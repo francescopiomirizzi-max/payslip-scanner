@@ -1,0 +1,105 @@
+Integrazione Logica e Design
+Contesto: Ho già i file della UI creati con Google AI Studio in questa cartella (vedi App.tsx, TableComponent.tsx, ecc.).
+
+Obiettivo: Devi integrare la logica di calcolo che ho ottenuto da Claude all'interno di questi file esistenti.
+
+Logica da integrare (da Claude):// Funzione per calcolare l'incidenza giornaliera
+function calcolaIncidenzaGiornaliera(totaleVoci, divisore) {
+  if (divisore === 0) {
+    throw new Error("Il divisore non può essere zero");
+  }
+  return totaleVoci / divisore;
+}
+
+// Funzione per calcolare l'incidenza totale anno
+function calcolaIncidenzaTotaleAnno(incidenzaGiornaliera, giornateFerie) {
+  return incidenzaGiornaliera * giornateFerie;
+}
+
+// Funzione per processare un singolo anno
+function processaAnno(datiAnno) {
+  const incidenzaGiornaliera = calcolaIncidenzaGiornaliera(
+    datiAnno.totaleVociAccessorie,
+    datiAnno.divisoreAnnuo
+  );
+  
+  const incidenzaTotaleAnno = calcolaIncidenzaTotaleAnno(
+    incidenzaGiornaliera,
+    datiAnno.giornateFerieFruite
+  );
+  
+  return {
+    anno: datiAnno.anno,
+    incidenzaGiornaliera: parseFloat(incidenzaGiornaliera.toFixed(2)),
+    incidenzaTotaleAnno: parseFloat(incidenzaTotaleAnno.toFixed(2))
+  };
+}
+
+// Funzione per calcolare il totale complessivo
+function calcolaTotaleComplessivo(dati) {
+  const risultatiAnni = dati.anni.map(anno => processaAnno(anno));
+  
+  const totaleComplessivo = risultatiAnni.reduce(
+    (acc, curr) => acc + curr.incidenzaTotaleAnno,
+    0
+  );
+  
+  return {
+    risultatiAnni: risultatiAnni,
+    totaleComplessivo: parseFloat(totaleComplessivo.toFixed(2))
+  };
+}
+
+// Esempio di utilizzo
+const datiEsempio = {
+  "anni": [
+    {
+      "anno": 2023,
+      "totaleVociAccessorie": 5000.00,
+      "divisoreAnnuo": 312,
+      "giornateFerieFruite": 20
+    },
+    {
+      "anno": 2024,
+      "totaleVociAccessorie": 5500.00,
+      "divisoreAnnuo": 312,
+      "giornateFerieFruite": 22
+    }
+  ]
+};
+
+const risultato = calcolaTotaleComplessivo(datiEsempio);
+console.log(risultato);
+
+/*
+Output esempio:
+{
+  risultatiAnni: [
+    {
+      anno: 2023,
+      incidenzaGiornaliera: 16.03,
+      incidenzaTotaleAnno: 320.51
+    },
+    {
+      anno: 2024,
+      incidenzaGiornaliera: 17.63,
+      incidenzaTotaleAnno: 387.82
+    }
+  ],
+  totaleComplessivo: 708.33
+}
+*/
+
+
+
+
+
+Istruzioni operative:
+
+Modifica TableComponent.tsx per applicare la formula di calcolo sopra indicata.
+
+Assicurati che il 'Totale Dovuto' nella tabella aggiorni automaticamente il valore nella scheda (Card) del lavoratore in App.tsx.
+
+Implementa il salvataggio in localStorage in modo che, aggiungendo un nuovo lavoratore, i dati non vadano persi.
+
+Mantieni lo stile grafico (colori verde/rosso) che vedi nei file attuali.
