@@ -27,7 +27,7 @@ export const handler: Handler = async (event, context) => {
         const cleanData = fileData.includes("base64,") ? fileData.split("base64,")[1] : fileData;
 
         // Usiamo il modello PRO perché legge meglio le tabelle dense dei cedolini RFI
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
+        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
         // --- IL PROMPT OTTIMIZZATO SUL TUO CODICE ---
         const prompt = `
