@@ -25,7 +25,7 @@ export const handler: Handler = async (event, context) => {
     const cleanData = fileData.includes("base64,") ? fileData.split("base64,")[1] : fileData;
 
     // Usiamo Flash (Veloce e Stabile)
-    const model = genAI.getGenerativeModel({ model: "gemini-3-pro-preview" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
     // --- PROMPT CHIRURGICO PER I TUOI CODICI ---
     const prompt = `
