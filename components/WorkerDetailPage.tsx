@@ -172,54 +172,75 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
     reader.onload = () => resolve(reader.result as string);
     reader.onerror = error => reject(error);
   });
-  // --- FUNZIONE ANALISI AI CORRETTA (CREA I MESI MANCANTI) ---
+  // --- FUNZIONE ANALISI AI BUSTA PAGA (Versione Definitiva JSON) ---
   const handleAnalyzePaySlip = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
+    // 1. Attiva lo stato di caricamento
     setIsAnalyzing(true);
 
     try {
-      // 1. Converti in Base64
-      const base64Image = await toBase64(file);
+      console.log(`🚀 Inizio upload file: ${file.name} (${file.type})`);
 
-      // 2. Chiama il Backend
+      // 2. Helper interno per convertire il file in Base64
+      const convertFileToBase64 = (file: File): Promise<string> => {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.readAsDataURL(file);
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = error => reject(error);
+        });
+      };
+
+      // 3. Conversione effettiva
+      const base64String = await convertFileToBase64(file);
+      console.log("📦 File convertito in Base64. Lunghezza stringa:", base64String.length);
+
+      // 4. CHIAMATA AL BACKEND (Il punto critico corretto)
       const response = await fetch('/.netlify/functions/scan-payslip', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image: base64Image })
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          fileData: base64String,            // <--- FONDAMENTALE: Il backend cerca questa chiave
+          mimeType: file.type || "application/pdf" // <--- FONDAMENTALE: Dice a Gemini che è un PDF
+        })
       });
 
-      // GESTIONE ERRORE DETTAGLIATA (Così capiamo se è la Chiave o altro)
+      // 5. Gestione Errori HTTP
       if (!response.ok) {
         const errorText = await response.text();
-        console.error("Errore Backend:", errorText);
-        throw new Error(`Errore Server: ${errorText}`);
+        throw new Error(`Errore Server Netlify: ${errorText} (${response.status})`);
       }
 
+      // 6. Lettura Risposta AI
       const aiResult = await response.json();
-      console.log("Dati letti dall'IA:", aiResult);
+      console.log("✅ RISPOSTA GEMINI RICEVUTA:", aiResult);
 
-      // 3. AGGIORNAMENTO DATI (LOGICA AUTO-CREAZIONE)
+      // 7. AGGIORNAMENTO DATI NELLA TABELLA
+      // Creiamo una copia profonda dei dati attuali per modificarli
       const currentAnni = JSON.parse(JSON.stringify(monthlyInputs));
 
-      // L'IA restituisce mese 1-12, noi usiamo index 0-11
+      // L'IA restituisce mese 1-12, noi usiamo indici 0-11
       const targetMonthIndex = aiResult.month - 1;
       const targetYear = aiResult.year;
 
-      // CERCA LA RIGA
+      // Cerchiamo se esiste già la riga per quel mese/anno
       let rowIndex = currentAnni.findIndex((r: AnnoDati) =>
         Number(r.year) === targetYear &&
         r.monthIndex === targetMonthIndex
       );
 
-      // --- MODIFICA CRUCIALE: SE NON ESISTE, LA CREIAMO! ---
+      // SE NON ESISTE, LA CREIAMO DA ZERO
       if (rowIndex === -1) {
+        console.log("➕ Creo nuova riga per", aiResult.month, "/", aiResult.year);
         const newRow: AnnoDati = {
-          id: Date.now().toString(), // ID temporaneo
+          id: Date.now().toString(),
           year: targetYear,
           monthIndex: targetMonthIndex,
-          month: MONTH_NAMES[targetMonthIndex],
+          month: MONTH_NAMES[targetMonthIndex], // Usa la costante globale dei nomi mesi
           daysWorked: 0,
           daysVacation: 0,
           ticket: 0,
@@ -227,70 +248,64 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
         };
         currentAnni.push(newRow);
 
-        // Ordiniamo per anno e mese per non rompere la tabella
+        // Riordiniamo cronologicamente
         currentAnni.sort((a: AnnoDati, b: AnnoDati) => {
           if (a.year !== b.year) return a.year - b.year;
           return a.monthIndex - b.monthIndex;
         });
 
-        // Ritroviamo l'indice della riga appena creata
+        // Ritroviamo l'indice della nuova riga
         rowIndex = currentAnni.findIndex((r: AnnoDati) =>
           Number(r.year) === targetYear &&
           r.monthIndex === targetMonthIndex
         );
       }
 
-      // ORA AGGIORNIAMO I DATI SICURI DI AVERE LA RIGA
+      // Ora siamo sicuri che la riga esiste. Aggiorniamo i valori.
       const row = currentAnni[rowIndex];
 
-      // A. Dati Base
+      // A. Giorni e Ferie
       if (aiResult.daysWorked) row.daysWorked = aiResult.daysWorked;
       if (aiResult.daysVacation) row.daysVacation = aiResult.daysVacation;
 
-      // B. Voci Variabili (Codici)
+      // B. Note (per debug visivo)
+      if (aiResult.netto) {
+        const oldNote = row.note || '';
+        if (!oldNote.includes('AI')) {
+          row.note = `${oldNote} [AI Netto: €${aiResult.netto}]`.trim();
+        }
+      }
+
+      // C. Voci Variabili (Indennità, Straordinari, etc.)
       if (aiResult.codes) {
         Object.entries(aiResult.codes).forEach(([code, value]) => {
-          if (value && typeof value === 'number') {
+          if (typeof value === 'number') {
+            // @ts-ignore (Ignoriamo errore TS se il codice non è definito nel tipo stretto)
             row[code] = value;
           }
         });
       }
 
-      // C. Logica Ticket
-      let calculatedCoeff = 0;
-      if (aiResult.ticket_data) {
-        if (aiResult.ticket_data.single > 0) {
-          calculatedCoeff = aiResult.ticket_data.single;
-        } else if (aiResult.ticket_data.total > 0 && row.daysWorked > 0) {
-          calculatedCoeff = aiResult.ticket_data.total / row.daysWorked;
-        }
-      }
-
-      if (calculatedCoeff > 0) {
-        row.coeffTicket = calculatedCoeff.toFixed(2);
-        const oldNote = row.note || '';
-        if (!oldNote.includes('AI: Ticket')) {
-          row.note = `${oldNote} [AI: Ticket €${calculatedCoeff.toFixed(2)}]`.trim();
-        }
-      }
-
-      // Aggiorna array e stato
+      // Salviamo le modifiche
       currentAnni[rowIndex] = row;
 
-      // Se l'anno scansionato è diverso da quello visualizzato, cambiamo vista
+      // Se l'anno della busta è diverso da quello che stiamo guardando, cambiamo vista
       if (targetYear !== currentYear) {
         setCurrentYear(targetYear);
       }
 
+      // Aggiorniamo lo stato React
       handleDataChange(currentAnni);
-      alert(`✅ Busta ${aiResult.month}/${aiResult.year} acquisita con successo!`);
+
+      alert(`✅ Busta Paga di ${MONTH_NAMES[targetMonthIndex]} ${targetYear} acquisita con successo!`);
 
     } catch (error: any) {
-      console.error("Errore analisi:", error);
-      // Mostra l'errore vero nell'alert
-      alert(`Errore: ${error.message || "Controlla la console per dettagli"}`);
+      console.error("❌ ERRORE ANALISI:", error);
+      alert(`Errore durante l'analisi: ${error.message || "Errore sconosciuto"}`);
     } finally {
+      // 8. Pulizia finale
       setIsAnalyzing(false);
+      // Resetta l'input file per permettere di ricaricare lo stesso file se necessario
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
