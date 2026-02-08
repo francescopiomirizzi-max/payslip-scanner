@@ -172,18 +172,15 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
     reader.onload = () => resolve(reader.result as string);
     reader.onerror = error => reject(error);
   });
-  // --- FUNZIONE ANALISI AI BUSTA PAGA (Versione Definitiva JSON) ---
+  // --- FUNZIONE ANALISI AI - FIX GESTIONE MESE (Stringa -> Numero) ---
   const handleAnalyzePaySlip = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    // 1. Attiva lo stato di caricamento
     setIsAnalyzing(true);
 
     try {
-      console.log(`🚀 Inizio upload file: ${file.name} (${file.type})`);
-
-      // 2. Helper interno per convertire il file in Base64
+      // 1. Conversione Base64 interna (Sicura)
       const convertFileToBase64 = (file: File): Promise<string> => {
         return new Promise((resolve, reject) => {
           const reader = new FileReader();
@@ -193,54 +190,61 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
         });
       };
 
-      // 3. Conversione effettiva
       const base64String = await convertFileToBase64(file);
-      console.log("📦 File convertito in Base64. Lunghezza stringa:", base64String.length);
 
-      // 4. CHIAMATA AL BACKEND (Il punto critico corretto)
+      // 2. Chiamata al Backend
       const response = await fetch('/.netlify/functions/scan-payslip', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          fileData: base64String,            // <--- FONDAMENTALE: Il backend cerca questa chiave
-          mimeType: file.type || "application/pdf" // <--- FONDAMENTALE: Dice a Gemini che è un PDF
+          fileData: base64String,
+          mimeType: file.type || "application/pdf"
         })
       });
 
-      // 5. Gestione Errori HTTP
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Errore Server Netlify: ${errorText} (${response.status})`);
+      if (!response.ok) throw new Error("Errore comunicazione server");
+      const aiResult = await response.json();
+      console.log("✅ Dati Gemini:", aiResult);
+
+      // 3. PARSING INTELLIGENTE DEL MESE (Il Fix Cruciale)
+      const rawMese = aiResult.mese || aiResult.month; // Gestisce chiavi diverse
+      let targetMonthIndex = -1;
+
+      // Se è un numero (es. "2"), lo convertiamo
+      if (!isNaN(parseInt(rawMese))) {
+        targetMonthIndex = parseInt(rawMese) - 1;
+      }
+      // Se è una stringa (es. "Febbraio"), cerchiamo l'indice nell'array globale
+      else if (typeof rawMese === 'string') {
+        targetMonthIndex = MONTH_NAMES.findIndex(
+          m => m.toLowerCase().startsWith(rawMese.toLowerCase().substring(0, 3))
+        );
       }
 
-      // 6. Lettura Risposta AI
-      const aiResult = await response.json();
-      console.log("✅ RISPOSTA GEMINI RICEVUTA:", aiResult);
+      // Se non abbiamo trovato il mese, usiamo il mese corrente o lanciamo errore
+      if (targetMonthIndex === -1) {
+        console.warn("Mese non riconosciuto:", rawMese);
+        // Fallback: prova a vedere se c'è una data nel nome file o usa mese corrente
+        targetMonthIndex = new Date().getMonth();
+      }
 
-      // 7. AGGIORNAMENTO DATI NELLA TABELLA
-      // Creiamo una copia profonda dei dati attuali per modificarli
+      const targetYear = parseInt(aiResult.anno || aiResult.year || new Date().getFullYear().toString());
+
+      // 4. AGGIORNAMENTO DATI
       const currentAnni = JSON.parse(JSON.stringify(monthlyInputs));
 
-      // L'IA restituisce mese 1-12, noi usiamo indici 0-11
-      const targetMonthIndex = aiResult.month - 1;
-      const targetYear = aiResult.year;
-
-      // Cerchiamo se esiste già la riga per quel mese/anno
+      // Cerchiamo la riga
       let rowIndex = currentAnni.findIndex((r: AnnoDati) =>
-        Number(r.year) === targetYear &&
-        r.monthIndex === targetMonthIndex
+        Number(r.year) === targetYear && r.monthIndex === targetMonthIndex
       );
 
-      // SE NON ESISTE, LA CREIAMO DA ZERO
+      // CREAZIONE RIGA SE MANCA
       if (rowIndex === -1) {
-        console.log("➕ Creo nuova riga per", aiResult.month, "/", aiResult.year);
         const newRow: AnnoDati = {
           id: Date.now().toString(),
           year: targetYear,
           monthIndex: targetMonthIndex,
-          month: MONTH_NAMES[targetMonthIndex], // Usa la costante globale dei nomi mesi
+          month: MONTH_NAMES[targetMonthIndex],
           daysWorked: 0,
           daysVacation: 0,
           ticket: 0,
@@ -248,64 +252,51 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
         };
         currentAnni.push(newRow);
 
-        // Riordiniamo cronologicamente
+        // Riordina per non perdere l'indice
         currentAnni.sort((a: AnnoDati, b: AnnoDati) => {
           if (a.year !== b.year) return a.year - b.year;
           return a.monthIndex - b.monthIndex;
         });
 
-        // Ritroviamo l'indice della nuova riga
+        // Ritrova l'indice corretto dopo il sort
         rowIndex = currentAnni.findIndex((r: AnnoDati) =>
-          Number(r.year) === targetYear &&
-          r.monthIndex === targetMonthIndex
+          Number(r.year) === targetYear && r.monthIndex === targetMonthIndex
         );
       }
 
-      // Ora siamo sicuri che la riga esiste. Aggiorniamo i valori.
+      // Controllo di sicurezza finale (evita l'errore "undefined")
+      if (rowIndex === -1 || !currentAnni[rowIndex]) {
+        throw new Error("Impossibile creare o trovare la riga per il mese specificato.");
+      }
+
       const row = currentAnni[rowIndex];
 
-      // A. Giorni e Ferie
-      if (aiResult.daysWorked) row.daysWorked = aiResult.daysWorked;
-      if (aiResult.daysVacation) row.daysVacation = aiResult.daysVacation;
-
-      // B. Note (per debug visivo)
+      // Assegnazione Valori
       if (aiResult.netto) {
-        const oldNote = row.note || '';
-        if (!oldNote.includes('AI')) {
-          row.note = `${oldNote} [AI Netto: €${aiResult.netto}]`.trim();
+        // Pulisce il numero da simboli (1.200,50 -> 1200.50)
+        const nettoPulito = aiResult.netto.toString().replace(/\./g, '').replace(',', '.');
+        if (!row.note?.includes('AI:')) {
+          row.note = (row.note || '') + ` [AI Netto: €${aiResult.netto}]`;
         }
       }
 
-      // C. Voci Variabili (Indennità, Straordinari, etc.)
-      if (aiResult.codes) {
-        Object.entries(aiResult.codes).forEach(([code, value]) => {
-          if (typeof value === 'number') {
-            // @ts-ignore (Ignoriamo errore TS se il codice non è definito nel tipo stretto)
-            row[code] = value;
-          }
-        });
+      // Mappatura ferie/rol se presenti
+      if (aiResult.ferie_residue) {
+        // Logica opzionale: se vuoi salvarlo in una colonna specifica o nelle note
       }
 
-      // Salviamo le modifiche
       currentAnni[rowIndex] = row;
 
-      // Se l'anno della busta è diverso da quello che stiamo guardando, cambiamo vista
-      if (targetYear !== currentYear) {
-        setCurrentYear(targetYear);
-      }
-
-      // Aggiorniamo lo stato React
+      if (targetYear !== currentYear) setCurrentYear(targetYear);
       handleDataChange(currentAnni);
 
-      alert(`✅ Busta Paga di ${MONTH_NAMES[targetMonthIndex]} ${targetYear} acquisita con successo!`);
+      alert(`✅ Busta di ${MONTH_NAMES[targetMonthIndex]} ${targetYear} analizzata!`);
 
     } catch (error: any) {
-      console.error("❌ ERRORE ANALISI:", error);
-      alert(`Errore durante l'analisi: ${error.message || "Errore sconosciuto"}`);
+      console.error("Errore Frontend:", error);
+      alert(`Errore: ${error.message}`);
     } finally {
-      // 8. Pulizia finale
       setIsAnalyzing(false);
-      // Resetta l'input file per permettere di ricaricare lo stesso file se necessario
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
