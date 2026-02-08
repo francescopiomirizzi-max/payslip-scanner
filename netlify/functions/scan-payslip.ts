@@ -53,7 +53,7 @@ export const handler: Handler = async (event, context) => {
         console.log(`Primi 30 caratteri del file pulito: ${cleanData.substring(0, 30)}...`);
 
         // 4. Chiamata a Gemini
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-001" });
+        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
         const prompt = `Analizza questa busta paga. Estrai ESATTAMENTE questo JSON: 
     { "mese": "mese in lettere", "anno": "AAAA", "netto": "numero", "ferie_residue": "numero", "rol_residui": "numero" }. 
     Se illeggibile o assente metti null.`;
