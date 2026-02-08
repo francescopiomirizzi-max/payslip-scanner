@@ -172,7 +172,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
     reader.onload = () => resolve(reader.result as string);
     reader.onerror = error => reject(error);
   });
-  // --- FUNZIONE ANALISI AI - FIX GESTIONE MESE (Stringa -> Numero) ---
+  // --- FUNZIONE ANALISI AI INTEGRATA (Popola la Tabella) ---
   const handleAnalyzePaySlip = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -180,7 +180,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
     setIsAnalyzing(true);
 
     try {
-      // 1. Conversione Base64 interna (Sicura)
+      // 1. Converti PDF in Base64
       const convertFileToBase64 = (file: File): Promise<string> => {
         return new Promise((resolve, reject) => {
           const reader = new FileReader();
@@ -192,7 +192,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
 
       const base64String = await convertFileToBase64(file);
 
-      // 2. Chiamata al Backend
+      // 2. Invia al Backend
       const response = await fetch('/.netlify/functions/scan-payslip', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -203,47 +203,30 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
       });
 
       if (!response.ok) throw new Error("Errore comunicazione server");
+
       const aiResult = await response.json();
-      console.log("✅ Dati Gemini:", aiResult);
-      // DEBUG: Vediamo cosa ha trovato Gemini
-      let foundCodes = 0;
-      if (aiResult.codes) {
-        foundCodes = Object.keys(aiResult.codes).length;
-      }
-      alert(`Analisi completata!\nNetto trovato: €${aiResult.netto}\nCodici trovati: ${foundCodes}`);
-      // 3. PARSING INTELLIGENTE DEL MESE (Il Fix Cruciale)
-      const rawMese = aiResult.mese || aiResult.month; // Gestisce chiavi diverse
-      let targetMonthIndex = -1;
+      console.log("✅ Dati ricevuti:", aiResult);
 
-      // Se è un numero (es. "2"), lo convertiamo
-      if (!isNaN(parseInt(rawMese))) {
-        targetMonthIndex = parseInt(rawMese) - 1;
-      }
-      // Se è una stringa (es. "Febbraio"), cerchiamo l'indice nell'array globale
-      else if (typeof rawMese === 'string') {
-        targetMonthIndex = MONTH_NAMES.findIndex(
-          m => m.toLowerCase().startsWith(rawMese.toLowerCase().substring(0, 3))
-        );
+      // 3. IDENTIFICAZIONE MESE/ANNO
+      // Il backend ora restituisce month come numero (1-12)
+      // Noi usiamo indice array (0-11), quindi facciamo -1
+      const targetYear = aiResult.year || new Date().getFullYear();
+      const targetMonthIndex = (aiResult.month - 1);
+
+      if (isNaN(targetMonthIndex) || targetMonthIndex < 0 || targetMonthIndex > 11) {
+        throw new Error(`Mese non valido ricevuto: ${aiResult.month}`);
       }
 
-      // Se non abbiamo trovato il mese, usiamo il mese corrente o lanciamo errore
-      if (targetMonthIndex === -1) {
-        console.warn("Mese non riconosciuto:", rawMese);
-        // Fallback: prova a vedere se c'è una data nel nome file o usa mese corrente
-        targetMonthIndex = new Date().getMonth();
-      }
-
-      const targetYear = parseInt(aiResult.anno || aiResult.year || new Date().getFullYear().toString());
-
-      // 4. AGGIORNAMENTO DATI
+      // 4. AGGIORNAMENTO TABELLA
+      // Facciamo una copia profonda dei dati attuali
       const currentAnni = JSON.parse(JSON.stringify(monthlyInputs));
 
-      // Cerchiamo la riga
+      // Cerchiamo se esiste già la riga per quell'anno/mese
       let rowIndex = currentAnni.findIndex((r: AnnoDati) =>
         Number(r.year) === targetYear && r.monthIndex === targetMonthIndex
       );
 
-      // CREAZIONE RIGA SE MANCA
+      // Se non esiste, la creiamo nuova
       if (rowIndex === -1) {
         const newRow: AnnoDati = {
           id: Date.now().toString(),
@@ -257,45 +240,55 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
         };
         currentAnni.push(newRow);
 
-        // Riordina per non perdere l'indice
+        // Riordiniamo per data
         currentAnni.sort((a: AnnoDati, b: AnnoDati) => {
           if (a.year !== b.year) return a.year - b.year;
           return a.monthIndex - b.monthIndex;
         });
 
-        // Ritrova l'indice corretto dopo il sort
+        // Ritroviamo l'indice
         rowIndex = currentAnni.findIndex((r: AnnoDati) =>
           Number(r.year) === targetYear && r.monthIndex === targetMonthIndex
         );
       }
 
-      // Controllo di sicurezza finale (evita l'errore "undefined")
-      if (rowIndex === -1 || !currentAnni[rowIndex]) {
-        throw new Error("Impossibile creare o trovare la riga per il mese specificato.");
-      }
-
       const row = currentAnni[rowIndex];
 
-      // Assegnazione Valori
+      // A. INSERIMENTO DATI PRESENZE
+      if (aiResult.daysWorked) row.daysWorked = aiResult.daysWorked;
+      if (aiResult.daysVacation) row.daysVacation = aiResult.daysVacation;
+
+      // B. INSERIMENTO VOCI VARIABILI (Il cuore del problema)
+      // Iteriamo sui codici trovati e li scriviamo nelle colonne corrispondenti
+      if (aiResult.codes) {
+        Object.entries(aiResult.codes).forEach(([code, value]) => {
+          const numValue = parseFloat(value as string);
+          // Scriviamo solo se è un numero valido e maggiore di 0
+          if (!isNaN(numValue) && numValue > 0) {
+            // @ts-ignore (Usiamo ignore perché le chiavi sono dinamiche)
+            row[code] = numValue;
+          }
+        });
+      }
+
+      // C. NOTA NETTO (Opzionale)
       if (aiResult.netto) {
-        // Pulisce il numero da simboli (1.200,50 -> 1200.50)
-        const nettoPulito = aiResult.netto.toString().replace(/\./g, '').replace(',', '.');
-        if (!row.note?.includes('AI:')) {
-          row.note = (row.note || '') + ` [AI Netto: €${aiResult.netto}]`;
+        const notaNetto = `[AI Netto: €${aiResult.netto}]`;
+        if (!row.note?.includes(notaNetto)) {
+          row.note = (row.note ? row.note + ' ' : '') + notaNetto;
         }
       }
 
-      // Mappatura ferie/rol se presenti
-      if (aiResult.ferie_residue) {
-        // Logica opzionale: se vuoi salvarlo in una colonna specifica o nelle note
-      }
-
+      // Salviamo la riga modificata
       currentAnni[rowIndex] = row;
 
+      // Aggiorniamo la vista
       if (targetYear !== currentYear) setCurrentYear(targetYear);
       handleDataChange(currentAnni);
 
-      alert(`✅ Busta di ${MONTH_NAMES[targetMonthIndex]} ${targetYear} analizzata!`);
+      // Feedback
+      const countVoci = aiResult.codes ? Object.keys(aiResult.codes).length : 0;
+      alert(`✅ Busta ${MONTH_NAMES[targetMonthIndex]} acquisita!\n\nPresenze: Aggiornate\nVoci Trovate: ${countVoci}\nNetto: €${aiResult.netto}`);
 
     } catch (error: any) {
       console.error("Errore Frontend:", error);

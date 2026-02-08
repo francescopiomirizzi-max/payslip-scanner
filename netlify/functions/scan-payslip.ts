@@ -4,134 +4,116 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || "");
 
 export const handler: Handler = async (event, context) => {
-    // Headers CORS standard
-    const headers = {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Headers": "Content-Type",
-        "Access-Control-Allow-Methods": "POST, OPTIONS"
-    };
+  const headers = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Methods": "POST, OPTIONS"
+  };
 
-    if (event.httpMethod === "OPTIONS") {
-        return { statusCode: 200, headers, body: "OK" };
-    }
+  if (event.httpMethod === "OPTIONS") {
+    return { statusCode: 200, headers, body: "OK" };
+  }
 
-    try {
-        console.log("--- 🕵️‍♂️ AVVIO SCANSIONE BUSTA PAGA RFI (Prompt v3.0) ---");
+  try {
+    console.log("--- 🚄 AVVIO SCANSIONE RFI (Targeted Extraction) ---");
+    const body = JSON.parse(event.body || "{}");
+    const { fileData, mimeType } = body;
 
-        const body = JSON.parse(event.body || "{}");
-        const { fileData, mimeType } = body;
+    if (!fileData) throw new Error("File mancante");
 
-        if (!fileData) throw new Error("File mancante");
+    // Pulizia Header Base64
+    const cleanData = fileData.includes("base64,") ? fileData.split("base64,")[1] : fileData;
 
-        // Pulizia stringa Base64
-        const cleanData = fileData.includes("base64,") ? fileData.split("base64,")[1] : fileData;
+    // Usiamo Flash (Veloce e Stabile)
+    const model = genAI.getGenerativeModel({ model: "gemini-3-pro-preview" });
 
-        // Usiamo il modello PRO perché legge meglio le tabelle dense dei cedolini RFI
-        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    // --- PROMPT CHIRURGICO PER I TUOI CODICI ---
+    const prompt = `
+      Sei un esperto paghe RFI (Ferrovie). Analizza il testo grezzo di questa busta paga.
+      Il testo potrebbe apparire disordinato o simile a un CSV (es: "Codice","Descrizione",...,"Importo").
 
-        // --- IL PROMPT OTTIMIZZATO SUL TUO CODICE ---
-        const prompt = `
-      Sei un Analista Paghe esperto in contratti ferroviari (RFI/Trenitalia).
-      Il tuo compito è estrarre dati specifici da una busta paga e restituire UNICAMENTE un oggetto JSON.
+      OBIETTIVO:
+      Estrarre i valori monetari (COMPETENZE) per una lista specifica di codici voce e i dati di presenza.
 
-      🔍 **OBIETTIVO**:
-      Estrarre i dati per popolare una griglia di calcolo legale.
-      Devi cercare codici voce specifici e i dati di presenza.
+      1. DATI TEMPORALI:
+         - "month": Estrai il mese come NUMERO (1-12). Es: "Febbraio" -> 2.
+         - "year": L'anno di riferimento (es. 2024).
 
-      📜 **ISTRUZIONI DI ESTRAZIONE**:
+      2. DATI PRESENZE (Cerca nel box in alto "Presenze"):
+         - "daysWorked": Giorni lavorati/presenze (spesso colonna P o Lavorati).
+         - "daysVacation": Giorni di ferie GODUTE nel mese corrente (NON il residuo anno precedente).
 
-      1. **TESTATA (Periodo)**:
-         - "mese": Il mese di competenza in italiano (es. "Gennaio", "Febbraio").
-         - "anno": L'anno di competenza (es. 2024).
-
-      2. **PIÈ DI PAGINA (Totali)**:
-         - "netto": Il "Netto a Pagare" finale (cerca in basso a destra).
-
-      3. **DATI PRESENZE (Molto Importante)**:
-         - Cerca la tabella presenze (solitamente in alto o centro pagina).
-         - "daysWorked": Giorni lavorati effettivi (colonna "Presenze", "Lavorati", o codice "P"). Se vuoto usa 26 ma preferisci il dato reale.
-         - "daysVacation": Giorni di Ferie GODUTE nel mese (colonna "Ferie", "Godute" o "F"). NON le ferie residue, SOLO quelle prese nel mese.
-
-      4. **VOCI VARIABILI (Il Cuore dell'analisi)**:
-         Analizza la tabella centrale "Dettaglio Voci" o "Competenze".
-         Cerca ESATTAMENTE i seguenti codici nella colonna "Codice" o "Voce".
-         Per ogni codice trovato, estrai il valore dalla colonna **COMPETENZE** (o IMPORTO).
+      3. VOCI VARIABILI (Il cuore dell'analisi):
+         Cerca nella tabella centrale "Dettaglio Voci".
+         Devi trovare l'importo nella colonna **COMPETENZE** (Euro) per i seguenti codici ESATTI.
          
-         ⚠️ **ATTENZIONE**:
-         - Ignora la colonna "Trattenute".
-         - Ignora la colonna "Quantità/Ore" (a meno che non sia l'unico dato numerico, ma preferisci sempre l'importo in Euro).
-         - Se una voce non è presente, non includerla nel JSON (o mettila a 0).
+         ⚠️ ATTENZIONE: Ignora colonne "Ore", "Quantità" o "Trattenute". Prendi solo l'importo positivo.
+         
+         LISTA CODICI DA CERCARE:
+         - 0152 (Str. Feriale Diurno)
+         - 0421 (Ind. Notturno)
+         - 0470 (Ind. Chiamata Rep)
+         - 0482 (Compenso Rep)
+         - 0496 (Ind. Disp)
+         - 0687 (Ind. Linea <=10h)
+         - 0AA1 (Trasferta)
+         - 0423 (Cantiere Notte)
+         - 0576 (Orario Spezzato)
+         - 0584 (Rep. Festive)
+         - 0919 (Str. Feriale)
+         - 0920 (Str. Fest/Nott)
+         - 0932 (Str. Rep Diurno)
+         - 0933 (Str. Rep Fest/Nott)
+         - 0995 (Str. Disp Diurno)
+         - 0996 (Str. Disp Fest/Nott)
+         - 0376 (Ind. Turno A)
+         - 0686 (Ind. Linea >10h)
 
-         **LISTA CODICI DA CERCARE (Target List):**
-         - "0152" (Straord. Feriale Diurno non recup)
-         - "0421" (Ind. Lavoro Notturno)
-         - "0470" (Ind. Chiamata Reperibilità)
-         - "0482" (Compenso Reperibilità)
-         - "0496" (Ind. Chiamata Disponibilità)
-         - "0687" (Ind. Linea <= 10h)
-         - "0AA1" (Trasferta Esente)
-         - "0423" (Comp. Cantiere Notte)
-         - "0576" (Ind. Orario Spezzato)
-         - "0584" (Reperibilità Festive)
-         - "0919" (Straordinario Feriale Diurno)
-         - "0920" (Str. Festivo Diurno/Notturno)
-         - "0932" (Str. Reperibilità Diurno)
-         - "0933" (Str. Reperibilità Fest/Nott)
-         - "0995" (Str. Disponibilità Diurno)
-         - "0996" (Str. Disponibilità Fest/Nott)
-         - "0376" (Ind. Turno A)
-         - "0686" (Ind. Linea > 10 ore)
+      4. NETTO:
+         - "netto": Il netto a pagare finale.
 
-      5. **REGOLE FORMATTAZIONE**:
-         - Converti tutti i numeri in formato decimale con il punto (es: "1.200,50" diventa 1200.50).
-         - Restituisci SOLO il JSON valido, senza markdown o commenti.
-
-      **STRUTTURA JSON RICHIESTA**:
+      Restituisci ESCLUSIVAMENTE questo JSON:
       {
-        "mese": "Stringa",
-        "anno": Numero,
-        "netto": Numero,
-        "daysWorked": Numero,
-        "daysVacation": Numero,
+        "month": 2,
+        "year": 2024,
+        "daysWorked": 0,
+        "daysVacation": 0,
+        "netto": 0.00,
         "codes": {
-          "0919": Numero,
-          "0687": Numero,
-          ...altri codici trovati...
+           "0152": 0.00,
+           "0687": 0.00
+           ... inserisci solo i codici trovati ...
         }
       }
     `;
 
-        // Chiamata effettiva a Gemini
-        const result = await model.generateContent([
-            prompt,
-            {
-                inlineData: {
-                    data: cleanData,
-                    mimeType: mimeType || "application/pdf",
-                },
-            },
-        ]);
+    const result = await model.generateContent([
+      prompt,
+      {
+        inlineData: {
+          data: cleanData,
+          mimeType: mimeType || "application/pdf",
+        },
+      },
+    ]);
 
-        const response = await result.response;
-        const text = response.text();
+    const response = await result.response;
+    const text = response.text().replace(/```json/g, "").replace(/```/g, "").trim();
 
-        // Pulizia estrema per evitare errori di parsing JSON
-        const jsonString = text.replace(/```json/g, "").replace(/```/g, "").trim();
+    console.log("✅ Dati estratti:", text.substring(0, 150));
 
-        console.log("✅ Dati estratti da Gemini:", jsonString.substring(0, 100) + "...");
+    return {
+      statusCode: 200,
+      headers,
+      body: text,
+    };
 
-        return {
-            statusCode: 200,
-            headers,
-            body: jsonString,
-        };
-
-    } catch (error: any) {
-        console.error("❌ ERRORE CRITICO BACKEND:", error);
-        return {
-            statusCode: 500,
-            headers,
-            body: JSON.stringify({ error: error.message || "Errore sconosciuto nel server" }),
-        };
-    }
+  } catch (error: any) {
+    console.error("❌ ERRORE:", error);
+    return {
+      statusCode: 500,
+      headers,
+      body: JSON.stringify({ error: error.message }),
+    };
+  }
 };
