@@ -1,0 +1,16 @@
+{
+    "short_name": "Indennità FS",
+    "name": "Gestione Indennità Ferrovieri",
+    "icons": [
+        {
+            "src": "./railway-app-icon.svg",
+            "sizes": "any",
+            "type": "image/svg+xml",
+            "purpose": "any maskable"
+        }
+    ],
+    "start_url": "./index.html",
+    "display": "standalone",
+    "theme_color": "#6366f1",
+    "background_color": "#f0f4ff"
+}

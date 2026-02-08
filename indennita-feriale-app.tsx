@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Plus, User, ArrowLeft, Trash2, Edit2 } from 'lucide-react';
 
-// Struttura dati principale
+// --- 1. DATI INIZIALI CORRETTI CON ID ANCHE NEGLI ANNI ---
 const inizializzaLavoratori = () => [
   {
     id: 1,
@@ -9,12 +9,14 @@ const inizializzaLavoratori = () => [
     cognome: "Rossi",
     anni: [
       {
+        id: 101, // ID univoco per l'anno
         anno: 2023,
         totaleVociAccessorie: 5000.00,
         divisoreAnnuo: 312,
         giornateFerieFruite: 20
       },
       {
+        id: 102,
         anno: 2024,
         totaleVociAccessorie: 5500.00,
         divisoreAnnuo: 312,
@@ -28,6 +30,7 @@ const inizializzaLavoratori = () => [
     cognome: "Bianchi",
     anni: [
       {
+        id: 201,
         anno: 2023,
         totaleVociAccessorie: 4800.00,
         divisoreAnnuo: 312,
@@ -37,7 +40,7 @@ const inizializzaLavoratori = () => [
   }
 ];
 
-// Funzioni di calcolo
+// Funzioni di calcolo (Invariate)
 function calcolaIncidenzaGiornaliera(totaleVoci, divisore) {
   if (divisore === 0) return 0;
   return totaleVoci / divisore;
@@ -52,12 +55,12 @@ function processaAnno(datiAnno) {
     datiAnno.totaleVociAccessorie,
     datiAnno.divisoreAnnuo
   );
-  
+
   const incidenzaTotaleAnno = calcolaIncidenzaTotaleAnno(
     incidenzaGiornaliera,
     datiAnno.giornateFerieFruite
   );
-  
+
   return {
     ...datiAnno,
     incidenzaGiornaliera: parseFloat(incidenzaGiornaliera.toFixed(2)),
@@ -67,20 +70,20 @@ function processaAnno(datiAnno) {
 
 function calcolaTotaleDovuto(anni) {
   if (!anni || anni.length === 0) return 0;
-  
+
   const risultatiAnni = anni.map(anno => processaAnno(anno));
   const totale = risultatiAnni.reduce(
     (acc, curr) => acc + curr.incidenzaTotaleAnno,
     0
   );
-  
+
   return parseFloat(totale.toFixed(2));
 }
 
 // Componente Scheda Lavoratore
-function SchedaLavoratore({ lavoratore, onClick }) {
+function SchedaLavoratore({ lavoratore, onClick }: any) {
   const totaleDovuto = calcolaTotaleDovuto(lavoratore.anni);
-  
+
   return (
     <div
       onClick={onClick}
@@ -99,7 +102,7 @@ function SchedaLavoratore({ lavoratore, onClick }) {
           </p>
         </div>
       </div>
-      
+
       <div className="pt-4 border-t border-gray-200">
         <p className="text-sm text-gray-600 mb-1">Totale Dovuto</p>
         <p className="text-2xl font-bold text-green-600">
@@ -120,7 +123,7 @@ function HomePage({ lavoratori, onSelezionaLavoratore, onAggiungiLavoratore }) {
             <h1 className="text-3xl font-bold text-gray-900">Gestione Indennità Feriale</h1>
             <p className="text-gray-600 mt-2">Gestisci i calcoli delle indennità per i lavoratori</p>
           </div>
-          
+
           <button
             onClick={onAggiungiLavoratore}
             className="bg-blue-600 text-white px-6 py-3 rounded-lg flex items-center gap-2 hover:bg-blue-700 transition-colors shadow-md"
@@ -129,7 +132,7 @@ function HomePage({ lavoratori, onSelezionaLavoratore, onAggiungiLavoratore }) {
             Aggiungi Lavoratore
           </button>
         </div>
-        
+
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {lavoratori.map(lavoratore => (
             <SchedaLavoratore
@@ -139,7 +142,7 @@ function HomePage({ lavoratori, onSelezionaLavoratore, onAggiungiLavoratore }) {
             />
           ))}
         </div>
-        
+
         {lavoratori.length === 0 && (
           <div className="text-center py-12">
             <User className="w-16 h-16 text-gray-300 mx-auto mb-4" />
@@ -156,15 +159,17 @@ function HomePage({ lavoratori, onSelezionaLavoratore, onAggiungiLavoratore }) {
 function DettaglioLavoratore({ lavoratore, onIndietro, onAggiorna, onElimina }) {
   const [datiModifica, setDatiModifica] = useState(lavoratore);
   const [modalitaModifica, setModalitaModifica] = useState(false);
-  
+
   const risultatiAnni = datiModifica.anni.map(anno => processaAnno(anno));
   const totaleDovuto = risultatiAnni.reduce(
     (acc, curr) => acc + curr.incidenzaTotaleAnno,
     0
   );
-  
+
+  // --- 2. MODIFICA: AGGIUNTA ID UNIVOCO PER NUOVI ANNI ---
   const aggiungiAnno = () => {
     const nuovoAnno = {
+      id: Date.now(), // Genera ID univoco basato sul tempo
       anno: new Date().getFullYear(),
       totaleVociAccessorie: 0,
       divisoreAnnuo: 312,
@@ -175,7 +180,7 @@ function DettaglioLavoratore({ lavoratore, onIndietro, onAggiorna, onElimina }) 
       anni: [...datiModifica.anni, nuovoAnno]
     });
   };
-  
+
   const rimuoviAnno = (index) => {
     const nuoviAnni = datiModifica.anni.filter((_, i) => i !== index);
     setDatiModifica({
@@ -183,7 +188,7 @@ function DettaglioLavoratore({ lavoratore, onIndietro, onAggiorna, onElimina }) 
       anni: nuoviAnni
     });
   };
-  
+
   const aggiornaAnno = (index, campo, valore) => {
     const nuoviAnni = [...datiModifica.anni];
     nuoviAnni[index] = {
@@ -195,12 +200,12 @@ function DettaglioLavoratore({ lavoratore, onIndietro, onAggiorna, onElimina }) 
       anni: nuoviAnni
     });
   };
-  
+
   const salvaModifiche = () => {
     onAggiorna(datiModifica);
     setModalitaModifica(false);
   };
-  
+
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-6xl mx-auto">
@@ -212,7 +217,7 @@ function DettaglioLavoratore({ lavoratore, onIndietro, onAggiorna, onElimina }) 
             <ArrowLeft className="w-5 h-5" />
             Torna alla Home
           </button>
-          
+
           <div className="bg-white rounded-lg shadow-md p-6">
             <div className="flex justify-between items-start mb-4">
               <div>
@@ -221,14 +226,14 @@ function DettaglioLavoratore({ lavoratore, onIndietro, onAggiorna, onElimina }) 
                     <input
                       type="text"
                       value={datiModifica.nome}
-                      onChange={(e) => setDatiModifica({...datiModifica, nome: e.target.value})}
+                      onChange={(e) => setDatiModifica({ ...datiModifica, nome: e.target.value })}
                       className="border border-gray-300 rounded px-3 py-2"
                       placeholder="Nome"
                     />
                     <input
                       type="text"
                       value={datiModifica.cognome}
-                      onChange={(e) => setDatiModifica({...datiModifica, cognome: e.target.value})}
+                      onChange={(e) => setDatiModifica({ ...datiModifica, cognome: e.target.value })}
                       className="border border-gray-300 rounded px-3 py-2"
                       placeholder="Cognome"
                     />
@@ -239,7 +244,7 @@ function DettaglioLavoratore({ lavoratore, onIndietro, onAggiorna, onElimina }) 
                   </h1>
                 )}
               </div>
-              
+
               <div className="flex gap-2">
                 {modalitaModifica ? (
                   <>
@@ -277,7 +282,7 @@ function DettaglioLavoratore({ lavoratore, onIndietro, onAggiorna, onElimina }) 
                 </button>
               </div>
             </div>
-            
+
             <div className="bg-green-50 rounded-lg p-4 mt-4">
               <p className="text-sm text-gray-600 mb-1">Totale Dovuto Complessivo</p>
               <p className="text-3xl font-bold text-green-600">
@@ -286,7 +291,7 @@ function DettaglioLavoratore({ lavoratore, onIndietro, onAggiorna, onElimina }) 
             </div>
           </div>
         </div>
-        
+
         <div className="bg-white rounded-lg shadow-md p-6">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-xl font-bold text-gray-900">Tabella Analitica</h2>
@@ -300,7 +305,7 @@ function DettaglioLavoratore({ lavoratore, onIndietro, onAggiorna, onElimina }) 
               </button>
             )}
           </div>
-          
+
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead className="bg-gray-100">
@@ -316,7 +321,8 @@ function DettaglioLavoratore({ lavoratore, onIndietro, onAggiorna, onElimina }) 
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {risultatiAnni.map((anno, index) => (
-                  <tr key={index} className="hover:bg-gray-50">
+                  /* --- 3. MODIFICA: USO DI KEY UNICA AL POSTO DELL'INDEX --- */
+                  <tr key={anno.id || index} className="hover:bg-gray-50">
                     <td className="px-4 py-3">
                       {modalitaModifica ? (
                         <input
@@ -409,37 +415,40 @@ export default function App() {
   const [lavoratori, setLavoratori] = useState(inizializzaLavoratori());
   const [vistaCorrente, setVistaCorrente] = useState('home');
   const [lavoratoreSelezionato, setLavoratoreSelezionato] = useState(null);
-  
+
   const handleSelezionaLavoratore = (lavoratore) => {
     setLavoratoreSelezionato(lavoratore);
     setVistaCorrente('dettaglio');
   };
-  
+
+  // --- 4. MODIFICA: GENERAZIONE ID PIÙ ROBUSTA ---
   const handleAggiungiLavoratore = () => {
-    const nuovoId = Math.max(...lavoratori.map(l => l.id), 0) + 1;
+    // Usiamo Date.now() per garantire un ID sempre univoco
     const nuovoLavoratore = {
-      id: nuovoId,
+      id: Date.now(),
       nome: "Nuovo",
       cognome: "Lavoratore",
       anni: []
     };
-    setLavoratori([...lavoratori, nuovoLavoratore]);
+
+    // Aggiorniamo lo stato in modo sicuro
+    setLavoratori(prevLavoratori => [...prevLavoratori, nuovoLavoratore]);
     handleSelezionaLavoratore(nuovoLavoratore);
   };
-  
+
   const handleTornaHome = () => {
     setVistaCorrente('home');
     setLavoratoreSelezionato(null);
   };
-  
+
   const handleAggiornaLavoratore = (lavoratoreAggiornato) => {
-    const nuoviLavoratori = lavoratori.map(l => 
+    const nuoviLavoratori = lavoratori.map(l =>
       l.id === lavoratoreAggiornato.id ? lavoratoreAggiornato : l
     );
     setLavoratori(nuoviLavoratori);
     setLavoratoreSelezionato(lavoratoreAggiornato);
   };
-  
+
   const handleEliminaLavoratore = () => {
     if (window.confirm(`Sei sicuro di voler eliminare ${lavoratoreSelezionato.nome} ${lavoratoreSelezionato.cognome}?`)) {
       const nuoviLavoratori = lavoratori.filter(l => l.id !== lavoratoreSelezionato.id);
@@ -447,7 +456,7 @@ export default function App() {
       handleTornaHome();
     }
   };
-  
+
   return vistaCorrente === 'home' ? (
     <HomePage
       lavoratori={lavoratori}

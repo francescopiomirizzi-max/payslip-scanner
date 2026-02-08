@@ -1,0 +1,56 @@
+@import "tailwindcss";
+
+/* --- SCROLLBAR PERSONALIZZATA (Utile per le tabelle) --- */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 8px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.3); /* Slate-500 con opacità */
+  border-radius: 8px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.5);
+}
+
+/* --- ANIMAZIONI GLOBALI AGGIUNTIVE --- */
+/* (Queste servono se Tailwind non le ha caricate dal config, ma è una sicurezza in più) */
+@keyframes blob {
+  0% { transform: translate(0px, 0px) scale(1); }
+  33% { transform: translate(30px, -50px) scale(1.1); }
+  66% { transform: translate(-20px, 20px) scale(0.9); }
+  100% { transform: translate(0px, 0px) scale(1); }
+}
+
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Classi di utilità per le animazioni se non vengono lette dal config */
+.animate-blob {
+  animation: blob 7s infinite;
+}
+.animate-shimmer {
+  background-size: 200% auto;
+  animation: shimmer 2s linear infinite;
+}
+.animation-delay-2000 {
+  animation-delay: 2s;
+}
+.animation-delay-4000 {
+  animation-delay: 4s;
+}
+
+/* STILI STAMPA (Per far funzionare bene i PDF) */
+@media print {
+  @page { margin: 0; }
+  body { margin: 1.6cm; }
+}
