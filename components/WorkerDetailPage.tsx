@@ -205,7 +205,12 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
       if (!response.ok) throw new Error("Errore comunicazione server");
       const aiResult = await response.json();
       console.log("✅ Dati Gemini:", aiResult);
-
+      // DEBUG: Vediamo cosa ha trovato Gemini
+      let foundCodes = 0;
+      if (aiResult.codes) {
+        foundCodes = Object.keys(aiResult.codes).length;
+      }
+      alert(`Analisi completata!\nNetto trovato: €${aiResult.netto}\nCodici trovati: ${foundCodes}`);
       // 3. PARSING INTELLIGENTE DEL MESE (Il Fix Cruciale)
       const rawMese = aiResult.mese || aiResult.month; // Gestisce chiavi diverse
       let targetMonthIndex = -1;
