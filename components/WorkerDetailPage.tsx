@@ -193,7 +193,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
       const base64String = await convertFileToBase64(file);
 
       // 2. Chiamata al Backend
-      const response = await fetch('/.netlify/functions/scan-payslip', {
+      const response = await fetch('/api/scan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
