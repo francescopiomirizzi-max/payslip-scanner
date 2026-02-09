@@ -3,34 +3,26 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || "");
 
-// --- IL PULITORE DI JAVASCRIPT ---
-// Questa funzione è il "cane da guardia": non fa passare nulla che non sia JSON puro.
+// --- IL PULITORE DI JAVASCRIPT (V12) ---
 function cleanAndParseJSON(text: string): any {
   try {
-    // 1. Rimuove Markdown (```json ... ```) se presente
     let clean = text.replace(/```json/g, "").replace(/```/g, "");
-
-    // 2. Cerca la prima parentesi graffa aperta '{' e l'ultima chiusa '}'
     const firstBrace = clean.indexOf('{');
     const lastBrace = clean.lastIndexOf('}');
 
     if (firstBrace !== -1 && lastBrace !== -1) {
-      // 3. Isola il contenuto esatto
       clean = clean.substring(firstBrace, lastBrace + 1);
     } else {
-      throw new Error("Struttura JSON non trovata nella risposta dell'IA.");
+      throw new Error("Struttura JSON non trovata.");
     }
-
-    // 4. Parsing con controllo errori
     return JSON.parse(clean);
   } catch (error) {
-    console.error("Errore Raw Text:", text); // Log per debug estremo
-    throw new Error(`Errore di formattazione JSON: ${error.message}`);
+    console.error("Errore Raw Text:", text);
+    throw new Error(`Errore Formattazione: ${error.message}`);
   }
 }
 
 export const handler: Handler = async (event, context) => {
-  // Headers CORS per permettere al Frontend di chiamare il Backend
   const headers = {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Headers": "Content-Type",
@@ -42,8 +34,7 @@ export const handler: Handler = async (event, context) => {
   }
 
   try {
-    console.log("--- 🛡️ AVVIO ANALISI V11 ULTIMATE (JSON MODE + CLEANER) ---");
-
+    console.log("--- 🦅 AVVIO ANALISI V12 (DEEP SCAN PAGINA 1 & 2) ---");
     const body = JSON.parse(event.body || "{}");
     const { fileData, mimeType } = body;
 
@@ -51,56 +42,67 @@ export const handler: Handler = async (event, context) => {
 
     const cleanData = fileData.includes("base64,") ? fileData.split("base64,")[1] : fileData;
 
-    // CONFIGURAZIONE CRITICA: Forziamo l'uscita JSON nativa
     const model = genAI.getGenerativeModel({
       model: "gemini-2.5-flash",
       generationConfig: { responseMimeType: "application/json" }
     });
 
     const prompt = `
-      Sei un Analista Paghe esperto in buste paga RFI (Ferrovie).
-      Analizza l'immagine e restituisci ESCLUSIVAMENTE un oggetto JSON.
+      Sei un Analista Paghe esperto in buste paga RFI multipagina.
       
-      ⚠️ REGOLE DI ESTRAZIONE FERREE (2008-2025):
+      ⚠️ ATTENZIONE CRITICA: IL DOCUMENTO HA PIÙ PAGINE.
+      La tabella delle competenze inizia nella PRIMA PAGINA e finisce nella SECONDA.
+      DEVI LEGGERE ENTRAMBE LE PAGINE.
+      Non limitarti a leggere l'ultima pagina. I codici più importanti sono spesso all'inizio.
 
-      1. **DATA**: Estrai Mese (numero) e Anno (numero 4 cifre).
-      2. **PRESENZE**: Cerca "GG. Lav.", "Presenze" o colonna "P" nel box in alto. Usa il valore effettivo.
-      3. **FERIE**: Cerca "Ferie Godute" mese corrente.
+      ESTRAI I SEGUENTI DATI JSON:
+
+      1. **DATA**: Mese e Anno (es. 5, 2024).
+      2. **PRESENZE** (Box in alto Pagina 1):
+         - "daysWorked": GG. Lav. / Presenze (es. 21, 22).
+         - "daysVacation": Ferie godute.
       
-      4. **TICKET RESTAURANT (Cruciale)**:
-         - Devi trovare l'aliquota unitaria (valore singolo buono).
-         - Cerca codici: **0E99** (Priorità Assoluta, di solito 8.00 o 7.00), **0299**, **0293**.
-         - IGNORA importi bassi (es. 0.30, 0.40) se trovi un importo più alto (es. 7.00, 8.00).
-         - SE trovi SOLO Welfare (9WLF) o Assicurazioni (9UNI), il ticket è 0.00.
-         - Restituisci il numero puro (es. 8.00).
+      3. **TICKET RESTAURANT** (Cerca ovunque):
+         - "ticketRate": Cerca codici 0E99 (8.00€/7.00€), 0299, 0293.
+         - Se trovi solo Welfare/Mensa/Unisalute: metti 0.00.
 
-      5. **ARRETRATI E EVENTI**:
-         - Somma in 'arretrati' SOLO importi positivi (Competenze) per:
-           - Malattia / Infortunio / Carenza (Codici 3E..).
-           - Una Tantum / Arretrati Anni Prec. / Premi Risultato (Codici 0K.., 0C.., 74.., 6INT).
-         - NON includere Rimborsi Spese o Welfare qui.
-         - Crea una stringa 'eventNote' elencando cosa hai trovato (es. "Malattia, Una Tantum").
+      4. **ARRETRATI** (Cerca ovunque):
+         - "arretrati": Somma codici 3E.. (Malattia), 0K.. (Una Tantum), 74.. (Arretrati).
+         - "eventNote": Lista eventi trovati.
 
-      6. **VOCI VARIABILI (Indennità)**:
-         - Estrai importi per codici: 0152, 0421, 0470, 0482, 0496, 0687, 0AA1, 0423, 0576, 0584, 0919, 0920, 0932, 0933, 0995, 0996, 0376, 0686, 3B70, 3B71.
+      5. **CODICI INDENNITÀ (SCANSIONE COMPLETA)**:
+         Cerca e estrai l'importo (Competenze) per TUTTI i seguenti codici.
+         Se un codice è a Pagina 1, PRENDILO. Non saltarlo.
+         
+         *GRUPPO 1 (Spesso a Pagina 1):*
+         - 0152 (Str. feriale)
+         - 0421 (Turno notturno)
+         - 0423 (Festivo)
+         - 0457 (Festivo notturno)
+         - 0470 (Indennità turno)
+         - 0482 (Domenicale)
+         - 0AA1 (Mancata mensa)
 
-      ⛔ **BLACKLIST (DA IGNORARE SEMPRE)**:
-         - 9WLF (Welfare), 9UNI/9RBM/9POZ (Sanità), 6HEA (CTR Eurofer).
-         - 6YZD (Rimborso 730), 6YR5.
-         - 9DT6, 9564, 3ITT (Recuperi/Statistiche).
-         - 0PA8, 0PA9 (Polizze).
-         - 0030, 0032 (Rimborsi Benzina/Gasolio).
+         *GRUPPO 2 (Spesso a Pagina 1 o 2):*
+         - 0496, 0576, 0584, 0687
+         - 0919, 0920, 0932, 0933
+         - 0995, 0996, 0376, 0686
+         - 3B70, 3B71 (Produttività)
 
-      FORMATO JSON RICHIESTO:
+      FORMATO JSON:
       {
-        "month": 1,
+        "month": 5,
         "year": 2024,
         "daysWorked": 0,
         "daysVacation": 0,
         "ticketRate": 0.00,
         "arretrati": 0.00,
         "eventNote": "",
-        "codes": {}
+        "codes": {
+           "0152": 0.00,
+           "0421": 0.00,
+           ... (inserisci qui i codici trovati)
+        }
       }
     `;
 
@@ -115,23 +117,20 @@ export const handler: Handler = async (event, context) => {
     ]);
 
     const response = await result.response;
-    const rawText = response.text();
+    const finalJson = cleanAndParseJSON(response.text());
 
-    // Pulizia e Validazione
-    const finalJson = cleanAndParseJSON(rawText);
-
-    console.log("✅ JSON Valido Generato:", JSON.stringify(finalJson).substring(0, 100) + "...");
+    console.log("✅ Dati V12:", JSON.stringify(finalJson).substring(0, 100) + "...");
 
     return {
       statusCode: 200,
       headers,
-      body: JSON.stringify(finalJson), // Restituiamo direttamente l'oggetto pulito
+      body: JSON.stringify(finalJson),
     };
 
   } catch (error: any) {
-    console.error("❌ ERRORE CRITICO:", error);
+    console.error("❌ ERRORE:", error);
     return {
-      statusCode: 500, // O 200 con un flag di errore per non far crashare il frontend
+      statusCode: 500,
       headers,
       body: JSON.stringify({ error: error.message }),
     };
