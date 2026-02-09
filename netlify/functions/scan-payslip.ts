@@ -4,7 +4,6 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || "");
 
 export const handler: Handler = async (event, context) => {
-  // Headers CORS
   const headers = {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Headers": "Content-Type",
@@ -16,7 +15,7 @@ export const handler: Handler = async (event, context) => {
   }
 
   try {
-    console.log("--- 💎 AVVIO SCANSIONE PRECISIONE MASSIMA (No Netto / Si Ticket) ---");
+    console.log("--- 🚀 AVVIO ANALISI UNIVERSALE V10.0 (2008-2025) ---");
     const body = JSON.parse(event.body || "{}");
     const { fileData, mimeType } = body;
 
@@ -24,48 +23,66 @@ export const handler: Handler = async (event, context) => {
 
     const cleanData = fileData.includes("base64,") ? fileData.split("base64,")[1] : fileData;
 
-    // Usiamo Flash con configurazione JSON forzata per evitare crash
+    // Configurazione JSON Mode
     const model = genAI.getGenerativeModel({
       model: "gemini-2.5-flash",
       generationConfig: { responseMimeType: "application/json" }
     });
 
     const prompt = `
-      Sei un Analista Paghe Senior per Ferrovie dello Stato (RFI).
-      Analizza il documento ed estrai i dati con precisione chirurgica.
+      Sei il massimo esperto di Buste Paga Ferroviarie (RFI) in Italia. 
+      Hai analizzato lo storico dal 2008 al 2025.
+      Il tuo compito è estrarre dati precisi ignorando i "falsi positivi" (Welfare, Rimborsi, Statistiche).
 
-      ⚠️ ISTRUZIONI CRITICHE ANTI-ALLUCINAZIONE:
-      1. Non inventare dati. Se un campo è illeggibile, restituisci 0 o null.
-      2. Ignora intestazioni, piè di pagina promozionali o note generiche.
-      3. Ignora il "Netto a pagare". Non ci serve.
+      🔍 ISTRUZIONI DI ESTRAZIONE:
 
-      🔍 DOVE CERCARE I DATI:
+      1. DATA (CRUCIALE):
+         - Trova Mese e Anno (es. "Gennaio 2024", "01/2008").
+         - Restituisci "month" (numero 1-12) e "year" (numero 4 cifre).
 
-      A. [HEADER/BOX PRESENZE] (Di solito in alto o centro-alto):
-         - "daysWorked": Cerca "GG. Lav.", "Lavorati", "Presenze" o il codice "P". 
-           ATTENZIONE: Se trovi "26" (teorico) e "22" (effettivo), prendi l'EFFETTIVO.
-         - "daysVacation": Cerca "Ferie Godute", "Ferie A.C.", o codice "F". SOLO quelle godute nel mese.
+      2. PRESENZE (BOX IN ALTO):
+         - "daysWorked": Cerca "GG. Lav.", "Presenze", "Lavorati" o la colonna "P". Prendi il valore effettivo (es. 19, 21, 15).
+         - "daysVacation": Cerca "Ferie Godute", "Ferie", o colonna "F".
 
-      B. [CORPO CENTRALE] (Voci variabili):
-         - "ticketRate": Cerca l'importo unitario del Buono Pasto/Mensa. Cerca "Valore Ticket", "Aliq. Ticket", "Mensa". 
-           Esempio: Se vedi "Ticket ... 7,00", estrai 7.00.
-         - "codes": Cerca ESATTAMENTE i codici voce elencati sotto nella colonna COMPETENZE (Importo).
-           Ignora colonne "Ore", "Quantità", "Trattenute".
+      3. TICKET RESTAURANT (LOGICA "SEGUGIO"):
+         - Devi trovare il valore unitario del buono pasto.
+         - Cerca i codici in ordine di priorità: **0E99** (priorità massima), **0299**, **0293**.
+         - IGNORA se l'aliquota è inferiore a 0.50€ (es. 0.30 è una quota dipendente).
+         - Cerca valore "Aliquota" o "Parametro": può essere 8.00, 7.00, 5.29, 2.01, 0.91.
+         - SE NON TROVI NULLA o trovi solo "Welfare"/"Mensa": Restituisci 0.00.
 
-      📋 LISTA CODICI DA ESTRARRE (Solo valori positivi in Euro):
-      [0152], [0421], [0470], [0482], [0496], [0687], [0AA1], [0423], [0576], 
-      [0584], [0919], [0920], [0932], [0933], [0995], [0996], [0376], [0686]
+      4. ARRETRATI E EVENTI (COLONNA "ARRETRATI"):
+         - Somma in "arretrati" gli importi positivi (Competenze) relativi a:
+           - "Malattia", "Infortunio", "Carenza" (Codici che iniziano con 3E..).
+           - "Una Tantum", "U.T.", "Accordo", "Premio Risultato" (Codici 0K.., 0C.., 0U..).
+           - "Arretrati", "Arr. Comp." (Codici 74.., 6INT).
+         - "eventNote": Scrivi una breve lista degli eventi trovati (es. "Malattia, Una Tantum").
+
+      5. COMPETENZE VARIABILI (LISTA BIANCA):
+         - Somma nelle voci specifiche (codes) SOLO i codici indennità operativa puri.
+         - LISTA: [0152], [0421], [0470], [0482], [0496], [0687], [0AA1], [0423], [0576], 
+           [0584], [0919], [0920], [0932], [0933], [0995], [0996], [0376], [0686], [3B70], [3B71].
+
+      ⛔ BLACKLIST ASSOLUTA (IGNORARE SEMPRE):
+         - Non sommare MAI questi codici o descrizioni, sono "falsi soldi":
+         - WELFARE: 9WLF, 9UNI, 9RBM, 9POZ, 6HEA, Welfare.
+         - RIMBORSI FISCALI: 6YZD (Rimb. 730), 6YR5.
+         - STATISTICHE: 9DT6 (Imponibile detass.), 9564 (Recuperi), 3ITT.
+         - ASSICURAZIONI: 0PA8, 0PA9, 0962, Polizza.
+         - RIMBORSI SPESE: 0030 (Benzina), 0032 (Gasolio), 0341.
 
       FORMATO JSON OBBLIGATORIO:
       {
-        "month": (Numero 1-12),
-        "year": (Numero 2024...),
-        "daysWorked": (Numero o 0),
-        "daysVacation": (Numero o 0),
-        "ticketRate": (Numero o 0, es. 7.00),
+        "month": 1,
+        "year": 2024,
+        "daysWorked": 0,
+        "daysVacation": 0,
+        "ticketRate": 0.00,
+        "arretrati": 0.00,
+        "eventNote": "",
         "codes": {
-           "0152": 0.00,
-           ... (altri codici trovati)
+           "0687": 0.00,
+           ...
         }
       }
     `;
@@ -83,18 +100,14 @@ export const handler: Handler = async (event, context) => {
     const response = await result.response;
     let text = response.text();
 
-    // 🧹 Pulizia JSON Estrema per evitare crash
-    // Cerca la prima parentesi graffa e l'ultima
+    // Pulizia JSON chirurgica
     const firstBrace = text.indexOf('{');
     const lastBrace = text.lastIndexOf('}');
-
     if (firstBrace !== -1 && lastBrace !== -1) {
       text = text.substring(firstBrace, lastBrace + 1);
-    } else {
-      throw new Error("Gemini non ha prodotto un JSON valido.");
     }
 
-    console.log("✅ Dati Estratti:", text.substring(0, 100) + "...");
+    console.log("✅ Dati Estratti (V10):", text.substring(0, 150) + "...");
 
     return {
       statusCode: 200,
