@@ -172,7 +172,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
     reader.onload = () => resolve(reader.result as string);
     reader.onerror = error => reject(error);
   });
-  // --- FUNZIONE ANALISI AI INTEGRATA (Popola la Tabella) ---
+  // --- FUNZIONE ANALISI V4 (Ticket Rate & No Netto) ---
   const handleAnalyzePaySlip = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -180,7 +180,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
     setIsAnalyzing(true);
 
     try {
-      // 1. Converti PDF in Base64
+      // 1. Conversione Base64
       const convertFileToBase64 = (file: File): Promise<string> => {
         return new Promise((resolve, reject) => {
           const reader = new FileReader();
@@ -192,7 +192,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
 
       const base64String = await convertFileToBase64(file);
 
-      // 2. Invia al Backend
+      // 2. Chiamata Backend
       const response = await fetch('/.netlify/functions/scan-payslip', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -205,28 +205,29 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
       if (!response.ok) throw new Error("Errore comunicazione server");
 
       const aiResult = await response.json();
-      console.log("✅ Dati ricevuti:", aiResult);
+      console.log("✅ Dati IA:", aiResult);
 
-      // 3. IDENTIFICAZIONE MESE/ANNO
-      // Il backend ora restituisce month come numero (1-12)
-      // Noi usiamo indice array (0-11), quindi facciamo -1
-      const targetYear = aiResult.year || new Date().getFullYear();
-      const targetMonthIndex = (aiResult.month - 1);
-
-      if (isNaN(targetMonthIndex) || targetMonthIndex < 0 || targetMonthIndex > 11) {
-        throw new Error(`Mese non valido ricevuto: ${aiResult.month}`);
+      // 3. Verifica Dati Minimi
+      if (!aiResult.month || !aiResult.year) {
+        throw new Error("L'IA non è riuscita a leggere la data (Mese/Anno) dalla busta.");
       }
 
-      // 4. AGGIORNAMENTO TABELLA
-      // Facciamo una copia profonda dei dati attuali
+      // 4. Normalizzazione Mese
+      const targetYear = aiResult.year;
+      const targetMonthIndex = aiResult.month - 1; // Backend 1-12 -> Frontend 0-11
+
+      if (targetMonthIndex < 0 || targetMonthIndex > 11) {
+        throw new Error(`Mese non valido: ${aiResult.month}`);
+      }
+
+      // 5. Aggiornamento Tabella
       const currentAnni = JSON.parse(JSON.stringify(monthlyInputs));
 
-      // Cerchiamo se esiste già la riga per quell'anno/mese
+      // Trova o crea riga
       let rowIndex = currentAnni.findIndex((r: AnnoDati) =>
         Number(r.year) === targetYear && r.monthIndex === targetMonthIndex
       );
 
-      // Se non esiste, la creiamo nuova
       if (rowIndex === -1) {
         const newRow: AnnoDati = {
           id: Date.now().toString(),
@@ -239,14 +240,11 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
           note: ''
         };
         currentAnni.push(newRow);
-
-        // Riordiniamo per data
+        // Riordina
         currentAnni.sort((a: AnnoDati, b: AnnoDati) => {
           if (a.year !== b.year) return a.year - b.year;
           return a.monthIndex - b.monthIndex;
         });
-
-        // Ritroviamo l'indice
         rowIndex = currentAnni.findIndex((r: AnnoDati) =>
           Number(r.year) === targetYear && r.monthIndex === targetMonthIndex
         );
@@ -254,41 +252,52 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
 
       const row = currentAnni[rowIndex];
 
-      // A. INSERIMENTO DATI PRESENZE
-      if (aiResult.daysWorked) row.daysWorked = aiResult.daysWorked;
-      if (aiResult.daysVacation) row.daysVacation = aiResult.daysVacation;
+      // --- ASSEGNAZIONE DATI ---
 
-      // B. INSERIMENTO VOCI VARIABILI (Il cuore del problema)
-      // Iteriamo sui codici trovati e li scriviamo nelle colonne corrispondenti
+      // A. Presenze (GG Lav e Ferie)
+      // Usiamo logica robusta: se arriva 0 o null, manteniamo il valore precedente se esiste, o 0
+      if (aiResult.daysWorked !== undefined && aiResult.daysWorked !== null) {
+        row.daysWorked = Number(aiResult.daysWorked);
+      }
+      if (aiResult.daysVacation !== undefined && aiResult.daysVacation !== null) {
+        row.daysVacation = Number(aiResult.daysVacation);
+      }
+
+      // B. Ticket Rate (NOVITÀ)
+      // Se c'è un'aliquota ticket, la mettiamo nel coefficiente per la Tabella 2
+      if (aiResult.ticketRate && Number(aiResult.ticketRate) > 0) {
+        row.coeffTicket = Number(aiResult.ticketRate);
+
+        // Aggiungiamo anche una nota visiva (senza duplicarla)
+        const ticketNote = `[Aliq. Ticket: €${Number(aiResult.ticketRate).toFixed(2)}]`;
+        if (!row.note?.includes('Aliq. Ticket')) {
+          row.note = (row.note ? row.note + ' ' : '') + ticketNote;
+        }
+      }
+
+      // C. Voci Variabili
+      let countVoci = 0;
       if (aiResult.codes) {
         Object.entries(aiResult.codes).forEach(([code, value]) => {
           const numValue = parseFloat(value as string);
-          // Scriviamo solo se è un numero valido e maggiore di 0
           if (!isNaN(numValue) && numValue > 0) {
-            // @ts-ignore (Usiamo ignore perché le chiavi sono dinamiche)
+            // @ts-ignore
             row[code] = numValue;
+            countVoci++;
           }
         });
       }
 
-      // C. NOTA NETTO (Opzionale)
-      if (aiResult.netto) {
-        const notaNetto = `[AI Netto: €${aiResult.netto}]`;
-        if (!row.note?.includes(notaNetto)) {
-          row.note = (row.note ? row.note + ' ' : '') + notaNetto;
-        }
-      }
+      // NO NETTO: Abbiamo rimosso la logica che scriveva il netto nelle note.
 
-      // Salviamo la riga modificata
+      // Salva
       currentAnni[rowIndex] = row;
 
-      // Aggiorniamo la vista
       if (targetYear !== currentYear) setCurrentYear(targetYear);
       handleDataChange(currentAnni);
 
-      // Feedback
-      const countVoci = aiResult.codes ? Object.keys(aiResult.codes).length : 0;
-      alert(`✅ Busta ${MONTH_NAMES[targetMonthIndex]} acquisita!\n\nPresenze: Aggiornate\nVoci Trovate: ${countVoci}\nNetto: €${aiResult.netto}`);
+      // Alert riepilogativo
+      alert(`✅ Busta Acquisita: ${MONTH_NAMES[targetMonthIndex]} ${targetYear}\n\n- GG Lavorati: ${row.daysWorked}\n- Ferie Godute: ${row.daysVacation}\n- Aliquota Ticket: ${row.coeffTicket ? '€' + row.coeffTicket : 'Non trovata'}\n- Voci Indennità: ${countVoci}`);
 
     } catch (error: any) {
       console.error("Errore Frontend:", error);

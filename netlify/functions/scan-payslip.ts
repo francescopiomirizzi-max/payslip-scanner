@@ -4,6 +4,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || "");
 
 export const handler: Handler = async (event, context) => {
+  // Headers CORS
   const headers = {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Headers": "Content-Type",
@@ -15,74 +16,56 @@ export const handler: Handler = async (event, context) => {
   }
 
   try {
-    console.log("--- 🚄 AVVIO SCANSIONE RFI (Targeted Extraction) ---");
+    console.log("--- 💎 AVVIO SCANSIONE PRECISIONE MASSIMA (No Netto / Si Ticket) ---");
     const body = JSON.parse(event.body || "{}");
     const { fileData, mimeType } = body;
 
     if (!fileData) throw new Error("File mancante");
 
-    // Pulizia Header Base64
     const cleanData = fileData.includes("base64,") ? fileData.split("base64,")[1] : fileData;
 
-    // Usiamo Flash (Veloce e Stabile)
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    // Usiamo Flash con configurazione JSON forzata per evitare crash
+    const model = genAI.getGenerativeModel({
+      model: "gemini-2.5-flash",
+      generationConfig: { responseMimeType: "application/json" }
+    });
 
-    // --- PROMPT CHIRURGICO PER I TUOI CODICI ---
     const prompt = `
-      Sei un esperto paghe RFI (Ferrovie). Analizza il testo grezzo di questa busta paga.
-      Il testo potrebbe apparire disordinato o simile a un CSV (es: "Codice","Descrizione",...,"Importo").
+      Sei un Analista Paghe Senior per Ferrovie dello Stato (RFI).
+      Analizza il documento ed estrai i dati con precisione chirurgica.
 
-      OBIETTIVO:
-      Estrarre i valori monetari (COMPETENZE) per una lista specifica di codici voce e i dati di presenza.
+      ⚠️ ISTRUZIONI CRITICHE ANTI-ALLUCINAZIONE:
+      1. Non inventare dati. Se un campo è illeggibile, restituisci 0 o null.
+      2. Ignora intestazioni, piè di pagina promozionali o note generiche.
+      3. Ignora il "Netto a pagare". Non ci serve.
 
-      1. DATI TEMPORALI:
-         - "month": Estrai il mese come NUMERO (1-12). Es: "Febbraio" -> 2.
-         - "year": L'anno di riferimento (es. 2024).
+      🔍 DOVE CERCARE I DATI:
 
-      2. DATI PRESENZE (Cerca nel box in alto "Presenze"):
-         - "daysWorked": Giorni lavorati/presenze (spesso colonna P o Lavorati).
-         - "daysVacation": Giorni di ferie GODUTE nel mese corrente (NON il residuo anno precedente).
+      A. [HEADER/BOX PRESENZE] (Di solito in alto o centro-alto):
+         - "daysWorked": Cerca "GG. Lav.", "Lavorati", "Presenze" o il codice "P". 
+           ATTENZIONE: Se trovi "26" (teorico) e "22" (effettivo), prendi l'EFFETTIVO.
+         - "daysVacation": Cerca "Ferie Godute", "Ferie A.C.", o codice "F". SOLO quelle godute nel mese.
 
-      3. VOCI VARIABILI (Il cuore dell'analisi):
-         Cerca nella tabella centrale "Dettaglio Voci".
-         Devi trovare l'importo nella colonna **COMPETENZE** (Euro) per i seguenti codici ESATTI.
-         
-         ⚠️ ATTENZIONE: Ignora colonne "Ore", "Quantità" o "Trattenute". Prendi solo l'importo positivo.
-         
-         LISTA CODICI DA CERCARE:
-         - 0152 (Str. Feriale Diurno)
-         - 0421 (Ind. Notturno)
-         - 0470 (Ind. Chiamata Rep)
-         - 0482 (Compenso Rep)
-         - 0496 (Ind. Disp)
-         - 0687 (Ind. Linea <=10h)
-         - 0AA1 (Trasferta)
-         - 0423 (Cantiere Notte)
-         - 0576 (Orario Spezzato)
-         - 0584 (Rep. Festive)
-         - 0919 (Str. Feriale)
-         - 0920 (Str. Fest/Nott)
-         - 0932 (Str. Rep Diurno)
-         - 0933 (Str. Rep Fest/Nott)
-         - 0995 (Str. Disp Diurno)
-         - 0996 (Str. Disp Fest/Nott)
-         - 0376 (Ind. Turno A)
-         - 0686 (Ind. Linea >10h)
+      B. [CORPO CENTRALE] (Voci variabili):
+         - "ticketRate": Cerca l'importo unitario del Buono Pasto/Mensa. Cerca "Valore Ticket", "Aliq. Ticket", "Mensa". 
+           Esempio: Se vedi "Ticket ... 7,00", estrai 7.00.
+         - "codes": Cerca ESATTAMENTE i codici voce elencati sotto nella colonna COMPETENZE (Importo).
+           Ignora colonne "Ore", "Quantità", "Trattenute".
 
-      4. NETTO:
-         - "netto": Il netto a pagare finale.
+      📋 LISTA CODICI DA ESTRARRE (Solo valori positivi in Euro):
+      [0152], [0421], [0470], [0482], [0496], [0687], [0AA1], [0423], [0576], 
+      [0584], [0919], [0920], [0932], [0933], [0995], [0996], [0376], [0686]
 
-      Restituisci ESCLUSIVAMENTE questo JSON:
+      FORMATO JSON OBBLIGATORIO:
       {
-        "month": 2,
-        "year": 2024,
-        "daysWorked": 0,
-        "daysVacation": 0,
-        "netto": 0.00,
+        "month": (Numero 1-12),
+        "year": (Numero 2024...),
+        "daysWorked": (Numero o 0),
+        "daysVacation": (Numero o 0),
+        "ticketRate": (Numero o 0, es. 7.00),
         "codes": {
            "0152": 0.00,
-           "0687": 0.00
-           ... inserisci solo i codici trovati ...
+           ... (altri codici trovati)
         }
       }
     `;
@@ -98,9 +81,20 @@ export const handler: Handler = async (event, context) => {
     ]);
 
     const response = await result.response;
-    const text = response.text().replace(/```json/g, "").replace(/```/g, "").trim();
+    let text = response.text();
 
-    console.log("✅ Dati estratti:", text.substring(0, 150));
+    // 🧹 Pulizia JSON Estrema per evitare crash
+    // Cerca la prima parentesi graffa e l'ultima
+    const firstBrace = text.indexOf('{');
+    const lastBrace = text.lastIndexOf('}');
+
+    if (firstBrace !== -1 && lastBrace !== -1) {
+      text = text.substring(firstBrace, lastBrace + 1);
+    } else {
+      throw new Error("Gemini non ha prodotto un JSON valido.");
+    }
+
+    console.log("✅ Dati Estratti:", text.substring(0, 100) + "...");
 
     return {
       statusCode: 200,
