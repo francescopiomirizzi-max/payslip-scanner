@@ -172,7 +172,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
     reader.onload = () => resolve(reader.result as string);
     reader.onerror = error => reject(error);
   });
-  // --- FUNZIONE ANALISI V10 (UNIVERSAL SOLDIER) ---
+  // --- FUNZIONE V11: GESTIONE ERRORI E DATI SICURI ---
   const handleAnalyzePaySlip = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -200,24 +200,37 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
         })
       });
 
-      if (!response.ok) throw new Error("Errore comunicazione server");
+      // Gestione errori HTTP
+      if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.error || "Errore del server durante l'analisi");
+      }
 
       const aiResult = await response.json();
-      console.log("✅ Dati IA V10:", aiResult);
 
+      // Controllo se il backend ha restituito un errore JSON
+      if (aiResult.error) {
+        throw new Error(aiResult.error);
+      }
+
+      console.log("✅ Dati Ricevuti e Puliti:", aiResult);
+
+      // Validazione Dati Minimi
       if (!aiResult.month || !aiResult.year) {
-        throw new Error("Data non identificata nella busta.");
+        throw new Error("Impossibile leggere la data dalla busta paga.");
       }
 
-      const targetYear = aiResult.year;
-      const targetMonthIndex = aiResult.month - 1;
+      const targetYear = Number(aiResult.year);
+      const targetMonthIndex = Number(aiResult.month) - 1;
 
-      if (targetMonthIndex < 0 || targetMonthIndex > 11) {
-        throw new Error(`Mese non valido: ${aiResult.month}`);
+      if (isNaN(targetYear) || isNaN(targetMonthIndex) || targetMonthIndex < 0 || targetMonthIndex > 11) {
+        throw new Error(`Data non valida letta: ${aiResult.month}/${aiResult.year}`);
       }
 
+      // --- AGGIORNAMENTO STATO ---
       const currentAnni = JSON.parse(JSON.stringify(monthlyInputs));
 
+      // Cerco o creo la riga
       let rowIndex = currentAnni.findIndex((r: AnnoDati) =>
         Number(r.year) === targetYear && r.monthIndex === targetMonthIndex
       );
@@ -231,10 +244,11 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
           daysWorked: 0,
           daysVacation: 0,
           ticket: 0,
-          arretrati: 0, // Campo per Una Tantum/Malattia
+          arretrati: 0,
           note: ''
         };
         currentAnni.push(newRow);
+        // Riordino cronologico
         currentAnni.sort((a: AnnoDati, b: AnnoDati) => {
           if (a.year !== b.year) return a.year - b.year;
           return a.monthIndex - b.monthIndex;
@@ -246,41 +260,42 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
 
       const row = currentAnni[rowIndex];
 
-      // 1. Presenze (Priorità IA)
-      if (aiResult.daysWorked !== undefined && aiResult.daysWorked !== null) row.daysWorked = Number(aiResult.daysWorked);
-      if (aiResult.daysVacation !== undefined && aiResult.daysVacation !== null) row.daysVacation = Number(aiResult.daysVacation);
+      // --- ASSEGNAZIONE SICURA (Con Fallback a 0) ---
 
-      // 2. Ticket Rate (Logica Avanzata)
-      if (aiResult.ticketRate && Number(aiResult.ticketRate) > 0) {
-        row.coeffTicket = Number(aiResult.ticketRate);
-        // Nota solo se non già presente
+      // 1. Presenze
+      if (typeof aiResult.daysWorked === 'number') row.daysWorked = aiResult.daysWorked;
+      if (typeof aiResult.daysVacation === 'number') row.daysVacation = aiResult.daysVacation;
+
+      // 2. Ticket Rate (Logica 0E99 vs Welfare)
+      const ticketVal = Number(aiResult.ticketRate);
+      if (!isNaN(ticketVal) && ticketVal > 0) {
+        row.coeffTicket = ticketVal;
+        // Aggiungi nota solo se non esiste già
         if (!row.note?.includes('Aliq.')) {
-          row.note = (row.note ? row.note + ' ' : '') + `[Aliq. Ticket: €${Number(aiResult.ticketRate).toFixed(2)}]`;
+          row.note = (row.note ? row.note + ' ' : '') + `[Aliq. Ticket: €${ticketVal.toFixed(2)}]`;
         }
       } else {
-        // Se non trova ticket, NON sovrascrivere con 0 se c'era un valore manuale, 
-        // a meno che non sia esplicito che mancano i ticket.
-        // Qui lasciamo invariato se l'IA restituisce 0, oppure mettiamo 0 se vogliamo fidarci ciecamente.
-        // Nel dubbio V10 si fida: se dice 0, è 0 (es. Welfare).
-        if (aiResult.ticketRate === 0) row.coeffTicket = 0;
+        // Se 0, esplicita che non ci sono ticket (es. Welfare)
+        // Opzionale: row.coeffTicket = 0; // Se vuoi sovrascrivere
       }
 
-      // 3. Arretrati e Eventi (Malattia, Una Tantum)
-      if (aiResult.arretrati && Number(aiResult.arretrati) > 0) {
-        row.arretrati = Number(aiResult.arretrati);
+      // 3. Arretrati / Eventi
+      const arretratiVal = Number(aiResult.arretrati);
+      if (!isNaN(arretratiVal) && arretratiVal > 0) {
+        row.arretrati = arretratiVal;
       }
 
-      // Gestione Note Eventi
-      if (aiResult.eventNote && aiResult.eventNote.length > 0) {
-        const cleanNote = aiResult.eventNote.replace(/['"]+/g, '');
-        if (!row.note?.includes(cleanNote)) {
+      // 4. Note Eventi
+      if (aiResult.eventNote && typeof aiResult.eventNote === 'string' && aiResult.eventNote.length > 0) {
+        const cleanNote = aiResult.eventNote.replace(/['"]+/g, '').trim();
+        if (cleanNote && !row.note?.includes(cleanNote)) {
           row.note = (row.note ? row.note + ' ' : '') + `[⚠️ ${cleanNote}]`;
         }
       }
 
-      // 4. Voci Variabili (Indennità pure)
+      // 5. Voci Variabili (Indennità)
       let countVoci = 0;
-      if (aiResult.codes) {
+      if (aiResult.codes && typeof aiResult.codes === 'object') {
         Object.entries(aiResult.codes).forEach(([code, value]) => {
           const numValue = parseFloat(value as string);
           if (!isNaN(numValue) && numValue > 0) {
@@ -291,16 +306,17 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
         });
       }
 
+      // Salva
       currentAnni[rowIndex] = row;
 
       if (targetYear !== currentYear) setCurrentYear(targetYear);
       handleDataChange(currentAnni);
 
-      alert(`✅ Analisi ${targetYear} Completata!\n\n- GG Lav: ${row.daysWorked}\n- Ticket: ${row.coeffTicket ? '€' + row.coeffTicket : 'Welfare/Assente'}\n- Eventi: ${aiResult.eventNote || "Nessuno"}\n- Arretrati/Extra: €${row.arretrati || 0}`);
+      alert(`✅ Analisi Completata!\n\n📅 ${MONTH_NAMES[targetMonthIndex]} ${targetYear}\n- GG Lav: ${row.daysWorked}\n- Ticket: ${row.coeffTicket ? '€' + row.coeffTicket : '0'}\n- Eventi: ${aiResult.eventNote || "Nessuno"}`);
 
     } catch (error: any) {
       console.error("Errore Frontend:", error);
-      alert(`Errore: ${error.message}`);
+      alert(`❌ Errore durante l'analisi:\n${error.message}`);
     } finally {
       setIsAnalyzing(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
