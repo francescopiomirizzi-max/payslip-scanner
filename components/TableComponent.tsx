@@ -72,7 +72,8 @@ const TableComponent: React.FC<TableComponentProps> = ({ worker, onBack, onEdit 
         // A. Calcolo Voci del MESE
         let monthlyVoci = 0;
         profileColumns.forEach(col => {
-          if (!['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'coeffPercepito', 'coeffTicket', 'note'].includes(col.id)) {
+          // MODIFICA FONDAMENTALE: Aggiunto 'arretrati' per escluderlo dal conteggio lordo
+          if (!['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'coeffPercepito', 'coeffTicket', 'note', 'arretrati'].includes(col.id)) {
             monthlyVoci += parseFloatSafe(row[col.id]);
           }
         });
@@ -435,8 +436,8 @@ Distinti saluti.
             <button
               onClick={() => setIncludeExFest(!includeExFest)}
               className={`group relative px-4 py-2 rounded-xl font-bold text-xs shadow-lg transition-all duration-300 flex items-center gap-2 ${includeExFest
-                  ? 'bg-amber-600 text-white border border-amber-400'
-                  : 'bg-slate-700 text-slate-300 border border-slate-600 hover:text-white'
+                ? 'bg-amber-600 text-white border border-amber-400'
+                : 'bg-slate-700 text-slate-300 border border-slate-600 hover:text-white'
                 }`}
             >
               <CalendarPlus className="w-4 h-4" />

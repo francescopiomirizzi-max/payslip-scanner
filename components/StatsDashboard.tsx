@@ -198,9 +198,9 @@ const StatsDashboard: React.FC<StatsDashboardProps> = ({ workers = [], onBack })
     // --- LOGICA DI CALCOLO UNIFICATA CON IL RESTO DELL'APP ---
     const stats = useMemo(() => {
         const computedWorkers = workers.map(w => {
-            // 1. Identifichiamo le colonne indennità (tutto tranne i campi tecnici)
+            // 1. Identifichiamo le colonne indennità (ESCLUDENDO Arretrati)
             const indennitaCols = getColumnsByProfile(w.profilo).filter(c =>
-                !['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'coeffPercepito', 'coeffTicket', 'note'].includes(c.id)
+                !['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'coeffPercepito', 'coeffTicket', 'note', 'arretrati'].includes(c.id)
             );
 
             let grandTotalNetto = 0;

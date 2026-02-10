@@ -165,7 +165,7 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
   const financialStats = useMemo(() => {
     // 1. Configurazioni Base
     const TETTO_MAX = 28; // Standard conservativo per la card
-    const cols = getColumnsByProfile(worker.profilo).filter(c => !['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'coeffPercepito', 'coeffTicket', 'note'].includes(c.id));
+    const cols = getColumnsByProfile(worker.profilo).filter(c => !['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'coeffPercepito', 'coeffTicket', 'note', 'arretrati'].includes(c.id));
 
     let totalLordo = 0;
     let totalPercepito = 0;

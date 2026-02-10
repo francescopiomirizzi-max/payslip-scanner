@@ -574,8 +574,10 @@ const App: React.FC = () => {
     const dashboardStats = useMemo(() => {
         return workers.reduce((acc, worker) => {
             const safeAnni = Array.isArray(worker.anni) ? worker.anni : [];
-            // FIX: Rimossa esclusione 'arretrati' per allinearsi con Card e Report
-            const cols = getColumnsByProfile(worker.profilo || 'RFI').filter(c => !['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'coeffPercepito', 'coeffTicket', 'note'].includes(c.id));
+            // FIX: Aggiunto 'arretrati' alla lista delle esclusioni
+            const cols = getColumnsByProfile(worker.profilo || 'RFI').filter(c =>
+                !['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'coeffPercepito', 'coeffTicket', 'note', 'arretrati'].includes(c.id)
+            );
 
             let wNetto = 0;
             let wTicket = 0;
@@ -626,8 +628,9 @@ const App: React.FC = () => {
 
         return workers.map(worker => {
             const safeAnni = Array.isArray(worker.anni) ? worker.anni : [];
-            // FIX: Rimossa esclusione 'arretrati' anche qui
-            const cols = getColumnsByProfile(worker.profilo || 'RFI').filter(c => !['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'coeffPercepito', 'coeffTicket', 'note'].includes(c.id));
+            const cols = getColumnsByProfile(worker.profilo || 'RFI').filter(c =>
+                !['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'coeffPercepito', 'coeffTicket', 'note', 'arretrati'].includes(c.id)
+            );
 
             let wNetto = 0;
             let wTicket = 0;

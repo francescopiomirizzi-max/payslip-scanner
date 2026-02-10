@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-// AGGIUNTO PenTool agli import
 import { X, Printer, Copy, CheckCircle, PenTool } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { YEARS, AnnoDati } from './types';
@@ -16,9 +15,10 @@ const generaRelazioneTestuale = (worker: any, totali: any, includeExFest: boolea
     const tettoGiorni = includeExFest ? 32 : 28;
 
     // --- PROTEZIONE DATI ---
-    const gt = totali?.grandTotal || {};
+    // Gestisce diverse strutture di dati in ingresso per evitare crash
+    const gt = totali?.grandTotal || totali || {};
 
-    // Recupero valori sicuro
+    // Recupero valori (con fallback intelligenti)
     const lordoVal = gt.incidenzaTotale ?? gt.totalLordo ?? gt.grossClaim ?? 0;
     const percepitoVal = gt.indennitaPercepita ?? gt.totalPercepito ?? 0;
     const ticketVal = gt.indennitaPasto ?? gt.totalTicket ?? 0;
@@ -39,64 +39,88 @@ const generaRelazioneTestuale = (worker: any, totali: any, includeExFest: boolea
             .sort((a: AnnoDati, b: AnnoDati) => (a.year || 0) - (b.year || 0));
 
         if (noteTrovate.length > 0) {
-            sezioneNote = "\nEVENTI E ANNOTAZIONI SPECIFICHE:\n";
+            sezioneNote = "\nEVENTI RILEVANTI E ANNOTAZIONI:\n";
             noteTrovate.forEach((r: AnnoDati) => {
-                sezioneNote += `- ${r.month} ${r.year}: ${r.note}\n`;
+                // Pulisce le note da caratteri tecnici se presenti
+                const cleanNote = r.note?.replace(/[\[\]]/g, '') || '';
+                sezioneNote += `- ${r.month} ${r.year}: ${cleanNote}\n`;
             });
             sezioneNote += "--------------------------------------------------\n";
         }
     }
 
-    // --- INTEGRAZIONE TESTO LEGALE ---
+    // --- INTEGRAZIONE TESTO LEGALE (AGGIORNATO V14) ---
     let elencoVoci = "";
 
     if (worker?.profilo === 'RFI' || !worker?.profilo || worker?.profilo === 'ND') {
         elencoVoci = `
-VOCI VARIABILI INCLUSE (Riferimento CCNL/Contratti Aziendali):
-- Straordinario Diurno non recuperato (Cod. 0152)
-- Indennità Lavoro Notturno (Cod. 0421, 1130)
-- Indennità di Chiamata/Disponibilità (Cod. 0470, 0496)
-- Compenso per Reperibilità (Cod. 0482, 0584)
-- Indennità di Linea (Cod. 0687)
-- Trasferta (Cod. 0AA1)
-- Compenso Cantiere Notte (Cod. 0423)
-- Indennità Orario Spezzato (Cod. 0576)
-- Straordinari Vari (Cod. 0919, 0920, 0932, 0933, 0995, 0996)
-- Ticket Restaurant / Buoni Pasto
+VOCI RETRIBUTIVE VARIABILI INCLUSE NEL CALCOLO:
+L'analisi ha isolato le voci a carattere continuativo e ricorrente (Art. 64 CCNL), tra cui:
+
+1. LAVORO NOTTURNO E FESTIVO:
+   - Indennità Lavoro Notturno (Cod. 0421, 1130)
+   - Festivo Notturno (Cod. 0457) [Alta Incidenza]
+   - Compenso Cantiere Notte (Cod. 0423)
+   - Straordinari Vari (Cod. 0919, 0920, 0932, 0933, 0995, 0996)
+
+2. INDENNITÀ DI FUNZIONE E DISAGIO:
+   - Indennità di Chiamata/Disponibilità (Cod. 0470, 0496)
+   - Compenso per Reperibilità (Cod. 0482, 0584)
+   - Indennità di Linea e Manutenzione (Cod. 0687, 0686)
+   - Indennità Orario Spezzato (Cod. 0576)
+   - Trasferta Esente (Cod. 0AA1)
+
+3. PREMIALITÀ RICORRENTE (Novità 2024):
+   - Salario Produttività Mensile (Cod. 3B70)
+   - Produttività Incrementale (Cod. 3B71)
+
+4. RISTORO PASTI:
+   - Ticket Restaurant / Buoni Pasto (Quota Esente)
+
+NOTA BENE:
+Sono state TASSATIVAMENTE ESCLUSE dal calcolo della media tutte le voci "Una Tantum", i rimborsi spese a piè di lista, i premi annuali non ricorrenti, la malattia, gli arretrati anni precedenti e le voci di Welfare aziendale, al fine di non alterare il valore della retribuzione globale di fatto giornaliera.
 `;
     } else if (worker?.profilo === 'REKEEP') {
-        elencoVoci = "Voci incluse: Indennità specifiche appalto FS/Multiservizi (Turni non cadenzati, Ind. Sussidiaria, Straordinari, Maggiorazioni).";
+        elencoVoci = `
+VOCI INCLUSE (Appalto Multiservizi/FS):
+- Indennità Turni Non Cadenzati (Cod. I215FC)
+- Indennità Sussidiaria (Cod. I1182C)
+- Lavoro Domenicale e Notturno (Cod. I1037C, I1040C)
+- Maggiorazioni e Straordinari (Cod. S1800C, M3500C)
+`;
     } else {
-        elencoVoci = "Voci incluse: Tipiche della Ristorazione a Bordo (Diaria Scorta, Ind. Cassa, Lavoro Domenicale/Notturno).";
+        elencoVoci = "Voci incluse: Indennità specifiche della Ristorazione a Bordo (Diaria Scorta, Ind. Cassa, Lavoro Domenicale/Notturno).";
     }
 
     const dettagliMetodologia = `
-METODOLOGIA DI CALCOLO (Rif. Cass. 23/6/2022 n. 20216):
-Il conteggio è stato costruito su due elementi fondamentali:
+METODOLOGIA DI CALCOLO PERITALE (Rif. Cass. Sez. Lav. 23/6/2022 n. 20216):
+Il presente prospetto determina la "Retribuzione Globale di Fatto" spettante durante le ferie, superando il concetto di retribuzione base.
 
-1. DIVISORE: Il numero delle effettive giornate lavorative annuali, ricavato dalle buste paga.
-2. MOLTIPLICATORE: Il numero dei giorni di ferie annualmente spettanti, nel limite comunque di ${tettoGiorni} giorni (periodo minimo protetto ex Art. 36 Cost. e Dir. 2003/88/CE).
+CRITERI ADOTTATI:
+1. PRINCIPIO DI ONNICOMPRENSIVITÀ: Inclusione di tutte le indennità collegate agli inconvenienti intrinseci alle mansioni (es. notte, turni) o alla status professionale.
+2. CRITERIO DEL DIVISORE REALE: La media giornaliera è ottenuta dividendo la somma delle competenze variabili per le GIORNATE EFFETTIVAMENTE LAVORATE nel mese/anno, e non per divisori convenzionali (26 o 30), garantendo la massima precisione contabile.
+3. TETTO MASSIMO DI LEGGE: Il ricalcolo è applicato sui giorni di ferie fruiti entro il limite del periodo minimo legale di ${tettoGiorni} giorni (Art. 36 Cost. e Dir. 2003/88/CE). L'eventuale eccedenza non è stata conteggiata.
 
 PROCEDIMENTO ANALITICO:
-- È stata estrapolata, busta per busta, ogni singola voce variabile della retribuzione.
-- È stata effettuata la sommatoria annuale di tali voci.
-- Dividendo tale somma per il numero delle effettive giornate lavorative, è stato ricavato il valore medio giornaliero.
-- Tale valore medio è stato moltiplicato per i giorni di ferie effettivamente fruiti (ridotti al tetto di ${tettoGiorni} ove eccedenti).
-- Infine, è stato detratto quanto già percepito allo stesso titolo.
+- Estrapolazione OCR dei dati da cedolini paga originali (2008-2025).
+- Separazione netta tra voci ricorrenti (utili) e voci straordinarie (escluse).
+- Calcolo differenziale: [Media Giornaliera Spettante] x [Giorni Ferie] - [Quanto già erogato].
 `;
 
     return `
 RELAZIONE TECNICA DI RICALCOLO CONTABILE - ${worker?.profilo || 'ND'}
-OGGETTO: Integrazione Indennità Feriale - Periodo ${inizioPeriodo}-${finePeriodo}
+OGGETTO: Integrazione Indennità Feriale (Mancata Retribuzione Variabile)
+PERIODO DI ANALISI: ${inizioPeriodo} - ${finePeriodo}
 
-DATI DEL LAVORATORE
-Nominativo: ${worker?.cognome || ''} ${worker?.nome || ''}
-Azienda/Contratto: ${worker?.profilo || 'ND'}
-Qualifica: ${worker?.ruolo || 'Personale Operativo'}
-ID Pratica: #W-${worker?.id || 'ND'}
+DATI DEL RICORRENTE
+Nominativo: ....... ${worker?.cognome || ''} ${worker?.nome || ''}
+Matricola/ID: ..... ${worker?.id || 'ND'}
+Profilo: .......... ${worker?.profilo || 'ND'} - ${worker?.ruolo || 'Personale Operativo'}
+
+--------------------------------------------------
 
 PREMESSA GIURIDICA
-La presente analisi determina le differenze retributive maturate durante le ferie, applicando il principio di onnicomprensività della retribuzione feriale, previa disapplicazione delle clausole contrattuali limitative per contrarietà a norme imperative.
+La presente perizia tecnica ha lo scopo di quantificare le differenze retributive maturate a titolo di "Retribuzione Feriale", in applicazione della giurisprudenza della Corte di Giustizia UE e della Corte di Cassazione, che sanciscono il diritto del lavoratore a percepire, durante le ferie, la retribuzione ordinaria comprensiva delle voci variabili medie.
 
 ${dettagliMetodologia}
 
@@ -104,26 +128,40 @@ ${elencoVoci}
 
 ${sezioneNote}
 
-RISULTANZE CONTABILI
-Si certifica che per il lavoratore risulta maturato il seguente credito:
+RISULTANZE CONTABILI FINALI
+Dall'analisi dei cedolini paga prodotti, risulta il seguente credito a favore del lavoratore:
 
-- DIFFERENZE RETRIBUTIVE (Lordo): ..... € ${fmt(lordoVal)}
-- MENO GIÀ PERCEPITO: ................. € ${fmt(percepitoVal)}
-- CREDITO BUONI PASTO: ................ € ${fmt(ticketVal)}
++ DIFFERENZE LORDE MATURATE: .......... € ${fmt(lordoVal)}
+  (Calcolate su indennità fisse e variabili ricorrenti)
 
---------------------------------------------------
-TOTALE CREDITO NETTO SPETTANTE: ....... € ${fmt(nettoVal)} 
+- IMPORTO GIÀ PERCEPITO: .............. € ${fmt(percepitoVal)}
+  (A titolo di indennità feriale base o acconti)
 
-Documento generato il: ${oggi}
++ CREDITO BUONI PASTO: ................ € ${fmt(ticketVal)}
+  (Ticket maturati durante le ferie e non goduti)
+
+==================================================
+  TOTALE CREDITO LORDO SPETTANTE: ..... € ${fmt(nettoVal)}
+==================================================
+
+Si rilascia il presente conteggio per gli usi consentiti dalla legge.
+
+Luogo e Data: Foggia, ${oggi}
+Firma del Tecnico: __________________________
 `;
 };
 
+// ... Il resto del componente (RelazioneModal) rimane identico ...
+// ... Copia tutto il resto dal tuo codice originale (handleStampa, JSX return, etc.) ...
+
 export const RelazioneModal = ({ isOpen, onClose, worker, totals, includeExFest = false }: any) => {
+    // ... STESSO CODICE DI PRIMA PER IL COMPONENTE ...
+    // (Non serve cambiarlo, la logica è tutta nella funzione sopra)
+
     const [copiato, setCopiato] = useState(false);
 
     if (!isOpen) return null;
 
-    // Generazione sicura del testo
     let testoCompleto = "";
     try {
         testoCompleto = generaRelazioneTestuale(worker, totals, includeExFest);
@@ -132,6 +170,7 @@ export const RelazioneModal = ({ isOpen, onClose, worker, totals, includeExFest 
         testoCompleto = "Errore nella generazione dei dati. Controllare la console.";
     }
 
+    // ... (Mantieni tutto il codice HTML per la stampa e il render JSX invariato) ...
     // Prepariamo l'HTML per le note (per la stampa)
     let noteSectionHTML = '';
     if (worker?.anni && Array.isArray(worker.anni)) {
@@ -173,7 +212,7 @@ export const RelazioneModal = ({ isOpen, onClose, worker, totals, includeExFest 
               <div class="sub-header">CONTRATTO DI RIFERIMENTO: ${worker?.profilo || 'ND'}</div>
             </div>
             
-            <pre>${testoCompleto.replace('EVENTI E ANNOTAZIONI SPECIFICHE:', '')}</pre>
+            <pre>${testoCompleto.replace('EVENTI RILEVANTI E ANNOTAZIONI:', '')}</pre>
             
             ${noteSectionHTML}
 
@@ -203,13 +242,11 @@ export const RelazioneModal = ({ isOpen, onClose, worker, totals, includeExFest 
             <motion.div
                 initial={{ scale: 0.9, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
-                // Aggiunto gradiente sottile in dark mode
                 className="bg-white dark:bg-gradient-to-b dark:from-slate-900 dark:to-slate-950 w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] border border-white/20 dark:border-slate-700/50"
             >
-                {/* HEADER: Icona Penna migliorata */}
+                {/* HEADER */}
                 <div className="p-6 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-white dark:bg-slate-900/50 relative z-10">
                     <div className="flex items-center gap-4">
-                        {/* Contenitore icona con gradiente e bordo */}
                         <div className="p-3 bg-gradient-to-br from-indigo-50 to-violet-50 dark:from-indigo-900/30 dark:to-violet-900/30 rounded-2xl border border-indigo-100 dark:border-indigo-500/20 shadow-sm">
                             <PenTool className="text-indigo-600 dark:text-indigo-400 w-6 h-6" />
                         </div>
@@ -223,17 +260,15 @@ export const RelazioneModal = ({ isOpen, onClose, worker, totals, includeExFest 
                     </button>
                 </div>
 
-                {/* BODY: Area testo migliorata */}
+                {/* BODY */}
                 <div className="p-6 overflow-y-auto bg-slate-50 dark:bg-slate-950/50 flex-1 relative">
-                    {/* Box testo con sfondo semitrasparente in dark mode e bordi più curati */}
                     <div className="bg-white dark:bg-slate-900/60 backdrop-blur-sm p-8 shadow-sm dark:shadow-inner border border-slate-200 dark:border-slate-800 rounded-2xl font-mono text-xs dark:text-slate-300 leading-relaxed relative z-10">
                         <pre className="whitespace-pre-wrap">{testoCompleto}</pre>
                     </div>
                 </div>
 
-                {/* FOOTER: Pulsanti con effetti grafici */}
+                {/* FOOTER */}
                 <div className="p-6 border-t border-slate-200 dark:border-slate-800 flex gap-3 justify-end bg-white dark:bg-slate-900/50 relative z-10">
-                    {/* Pulsante COPIA: Effetto hover sul bordo e testo */}
                     <button
                         onClick={handleCopia}
                         className="px-5 py-2.5 flex items-center gap-2 border border-slate-300 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 text-slate-700 dark:text-slate-300 font-semibold transition-all active:scale-95 hover:border-indigo-500 dark:hover:border-indigo-400 hover:text-indigo-600 dark:hover:text-indigo-300 hover:shadow-sm"
@@ -242,7 +277,6 @@ export const RelazioneModal = ({ isOpen, onClose, worker, totals, includeExFest 
                         {copiato ? 'Copiato' : 'Copia Testo'}
                     </button>
 
-                    {/* Pulsante STAMPA: Gradiente, ombra colorata e effetto sollevamento */}
                     <button
                         onClick={handleStampa}
                         className="px-6 py-2.5 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white rounded-xl font-bold flex items-center gap-2 shadow-lg shadow-indigo-500/30 hover:shadow-indigo-500/50 transition-all active:scale-95 hover:-translate-y-0.5"

@@ -138,7 +138,22 @@ const INDENNITA_DETAILS: Record<string, IndennitaDetail> = {
     title: "Giorni Ferie (Moltiplicatore)",
     explanation: "Giorni di ferie goduti. Tetto max 28gg (Sent. Cass. 20216/2022).",
     location: "Testata del cedolino, riquadro 'Ferie' -> Colonna 'Godute' o 'Anno Corr.'."
-  }
+  },
+  "0457": {
+    title: "Festivo Notturno (Alta Incidenza)",
+    explanation: "Indennità per prestazione svolta in orario notturno (22-06) ricadente in giornata festiva. È una delle voci variabili più 'pesanti': la sua esclusione abbassa drasticamente la media giornaliera spettante.",
+    location: "Corpo centrale. Verifica la concomitanza di 'Notti' e 'Festivi' nel calendario."
+  },
+  "3B70": {
+    title: "Salario Produttività (Mensile)",
+    explanation: "Quota mensile del premio di risultato/produttività. A differenza del premio annuale una tantum, questa voce è RICORRENTE (presente ogni mese), quindi DEVE rientrare nel calcolo della retribuzione feriale (Art. 64 CCNL).",
+    location: "Corpo centrale, spesso verso la fine della lista competenze."
+  },
+  "3B71": {
+    title: "Produttività Incrementale",
+    explanation: "Elemento aggiuntivo al salario di produttività (3B70). Introdotto dai recenti accordi (2024), rappresenta una componente fissa della retribuzione variabile mensile. Va sommata al calcolo.",
+    location: "Solitamente adiacente al codice 3B70."
+  },
 };
 
 interface MonthlyDataGridProps {
@@ -228,7 +243,6 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
       col.id !== 'month' && col.id !== 'total' && col.id !== 'note'
     );
   }, [currentColumns]);
-
   // --- CALCOLO TOTALI RIGA ---
   const calculateRowTotal = useCallback((row: any): number => {
     if (!row) return 0;
@@ -237,9 +251,10 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
       if (
         col.id !== 'month' && col.id !== 'total' &&
         col.id !== 'daysWorked' && col.id !== 'daysVacation' &&
-        col.id !== 'ticket' && col.id !== 'note'
+        col.id !== 'ticket' && col.id !== 'note' &&
+        col.id !== 'arretrati' // <--- MODIFICA: ESCLUDA ARRETRATI DAL TOTALE RIGA
       ) {
-        const val = row[col.id];
+        const val = parseLocalFloat(row[col.id]);
         const num = parseLocalFloat(val);
         if (num && !isNaN(num)) sum += num;
       }
@@ -270,8 +285,9 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
 
   // --- 2. STATISTICHE HEADER ---
   const annualStats = useMemo(() => {
+    // MODIFICA: Aggiunto 'arretrati' alla lista delle esclusioni
     const indennitaCols = currentColumns.filter(col =>
-      !['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'note'].includes(col.id)
+      !['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'note', 'arretrati'].includes(col.id)
     );
     let totIndennita = 0;
     let totGiorniLav = 0;

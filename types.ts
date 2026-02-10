@@ -7,12 +7,11 @@ export const MONTH_NAMES = [
   'LUGLIO', 'AGOSTO', 'SETTEMBRE', 'OTTOBRE', 'NOVEMBRE', 'DICEMBRE'
 ];
 
-// Alias per compatibilità con altri componenti che cercano "MONTHS"
+// Alias per compatibilità
 export const MONTHS = MONTH_NAMES;
 
 export const YEARS = Array.from({ length: 18 }, (_, i) => 2008 + i);
 
-// --- 1. MODIFICA: AGGIUNTO 'REKEEP' ---
 export type ProfiloAzienda = 'RFI' | 'ELIOR' | 'REKEEP';
 
 export interface AnnoDati {
@@ -21,15 +20,15 @@ export interface AnnoDati {
   monthIndex: number;
   month?: string;
 
-  // Input per il calcolo delle differenze ferie
-  daysWorked: string | number;   // Divisore (GG Lavorati)
-  daysVacation: string | number; // GG Ferie fruite
-  ticket: string | number;       // Buoni Pasto
+  // Input per il calcolo
+  daysWorked: string | number;   // Divisore
+  daysVacation: string | number; // Ferie fruite
+  ticket: string | number;       // Buono pasto
 
-  // --- MODIFICA: CAMPO NOTE PER EVENTI SPECIALI ---
-  note?: string; // Es. "Infortunio", "Congedo", "Sciopero"
+  // Note per eventi (es. Malattia, Infortunio)
+  note?: string;
 
-  // Campi dinamici per le indennità
+  // Campi dinamici (codici indennità)
   [key: string]: any;
 }
 
@@ -54,21 +53,22 @@ export interface ColumnDef {
   isTotal?: boolean;
   type?: 'integer' | 'currency' | 'text';
   isCalculated?: boolean;
-  isInput?: boolean; // Aggiunto per compatibilità
+  isInput?: boolean;
 }
 
 // --- CONFIGURAZIONE COLONNE PER PROFILO ---
 
-// Colonne RFI (Aggiornate: ESATTAMENTE 16 VOCI DA DOCUMENTO LEGALE)
+// Colonne RFI (Allineate al Prompt V14)
 export const INDENNITA_RFI: ColumnDef[] = [
   { id: '0152', label: 'Straord. Diurno', subLabel: '(0152)', width: 'min-w-[120px]', type: 'currency' },
   { id: '0421', label: 'Ind. Notturno', subLabel: '(0421)', width: 'min-w-[120px]', type: 'currency' },
+  { id: '0423', label: 'Comp. Cantiere Notte', subLabel: '(0423)', width: 'min-w-[130px]', type: 'currency' },
+  { id: '0457', label: 'Festivo Notturno', subLabel: '(0457)', width: 'min-w-[130px]', type: 'currency' }, // AGGIUNTO
   { id: '0470', label: 'Ind. Chiamata', subLabel: '(0470)', width: 'min-w-[120px]', type: 'currency' },
   { id: '0482', label: 'Ind. Reperibilità', subLabel: '(0482)', width: 'min-w-[120px]', type: 'currency' },
   { id: '0496', label: 'Ind. Disp. Chiamata', subLabel: '(0496)', width: 'min-w-[120px]', type: 'currency' },
   { id: '0687', label: 'Ind. Linea < 10h', subLabel: '(0687)', width: 'min-w-[120px]', type: 'currency' },
   { id: '0AA1', label: 'Trasferta', subLabel: '(0AA1)', width: 'min-w-[120px]', type: 'currency' },
-  { id: '0423', label: 'Comp. Cantiere Notte', subLabel: '(0423)', width: 'min-w-[130px]', type: 'currency' },
   { id: '0576', label: 'Ind. Orario Spezz.', subLabel: '(0576)', width: 'min-w-[120px]', type: 'currency' },
   { id: '0584', label: 'Rep. Festive/Riposo', subLabel: '(0584)', width: 'min-w-[130px]', type: 'currency' },
   { id: '0919', label: 'Str. Feriale Diurno', subLabel: '(0919)', width: 'min-w-[120px]', type: 'currency' },
@@ -77,6 +77,8 @@ export const INDENNITA_RFI: ColumnDef[] = [
   { id: '0933', label: 'Str. Fest/Not Rep.', subLabel: '(0933)', width: 'min-w-[120px]', type: 'currency' },
   { id: '0995', label: 'Str. Diurno Disp.', subLabel: '(0995)', width: 'min-w-[120px]', type: 'currency' },
   { id: '0996', label: 'Str. Fest/Not Disp.', subLabel: '(0996)', width: 'min-w-[120px]', type: 'currency' },
+  { id: '3B70', label: 'Sal. Produttività', subLabel: '(3B70)', width: 'min-w-[120px]', type: 'currency' }, // AGGIUNTO
+  { id: '3B71', label: 'Prod. Incrementale', subLabel: '(3B71)', width: 'min-w-[120px]', type: 'currency' }, // AGGIUNTO
 ];
 
 // Colonne ELIOR (Invariato)
@@ -115,16 +117,17 @@ export const INDENNITA_REKEEP: ColumnDef[] = [
   { id: 'M3500C', label: 'Maggioraz. 35%', subLabel: '(M3500C)', width: 'min-w-[110px]', type: 'currency' },
 ];
 
-// --- MODIFICA: COLONNA ARRETRATI/EXTRA (Universale) ---
+// --- COLONNA ARRETRATI (Universale) ---
+// Questa è la colonna "Cuscinetto" per i dati informativi (non sommati)
 export const COLONNA_ARRETRATI: ColumnDef = {
   id: 'arretrati',
   label: 'Arretrati / Altro',
-  subLabel: '(Una Tantum)',
+  subLabel: '(Esclusi)',
   width: 'min-w-[130px]',
   type: 'currency'
 };
 
-// --- 3. MODIFICA: COMPOSIZIONE COLONNE ---
+// --- COMPOSIZIONE COLONNE ---
 export const getColumnsByProfile = (profilo: ProfiloAzienda): ColumnDef[] => {
   let specificColumns: ColumnDef[] = [];
 
@@ -142,17 +145,15 @@ export const getColumnsByProfile = (profilo: ProfiloAzienda): ColumnDef[] => {
   return [
     { id: 'month', label: 'MESE', width: 'min-w-[120px]', sticky: true },
     ...specificColumns,
-    COLONNA_ARRETRATI,
+    COLONNA_ARRETRATI, // Viene sempre aggiunta alla fine delle indennità
     { id: 'total', label: 'TOTALE', subLabel: 'Voci', width: 'min-w-[100px]', isTotal: true, isCalculated: true },
     { id: 'daysWorked', label: 'GG Lav.', subLabel: 'Divisore', width: 'min-w-[80px]', type: 'integer' },
     { id: 'daysVacation', label: 'GG Ferie', subLabel: 'Fruite', width: 'min-w-[80px]', type: 'integer' },
-
-    // Manteniamo Ticket qui nel modello dati, ma la UI (MonthlyDataGrid) lo filtrerà come concordato
     { id: 'ticket', label: 'Ticket', subLabel: 'Past.', width: 'min-w-[80px]', type: 'currency' }
   ];
 };
 
-// 4. HELPER FUNCTIONS (Invariate)
+// 4. HELPER FUNCTIONS
 export const formatCurrency = (value: number | string | undefined) => {
   if (value === undefined || value === null || value === '') return '-';
   const num = typeof value === 'string' ? parseFloat(value.replace(',', '.')) : value;

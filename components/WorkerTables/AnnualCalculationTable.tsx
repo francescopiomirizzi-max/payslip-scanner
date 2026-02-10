@@ -106,7 +106,7 @@ const AnnualCalculationTable: React.FC<AnnualCalculationTableProps> = ({ data = 
     let sum = 0;
     const specificColumns = getColumnsByProfile(profilo);
     specificColumns.forEach(col => {
-      if (!['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'coeffPercepito', 'coeffTicket', 'note'].includes(col.id)) {
+      if (!['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'coeffPercepito', 'coeffTicket', 'note', 'arretrati'].includes(col.id)) {
         sum += parseFloatSafe(monthRow[col.id]);
       }
     });
@@ -251,8 +251,8 @@ const AnnualCalculationTable: React.FC<AnnualCalculationTableProps> = ({ data = 
           <button
             onClick={() => setIncludeExFest(!includeExFest)}
             className={`flex items-center gap-1.5 px-2 py-1 rounded text-[10px] border transition-all ${includeExFest
-                ? 'bg-amber-500/20 border-amber-500 text-amber-300 font-bold'
-                : 'bg-slate-700 border-slate-600 text-slate-400 hover:text-slate-200'
+              ? 'bg-amber-500/20 border-amber-500 text-amber-300 font-bold'
+              : 'bg-slate-700 border-slate-600 text-slate-400 hover:text-slate-200'
               }`}
             title="Include le 4 giornate di Ex Festività nel calcolo (Tetto 32gg)"
           >
