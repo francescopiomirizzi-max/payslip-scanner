@@ -120,7 +120,66 @@ const MovingGrid = () => (
     <div className="absolute top-[40%] left-[40%] w-[400px] h-[400px] bg-purple-400/20 rounded-full blur-[120px] mix-blend-multiply animate-blob animation-delay-4000"></div>
   </div>
 );
+// --- COMPONENTE CALCOLATRICE FLUTTUANTE (Spostabile) ---
+const FloatingCalculator = ({ onClose }: { onClose: () => void }) => {
+  const [display, setDisplay] = useState('');
 
+  const handleInput = (val: string) => setDisplay(prev => prev + val);
+  const handleClear = () => setDisplay('');
+  const handleCalc = () => {
+    try { setDisplay(String(eval(display.replace(/,/g, '.')))); }
+    catch { setDisplay('Errore'); setTimeout(() => setDisplay(''), 1000); }
+  };
+
+  // Listener Tastiera
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const key = e.key;
+      if (/[0-9+\-*/.]/.test(key)) handleInput(key);
+      if (key === 'Enter' || key === '=') { e.preventDefault(); handleCalc(); }
+      if (key === 'Backspace') setDisplay(prev => prev.slice(0, -1));
+      if (key === 'Escape') onClose();
+      if (key === 'Delete' || key === 'c') handleClear();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  const btnClass = "h-12 rounded-lg font-bold text-lg transition-all active:scale-95 flex items-center justify-center shadow-sm";
+
+  return (
+    <motion.div
+      drag // <--- ABILITA IL TRASCINAMENTO
+      dragMomentum={false} // <--- FERMA IL MOVIMENTO AL RILASCIO
+      initial={{ scale: 0.8, opacity: 0 }}
+      animate={{ scale: 1, opacity: 1 }}
+      exit={{ scale: 0.8, opacity: 0 }}
+      className="fixed bottom-24 right-8 z-[100] w-64 bg-slate-900/90 backdrop-blur-xl border border-white/20 shadow-2xl rounded-2xl overflow-hidden text-white"
+    >
+      {/* HEADER con cursore di spostamento */}
+      <div className="p-3 bg-slate-800/50 flex justify-between items-center border-b border-white/10 cursor-move">
+        <span className="font-bold text-xs uppercase tracking-widest flex items-center gap-2"><Calculator className="w-3 h-3" /> Calc</span>
+        {/* Stop Propagation per evitare di trascinare quando si clicca X */}
+        <button onClick={onClose} onPointerDown={(e) => e.stopPropagation()}><X className="w-4 h-4 text-slate-400 hover:text-white" /></button>
+      </div>
+
+      <div className="p-4 bg-transparent text-right text-2xl font-mono font-bold tracking-wider overflow-hidden h-16 flex items-center justify-end break-all">
+        {display || '0'}
+      </div>
+      <div className="grid grid-cols-4 gap-1 p-2 bg-white/5">
+        {['7', '8', '9', '/', '4', '5', '6', '*', '1', '2', '3', '-', 'C', '0', '=', '+'].map((btn) => (
+          <button key={btn} onClick={() => {
+            if (btn === '=') handleCalc();
+            else if (btn === 'C') handleClear();
+            else handleInput(btn);
+          }} className={`${btnClass} ${btn === '=' ? 'bg-emerald-500 hover:bg-emerald-400' : btn === 'C' ? 'text-red-400 hover:bg-white/10' : ['/', '*', '-', '+'].includes(btn) ? 'text-indigo-400 hover:bg-white/10' : 'hover:bg-white/10'}`}>
+            {btn}
+          </button>
+        ))}
+      </div>
+    </motion.div>
+  );
+};
 const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateData, onUpdateStatus, onBack, onOpenReport }) => {
   const [monthlyInputs, setMonthlyInputs] = useState<AnnoDati[]>(Array.isArray(worker?.anni) ? worker.anni : []);
   const [activeTab, setActiveTab] = useState<'input' | 'calc' | 'pivot'>('input');
@@ -129,6 +188,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
   // --- STATO SPLIT SCREEN / VISORE ---
   const [showSplit, setShowSplit] = useState(false);
   const [showDealMaker, setShowDealMaker] = useState(false);
+  const [showCalc, setShowCalc] = useState(false); // Stato Calcolatrice
   const [payslipImg, setPayslipImg] = useState<string | null>(null);
   const [imgScale, setImgScale] = useState(1);
   const [imgPos, setImgPos] = useState({ x: 0, y: 0 });
@@ -1262,6 +1322,16 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
               </button>
 
             </div>
+            {/* TASTO CALCOLATRICE */}
+            <button
+              onClick={() => setShowCalc(!showCalc)}
+              className={`group relative px-4 py-3 rounded-xl font-bold text-sm transition-all duration-300 flex items-center gap-2 overflow-hidden border-2 shrink-0
+                  ${showCalc ? 'text-white border-white/20 shadow-lg' : 'bg-white/40 dark:bg-slate-800/40 text-slate-600 border-transparent hover:bg-white hover:text-indigo-500'}`}
+              style={showCalc ? { backgroundImage: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)' } : {}}
+            >
+              <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500 rotate-12"></div>
+              <Calculator className="w-5 h-5 relative z-10" />
+            </button>
           </div>
           <div className="flex-1 bg-white/60 backdrop-blur-md rounded-[2.5rem] border border-white/60 shadow-2xl overflow-hidden flex flex-col relative min-h-0">
             <div className="flex-1 p-2 sm:p-6 overflow-hidden relative">
@@ -1351,20 +1421,31 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
                 onMouseMove={handleMouseMove}
               >
                 {payslipImg ? (
-                  <div className="relative">
-                    <img
-                      ref={imgRef}
-                      src={payslipImg}
-                      alt="Busta Paga"
-                      draggable={false}
-                      style={{
-                        transform: `scale(${imgScale}) translate(${imgPos.x}px, ${imgPos.y}px)`,
-                        transition: isDragging ? 'none' : 'transform 0.2s ease-out'
-                      }}
-                      className="max-w-full max-h-full object-contain select-none"
-                    />
+                  <div className="relative w-full h-full flex items-center justify-center">
+                    {/* LOGICA VISUALIZZAZIONE PDF vs IMMAGINE */}
+                    {payslipImg.startsWith('data:application/pdf') ? (
+                      <embed
+                        src={payslipImg}
+                        type="application/pdf"
+                        className="w-full h-full rounded-xl"
+                        style={{ minHeight: '500px' }}
+                      />
+                    ) : (
+                      <img
+                        ref={imgRef}
+                        src={payslipImg}
+                        alt="Busta Paga"
+                        draggable={false}
+                        style={{
+                          transform: `scale(${imgScale}) translate(${imgPos.x}px, ${imgPos.y}px)`,
+                          transition: isDragging ? 'none' : 'transform 0.2s ease-out'
+                        }}
+                        className="max-w-full max-h-full object-contain select-none"
+                      />
+                    )}
 
-                    {isSniperMode && selectionBox && (
+                    {/* IL BOX SELEZIONE FUNZIONA SOLO SU IMMAGINI (nascondilo se è PDF) */}
+                    {!payslipImg.startsWith('data:application/pdf') && isSniperMode && selectionBox && (
                       <div
                         style={{
                           position: 'absolute',
@@ -1381,6 +1462,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
                     )}
                   </div>
                 ) : (
+                  // ... (resto del codice "Clicca per caricare" invariato)
                   <div
                     onClick={() => fileInputRef.current?.click()}
                     className="flex flex-col items-center justify-center text-slate-500 hover:text-indigo-400 transition-colors cursor-pointer p-10 border-2 border-dashed border-slate-700 rounded-3xl hover:border-indigo-500/50 hover:bg-slate-900"
@@ -1395,7 +1477,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
                   ref={fileInputRef}
                   onChange={handleImageUpload}
                   className="hidden"
-                  accept="image/*"
+                  accept="image/*,application/pdf"
                 />
               </div>
 
@@ -1555,6 +1637,14 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
         </AnimatePresence>
 
       </div>
+      {/* RENDER CALCOLATRICE */}
+      <AnimatePresence>
+        {showCalc && (
+          <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}>
+            <FloatingCalculator onClose={() => setShowCalc(false)} />
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
