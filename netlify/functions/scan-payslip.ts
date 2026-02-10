@@ -51,6 +51,8 @@ export const handler: Handler = async (event, context) => {
       generationConfig: { responseMimeType: "application/json" }
     });
 
+    // ... (tutto il codice prima rimane uguale)
+
     const prompt = `
       Sei un software OCR avanzato specializzato in Buste Paga RFI.
       Il tuo compito è scansionare il documento riga per riga e estrarre i valori numerici associati a specifici codici.
@@ -60,6 +62,23 @@ export const handler: Handler = async (event, context) => {
       2. La tabella "Competenze" inizia nella PARTE ALTA della Pagina 1.
       3. NON saltare le prime righe. Scansiona dalla prima riga della tabella in giù.
       4. Se un codice è presente nel documento, DEVI estrarre il suo importo.
+
+      DATI DA ESTRARRE (JSON):
+      1. "month" (numero 1-12), "year" (numero 4 cifre).
+      
+      2. "daysWorked" (Giorni Lavorati):
+         - Cerca la casella "Presenze" nel riquadro in alto.
+         - ATTENZIONE: Se vedi "Riposi" o "RR", IGNORA quel numero.
+         - Estrai ESCLUSIVAMENTE il valore numerico sotto "Presenze".
+
+      3. "daysVacation" (Giorni Ferie Goduti):
+         - Vai alla sezione "Ferie". Ci sono più colonne (Residuo, Maturato, Goduto).
+         - Estrai SOLO il valore della colonna "Goduto" (o "Fruit." o mese corrente).
+         - ATTENZIONE: IGNORA ASSOLUTAMENTE "Ferie Anno Prec." e "Ferie Anno Corr." (Residui).
+      
+      4. "ticketRate": Valore unitario (cerca 0E99 o 0299). Se Welfare/Assente: 0.00.
+      5. "arretrati": Somma importi: Malattia (3E..), Una Tantum (0K.., 0C..), Arretrati anni prec (74..), Premi.
+      6. "eventNote": "Malattia" o "Premi" se presenti in arretrati.
 
       🔍 MASTER LIST CODICI DA CERCARE (TUTTI):
       - 0152 (Straordinario feriale)

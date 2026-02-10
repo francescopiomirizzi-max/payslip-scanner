@@ -207,6 +207,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
   const [offerAmount, setOfferAmount] = useState<string>('');
   // --- NUOVO STATO: Toggle Ex Festività (Default False = 28gg) ---
   const [includeExFest, setIncludeExFest] = useState(false);
+  const scanRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -379,7 +380,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
       alert(`❌ Errore durante l'analisi:\n${error.message}`);
     } finally {
       setIsAnalyzing(false);
-      if (fileInputRef.current) fileInputRef.current.value = '';
+      if (scanRef.current) scanRef.current.value = '';
     }
   };
   // --- HELPER PARSING (AGGIUNGERE QUESTO) ---
@@ -1191,7 +1192,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
           </div>
 
           <div className="flex justify-center mb-6 z-20 shrink-0">
-            <div className="flex p-2 bg-white/60 dark:bg-slate-900/60 backdrop-blur-2xl border border-white/50 dark:border-slate-700/50 rounded-2xl shadow-2xl gap-3 overflow-x-auto w-full justify-start md:justify-center scrollbar-hide">
+            <div className="flex p-2 bg/60 dark:bg-slate-900/60 backdrop-blur-2xl border border-white/50 dark:border-slate-700/50 rounded-2xl shadow-2xl gap-3 overflow-x-auto w-full justify-start md:justify-center scrollbar-hide">
 
               {/* TASTO CARICA BUSTA (Pink) */}
               <button
@@ -1213,7 +1214,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
               </button>
               {/* TASTO SCAN AI (Viola/Indaco) */}
               <button
-                onClick={() => fileInputRef.current?.click()}
+                onClick={() => scanRef.current?.click()}
                 disabled={isAnalyzing}
                 className={`group relative px-6 py-3 rounded-xl font-bold text-sm transition-all duration-300 flex items-center gap-2 overflow-hidden border-2 shrink-0
                   ${isAnalyzing
@@ -1243,7 +1244,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
               <input
                 type="file"
                 accept="image/*,.pdf"
-                ref={fileInputRef}
+                ref={scanRef}
                 className="hidden"
                 onChange={handleAnalyzePaySlip}
               />
@@ -1320,7 +1321,6 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
                 <Handshake className={`w-5 h-5 transition-transform duration-300 relative z-10 ${showDealMaker ? 'text-emerald-400' : 'group-hover:text-emerald-500'}`} />
                 <span className="hidden lg:inline relative z-10">Deal Maker</span>
               </button>
-
             </div>
             {/* TASTO CALCOLATRICE */}
             <button
@@ -1373,7 +1373,6 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
             </div>
           </div>
         </div>
-
         {/* --- SPLIT SCREEN SIDEBAR (Invariato) --- */}
         <AnimatePresence>
           {showSplit && (
