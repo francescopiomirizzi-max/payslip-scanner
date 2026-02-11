@@ -15,33 +15,46 @@ const generaRelazioneTestuale = (worker: any, totali: any, includeExFest: boolea
     const tettoGiorni = includeExFest ? 32 : 28;
 
     // --- PROTEZIONE DATI ---
-    // Gestisce diverse strutture di dati in ingresso per evitare crash
     const gt = totali?.grandTotal || totali || {};
-
-    // Recupero valori (con fallback intelligenti)
     const lordoVal = gt.incidenzaTotale ?? gt.totalLordo ?? gt.grossClaim ?? 0;
     const percepitoVal = gt.indennitaPercepita ?? gt.totalPercepito ?? 0;
     const ticketVal = gt.indennitaPasto ?? gt.totalTicket ?? 0;
-
-    // Netto finale
     const nettoVal = (Number(lordoVal) - Number(percepitoVal)) + Number(ticketVal);
 
-    // --- GESTIONE ANNI ---
-    const yearsSafe = (Array.isArray(YEARS) && YEARS.length > 0) ? YEARS : [2008, 2025];
-    const inizioPeriodo = yearsSafe[0];
-    const finePeriodo = yearsSafe[yearsSafe.length - 1];
+    // --- GESTIONE ANNI INTELLIGENTE ---
+    // Filtriamo gli anni che hanno effettivamente dati (daysWorked > 0)
+    let anniAttivi = (worker?.anni || [])
+        .filter((a: AnnoDati) => Number(a.daysWorked) > 0)
+        .map((a: AnnoDati) => Number(a.year))
+        .sort((a: number, b: number) => a - b);
+
+    // Rimuoviamo duplicati
+    anniAttivi = [...new Set(anniAttivi)];
+
+    // Se non ci sono dati, fallback su YEARS o [2008, 2025]
+    if (anniAttivi.length === 0) anniAttivi = (Array.isArray(YEARS) && YEARS.length > 0) ? YEARS : [2008, 2025];
+
+    // Logica esclusione 2007 (se usato solo come base)
+    // Se il primo anno è 2007 e c'è anche il 2008, facciamo partire la relazione dal 2008
+    let inizioPeriodo = anniAttivi[0];
+    if (inizioPeriodo === 2007 && anniAttivi.includes(2008)) {
+        inizioPeriodo = 2008;
+    }
+
+    const finePeriodo = anniAttivi[anniAttivi.length - 1];
 
     // --- ESTRAZIONE NOTE ---
     let sezioneNote = "";
     if (worker?.anni && Array.isArray(worker.anni)) {
         const noteTrovate = worker.anni
             .filter((r: AnnoDati) => r.note && r.note.trim() !== "")
+            // Filtriamo anche le note per escludere quelle del 2007 se non è l'anno di partenza
+            .filter((r: AnnoDati) => Number(r.year) >= inizioPeriodo)
             .sort((a: AnnoDati, b: AnnoDati) => (a.year || 0) - (b.year || 0));
 
         if (noteTrovate.length > 0) {
             sezioneNote = "\nEVENTI RILEVANTI E ANNOTAZIONI:\n";
             noteTrovate.forEach((r: AnnoDati) => {
-                // Pulisce le note da caratteri tecnici se presenti
                 const cleanNote = r.note?.replace(/[\[\]]/g, '') || '';
                 sezioneNote += `- ${r.month} ${r.year}: ${cleanNote}\n`;
             });
@@ -49,9 +62,8 @@ const generaRelazioneTestuale = (worker: any, totali: any, includeExFest: boolea
         }
     }
 
-    // --- INTEGRAZIONE TESTO LEGALE (AGGIORNATO V14) ---
+    // --- INTEGRAZIONE TESTO LEGALE ---
     let elencoVoci = "";
-
     if (worker?.profilo === 'RFI' || !worker?.profilo || worker?.profilo === 'ND') {
         elencoVoci = `
 VOCI RETRIBUTIVE VARIABILI INCLUSE NEL CALCOLO:
@@ -78,16 +90,14 @@ L'analisi ha isolato le voci a carattere continuativo e ricorrente (Art. 64 CCNL
    - Ticket Restaurant / Buoni Pasto (Quota Esente)
 
 NOTA BENE:
-Sono state TASSATIVAMENTE ESCLUSE dal calcolo della media tutte le voci "Una Tantum", i rimborsi spese a piè di lista, i premi annuali non ricorrenti, la malattia, gli arretrati anni precedenti e le voci di Welfare aziendale, al fine di non alterare il valore della retribuzione globale di fatto giornaliera.
-`;
+Sono state TASSATIVAMENTE ESCLUSE dal calcolo della media tutte le voci "Una Tantum", i rimborsi spese a piè di lista, i premi annuali non ricorrenti, la malattia, gli arretrati anni precedenti e le voci di Welfare aziendale.`;
     } else if (worker?.profilo === 'REKEEP') {
         elencoVoci = `
 VOCI INCLUSE (Appalto Multiservizi/FS):
 - Indennità Turni Non Cadenzati (Cod. I215FC)
 - Indennità Sussidiaria (Cod. I1182C)
 - Lavoro Domenicale e Notturno (Cod. I1037C, I1040C)
-- Maggiorazioni e Straordinari (Cod. S1800C, M3500C)
-`;
+- Maggiorazioni e Straordinari (Cod. S1800C, M3500C)`;
     } else {
         elencoVoci = "Voci incluse: Indennità specifiche della Ristorazione a Bordo (Diaria Scorta, Ind. Cassa, Lavoro Domenicale/Notturno).";
     }
@@ -99,12 +109,18 @@ Il presente prospetto determina la "Retribuzione Globale di Fatto" spettante dur
 CRITERI ADOTTATI:
 1. PRINCIPIO DI ONNICOMPRENSIVITÀ: Inclusione di tutte le indennità collegate agli inconvenienti intrinseci alle mansioni (es. notte, turni) o alla status professionale.
 2. CRITERIO DEL DIVISORE REALE: La media giornaliera è ottenuta dividendo la somma delle competenze variabili per le GIORNATE EFFETTIVAMENTE LAVORATE nel mese/anno, e non per divisori convenzionali (26 o 30), garantendo la massima precisione contabile.
-3. TETTO MASSIMO DI LEGGE: Il ricalcolo è applicato sui giorni di ferie fruiti entro il limite del periodo minimo legale di ${tettoGiorni} giorni (Art. 36 Cost. e Dir. 2003/88/CE). L'eventuale eccedenza non è stata conteggiata.
+3. TETTO MASSIMO DI LEGGE: Il ricalcolo è applicato sui giorni di ferie fruiti entro il limite del periodo minimo legale di ${tettoGiorni} giorni (Art. 36 Cost. e Dir. 2003/88/CE).
+
+4. APPLICAZIONE DEL CRITERIO DELLA MEDIA STORICA (ANNO PRECEDENTE):
+Al fine di rispettare il principio di comparabilità della retribuzione feriale con quella ordinaria, e in aderenza alla prassi contabile per la determinazione della "retribuzione media globale di fatto", i calcoli sono stati eseguiti applicando un criterio storico.
+
+Nello specifico, il valore giornaliero delle voci variabili da riconoscere per i giorni di ferie goduti nell'anno N è stato determinato sulla base della media delle competenze variabili maturate dal lavoratore nell'anno precedente (N-1).
+Questo metodo garantisce che la retribuzione feriale non sia influenzata dalla casualità del mese di fruizione, ma rifletta l'effettiva capacità reddituale media del dipendente, depurando il calcolo da picchi o flessioni momentanee.
 
 PROCEDIMENTO ANALITICO:
-- Estrapolazione OCR dei dati da cedolini paga originali (2008-2025).
+- Estrapolazione OCR dei dati da cedolini paga originali.
 - Separazione netta tra voci ricorrenti (utili) e voci straordinarie (escluse).
-- Calcolo differenziale: [Media Giornaliera Spettante] x [Giorni Ferie] - [Quanto già erogato].
+- Calcolo differenziale: [Media Giornaliera Storica] x [Giorni Ferie] - [Quanto già erogato].
 `;
 
     return `

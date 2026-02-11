@@ -40,7 +40,9 @@ import {
   AlertCircle,
   Clock,
   FileBarChart,
-  Search  // <--- ECCOLA! Ora non darà più errore
+  Search,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 // IMPORTANTE: Tesseract per il ritaglio (Canvas)
@@ -189,11 +191,16 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
   const [showSplit, setShowSplit] = useState(false);
   const [showDealMaker, setShowDealMaker] = useState(false);
   const [showCalc, setShowCalc] = useState(false); // Stato Calcolatrice
-  const [payslipImg, setPayslipImg] = useState<string | null>(null);
+  // --- STATO MULTI-FILE ---
+  const [payslipFiles, setPayslipFiles] = useState<string[]>([]); // Array di URL
+  const [currentFileIndex, setCurrentFileIndex] = useState(0); // Indice file corrente
   const [imgScale, setImgScale] = useState(1);
   const [imgPos, setImgPos] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
-
+  // --- FUNZIONE ZOOM MANCANTE ---
+  const handleZoom = (delta: number) => {
+    setImgScale(prev => Math.max(0.5, Math.min(3, prev + delta)));
+  };
   // --- STATO SNIPER OCR ---
   const [isSniperMode, setIsSniperMode] = useState(false);
   const [selectionBox, setSelectionBox] = useState<{ x: number, y: number, w: number, h: number } | null>(null);
@@ -392,7 +399,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
     return isNaN(num) ? 0 : num;
   };
 
-  // --- FUNZIONE CERVELLO CORRETTA (Logica Mensile + Tetto Dinamico) ---
+  // --- FUNZIONE CERVELLO CORRETTA (Logica Anno Precedente) ---
   const calculateAnnualLegalData = (data: AnnoDati[], profile: any, withExFest: boolean) => {
     const years = Array.from(new Set(data.map(d => Number(d.year)))).sort((a, b) => a - b);
 
@@ -400,6 +407,31 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
       !['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'coeffPercepito', 'coeffTicket', 'note', 'arretrati'].includes(c.id)
     );
 
+    // 1. PASSO PRELIMINARE: Calcoliamo le medie giornaliere per OGNI anno disponibile
+    const yearlyAverages: Record<number, number> = {};
+
+    years.forEach(year => {
+      const monthsInYear = data.filter(d => Number(d.year) === year);
+      let totIndennitaAnno = 0;
+      let totGiorniLavoratiAnno = 0;
+
+      monthsInYear.forEach(m => {
+        let totMese = 0;
+        indennitaCols.forEach(col => { totMese += parseLocalFloat(m[col.id]); });
+
+        totIndennitaAnno += totMese;
+        totGiorniLavoratiAnno += parseLocalFloat(m.daysWorked);
+      });
+
+      // Calcolo media giornaliera dell'anno (Voci Variabili / Giorni Lavorati)
+      if (totGiorniLavoratiAnno > 0) {
+        yearlyAverages[year] = totIndennitaAnno / totGiorniLavoratiAnno;
+      } else {
+        yearlyAverages[year] = 0;
+      }
+    });
+
+    // 2. PASSO FINALE: Calcolo Spettanze usando l'anno precedente (se esiste)
     let globalLordo = 0;
     let globalTicket = 0;
     let globalFerieEffettive = 0;
@@ -408,34 +440,30 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
     const TETTO_FERIE = withExFest ? 32 : 28;
 
     years.forEach(year => {
-      // Ordine cronologico fondamentale per il calcolo progressivo
       const monthsInYear = data.filter(d => Number(d.year) === year).sort((a, b) => a.monthIndex - b.monthIndex);
       let ferieCumulateAnno = 0;
 
-      monthsInYear.forEach(m => {
-        // A. Somma Indennità Mese
-        let totIndennitaMese = 0;
-        indennitaCols.forEach(col => {
-          totIndennitaMese += parseLocalFloat(m[col.id]);
-        });
+      // RECUPERO LA MEDIA DA USARE:
+      // Se esiste l'anno prima (es. per il 2024 cerco il 2023), uso quella.
+      // Altrimenti uso quella dell'anno corrente (fallback per il primo anno inserito).
+      const prevYear = year - 1;
+      const avgToUse = yearlyAverages[prevYear] !== undefined ? yearlyAverages[prevYear] : yearlyAverages[year];
 
-        // B. Dati Giorni
-        const giorniLavorati = parseLocalFloat(m.daysWorked);
+      monthsInYear.forEach(m => {
+        // Dati Giorni
         const ferieMese = parseLocalFloat(m.daysVacation);
         const coeffTicket = parseLocalFloat(m['coeffTicket']);
 
-        // C. Logica Tetto (Bucket)
+        // Logica Tetto (Bucket)
         const spazioRimanente = Math.max(0, TETTO_FERIE - ferieCumulateAnno);
         const giorniUtili = Math.min(ferieMese, spazioRimanente);
         ferieCumulateAnno += ferieMese;
 
-        // D. Calcolo Lordo Mensile (Puntuale)
-        if (giorniLavorati > 0) {
-          const valoreGiornaliero = totIndennitaMese / giorniLavorati;
-          globalLordo += (valoreGiornaliero * giorniUtili);
-        }
+        // D. Calcolo Lordo Mensile BASATO SULLA MEDIA (Anno Prec o Corrente)
+        // Formula: Giorni di ferie utili * Media Giornaliera Variabili
+        globalLordo += (giorniUtili * avgToUse);
 
-        // E. Calcolo Ticket
+        // E. Calcolo Ticket (Questo resta puntuale mese su mese)
         globalTicket += (giorniUtili * coeffTicket);
 
         globalFerieEffettive += ferieMese;
@@ -882,24 +910,58 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
     onUpdateData(newData);
   };
 
-  // --- GESTIONE IMMAGINE ---
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        setPayslipImg(event.target?.result as string);
-        setImgScale(1);
-        setImgPos({ x: 0, y: 0 });
-      };
-      reader.readAsDataURL(file);
+    if (e.target.files && e.target.files.length > 0) {
+      // Converte tutti i file selezionati in URL temporanei
+      // MODIFICA QUI: Aggiunto ": File" e "as File" per calmare TypeScript
+      const newFiles = Array.from(e.target.files).map((file: any) => URL.createObjectURL(file as Blob));
+
+      setPayslipFiles(prev => [...prev, ...newFiles]);
+      setCurrentFileIndex(prev => prev === 0 && payslipFiles.length === 0 ? 0 : prev);
+      setShowSplit(true);
+
+      // Reset zoom/pos
+      setImgScale(1);
+      setImgPos({ x: 0, y: 0 });
     }
   };
 
-  const handleZoom = (delta: number) => {
-    setImgScale(prev => Math.max(0.5, Math.min(3, prev + delta)));
+  // Funzioni di navigazione
+  const nextFile = () => {
+    if (currentFileIndex < payslipFiles.length - 1) {
+      setCurrentFileIndex(prev => prev + 1);
+      setImgScale(1); setImgPos({ x: 0, y: 0 }); // Reset zoom al cambio file
+    }
   };
 
+  const prevFile = () => {
+    if (currentFileIndex > 0) {
+      setCurrentFileIndex(prev => prev - 1);
+      setImgScale(1); setImgPos({ x: 0, y: 0 });
+    }
+  };
+  // --- NUOVE FUNZIONI DRAG & DROP ---
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault(); // Blocca l'apertura della scheda
+    e.stopPropagation();
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault(); // Blocca l'apertura della scheda
+    e.stopPropagation();
+
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const newFiles = Array.from(e.dataTransfer.files).map((file: any) => URL.createObjectURL(file));
+      setPayslipFiles(prev => [...prev, ...newFiles]);
+
+      // Se è il primo caricamento, resetta la vista
+      if (payslipFiles.length === 0) {
+        setCurrentFileIndex(0);
+        setImgScale(1);
+        setImgPos({ x: 0, y: 0 });
+      }
+    }
+  };
   // --- GESTIONE MOUSE ---
   const handleMouseDown = (e: React.MouseEvent) => {
     if (isSniperMode) {
@@ -912,7 +974,8 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
       setSelectionBox({ x: startX, y: startY, w: 0, h: 0 });
       setIsSelecting(true);
     } else {
-      if (payslipImg) setIsDragging(true);
+      // Controlla se ci sono file nell'array invece che l'immagine singola
+      if (payslipFiles.length > 0) setIsDragging(true);
     }
   };
 
@@ -1212,29 +1275,65 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
                   <span className="hidden lg:inline">{showSplit ? 'Chiudi Visore' : 'Carica Busta Paga'}</span>
                 </div>
               </button>
-              {/* TASTO SCAN AI (Viola/Indaco) */}
+              {/* --- TASTO SCAN AI (VERSIONE "STEALTH TECH") --- */}
+              <style>{`
+                @keyframes scan-vertical {
+                  0% { transform: translateY(-100%); opacity: 0; }
+                  15% { opacity: 1; }
+                  85% { opacity: 1; }
+                  100% { transform: translateY(200%); opacity: 0; }
+                }
+                @keyframes icon-float-subtle {
+                  0%, 100% { transform: translateY(0); }
+                  50% { transform: translateY(-2px); }
+                }
+                .group:hover .animate-scan-vertical {
+                  animation: scan-vertical 1.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+                }
+                .group:hover .animate-icon-subtle {
+                  animation: icon-float-subtle 1.5s ease-in-out infinite;
+                }
+              `}</style>
+
               <button
                 onClick={() => scanRef.current?.click()}
                 disabled={isAnalyzing}
                 className={`group relative px-6 py-3 rounded-xl font-bold text-sm transition-all duration-300 flex items-center gap-2 overflow-hidden border-2 shrink-0
-                  ${isAnalyzing
-                    ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed'
-                    : 'bg-white/40 dark:bg-slate-800/40 text-slate-600 dark:text-slate-400 border-transparent hover:bg-white dark:hover:bg-slate-700 hover:text-violet-500 hover:shadow-md hover:border-violet-200'
+                  ${isAnalyzing
+                    ? 'bg-slate-100 border-slate-200 cursor-not-allowed opacity-70'
+                    : 'bg-white/40 dark:bg-slate-800/40 text-slate-600 dark:text-slate-400 border-transparent hover:border-cyan-400/50 hover:shadow-[0_0_20px_rgba(6,182,212,0.4)]'
+                  // ^^^ MODIFICA QUI: Sfondo "glass" (white/40) e bordo trasparente a riposo.
                   }`}
               >
-                {/* EFFETTO SERRANDA */}
-                {!isAnalyzing && <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500 rotate-12"></div>}
 
-                <div className="relative z-10 flex items-center gap-2">
+                {/* 1. SFONDO SCURO CHE APPARE (Per contrasto massimo in hover) */}
+                <div className="absolute inset-0 bg-slate-900/95 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+
+                {/* 2. RAGGIO LASER DI SCANSIONE (Visibile solo in Hover) */}
+                <div className="absolute inset-0 w-full h-full pointer-events-none opacity-0 group-hover:opacity-100 overflow-hidden">
+                  <div className="absolute top-0 left-0 w-full h-1/2 bg-gradient-to-b from-transparent via-cyan-500/30 to-cyan-400/80 animate-scan-vertical"></div>
+                </div>
+
+                {/* 3. CONTENUTO */}
+                <div className="relative z-10 flex items-center gap-2.5 transition-colors duration-300 group-hover:text-white">
+
                   {isAnalyzing ? (
                     <>
-                      <Loader2 className="w-5 h-5 animate-spin text-violet-500" />
-                      <span>Analisi in corso...</span>
+                      <Loader2 className="w-5 h-5 animate-spin text-indigo-500" />
+                      <span className="font-medium">Analisi in corso...</span>
                     </>
                   ) : (
                     <>
-                      <ScanLine className="w-5 h-5 group-hover:scale-110 transition-transform" />
-                      <span className="hidden lg:inline">Scan AI Busta</span>
+                      {/* Icona: Colore base ereditato (slate), diventa Ciano in hover */}
+                      <ScanLine className="w-5 h-5 transition-colors duration-300 group-hover:text-cyan-400 animate-icon-subtle" />
+
+                      <span className="font-bold transition-colors duration-300 group-hover:text-white tracking-wide flex gap-1.5">
+                        SCAN
+                        <span className="group-hover:text-cyan-400 transition-colors duration-300 group-hover:drop-shadow-[0_0_5px_rgba(34,211,238,0.8)]">
+                          AI
+                        </span>
+                        Busta paga
+                      </span>
                     </>
                   )}
                 </div>
@@ -1321,17 +1420,18 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
                 <Handshake className={`w-5 h-5 transition-transform duration-300 relative z-10 ${showDealMaker ? 'text-emerald-400' : 'group-hover:text-emerald-500'}`} />
                 <span className="hidden lg:inline relative z-10">Deal Maker</span>
               </button>
-            </div>
-            {/* TASTO CALCOLATRICE */}
-            <button
-              onClick={() => setShowCalc(!showCalc)}
-              className={`group relative px-4 py-3 rounded-xl font-bold text-sm transition-all duration-300 flex items-center gap-2 overflow-hidden border-2 shrink-0
+
+              {/* TASTO CALCOLATRICE */}
+              <button
+                onClick={() => setShowCalc(!showCalc)}
+                className={`group relative px-4 py-3 rounded-xl font-bold text-sm transition-all duration-300 flex items-center gap-2 overflow-hidden border-2 shrink-0
                   ${showCalc ? 'text-white border-white/20 shadow-lg' : 'bg-white/40 dark:bg-slate-800/40 text-slate-600 border-transparent hover:bg-white hover:text-indigo-500'}`}
-              style={showCalc ? { backgroundImage: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)' } : {}}
-            >
-              <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500 rotate-12"></div>
-              <Calculator className="w-5 h-5 relative z-10" />
-            </button>
+                style={showCalc ? { backgroundImage: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)' } : {}}
+              >
+                <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500 rotate-12"></div>
+                <Calculator className="w-5 h-5 relative z-10" />
+              </button>
+            </div>
           </div>
           <div className="flex-1 bg-white/60 backdrop-blur-md rounded-[2.5rem] border border-white/60 shadow-2xl overflow-hidden flex flex-col relative min-h-0">
             <div className="flex-1 p-2 sm:p-6 overflow-hidden relative">
@@ -1373,7 +1473,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
             </div>
           </div>
         </div>
-        {/* --- SPLIT SCREEN SIDEBAR (Invariato) --- */}
+        {/* --- SPLIT SCREEN SIDEBAR (MULTI-FILE) --- */}
         <AnimatePresence>
           {showSplit && (
             <motion.div
@@ -1381,36 +1481,62 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
               animate={{ width: "45%", opacity: 1, x: 0 }}
               exit={{ width: 0, opacity: 0, x: -50 }}
               className="bg-slate-900 rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col border border-slate-700 relative shrink-0"
+              // 1. ASSEGNAZIONE EVENTI DRAG & DROP
+              onDragOver={handleDragOver}
+              onDrop={handleDrop}
             >
+
+              {/* 2. INPUT SPOSTATO E CORRETTO (Un solo ref) */}
+              <input
+                type="file"
+                ref={fileInputRef} // <--- SOLO QUESTO REF
+                className="hidden"
+                onChange={handleImageUpload}
+                accept="image/*,application/pdf"
+                multiple
+              />
+
+              {/* HEADER VISORE CON NAVIGAZIONE */}
               <div className="p-4 bg-slate-800/80 backdrop-blur border-b border-slate-700 flex justify-between items-center z-20">
-                <div className="flex items-center gap-2 text-slate-300">
-                  {isSniperMode ? <Crosshair className="w-5 h-5 text-red-500 animate-pulse" /> : <Eye className="w-5 h-5 text-indigo-400" />}
-                  <span className="text-xs font-bold uppercase tracking-wider">{isSniperMode ? 'MODALITÀ CECCHINO ATTIVA' : 'Visore Busta Paga'}</span>
+                <div className="flex items-center gap-3">
+                  {payslipFiles.length > 1 ? (
+                    <div className="flex items-center gap-2 bg-slate-950/50 rounded-lg p-1 border border-slate-700">
+                      <button onClick={prevFile} disabled={currentFileIndex === 0} className="p-1.5 hover:bg-slate-700 rounded text-white disabled:opacity-30 transition-colors"><ChevronLeft size={14} /></button>
+                      <span className="text-xs font-mono font-bold text-cyan-400 w-16 text-center">{currentFileIndex + 1} / {payslipFiles.length}</span>
+                      <button onClick={nextFile} disabled={currentFileIndex === payslipFiles.length - 1} className="p-1.5 hover:bg-slate-700 rounded text-white disabled:opacity-30 transition-colors"><ChevronRight size={14} /></button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 text-slate-300">
+                      {isSniperMode ? <Crosshair className="w-5 h-5 text-red-500 animate-pulse" /> : <Eye className="w-5 h-5 text-indigo-400" />}
+                      <span className="text-xs font-bold uppercase tracking-wider">{isSniperMode ? 'MODALITÀ CECCHINO' : 'Visore Busta'}</span>
+                    </div>
+                  )}
                 </div>
+
                 <div className="flex items-center gap-2">
-                  {payslipImg && (
+                  {payslipFiles.length > 0 && (
                     <>
-                      <button
-                        onClick={() => setIsSniperMode(!isSniperMode)}
-                        disabled={isProcessing}
-                        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${isSniperMode ? 'bg-red-500 text-white shadow-[0_0_15px_rgba(239,68,68,0.6)]' : 'bg-slate-700 text-white hover:bg-slate-600'}`}
-                      >
+                      <button onClick={() => setIsSniperMode(!isSniperMode)} disabled={isProcessing} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${isSniperMode ? 'bg-red-500 text-white shadow-[0_0_15px_rgba(239,68,68,0.6)]' : 'bg-slate-700 text-white hover:bg-slate-600'}`}>
                         {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <ScanEye className="w-4 h-4" />}
-                        {isSniperMode ? 'ANNULLA' : 'LEGGI NUMERO'}
+                        {isSniperMode ? 'STOP' : 'OCR'}
                       </button>
-
                       <div className="h-6 w-px bg-slate-600 mx-2"></div>
-
                       <button onClick={() => handleZoom(-0.1)} className="p-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-white transition-colors"><ZoomOut className="w-4 h-4" /></button>
                       <button onClick={() => { setImgScale(1); setImgPos({ x: 0, y: 0 }); }} className="p-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-white transition-colors"><Maximize className="w-4 h-4" /></button>
                       <button onClick={() => handleZoom(0.1)} className="p-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-white transition-colors"><ZoomIn className="w-4 h-4" /></button>
-                      <button onClick={() => setPayslipImg(null)} className="p-2 bg-red-900/50 hover:bg-red-900/80 text-red-400 rounded-lg ml-2 transition-colors"><Trash2 className="w-4 h-4" /></button>
+                      <button onClick={() => {
+                        const newFiles = payslipFiles.filter((_, i) => i !== currentFileIndex);
+                        setPayslipFiles(newFiles);
+                        if (newFiles.length === 0) setShowSplit(false);
+                        else if (currentFileIndex >= newFiles.length) setCurrentFileIndex(newFiles.length - 1);
+                      }} className="p-2 bg-red-900/50 hover:bg-red-900/80 text-red-400 rounded-lg ml-2 transition-colors"><Trash2 className="w-4 h-4" /></button>
                     </>
                   )}
                   <button onClick={() => setShowSplit(false)} className="p-2 hover:bg-slate-700 rounded-lg text-slate-400 hover:text-white ml-2"><X className="w-5 h-5" /></button>
                 </div>
               </div>
 
+              {/* BODY DEL VISORE */}
               <div
                 ref={containerRef}
                 className={`flex-1 bg-slate-950 relative overflow-hidden flex items-center justify-center ${isSniperMode ? 'cursor-crosshair' : 'cursor-grab active:cursor-grabbing'}`}
@@ -1419,32 +1545,37 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
                 onMouseLeave={handleMouseUp}
                 onMouseMove={handleMouseMove}
               >
-                {payslipImg ? (
+                {payslipFiles.length > 0 ? (
                   <div className="relative w-full h-full flex items-center justify-center">
-                    {/* LOGICA VISUALIZZAZIONE PDF vs IMMAGINE */}
-                    {payslipImg.startsWith('data:application/pdf') ? (
-                      <embed
-                        src={payslipImg}
-                        type="application/pdf"
-                        className="w-full h-full rounded-xl"
-                        style={{ minHeight: '500px' }}
-                      />
-                    ) : (
+
+                    {/* VISUALIZZATORE PDF / IMG */}
+                    <object
+                      data={payslipFiles[currentFileIndex]}
+                      type="application/pdf"
+                      className="w-full h-full rounded-none"
+                      style={{
+                        // IMPORTANTE: pointerEvents 'auto' permette lo scroll del PDF. 'none' solo se sei in modalità cecchino.
+                        pointerEvents: isSniperMode ? 'none' : 'auto',
+                        display: payslipFiles[currentFileIndex].endsWith('.pdf') || payslipFiles[currentFileIndex].startsWith('blob:') ? 'block' : 'none'
+                      }}
+                    >
+                      {/* Fallback IMG (Solo se il PDF non va o è un'immagine) */}
                       <img
                         ref={imgRef}
-                        src={payslipImg}
+                        src={payslipFiles[currentFileIndex]}
                         alt="Busta Paga"
                         draggable={false}
                         style={{
                           transform: `scale(${imgScale}) translate(${imgPos.x}px, ${imgPos.y}px)`,
-                          transition: isDragging ? 'none' : 'transform 0.2s ease-out'
+                          transition: isDragging ? 'none' : 'transform 0.2s ease-out',
+                          pointerEvents: 'auto' // Riabilita interazione img
                         }}
-                        className="max-w-full max-h-full object-contain select-none"
+                        className={`max-w-full max-h-full object-contain select-none ${isSniperMode ? '' : 'cursor-grab active:cursor-grabbing'}`}
                       />
-                    )}
+                    </object>
 
-                    {/* IL BOX SELEZIONE FUNZIONA SOLO SU IMMAGINI (nascondilo se è PDF) */}
-                    {!payslipImg.startsWith('data:application/pdf') && isSniperMode && selectionBox && (
+                    {/* BOX CECCHINO */}
+                    {isSniperMode && selectionBox && (
                       <div
                         style={{
                           position: 'absolute',
@@ -1461,27 +1592,27 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
                     )}
                   </div>
                 ) : (
-                  // ... (resto del codice "Clicca per caricare" invariato)
+                  // AREA UPLOAD (RIPRISTINATO STILE RIQUADRO CENTRALE CON ANIMAZIONE)
                   <div
                     onClick={() => fileInputRef.current?.click()}
-                    className="flex flex-col items-center justify-center text-slate-500 hover:text-indigo-400 transition-colors cursor-pointer p-10 border-2 border-dashed border-slate-700 rounded-3xl hover:border-indigo-500/50 hover:bg-slate-900"
+                    // Aggiunto 'group' per gestire l'hover
+                    className="group flex flex-col items-center justify-center text-slate-500 hover:text-indigo-400 transition-all cursor-pointer p-8 border-2 border-dashed border-slate-700 rounded-3xl hover:border-indigo-500 hover:bg-slate-900/50 w-64 h-64"
                   >
-                    <Upload className="w-12 h-12 mb-4" />
-                    <p className="font-bold">Clicca per caricare la Busta Paga</p>
-                    <p className="text-xs mt-2 opacity-60">Supporta JPG, PNG</p>
+                    {/* Icona che rimbalza in hover */}
+                    <div className="mb-4 p-4 bg-slate-900 rounded-full group-hover:scale-110 transition-transform duration-300 border border-slate-800 group-hover:border-indigo-500/30">
+                      <Upload className="w-8 h-8 group-hover:-translate-y-1 transition-transform duration-500 ease-in-out" />
+                    </div>
+                    <p className="font-bold text-sm uppercase tracking-wider text-slate-400 group-hover:text-white transition-colors">Carica Buste Paga</p>
+                    <p className="text-[10px] mt-2 opacity-50 text-center px-4 group-hover:opacity-100 transition-opacity">
+                      Trascina qui o clicca.<br />Supporta PDF, JPG, PNG (Max 12)
+                    </p>
+                    <p className="text-[10px] mt-1 opacity-40 pointer-events-none">Carica fino a 12 file insieme!</p>
                   </div>
-                )}
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  onChange={handleImageUpload}
-                  className="hidden"
-                  accept="image/*,application/pdf"
-                />
-              </div>
 
-              {payslipImg && (
-                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/50 backdrop-blur px-4 py-1.5 rounded-full text-[10px] text-white/70 pointer-events-none">
+                )}
+              </div>
+              {payslipFiles.length > 0 && (
+                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/60 backdrop-blur px-4 py-1.5 rounded-full text-[10px] text-white/70 pointer-events-none border border-white/10 z-30">
                   {isSniperMode ? "DISEGNA UN RETTANGOLO SUL NUMERO" : "Trascina per spostare • Usa i tasti per lo zoom"}
                 </div>
               )}

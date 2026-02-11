@@ -136,7 +136,9 @@ const TableComponent: React.FC<TableComponentProps> = ({ worker, onBack, onEdit 
         totaleDaPercepire: netAmount,
         indennitaPasto: yearlyTicketVal
       };
-    });
+    })
+      // AGGIUNGI QUESTO FILTRO:
+      .filter(row => row.anno >= 2008);
   }, [worker, includeExFest]);
 
   // 2. CALCOLO TOTALI GENERALI
@@ -154,8 +156,9 @@ const TableComponent: React.FC<TableComponentProps> = ({ worker, onBack, onEdit 
     });
   }, [tableData]);
 
-  const startYear = YEARS[0];
-  const endYear = YEARS[YEARS.length - 1];
+  // Prende il primo anno effettivamente visibile in tabella (es. 2008)
+  const startYear = tableData.length > 0 ? tableData[0].anno : 2008;
+  const endYear = tableData.length > 0 ? tableData[tableData.length - 1].anno : 2025;
 
   // STAMPA SCHERMO
   const handlePrint = () => {

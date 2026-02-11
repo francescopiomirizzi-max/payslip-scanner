@@ -10,7 +10,8 @@ export const MONTH_NAMES = [
 // Alias per compatibilità
 export const MONTHS = MONTH_NAMES;
 
-export const YEARS = Array.from({ length: 18 }, (_, i) => 2008 + i);
+// Dal 2007 al 2025 sono 19 anni (2025 - 2007 + 1)
+export const YEARS = Array.from({ length: 19 }, (_, i) => 2007 + i);
 
 export type ProfiloAzienda = 'RFI' | 'ELIOR' | 'REKEEP';
 

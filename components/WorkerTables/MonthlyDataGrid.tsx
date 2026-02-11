@@ -24,7 +24,8 @@ import {
   BookOpen,
   MapPin,
   Scale, // Icona per il legale
-  TriangleAlert // Icona per errori validazione
+  TriangleAlert,
+  AlertTriangle // Icona per errori validazione
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -187,51 +188,89 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
 }) => {
   const [selectedYear, setSelectedYear] = useState<number>(initialYear);
 
-  // Stati
-  const [noteModal, setNoteModal] = useState<{ isOpen: boolean; monthIndex: number; text: string }>({
-    isOpen: false, monthIndex: -1, text: ''
-  });
-  const [legalModalOpen, setLegalModalOpen] = useState(false); // Stato per il manuale legale
+  // Stati Modali
+  const [noteModal, setNoteModal] = useState<{ isOpen: boolean; monthIndex: number; text: string }>({ isOpen: false, monthIndex: -1, text: '' });
+  const [legalModalOpen, setLegalModalOpen] = useState(false);
   const [activeRowIndex, setActiveRowIndex] = useState<number | null>(null);
 
-  // --- 1. REF E LOGICA SCROLL ---
+  // --- 1. REF E LOGICA SCROLL (UNIFICATA) ---
   const tableContainerRef = useRef<HTMLDivElement>(null);
+  const topScrollRef = useRef<HTMLDivElement>(null);
+  const bottomScrollRef = useRef<HTMLDivElement>(null);
+
+  // Larghezza dinamica per scorrere fino alla fine
+  const [tableScrollWidth, setTableScrollWidth] = useState(0);
+
+  // Flags per il sync e intervallo scroll tasti
+  const isSyncing = useRef(false);
   const scrollInterval = useRef<NodeJS.Timeout | null>(null);
-
-  const startScrolling = (direction: 'left' | 'right') => {
-    if (scrollInterval.current) return;
-    const step = 120;
-    const speed = 2;
-
-    scrollInterval.current = setInterval(() => {
-      if (tableContainerRef.current) {
-        tableContainerRef.current.scrollBy({
-          left: direction === 'left' ? -step : step,
-          behavior: 'auto'
-        });
-      }
-    }, speed);
-  };
-
-  const stopScrolling = () => {
-    if (scrollInterval.current) {
-      clearInterval(scrollInterval.current);
-      scrollInterval.current = null;
-    }
-  };
 
   let ferieCumulateCounter = 0;
   const TETTO_FERIE = 28;
 
-  useEffect(() => {
-    setSelectedYear(initialYear);
-  }, [initialYear]);
+  useEffect(() => { setSelectedYear(initialYear); }, [initialYear]);
 
   const handleYearChange = (year: number) => {
     setSelectedYear(year);
     onYearChange(year);
   };
 
+  // Funzioni Tasti Laterali
+  const startScrolling = (direction: 'left' | 'right') => {
+    if (scrollInterval.current) return;
+    const step = 120;
+    const speed = 2;
+    scrollInterval.current = setInterval(() => {
+      if (tableContainerRef.current) {
+        tableContainerRef.current.scrollBy({ left: direction === 'left' ? -step : step, behavior: 'auto' });
+      }
+    }, speed);
+  };
+
+  const stopScrolling = () => {
+    if (scrollInterval.current) { clearInterval(scrollInterval.current); scrollInterval.current = null; }
+  };
+
+  // --- SINCRONIZZAZIONE A 3 VIE (Top <-> Table <-> Bottom) ---
+  useEffect(() => {
+    const tableEl = tableContainerRef.current;
+    const topEl = topScrollRef.current;
+    const botEl = bottomScrollRef.current;
+
+    if (!tableEl || !topEl || !botEl) return;
+
+    // Calcolo larghezza reale
+    const updateWidth = () => { if (tableEl) setTableScrollWidth(tableEl.scrollWidth); };
+    const resizeObserver = new ResizeObserver(updateWidth);
+    resizeObserver.observe(tableEl);
+
+    const handleScroll = (source: HTMLElement) => {
+      if (isSyncing.current) return;
+      isSyncing.current = true;
+      window.requestAnimationFrame(() => {
+        const left = source.scrollLeft;
+        if (source !== tableEl && tableEl.scrollLeft !== left) tableEl.scrollLeft = left;
+        if (source !== topEl && topEl.scrollLeft !== left) topEl.scrollLeft = left;
+        if (source !== botEl && botEl.scrollLeft !== left) botEl.scrollLeft = left;
+        isSyncing.current = false;
+      });
+    };
+
+    const onTableScroll = () => handleScroll(tableEl);
+    const onTopScroll = () => handleScroll(topEl);
+    const onBotScroll = () => handleScroll(botEl);
+
+    tableEl.addEventListener('scroll', onTableScroll);
+    topEl.addEventListener('scroll', onTopScroll);
+    botEl.addEventListener('scroll', onBotScroll);
+
+    return () => {
+      resizeObserver.disconnect();
+      tableEl.removeEventListener('scroll', onTableScroll);
+      topEl.removeEventListener('scroll', onTopScroll);
+      botEl.removeEventListener('scroll', onBotScroll);
+    };
+  }, [profilo]); // Si riaggiorna se cambia il profilo/colonne
   // --- 1. CONFIGURAZIONE COLONNE ---
   const currentColumns = useMemo(() => {
     const cols = getColumnsByProfile(profilo);
@@ -395,16 +434,20 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
   return (
     <>
       <div className="flex flex-col h-full bg-white shadow-xl rounded-lg overflow-hidden border border-slate-200 select-none group/main-container">
-
         <style>{`
+          /* Nasconde la scrollbar nativa dalla tabella principale */
+          .hide-native-scrollbar::-webkit-scrollbar { display: none; }
+          .hide-native-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+          /* Stile barre fantasma */
           .custom-scrollbar-x::-webkit-scrollbar { height: 22px; }
-          .custom-scrollbar-x::-webkit-scrollbar-track { background: #f1f5f9; border-top: 1px solid #cbd5e1; }
-          .custom-scrollbar-x::-webkit-scrollbar-thumb { 
-            background-color: #64748b; 
-            border-radius: 10px; 
-            border: 5px solid #f1f5f9; 
-          }
-          .custom-scrollbar-x::-webkit-scrollbar-thumb:hover { background-color: #475569; }
+          .custom-scrollbar-x::-webkit-scrollbar-track { background: transparent; border-top: 1px solid transparent; }
+          .custom-scrollbar-x::-webkit-scrollbar-thumb { background-color: transparent; border-radius: 10px; border: 5px solid transparent; background-clip: content-box; }
+          
+          /* Hover: Appaiono solo quando passi sopra il contenitore specifico */
+          .group-hover-scroll:hover::-webkit-scrollbar-track { background: #f1f5f9; border-top: 1px solid #cbd5e1; }
+          .group-hover-scroll:hover::-webkit-scrollbar-thumb { background-color: #64748b; }
+          .group-hover-scroll:hover::-webkit-scrollbar-thumb:hover { background-color: #475569; }
         `}</style>
 
         {/* --- HEADER --- */}
@@ -453,7 +496,61 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
             </motion.div>
           </div>
         </div>
+        {/* --- TICKER LEGALE (CORRETTO: NESSUNA SOVRAPPOSIZIONE) --- */}
+        <div className="bg-amber-50/80 border-b border-amber-100 py-1.5 px-4 flex items-center h-8 shrink-0 gap-4">
 
+          {/* 1. ETICHETTA FISSA (Non si muove, ha priorità di spazio) */}
+          <div className="flex items-center gap-2 text-[10px] font-bold text-amber-700 uppercase tracking-widest shrink-0 z-20">
+            <AlertTriangle size={12} className="animate-pulse" />
+            <span className="whitespace-nowrap">Nota Metodologica:</span>
+          </div>
+
+          {/* 2. AREA DI SCORRIMENTO (Occupa solo lo spazio rimanente a destra) */}
+          <div className="flex-1 overflow-hidden relative h-full flex items-center">
+
+            {/* Sfumatura sinistra (per non tagliare il testo di netto vicino all'etichetta) */}
+            <div className="absolute left-0 top-0 bottom-0 w-6 bg-gradient-to-r from-amber-50 to-transparent z-10"></div>
+
+            {/* Sfumatura destra */}
+            <div className="absolute right-0 top-0 bottom-0 w-6 bg-gradient-to-l from-amber-50 to-transparent z-10"></div>
+
+            <motion.div
+              className="whitespace-nowrap text-[11px] font-medium text-amber-800 flex gap-12 pl-4" // pl-4 per dare respiro iniziale
+              animate={{ x: ["0%", "-50%"] }}
+              transition={{ repeat: Infinity, duration: 40, ease: "linear" }}
+            >
+              {/* Blocco 1 */}
+              <span className="flex items-center gap-2">
+                Per un calcolo preciso della media storica, è fondamentale compilare anche i dati dell'anno precedente (es. per il 2008, inserire prima il 2007).
+              </span>
+              <span className="text-amber-400">•</span>
+              <span className="flex items-center gap-2">
+                Il sistema utilizzerà automaticamente i dati storici per determinare il valore corretto delle ferie.
+              </span>
+              <span className="text-amber-400">•</span>
+
+              {/* Blocco 2 (Copia esatta per il loop infinito fluido) */}
+              <span className="flex items-center gap-2">
+                Per un calcolo preciso della media storica, è fondamentale compilare anche i dati dell'anno precedente (es. per il 2008, inserire prima il 2007).
+              </span>
+              <span className="text-amber-400">•</span>
+              <span className="flex items-center gap-2">
+                Il sistema utilizzerà automaticamente i dati storici per determinare il valore corretto delle ferie.
+              </span>
+              <span className="text-amber-400">•</span>
+            </motion.div>
+          </div>
+        </div>
+        {/* --- GHOST SCROLLBAR SUPERIORE --- */}
+        <div className="bg-white border-b border-slate-200 h-7 shrink-0 flex items-center justify-center">
+          <div
+            ref={topScrollRef}
+            className="overflow-x-auto custom-scrollbar-x group-hover-scroll"
+            style={{ height: '24px', width: 'calc(100% - 80px)' }}
+          >
+            <div style={{ width: `${tableScrollWidth}px`, height: '1px' }}></div>
+          </div>
+        </div>
         {/* --- CORPO CENTRALE --- */}
         <div className="flex-1 flex flex-row relative min-h-0 bg-slate-50">
 
@@ -468,7 +565,7 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
             </div>
           </div>
 
-          <div ref={tableContainerRef} className="flex-1 overflow-auto bg-white custom-scrollbar-x scroll-smooth">
+          <div ref={tableContainerRef} className="flex-1 overflow-auto hide-native-scrollbar scroll-smooth">
             <table className="text-sm border-collapse table-fixed" style={{ minWidth: `${currentColumns.length * 100}px` }}>
               <thead className="sticky top-0 z-20 shadow-sm">
                 <tr className="bg-slate-100 text-slate-600 border-b border-slate-300">
@@ -735,7 +832,18 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
           </div>
 
         </div>
-
+        {/* --- GHOST SCROLLBAR INFERIORE (Sync - Speculare a quella sopra) --- */}
+        <div className="bg-white border-t border-slate-200 h-7 shrink-0 flex items-center justify-center">
+          <div
+            ref={bottomScrollRef}
+            className="overflow-x-auto custom-scrollbar-x group-hover-scroll"
+            // Usiamo lo stesso calcolo della superiore per allineamento perfetto
+            style={{ height: '24px', width: 'calc(100% - 80px)' }}
+          >
+            {/* Usa la larghezza reale rilevata */}
+            <div style={{ width: `${tableScrollWidth}px`, height: '1px' }}></div>
+          </div>
+        </div>
         {/* MODALE NOTE */}
         <AnimatePresence>
           {noteModal.isOpen && (
