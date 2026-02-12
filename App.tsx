@@ -570,51 +570,77 @@ const App: React.FC = () => {
     };
 
     const getEditingWorkerData = () => editingWorkerId ? workers.find(w => w.id === editingWorkerId) : null;
-    // --- CALCOLO STATISTICHE DASHBOARD (CORRETTO: INCLUDE ARRETRATI) ---
+    // --- CALCOLO STATISTICHE DASHBOARD (CORRETTO E UNIFICATO) ---
     const dashboardStats = useMemo(() => {
         return workers.reduce((acc, worker) => {
             const safeAnni = Array.isArray(worker.anni) ? worker.anni : [];
-            // FIX: Aggiunto 'arretrati' alla lista delle esclusioni
-            const cols = getColumnsByProfile(worker.profilo || 'RFI').filter(c =>
+            const TETTO_FERIE = 28; // Standard per la dashboard generale
+
+            // Filtra colonne indennità
+            const indennitaCols = getColumnsByProfile(worker.profilo || 'RFI').filter(c =>
                 !['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'coeffPercepito', 'coeffTicket', 'note', 'arretrati'].includes(c.id)
             );
 
-            let wNetto = 0;
-            let wTicket = 0;
+            // 1. PRE-CALCOLO MEDIE ANNUALI
+            const yearlyRaw: Record<number, { totVar: number; ggLav: number }> = {};
+            safeAnni.forEach(row => {
+                const y = Number(row.year);
+                if (!yearlyRaw[y]) yearlyRaw[y] = { totVar: 0, ggLav: 0 };
 
-            const years = Array.from(new Set(safeAnni.map(r => r.year)));
-
-            years.forEach(year => {
-                const yearRows = safeAnni.filter(r => r.year === year).sort((a, b) => a.monthIndex - b.monthIndex);
-                let ferieCounter = 0;
-
-                yearRows.forEach(row => {
-                    let monthlyVars = 0;
-                    cols.forEach(col => { monthlyVars += parseFloatSafe(row[col.id]); });
-
-                    const ggLav = parseFloatSafe(row.daysWorked);
-                    const ggFerieReali = parseFloatSafe(row.daysVacation);
-                    const coeffP = parseFloatSafe(row['coeffPercepito']);
-                    const coeffT = parseFloatSafe(row['coeffTicket']);
-
-                    const prevTotal = ferieCounter;
-                    ferieCounter += ggFerieReali;
-
-                    let ggUtili = 0;
-                    if (prevTotal < 28) {
-                        const spazio = 28 - prevTotal;
-                        ggUtili = Math.min(ggFerieReali, spazio);
-                    }
-
-                    let lordoMese = 0;
-                    if (ggLav > 0) {
-                        lordoMese = (monthlyVars / ggLav) * ggUtili;
-                    }
-
-                    wNetto += (lordoMese - (ggUtili * coeffP) + (ggUtili * coeffT));
-                    wTicket += (ggUtili * coeffT);
-                });
+                const gg = parseFloatSafe(row.daysWorked);
+                if (gg > 0) {
+                    let sum = 0;
+                    indennitaCols.forEach(c => sum += parseFloatSafe(row[c.id]));
+                    yearlyRaw[y].totVar += sum;
+                    yearlyRaw[y].ggLav += gg;
+                }
             });
+
+            const yearlyAverages: Record<number, number> = {};
+            Object.keys(yearlyRaw).forEach(k => {
+                const y = Number(k);
+                const t = yearlyRaw[y];
+                yearlyAverages[y] = t.ggLav > 0 ? t.totVar / t.ggLav : 0;
+            });
+
+            // 2. CALCOLO TOTALE
+            let wLordo = 0;
+            let wPercepito = 0;
+            let wTicket = 0;
+            let ferieCounter = 0;
+
+            // Ordine cronologico
+            const sortedRows = [...safeAnni].sort((a, b) => a.year - b.year || a.monthIndex - b.monthIndex);
+
+            sortedRows.forEach(row => {
+                const y = Number(row.year);
+
+                // LOGICA FALLBACK: Media Prec -> Corrente
+                let mediaApplied = yearlyAverages[y - 1];
+                if (mediaApplied === undefined || mediaApplied === 0) {
+                    mediaApplied = yearlyAverages[y] || 0;
+                }
+
+                const vacDays = parseFloatSafe(row.daysVacation);
+                const cTicket = parseFloatSafe(row.coeffTicket);
+                const cPercepito = parseFloatSafe(row.coeffPercepito);
+
+                // Tetto
+                const prevTotal = ferieCounter;
+                ferieCounter += vacDays;
+
+                let ggUtili = 0;
+                const spazio = Math.max(0, TETTO_FERIE - prevTotal);
+                ggUtili = Math.min(vacDays, spazio);
+
+                if (ggUtili > 0) {
+                    wLordo += (ggUtili * mediaApplied);
+                    wTicket += (ggUtili * cTicket);
+                    wPercepito += (ggUtili * cPercepito);
+                }
+            });
+
+            const wNetto = (wLordo - wPercepito) + wTicket;
 
             return {
                 totalNet: acc.totalNet + (wNetto > 0 ? wNetto : 0),

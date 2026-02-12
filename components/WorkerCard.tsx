@@ -34,7 +34,7 @@ const Sparkline = ({ worker }: { worker: Worker }) => {
     const cols = getColumnsByProfile(worker.profilo);
     const values = worker.anni.slice(-10).map(anno => {
       let sum = 0;
-      cols.forEach(col => { if (!['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'note'].includes(col.id)) sum += parseFloatSafe(anno[col.id]); });
+      cols.forEach(col => { if (!['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'note', 'arretrati'].includes(col.id)) sum += parseFloatSafe(anno[col.id]); });
       return sum > 0 ? sum : (Math.random() * 200 + 300);
     });
     return values.length < 2 ? [40, 45, 42, 48] : values;
@@ -161,62 +161,69 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
     return { percent: percentage, label: percentage === 100 ? 'Completa' : 'In Corso', range: minYear === maxYear ? `${minYear}` : `${minYear}-${maxYear}`, preview };
   }, [worker.anni]);
 
-  // --- CALCOLO FINANZIARIO CORRETTO (SIMULAZIONE TETTO 28GG) ---
+  // --- CALCOLO FINANZIARIO CORRETTO (ALLINEATO ALLA LOGICA LEGALE) ---
   const financialStats = useMemo(() => {
-    // 1. Configurazioni Base
-    const TETTO_MAX = 28; // Standard conservativo per la card
-    const cols = getColumnsByProfile(worker.profilo).filter(c => !['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'coeffPercepito', 'coeffTicket', 'note', 'arretrati'].includes(c.id));
+    const TETTO_FERIE = 28; // Standard per la card
+    const indennitaCols = getColumnsByProfile(worker.profilo).filter(c => !['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'coeffPercepito', 'coeffTicket', 'note', 'arretrati'].includes(c.id));
 
-    let totalLordo = 0;
-    let totalPercepito = 0;
-    let totalTicket = 0;
-    let totalFerieUtili = 0;
-
-    // 2. Ordinamento Cronologico (Essenziale per il calcolo progressivo)
-    const sortedRows = [...(worker.anni || [])].sort((a, b) =>
-      a.year - b.year || a.monthIndex - b.monthIndex
-    );
-
-    // 3. Raggruppamento per Anno (Reset del contatore ferie)
-    const years = Array.from(new Set(sortedRows.map(r => r.year)));
-
-    years.forEach(year => {
-      const yearRows = sortedRows.filter(r => r.year === year);
-      let ferieCounter = 0;
-
-      yearRows.forEach(row => {
-        // A. Calcolo Variabili Mese
-        let monthlyVars = 0;
-        cols.forEach(col => { monthlyVars += parseFloatSafe(row[col.id]); });
-
-        // B. Dati Base
-        const ggLav = parseFloatSafe(row.daysWorked);
-        const ggFerieReali = parseFloatSafe(row.daysVacation);
-        const coeffP = parseFloatSafe(row['coeffPercepito']);
-        const coeffT = parseFloatSafe(row['coeffTicket']);
-
-        // C. Logica Tetto (Il Fix Importante)
-        const prevTotal = ferieCounter;
-        ferieCounter += ggFerieReali;
-
-        let ggUtili = 0;
-        if (prevTotal < TETTO_MAX) {
-          const spazio = TETTO_MAX - prevTotal;
-          ggUtili = Math.min(ggFerieReali, spazio);
-        }
-
-        totalFerieUtili += ggUtili;
-
-        // D. Calcolo Economico sui GG UTILI
-        if (ggLav > 0) {
-          totalLordo += (monthlyVars / ggLav) * ggUtili;
-        }
-        totalPercepito += (ggUtili * coeffP);
-        totalTicket += (ggUtili * coeffT);
-      });
+    // 1. Pre-Calcolo Medie Annuali
+    const yearlyRaw: Record<number, { totVar: number; ggLav: number }> = {};
+    (worker.anni || []).forEach(row => {
+      const y = Number(row.year);
+      if (!yearlyRaw[y]) yearlyRaw[y] = { totVar: 0, ggLav: 0 };
+      const gg = parseFloatSafe(row.daysWorked);
+      if (gg > 0) {
+        let sum = 0;
+        indennitaCols.forEach(c => sum += parseFloatSafe(row[c.id]));
+        yearlyRaw[y].totVar += sum;
+        yearlyRaw[y].ggLav += gg;
+      }
     });
 
-    // Risultato Finale
+    const yearlyAverages: Record<number, number> = {};
+    Object.keys(yearlyRaw).forEach(k => {
+      const y = Number(k);
+      const t = yearlyRaw[y];
+      yearlyAverages[y] = t.ggLav > 0 ? t.totVar / t.ggLav : 0;
+    });
+
+    // 2. Calcolo Totali
+    let totalLordo = 0;
+    let totalTicket = 0;
+    let totalPercepito = 0;
+    let totalFerieUtili = 0;
+    let ferieCumulateCounter = 0;
+
+    // Ordine cronologico
+    const sortedData = [...(worker.anni || [])].sort((a, b) => a.year - b.year || a.monthIndex - b.monthIndex);
+
+    sortedData.forEach(row => {
+      const currentYear = Number(row.year);
+      const prevYear = currentYear - 1;
+
+      // LOGICA FALLBACK: Media Prec -> Corrente
+      let mediaApplied = yearlyAverages[prevYear];
+      if (mediaApplied === undefined || mediaApplied === 0) {
+        mediaApplied = yearlyAverages[currentYear] || 0;
+      }
+
+      const vacDays = parseFloatSafe(row.daysVacation);
+      const cTicket = parseFloatSafe(row.coeffTicket);
+      const cPercepito = parseFloatSafe(row.coeffPercepito);
+
+      // Tetto
+      const spazio = Math.max(0, TETTO_FERIE - ferieCumulateCounter);
+      const ggUtili = Math.min(vacDays, spazio);
+      ferieCumulateCounter += vacDays;
+
+      if (ggUtili > 0) {
+        totalLordo += (ggUtili * mediaApplied);
+        totalTicket += (ggUtili * cTicket);
+        totalPercepito += (ggUtili * cPercepito);
+        totalFerieUtili += ggUtili;
+      }
+    });
+
     return {
       netto: (totalLordo - totalPercepito) + totalTicket,
       ticket: totalTicket,

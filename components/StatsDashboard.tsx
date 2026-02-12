@@ -17,7 +17,6 @@ import {
 import { motion, useSpring, useMotionValue, AnimatePresence } from 'framer-motion';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-// 1. IMPORTIAMO GLI STRUMENTI NECESSARI
 import { Worker, getColumnsByProfile, parseFloatSafe, YEARS } from '../types';
 
 // --- COMPONENTE NUMERO ANIMATO (TICKING) ---
@@ -195,53 +194,74 @@ interface StatsDashboardProps {
 
 const StatsDashboard: React.FC<StatsDashboardProps> = ({ workers = [], onBack }) => {
 
-    // --- LOGICA DI CALCOLO UNIFICATA CON IL RESTO DELL'APP ---
+    // --- LOGICA DI CALCOLO UNIFICATA (IDENTICA A TABLECOMPONENT E TICKER) ---
     const stats = useMemo(() => {
+
+        // Per ogni lavoratore, calcoliamo il "Netto Recuperabile" esatto
         const computedWorkers = workers.map(w => {
-            // 1. Identifichiamo le colonne indennità (ESCLUDENDO Arretrati)
+            const safeAnni = Array.isArray(w.anni) ? w.anni : [];
+            const TETTO_FERIE = 28; // Tetto standard per reportistica aggregata
+
             const indennitaCols = getColumnsByProfile(w.profilo).filter(c =>
                 !['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'coeffPercepito', 'coeffTicket', 'note', 'arretrati'].includes(c.id)
             );
 
-            let grandTotalNetto = 0;
-            const safeAnni = Array.isArray(w.anni) ? w.anni : [];
-
-            // 2. ITERIAMO PER ANNI (Per resettare il contatore dei 28 giorni)
-            YEARS.forEach(year => {
-                // Filtriamo e ordiniamo per mese (importante per il calcolo progressivo!)
-                const yearRows = safeAnni
-                    .filter(r => r.year === year)
-                    .sort((a, b) => a.monthIndex - b.monthIndex);
-
-                let ferieCumulateCounter = 0;
-                const TETTO_FERIE = 28; // Tetto standard per la dashboard esecutiva
-
-                yearRows.forEach(row => {
-                    // A. Somma Indennità del mese
-                    let mIndemnity = 0;
-                    indennitaCols.forEach(col => { mIndemnity += parseFloatSafe(row[col.id]); });
-
-                    // B. Dati Giorni
-                    const ggLav = parseFloatSafe(row.daysWorked);
-                    const ggFerieReali = parseFloatSafe(row.daysVacation);
-
-                    // C. Logica Tetto 28gg (Giorni Utili)
-                    const prevTotal = ferieCumulateCounter;
-                    ferieCumulateCounter += ggFerieReali;
-
-                    let ggUtili = 0;
-                    if (prevTotal < TETTO_FERIE) {
-                        const spazioRimanente = TETTO_FERIE - prevTotal;
-                        ggUtili = Math.min(ggFerieReali, spazioRimanente);
-                    }
-
-                    // D. Calcolo Importo Spettante
-                    if (ggLav > 0) {
-                        const valoreGiornaliero = mIndemnity / ggLav;
-                        grandTotalNetto += valoreGiornaliero * ggUtili;
-                    }
-                });
+            // 1. PRE-CALCOLO MEDIE ANNUALI
+            const yearlyRaw: Record<number, { totVar: number; ggLav: number }> = {};
+            safeAnni.forEach(row => {
+                const y = Number(row.year);
+                if (!yearlyRaw[y]) yearlyRaw[y] = { totVar: 0, ggLav: 0 };
+                const gg = parseFloatSafe(row.daysWorked);
+                if (gg > 0) {
+                    let sum = 0;
+                    indennitaCols.forEach(c => sum += parseFloatSafe(row[c.id]));
+                    yearlyRaw[y].totVar += sum;
+                    yearlyRaw[y].ggLav += gg;
+                }
             });
+
+            const yearlyAverages: Record<number, number> = {};
+            Object.keys(yearlyRaw).forEach(k => {
+                const y = Number(k);
+                const t = yearlyRaw[y];
+                yearlyAverages[y] = t.ggLav > 0 ? t.totVar / t.ggLav : 0;
+            });
+
+            // 2. CALCOLO TOTALE
+            let totalLordo = 0;
+            let totalPercepito = 0;
+            let totalTicket = 0;
+            let ferieCumulateCounter = 0;
+
+            // Ordine cronologico essenziale
+            const sortedRows = [...safeAnni].sort((a, b) => a.year - b.year || a.monthIndex - b.monthIndex);
+
+            sortedRows.forEach(row => {
+                const y = Number(row.year);
+                // Fallback Logic: Media Prec o Corrente
+                let mediaApplied = yearlyAverages[y - 1];
+                if (mediaApplied === undefined || mediaApplied === 0) {
+                    mediaApplied = yearlyAverages[y] || 0;
+                }
+
+                const vacDays = parseFloatSafe(row.daysVacation);
+                const cTicket = parseFloatSafe(row.coeffTicket);
+                const cPercepito = parseFloatSafe(row.coeffPercepito);
+
+                // Tetto
+                const prevTotal = ferieCumulateCounter;
+                ferieCumulateCounter += vacDays;
+                const spazio = Math.max(0, TETTO_FERIE - prevTotal);
+                const ggUtili = Math.min(vacDays, spazio);
+
+                if (ggUtili > 0) {
+                    totalLordo += (ggUtili * mediaApplied);
+                    totalTicket += (ggUtili * cTicket);
+                    totalPercepito += (ggUtili * cPercepito);
+                }
+            });
+
+            const grandTotalNetto = (totalLordo - totalPercepito) + totalTicket;
 
             return { ...w, computedTotal: grandTotalNetto > 0 ? grandTotalNetto : 0 };
         });

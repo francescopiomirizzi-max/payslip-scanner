@@ -40,105 +40,108 @@ const TableComponent: React.FC<TableComponentProps> = ({ worker, onBack, onEdit 
   // --- STATO PER IL TOOLTIP INFORMATIVO ---
   const [showInfoTetto, setShowInfoTetto] = useState(false);
 
-  // --- 1. LOGICA DATI CORRETTA CON TETTO FERIE (MESE PER MESE) ---
+  // --- 1. LOGICA DATI CORRETTA (ALLINEATA ALLA PERIZIA LEGALE) ---
   const tableData = useMemo(() => {
     const sortedYears = [...YEARS].sort((a: number, b: number) => a - b);
-
-    // Definiamo il limite annuale
     const TETTO_FERIE = includeExFest ? 32 : 28;
+    const profileColumns = getColumnsByProfile(worker.profilo);
 
-    return sortedYears.map(year => {
-      const yearRows = worker.anni?.filter(r => r.year === year) || [];
+    // --- STEP A: PRE-CALCOLO MEDIE ANNUALI ---
+    const yearlyRawStats: Record<number, { totVar: number; ggLav: number }> = {};
+    const safeRows = worker.anni || [];
 
-      // Accumulatori per i dati da visualizzare (Statistici)
-      let displayTotalVoci = 0;
-      let displayTotalDaysWorked = 0;
+    safeRows.forEach(row => {
+      const y = Number(row.year);
+      if (!yearlyRawStats[y]) yearlyRawStats[y] = { totVar: 0, ggLav: 0 };
 
-      // Accumulatori FINANZIARI (Somma dei calcoli mensili)
-      let yearlyGrossAmount = 0; // Totale Lordo (Somma dei lordi mensili)
-      let yearlyPercepitoVal = 0;
-      let yearlyTicketVal = 0;
-      let yearlyDaysVacationUtili = 0;
-
-      // Contatore per il limite annuale (si resetta a ogni anno)
-      let ferieCumulateCounter = 0;
-
-      const profileColumns = getColumnsByProfile(worker.profilo);
-
-      // Ordiniamo le righe per mese per garantire il calcolo progressivo corretto
-      const sortedRows = [...yearRows].sort((a, b) => a.monthIndex - b.monthIndex);
-
-      sortedRows.forEach(row => {
-        // A. Calcolo Voci del MESE
+      const ggLav = parseFloatSafe(row.daysWorked);
+      if (ggLav > 0) {
         let monthlyVoci = 0;
         profileColumns.forEach(col => {
-          // MODIFICA FONDAMENTALE: Aggiunto 'arretrati' per escluderlo dal conteggio lordo
           if (!['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'coeffPercepito', 'coeffTicket', 'note', 'arretrati'].includes(col.id)) {
             monthlyVoci += parseFloatSafe(row[col.id]);
           }
         });
+        yearlyRawStats[y].totVar += monthlyVoci;
+        yearlyRawStats[y].ggLav += ggLav;
+      }
+    });
 
-        // B. Recupera Giorni MESE
-        const gLav = parseFloatSafe(row.daysWorked);
+    // Mappa Medie Giornaliere
+    const yearlyAverages: Record<number, number> = {};
+    Object.keys(yearlyRawStats).forEach(yStr => {
+      const y = Number(yStr);
+      const s = yearlyRawStats[y];
+      yearlyAverages[y] = s.ggLav > 0 ? s.totVar / s.ggLav : 0;
+    });
+
+    // --- STEP B: COSTRUZIONE RIGHE REPORT ---
+    let ferieCumulateCounter = 0; // Tetto progressivo globale
+
+    return sortedYears.map(year => {
+      // Filtra solo le righe di quell'anno
+      const yearRows = safeRows.filter(r => r.year === year).sort((a, b) => a.monthIndex - b.monthIndex);
+      if (yearRows.length === 0) return null; // Salta anni vuoti
+
+      // Logica Media: Anno Prec o Corrente
+      let avgApplied = yearlyAverages[year - 1];
+      if (avgApplied === undefined || avgApplied === 0) {
+        avgApplied = yearlyAverages[year] || 0;
+      }
+
+      // Totali Annuali
+      let yearlyDaysVacationUtili = 0;
+      let yearlyGrossAmount = 0;     // Lordo Spettante
+      let yearlyPercepitoVal = 0;    // Già pagato
+      let yearlyTicketVal = 0;       // Ticket
+
+      // Totali Statistici (per visualizzazione colonne 2 e 3)
+      let displayTotalVoci = yearlyRawStats[year]?.totVar || 0;
+      let displayTotalDaysWorked = yearlyRawStats[year]?.ggLav || 0;
+
+      yearRows.forEach(row => {
         const gFerieReali = parseFloatSafe(row.daysVacation);
 
-        // --- C. LOGICA CRUCIALE: FILTRO GIORNI UTILI ---
+        // Calcolo Giorni Utili (Tetto)
         const prevTotal = ferieCumulateCounter;
         ferieCumulateCounter += gFerieReali;
 
         let gFerieUtili = 0;
-        if (prevTotal < TETTO_FERIE) {
-          const spazioRimanente = TETTO_FERIE - prevTotal;
-          gFerieUtili = Math.min(gFerieReali, spazioRimanente);
-        } else {
-          gFerieUtili = 0; // Tetto superato
+        const spazioRimanente = Math.max(0, TETTO_FERIE - prevTotal);
+        gFerieUtili = Math.min(gFerieReali, spazioRimanente);
+
+        if (gFerieUtili > 0) {
+          // CALCOLO ECONOMICO: Giorni Utili * Media Applicata
+          yearlyGrossAmount += (gFerieUtili * avgApplied);
+
+          // Ticket e Percepito sono puntuali
+          const coeffPercepito = parseFloatSafe(row.coeffPercepito);
+          const coeffTicket = parseFloatSafe(row.coeffTicket);
+
+          yearlyPercepitoVal += (gFerieUtili * coeffPercepito);
+          yearlyTicketVal += (gFerieUtili * coeffTicket);
+          yearlyDaysVacationUtili += gFerieUtili;
         }
-
-        // Aggiorniamo i contatori statistici
-        displayTotalVoci += monthlyVoci;
-        displayTotalDaysWorked += gLav;
-        yearlyDaysVacationUtili += gFerieUtili;
-
-        // D. CALCOLO FINANZIARIO PUNTUALE (MESE PER MESE)
-        // Questo garantisce che la cifra sia identica alla "AnnualCalculationTable"
-        let monthlySpettante = 0;
-        if (gLav > 0) {
-          // (Totale Mese / Giorni Lav Mese) * Giorni Ferie Utili Mese
-          monthlySpettante = (monthlyVoci / gLav) * gFerieUtili;
-        }
-        yearlyGrossAmount += monthlySpettante;
-
-        // E. Calcolo Percepito e Ticket sui GG UTILI
-        const coeffPercepito = parseFloatSafe(row.coeffPercepito);
-        const coeffTicket = parseFloatSafe(row.coeffTicket);
-
-        yearlyPercepitoVal += (gFerieUtili * coeffPercepito);
-        yearlyTicketVal += (gFerieUtili * coeffTicket);
       });
 
-      // Calcolo Netto Annuale
+      // Calcolo Netto: (Spettante - Percepito) + Ticket
       const netAmount = (yearlyGrossAmount - yearlyPercepitoVal) + yearlyTicketVal;
-
-      // Calcolo Incidenza Media (Solo per visualizzazione nel report)
-      // Se ho pagato 1000€ per 10 giorni di ferie, la media è 100€/giorno
-      const avgDailyIncidence = yearlyDaysVacationUtili > 0
-        ? yearlyGrossAmount / yearlyDaysVacationUtili
-        : 0;
 
       return {
         anno: year,
-        totaleVoci: displayTotalVoci,        // Solo statistico
-        divisore: displayTotalDaysWorked,    // Solo statistico
-        incidenzaGiornata: avgDailyIncidence,// Media Ponderata Reale
-        giornateFerie: yearlyDaysVacationUtili,
-        incidenzaTotale: yearlyGrossAmount,  // SOMMA ESATTA DEI MESI
-        indennitaPercepita: yearlyPercepitoVal,
-        totaleDaPercepire: netAmount,
-        indennitaPasto: yearlyTicketVal
+        totaleVoci: displayTotalVoci,         // Colonna 2 (Totale Voci)
+        divisore: displayTotalDaysWorked,     // Colonna 3 (Divisore)
+        incidenzaGiornata: avgApplied,        // Colonna 4 (Media Giornaliera USATA)
+        giornateFerie: yearlyDaysVacationUtili, // Colonna 5 (Giorni Pagati)
+        incidenzaTotale: yearlyGrossAmount,   // Colonna 6 (Lordo Spettante)
+        indennitaPercepita: yearlyPercepitoVal,// Colonna 7 (Già Percepito)
+        totaleDaPercepire: netAmount,         // Colonna 8 (Netto Finale)
+        indennitaPasto: yearlyTicketVal       // Colonna 9 (Ticket)
       };
     })
-      // AGGIUNGI QUESTO FILTRO:
-      .filter(row => row.anno >= 2008);
+      .filter(Boolean) // Rimuove anni nulli
+      // @ts-ignore
+      .filter(row => row.anno >= 2008); // Filtro sicurezza anni vecchi
   }, [worker, includeExFest]);
 
   // 2. CALCOLO TOTALI GENERALI

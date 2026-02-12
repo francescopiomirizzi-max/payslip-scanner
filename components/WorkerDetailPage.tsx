@@ -531,120 +531,137 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
     window.location.href = `mailto:${profile.pec}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   };
 
-  // --- FUNZIONE STAMPA PDF (MOTORE MATEMATICO CORRETTO) ---
+  // --- FUNZIONE STAMPA PDF (STRUTTURA ORIGINALE + CALCOLI CORRETTI + FIX TYPESCRIPT) ---
   const handlePrintTables = () => {
-    // 1. SETUP COLONNE E FONT
+    // 1. SETUP E CONFIGURAZIONE
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    const totalPagesExp = '{total_pages_count_string}'; // Variabile necessaria
+
     const indennitaCols = getColumnsByProfile(worker.profilo).filter(c =>
       !['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'coeffPercepito', 'coeffTicket', 'note', 'arretrati'].includes(c.id)
     );
 
-    const colCount = indennitaCols.length + 6;
-    let dynamicFontSize = 8;
-    if (colCount > 10) dynamicFontSize = 7;
-    if (colCount > 14) dynamicFontSize = 6;
-
-    // 2. SETUP DOCUMENTO
-    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-    const totalPagesExp = '{total_pages_count_string}';
     const fmt = (n: number) => n !== 0 ? n.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-';
     const fmtInt = (n: number) => n !== 0 ? n.toLocaleString('it-IT', { maximumFractionDigits: 0 }) : '-';
 
+    // Parametri Calcolo
+    const TETTO = includeExFest ? 32 : 28;
+
+    // --- A. PRE-CALCOLO MEDIE ANNUALI (IL "CERVELLO") ---
+    const yearlyRaw: Record<number, { totVar: number; ggLav: number }> = {};
+    monthlyInputs.forEach(row => {
+      const y = Number(row.year);
+      if (!isNaN(y)) {
+        if (!yearlyRaw[y]) yearlyRaw[y] = { totVar: 0, ggLav: 0 };
+        const gg = parseLocalFloat(row.daysWorked);
+        if (gg > 0) {
+          let sum = 0;
+          indennitaCols.forEach(c => sum += parseLocalFloat(row[c.id]));
+          yearlyRaw[y].totVar += sum;
+          yearlyRaw[y].ggLav += gg;
+        }
+      }
+    });
+
+    const yearlyAverages: Record<number, number> = {};
+    Object.keys(yearlyRaw).forEach(k => {
+      const y = Number(k);
+      const t = yearlyRaw[y];
+      yearlyAverages[y] = t.ggLav > 0 ? t.totVar / t.ggLav : 0;
+    });
+
     // 3. PREPARAZIONE DATI
-    const yearsToPrint = Array.from(new Set(monthlyInputs.map((d: any) => Number(d.year))))
-      .sort((a: number, b: number) => a - b) as number[];
+    // FIX TYPESCRIPT: Creiamo un array di numeri garantiti
+    const yearsSet = new Set(monthlyInputs.map((d: any) => Number(d.year)));
+    const yearsToPrint = Array.from(yearsSet)
+      .filter((y: any) => !isNaN(Number(y)))
+      .map((y: any) => Number(y))
+      .sort((a: number, b: number) => a - b);
 
     // Variabili per i totali PDF
     const yearlyRows: any[] = [];
     const pivotData: any = {};
 
     // Inizializzazione Totali Generali
-    let grandTotalIndemnity = 0;
     let grandTotalLordo = 0;
     let grandTotalTicket = 0;
     let grandTotalNet = 0;
     let grandTotalFerieEffettive = 0;
     let grandTotalFeriePagate = 0;
+    // Totale Variabili (solo statistico)
+    let grandTotalIndemnity = 0;
 
-    const CAP = includeExFest ? 32 : 28;
+    // Contatore Tetto Progressivo
+    let ferieCumulateCounter = 0;
 
-    yearsToPrint.forEach((year: number) => {
-      // IMPORTANTE: Ordine cronologico per il tetto progressivo
+    // --- B. COSTRUZIONE DATI TABELLA 1 (RIEPILOGO) ---
+    yearsToPrint.forEach((yearVal) => {
+      const year = Number(yearVal);
+
+      // Logica Media: Anno Prec -> Fallback Corrente
+      let mediaApplicata = yearlyAverages[year - 1];
+      if (mediaApplicata === undefined || mediaApplicata === 0) {
+        mediaApplicata = yearlyAverages[year] || 0;
+      }
+
+      // Filtro mesi
       const months = monthlyInputs.filter(d => Number(d.year) === year).sort((a, b) => a.monthIndex - b.monthIndex);
 
-      // Totali dell'ANNO corrente
-      let yIndemnity = 0; // Totale Voci Variabili
-      let yWorkDays = 0; // Totale Giorni Lavorati
-      let yLordo = 0; // Totale Spettante (calcolato mese su mese)
-      let yTicket = 0; // Totale Ticket
-      let yPercepito = 0; // Totale Percepito
+      // Totali dell'ANNO
+      let yIndemnity = 0; // Somma voci
+      let yWorkDays = 0;
+      let yLordo = 0;
+      let yTicket = 0;
+      let yPercepito = 0; // Serve per il netto
       let yFerieEffettive = 0;
       let yFeriePagate = 0;
-      let ferieCumulateAnno = 0;
 
-      // --- CICLO MESE PER MESE (LOGICA PUNTUALE) ---
-      // @ts-ignore
       months.forEach(row => {
-        // 1. Somma voci del mese
+        // 1. Somma voci grezze (per Tabella 2 e colonna 1)
         let monthVoci = 0;
         indennitaCols.forEach(col => {
           const val = parseLocalFloat(row[col.id]);
           monthVoci += val;
-          // Pivot Data (per la tabella 2)
+          // Pivot Data
           if (!pivotData[col.label]) pivotData[col.label] = {};
           if (!pivotData[col.label][year]) pivotData[col.label][year] = 0;
           pivotData[col.label][year] += val;
         });
-
         yIndemnity += monthVoci;
-        const ggLav = parseLocalFloat(row.daysWorked);
-        yWorkDays += ggLav;
+        yWorkDays += parseLocalFloat(row.daysWorked);
 
-        const ggFerie = parseLocalFloat(row.daysVacation);
-        const coeffT = parseLocalFloat(row['coeffTicket']);
-        const coeffP = parseLocalFloat(row['coeffPercepito']);
+        // 2. Calcoli Economici
+        const vacDays = parseLocalFloat(row.daysVacation);
+        const cTicket = parseLocalFloat(row.coeffTicket);
+        const cPercepito = parseLocalFloat(row.coeffPercepito);
 
-        // 2. Logica Bucket (Tetto 28/32)
-        const spazio = Math.max(0, CAP - ferieCumulateAnno);
-        const ggUtili = Math.min(ggFerie, spazio);
-        ferieCumulateAnno += ggFerie;
+        // Tetto Progressivo
+        const prevTotal = ferieCumulateCounter;
+        ferieCumulateCounter += vacDays;
 
-        // 3. Calcolo Lordo MESE SU MESE (Non media annuale!)
-        let rowLordo = 0;
-        if (ggLav > 0) {
-          rowLordo = (monthVoci / ggLav) * ggUtili;
-        }
+        // Giorni Utili
+        const spazio = Math.max(0, TETTO - prevTotal);
+        const ggUtili = Math.min(vacDays, spazio);
 
-        const rowTicket = ggUtili * coeffT;
-        const rowPercepito = ggUtili * coeffP;
-
-        // Somma agli accumulatori annuali
-        yLordo += rowLordo;
-        yTicket += rowTicket;
-        yPercepito += rowPercepito;
-        yFerieEffettive += ggFerie;
+        // Accumulatori Giorni
+        yFerieEffettive += vacDays;
         yFeriePagate += ggUtili;
 
-        // Salvataggio temporaneo per dettaglio PDF (Tabella 3)
-        // @ts-ignore
-        row._tempLordo = rowLordo;
-        // @ts-ignore
-        row._tempGgUtili = ggUtili;
-        // @ts-ignore
-        row._tempNettoRow = (rowLordo - rowPercepito) + rowTicket;
+        // Calcolo Euro (Se ci sono giorni utili)
+        if (ggUtili > 0) {
+          yLordo += (ggUtili * mediaApplicata); // Usiamo la media corretta!
+          yTicket += (ggUtili * cTicket);
+          yPercepito += (ggUtili * cPercepito);
+        }
       });
 
-      // 4. Calcolo Netto Annuale
       const yNetto = (yLordo - yPercepito) + yTicket;
-
-      // Calcolo Media Visuale (Solo statistica per la tabella riepilogativa)
-      // Nota: Questa media è "ex-post", serve solo per dare un'idea del valore medio giornaliero pagato
-      const annualAvgVisual = yFeriePagate > 0 ? yLordo / yFeriePagate : 0;
 
       yearlyRows.push([
         year,
         fmt(yIndemnity),
         fmtInt(yWorkDays),
-        fmt(annualAvgVisual), // Mostriamo la media reale pagata
+        fmt(mediaApplicata), // Mostriamo la media usata
         `${fmtInt(yFeriePagate)} / ${fmtInt(yFerieEffettive)}`,
         fmt(yLordo),
         fmt(yTicket),
@@ -671,19 +688,23 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
       fmt(grandTotalNet)
     ]);
 
+    // --- C. GENERAZIONE PDF ---
     const drawHeaderFooter = (data: any) => {
       const pageWidth = doc.internal.pageSize.width;
       const pageHeight = doc.internal.pageSize.height;
       doc.setFillColor(23, 37, 84);
       doc.rect(0, 0, pageWidth, 20, 'F');
       doc.setFontSize(16); doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold');
-      doc.text(`CONTEGGIO DIFFERENZE RETRIBUTIVE (Max ${CAP}gg)`, 14, 12);
+      doc.text(`CONTEGGIO DIFFERENZE RETRIBUTIVE (Max ${TETTO}gg)`, 14, 12);
       doc.setFontSize(10); doc.setFont('helvetica', 'normal'); doc.setTextColor(200, 200, 200);
       doc.text(`Pratica: ${worker.cognome} ${worker.nome} (Matr. ${worker.id})`, pageWidth - 14, 12, { align: 'right' });
+
+      // Footer con Nota Legale
+      doc.setFontSize(7); doc.setTextColor(100);
+      const note = "Calcolo elaborato ai sensi Cass. n. 20216/2022 (Onnicomprensività retribuzione feriale).";
+      doc.text(note, 14, pageHeight - 10);
       const str = "Pagina " + doc.getNumberOfPages();
-      doc.setFontSize(8); doc.setTextColor(100);
       doc.text(str, pageWidth - 14, pageHeight - 10, { align: 'right' });
-      doc.text(`Generato il ${new Date().toLocaleDateString('it-IT')}`, 14, pageHeight - 10);
     };
 
     let currentY = 30;
@@ -694,15 +715,15 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
 
     autoTable(doc, {
       startY: currentY + 5,
-      head: [['ANNO', 'TOT. VARIABILI', 'GG LAV.', 'MEDIA GIORN.', 'GG UTILI / TOT', 'DIFF. LORDA', 'TICKET', 'NETTO DOVUTO']],
+      head: [['ANNO', 'TOT. VARIABILI', 'GG LAV.', 'MEDIA UTILIZZATA', 'GG UTILI / TOT', 'DIFF. LORDA', 'TICKET', 'NETTO DOVUTO']],
       body: yearlyRows,
       theme: 'grid',
       styles: { fontSize: 9, cellPadding: 3, textColor: 50, lineColor: [200, 200, 200], lineWidth: 0.1 },
-      headStyles: { fillColor: [241, 245, 249], textColor: [23, 37, 84], fontStyle: 'bold', halign: 'center', lineWidth: 0.1, lineColor: [200, 200, 200] },
+      headStyles: { fillColor: [241, 245, 249], textColor: [23, 37, 84], fontStyle: 'bold', halign: 'center' },
       columnStyles: {
         0: { fontStyle: 'bold', halign: 'center', fillColor: [248, 250, 252] },
-        4: { halign: 'center', textColor: [220, 38, 38], fontStyle: 'bold' },
-        7: { fontStyle: 'bold', halign: 'right', fillColor: [220, 252, 231], textColor: [21, 128, 61] }
+        3: { fontStyle: 'bold', textColor: [180, 83, 9] }, // Colonna Media in Arancio scuro
+        7: { fontStyle: 'bold', halign: 'right', fillColor: [220, 252, 231], textColor: [21, 128, 61] } // Netto Verde
       },
       bodyStyles: { halign: 'right' },
       didDrawPage: drawHeaderFooter,
@@ -723,7 +744,8 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
     const pivotBody = Object.keys(pivotData).sort().map(key => {
       let rowTotal = 0;
       const row = [key];
-      yearsToPrint.forEach(year => {
+      yearsToPrint.forEach(yearVal => {
+        const year = Number(yearVal);
         const val = pivotData[key][year] || 0;
         rowTotal += val;
         row.push(fmt(val));
@@ -745,30 +767,33 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
       margin: { top: 25, bottom: 15, left: 14, right: 14 }
     });
 
-    // --- TABELLA 3 ---
+    // --- TABELLA 3 (DETTAGLIO MENSILE) ---
     doc.addPage();
     currentY = 30;
     doc.setFontSize(12); doc.setTextColor(23, 37, 84);
     doc.text("3. DETTAGLIO MENSILE ANALITICO", 14, currentY);
 
-    yearsToPrint.forEach(year => {
+    // Reset contatore per ristampare i mesi correttamente
+    let monthlyFerieCounter = 0;
+
+    yearsToPrint.forEach(yearVal => {
+      const year = Number(yearVal);
       // @ts-ignore
       if (currentY > 160) { doc.addPage(); currentY = 30; }
 
+      // Recupero media per mostrarla nel titolo
+      let media = yearlyAverages[year - 1];
+      if (media === undefined || media === 0) media = yearlyAverages[year] || 0;
+
       doc.setFontSize(10); doc.setTextColor(100);
-      doc.text(`ANNO ${year}`, 14, currentY + 8);
+      doc.text(`ANNO ${year} (Media: ${fmt(media)})`, 14, currentY + 8);
 
       const yearRows = monthlyInputs.filter(d => Number(d.year) === year).sort((a, b) => a.monthIndex - b.monthIndex);
 
       const tableHead = [
         'MESE',
-        ...indennitaCols.map(c => {
-          const words = c.label.split(' ');
-          let formattedLabel = words.join('\n');
-          if (c.subLabel) formattedLabel += `\n${c.subLabel}`;
-          return formattedLabel.toUpperCase();
-        }),
-        'GG\nLAV', 'GG\nFER', 'GG\nUTILI', 'COEFF.\nTICKET', 'NETTO'
+        ...indennitaCols.map(c => c.label.substring(0, 10) + '.'),
+        'GG LAV', 'GG UTILI', 'LORDO', 'GIA\' PERC.', 'TICKET', 'NETTO'
       ];
 
       const tableBody = yearRows.map(row => {
@@ -777,23 +802,32 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
 
         indennitaCols.forEach(col => {
           const val = parseLocalFloat(row[col.id]);
-          rowData.push(fmt(val) === '-' ? '' : fmt(val));
+          rowData.push(fmt(val) === '-' ? '' : fmt(val).replace(' €', ''));
         });
 
         const ggLav = parseLocalFloat(row.daysWorked);
-        const ggFerie = parseLocalFloat(row.daysVacation);
-        // @ts-ignore
-        const ggUtili = row._tempGgUtili || 0;
-        const coeffT = parseLocalFloat(row['coeffTicket']);
-        // @ts-ignore
-        const netto = row._tempNettoRow || 0;
+        const vac = parseLocalFloat(row.daysVacation);
+
+        // Ricalcolo al volo per la visualizzazione mensile
+        const spazio = Math.max(0, TETTO - monthlyFerieCounter);
+        const gu = Math.min(vac, spazio);
+        monthlyFerieCounter += vac;
+
+        // Calcoli Row
+        let rLordo = 0;
+        if (gu > 0) rLordo = gu * media;
+        const rTicket = gu * parseLocalFloat(row.coeffTicket);
+        const rPercepito = gu * parseLocalFloat(row.coeffPercepito);
+        const rNetto = (rLordo - rPercepito) + rTicket;
 
         rowData.push(
           ggLav > 0 ? String(ggLav) : '',
-          ggFerie > 0 ? String(ggFerie) : '',
-          ggUtili !== ggFerie ? { content: String(fmtInt(ggUtili)), styles: { textColor: [220, 38, 38], fontStyle: 'bold' } } : String(fmtInt(ggUtili)),
-          coeffT > 0 ? fmt(coeffT) : '',
-          netto !== 0 ? fmt(netto) : '-'
+          // Se i giorni sono stati tagliati dal tetto, li segniamo con asterisco
+          gu !== vac ? `${fmtInt(gu)}*` : fmtInt(gu),
+          fmt(rLordo),
+          fmt(rPercepito),
+          fmt(rTicket),
+          fmt(rNetto)
         );
         return rowData;
       });
@@ -803,25 +837,8 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
         head: [tableHead],
         body: tableBody,
         theme: 'grid',
-        styles: {
-          fontSize: dynamicFontSize,
-          cellPadding: 1.5,
-          halign: 'right',
-          lineColor: [220, 220, 220],
-          lineWidth: 0.1,
-          textColor: 50,
-          valign: 'middle',
-          overflow: 'linebreak'
-        },
-        headStyles: {
-          fillColor: [23, 37, 84],
-          textColor: 255,
-          fontStyle: 'bold',
-          halign: 'center',
-          lineColor: 255,
-          lineWidth: 0.1,
-          minCellHeight: 15
-        },
+        styles: { fontSize: 7, cellPadding: 1.5, halign: 'right', lineColor: [220, 220, 220], lineWidth: 0.1 },
+        headStyles: { fillColor: [23, 37, 84], textColor: 255, fontStyle: 'bold', halign: 'center' },
         columnStyles: {
           0: { halign: 'left', fontStyle: 'bold', cellWidth: 12, fillColor: [241, 245, 249] },
           [tableHead.length - 1]: { fontStyle: 'bold', fillColor: [240, 253, 250], textColor: [21, 128, 61] }
@@ -833,6 +850,62 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
       // @ts-ignore
       currentY = doc.lastAutoTable.finalY + 10;
     });
+
+    // --- PAGINA 4: RIEPILOGO FINALE (AGGIUNTA) ---
+    doc.addPage();
+    drawHeaderFooter(null);
+    currentY = 40;
+
+    doc.setFontSize(16); doc.setTextColor(23, 37, 84); doc.setFont('helvetica', 'bold');
+    doc.text("RIEPILOGO FINALE DEI CREDITI", 105, currentY, { align: 'center' });
+    currentY += 20;
+
+    const printRow = (label: string, value: string, isTotal = false) => {
+      doc.setFontSize(isTotal ? 14 : 12);
+      if (isTotal) doc.setTextColor(22, 163, 74); // Verde
+      else doc.setTextColor(50, 50, 50); // Grigio
+
+      doc.setFont('helvetica', isTotal ? 'bold' : 'normal');
+
+      doc.text(label, 40, currentY);
+      doc.text(value, 170, currentY, { align: 'right' });
+      doc.setDrawColor(200); doc.setLineWidth(0.1);
+      doc.line(40, currentY + 2, 170, currentY + 2);
+      currentY += 12;
+    };
+
+    // Per il riepilogo finale usiamo i totali calcolati in "grandTotal..." che sono corretti
+    // MA dobbiamo calcolare il "Già Percepito Totale" per differenza logica o somma
+    // Poiché grandTotalIndemnity è la somma delle voci variabili e non del percepito (che è ferie * coeff),
+    // dobbiamo ricalcolare velocemente il percepito totale corretto.
+
+    let recalcPercepitoTotal = 0;
+    let tempFerie = 0;
+
+    // Ordine cronologico per coerenza tetto
+    const allSorted = [...monthlyInputs].sort((a, b) => {
+      return (Number(a.year) - Number(b.year)) || (a.monthIndex - b.monthIndex);
+    });
+
+    allSorted.forEach(row => {
+      const v = parseLocalFloat(row.daysVacation);
+      const s = Math.max(0, TETTO - tempFerie);
+      const gu = Math.min(v, s);
+      tempFerie += v;
+      if (gu > 0) recalcPercepitoTotal += (gu * parseLocalFloat(row.coeffPercepito));
+    });
+
+    printRow("Totale Lordo Spettante", fmt(grandTotalLordo));
+    printRow("Totale Già Percepito (Voce Busta)", fmt(recalcPercepitoTotal));
+    printRow("Totale Buoni Pasto Maturati", fmt(grandTotalTicket));
+
+    currentY += 5;
+    printRow("TOTALE NETTO DA LIQUIDARE", fmt(grandTotalNet), true);
+
+    // Disclaimer
+    currentY += 20;
+    doc.setFontSize(9); doc.setTextColor(100); doc.setFont('helvetica', 'italic');
+    doc.text("Il presente conteggio ha valore di perizia tecnica di parte. I calcoli sono basati sui dati inseriti e sulla giurisprudenza corrente.", 105, currentY, { align: 'center', maxWidth: 150 });
 
     if (typeof doc.putTotalPages === 'function') { doc.putTotalPages(totalPagesExp); }
     doc.save(`Scheda_Lavorazione_${worker.cognome}_${worker.nome}.pdf`);
@@ -1017,53 +1090,122 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
     setIsDragging(false);
   };
 
-  // --- PUNTO 4: STATISTICHE GLOBALI (CORRETTO) ---
+  // --- PUNTO 4: STATISTICHE GLOBALI (TICKER CON FALLBACK INTELLIGENTE) ---
   const globalStats = useMemo(() => {
     if (!monthlyInputs || !Array.isArray(monthlyInputs)) return [];
 
-    // 1. Recuperiamo i dati calcolati
-    const { globalLordo, globalTicket, globalFerieEffettive, globalFeriePagate } = calculateAnnualLegalData(monthlyInputs, worker.profilo, includeExFest);
+    // 1. PRE-CALCOLO MEDIE ANNUALI
+    // Calcoliamo la media giornaliera reale per ogni anno inserito
+    const yearlyTotals: Record<number, { indennita: number; giorni: number }> = {};
+    const indennitaCols = getColumnsByProfile(worker.profilo).filter(c =>
+      !['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'coeffPercepito', 'coeffTicket', 'note', 'arretrati'].includes(c.id)
+    );
 
-    // 2. Recuperiamo il totale dal Deal Maker (che ora esiste sicuro grazie alla correzione sopra)
-    const totaleRecupero = dealStats.netDifference || 0;
+    monthlyInputs.forEach(row => {
+      const y = Number(row.year);
+      if (!yearlyTotals[y]) yearlyTotals[y] = { indennita: 0, giorni: 0 };
 
-    // 3. Calcoliamo il Già Percepito per differenza
-    // Formula: Lordo Totale - (Recupero Netto - Ticket)
-    // Se il risultato è negativo (strano ma possibile), lo mettiamo a 0
-    let totaleGiaPercepito = globalLordo - (totaleRecupero - globalTicket);
-    if (totaleGiaPercepito < 0) totaleGiaPercepito = 0;
+      const ggLav = parseLocalFloat(row.daysWorked);
+      if (ggLav > 0) {
+        let sommaIndennitaRow = 0;
+        indennitaCols.forEach(c => {
+          sommaIndennitaRow += parseLocalFloat(row[c.id]);
+        });
+
+        yearlyTotals[y].indennita += sommaIndennitaRow;
+        yearlyTotals[y].giorni += ggLav;
+      }
+    });
+
+    // Mappa delle medie: { 2023: 50.5, 2024: 52.1 }
+    const yearlyAverages: Record<number, number> = {};
+    Object.keys(yearlyTotals).forEach(k => {
+      const y = Number(k);
+      const t = yearlyTotals[y];
+      yearlyAverages[y] = t.giorni > 0 ? t.indennita / t.giorni : 0;
+    });
+
+    // 2. CALCOLO SPETTANZE (Applicando la logica: Media Prec -> Fallback Corrente)
+    let totLordoSpettante = 0;
+    let totTicket = 0;
+    let totGiaPercepito = 0;
+
+    // Tetto ferie (globale o annuale a seconda della policy, qui progressivo per coerenza)
+    let ferieCumulateCounter = 0;
+    const TETTO = includeExFest ? 32 : 28;
+
+    // Ordiniamo cronologicamente i mesi
+    const sortedData = [...monthlyInputs].sort((a, b) => {
+      if (a.year !== b.year) return a.year - b.year;
+      return a.monthIndex - b.monthIndex;
+    });
+
+    sortedData.forEach(row => {
+      const currentYear = Number(row.year);
+      const prevYear = currentYear - 1;
+
+      // --- IL FIX FONDAMENTALE ---
+      // 1. Proviamo a prendere la media dell'anno precedente (Logica Legale Standard)
+      let mediaDaUsare = yearlyAverages[prevYear];
+
+      // 2. Se non esiste (es. startup o dati mancanti), usiamo quella dell'anno corrente
+      if (mediaDaUsare === undefined || mediaDaUsare === 0) {
+        mediaDaUsare = yearlyAverages[currentYear] || 0;
+      }
+
+      // Dati riga
+      const vacDays = parseLocalFloat(row.daysVacation);
+      const coeffTicket = parseLocalFloat(row['coeffTicket']);
+      const coeffPercepito = parseLocalFloat(row['coeffPercepito']);
+
+      // Logica Tetto Ferie
+      const spazio = Math.max(0, TETTO - ferieCumulateCounter);
+      const giorniUtili = Math.min(vacDays, spazio);
+      ferieCumulateCounter += vacDays;
+
+      if (giorniUtili > 0) {
+        // Calcolo Economico
+        totLordoSpettante += (giorniUtili * mediaDaUsare);
+        totTicket += (giorniUtili * coeffTicket);
+        totGiaPercepito += (giorniUtili * coeffPercepito);
+      }
+    });
+
+    // 3. Totali Finali
+    const differenzaRetributiva = totLordoSpettante - totGiaPercepito;
+    const nettoRecuperabile = differenzaRetributiva + totTicket;
 
     return [
       {
-        label: "NETTO RECUPERABILE",
-        value: totaleRecupero.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' }),
+        label: "TOTALE DA LIQUIDARE",
+        value: formatCurrency(nettoRecuperabile),
         icon: Wallet,
         color: "text-emerald-600 bg-emerald-50 border-emerald-200",
-        note: "Differenza dovuta + Ticket"
+        note: `Diff. Retr. (${formatCurrency(differenzaRetributiva)}) + Ticket`
       },
       {
         label: "LORDO SPETTANTE",
-        value: globalLordo.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' }),
+        value: formatCurrency(totLordoSpettante),
         icon: TrendingUp,
         color: "text-blue-600 bg-blue-50 border-blue-200",
-        note: "Calcolato su gg utili (Cass. 20216)"
+        note: "Basato su media annuale"
       },
       {
         label: "GIÀ PERCEPITO",
-        value: totaleGiaPercepito.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' }),
+        value: formatCurrency(totGiaPercepito),
         icon: CheckCircle2,
         color: "text-orange-600 bg-orange-50 border-orange-200",
-        note: "Importo da detrarre"
+        note: "Importo già erogato"
       },
       {
-        label: includeExFest ? "FERIE PAGABILI (32GG)" : "FERIE PAGABILI (28GG)",
-        value: `${globalFeriePagate.toLocaleString('it-IT', { maximumFractionDigits: 1 })} / ${globalFerieEffettive.toLocaleString('it-IT', { maximumFractionDigits: 0 })}`,
-        icon: CalendarClock,
+        label: "TOTALE BUONI PASTO",
+        value: formatCurrency(totTicket),
+        icon: Ticket,
         color: "text-indigo-600 bg-indigo-50 border-indigo-200",
-        note: `Eccedenza: ${(globalFerieEffettive - globalFeriePagate).toLocaleString('it-IT', { maximumFractionDigits: 1 })} gg`
+        note: "Indennità sostitutiva"
       },
     ];
-  }, [monthlyInputs, worker.profilo, includeExFest, dealStats]);
+  }, [monthlyInputs, worker.profilo, includeExFest]);
   // --- AGGIUNGI QUESTA RIGA QUI SOTTO ---
   const tickerItems = [...globalStats, ...globalStats, ...globalStats];
   // COMPONENTE TIMELINE (Semaforo Style)

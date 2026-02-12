@@ -19,7 +19,8 @@ import {
   EyeOff,
   AlertCircle,
   Percent,
-  CalendarPlus
+  CalendarPlus,
+  Info
 } from 'lucide-react';
 
 interface AnnualCalculationTableProps {
@@ -97,7 +98,7 @@ const AnnualCalculationTable: React.FC<AnnualCalculationTableProps> = ({ data = 
   const parseInputToNumber = (val: string | number | undefined): number => {
     if (!val) return 0;
     if (typeof val === 'number') return val;
-    const num = parseFloat(val.replace(',', '.'));
+    const num = parseFloat(val.toString().replace(',', '.'));
     return isNaN(num) ? 0 : num;
   };
 
@@ -113,64 +114,97 @@ const AnnualCalculationTable: React.FC<AnnualCalculationTableProps> = ({ data = 
     return sum;
   };
 
-  // --- LOGICA DI CALCOLO AGGIORNATA (TETTO DINAMICO) ---
+  // --- LOGICA DI CALCOLO UNIFICATA (TICKER + PDF + TABELLA) ---
   const annualRows = useMemo(() => {
     const safeData = Array.isArray(data) ? data : [];
-
-    // SE includeExFest è true, il tetto sale a 32 (28 Ferie + 4 Ex Fest)
     const TETTO_FERIE = includeExFest ? 32 : 28;
 
-    return YEARS.map(year => {
-      const existingMonths = safeData.filter(d => d.year === year);
+    // 1. PRE-CALCOLO MEDIE ANNUALI
+    // Calcoliamo prima i totali grezzi per ogni anno per derivare la media giornaliera
+    const yearlyRawStats: Record<number, { totVar: number; ggLav: number }> = {};
 
-      let ferieCumulateCounter = 0;
+    safeData.forEach(row => {
+      const y = Number(row.year);
+      if (!yearlyRawStats[y]) yearlyRawStats[y] = { totVar: 0, ggLav: 0 };
 
-      let sumIndennitaTotali = 0;
-      let sumGiorniLav = 0;
+      const gg = parseInputToNumber(row.daysWorked);
+      if (gg > 0) {
+        const indennitaMese = calculateMonthIndemnity(row);
+        yearlyRawStats[y].totVar += indennitaMese;
+        yearlyRawStats[y].ggLav += gg;
+      }
+    });
+
+    const yearlyAverages: Record<number, number> = {};
+    Object.keys(yearlyRawStats).forEach(yStr => {
+      const y = Number(yStr);
+      const s = yearlyRawStats[y];
+      yearlyAverages[y] = s.ggLav > 0 ? s.totVar / s.ggLav : 0;
+    });
+
+    // 2. COSTRUZIONE RIGHE ANNUALI
+    // Qui applichiamo la logica: Media Anno Prec (o Corrente se manca) * Giorni Utili
+
+    // Ordiniamo gli anni presenti nei dati
+    const availableYears = Array.from(new Set(safeData.map(d => d.year))).sort((a, b) => a - b);
+
+    // Contatore globale per il tetto ferie (se vogliamo che il tetto sia globale su tutti gli anni selezionati)
+    // NOTA: Di solito il tetto è annuale o globale. Qui assumiamo globale progressivo per coerenza col PDF.
+    let ferieCumulateCounter = 0;
+
+    return availableYears.map(year => {
+      const months = safeData.filter(d => d.year === year).sort((a, b) => a.monthIndex - b.monthIndex);
+
+      // Recupero media da applicare
+      let avgApplied = yearlyAverages[year - 1];
+      let isFallback = false;
+
+      // FALLBACK: Se non c'è l'anno prima, uso l'anno corrente
+      if (avgApplied === undefined || avgApplied === 0) {
+        avgApplied = yearlyAverages[year] || 0;
+        isFallback = true;
+      }
+
+      // Totali per la riga dell'anno
+      let sumIndennitaTotali = yearlyRawStats[year]?.totVar || 0; // Totale grezzo (solo visualizzazione)
+      let sumGiorniLav = yearlyRawStats[year]?.ggLav || 0;
       let sumGiorniFerieReali = 0;
       let sumGiorniFerieUtili = 0;
-      let sumIndennitaSpettante = 0;
+      let sumIndennitaSpettante = 0; // Questo è il valore economico calcolato
       let sumIndennitaPercepita = 0;
       let sumBuoniPasto = 0;
       let sumNetto = 0;
 
-      const monthlyDetails = MONTH_NAMES.map((monthName, index) => {
-        const safeRow = existingMonths.find((r: any) => r.monthIndex == index) || {};
+      const monthlyDetails = months.map(row => {
+        const indennitaMensile = calculateMonthIndemnity(row); // Solo visuale
+        const giorniLav = parseInputToNumber(row.daysWorked);
+        const giorniFerieReali = parseInputToNumber(row.daysVacation);
 
-        const indennitaMensile = calculateMonthIndemnity(safeRow);
-        const giorniLav = parseFloatSafe(safeRow['daysWorked']);
-        const giorniFerieReali = parseFloatSafe(safeRow['daysVacation']);
-
-        // --- APPLICAZIONE TETTO DINAMICO ---
+        // Tetto Dinamico
         const prevTotal = ferieCumulateCounter;
         ferieCumulateCounter += giorniFerieReali;
 
         let giorniUtili = 0;
-        if (prevTotal < TETTO_FERIE) {
-          const spazioRimanente = TETTO_FERIE - prevTotal;
-          giorniUtili = Math.min(giorniFerieReali, spazioRimanente);
-        } else {
-          giorniUtili = 0;
-        }
+        const spazioRimanente = Math.max(0, TETTO_FERIE - prevTotal);
+        giorniUtili = Math.min(giorniFerieReali, spazioRimanente);
+        // Se spazioRimanente < 0 (abbiamo già sforato), giorniUtili sarà 0 (grazie a max 0 sopra)
 
-        const rawPercepito = safeRow['coeffPercepito'] || "";
-        const rawTicket = safeRow['coeffTicket'] || "";
-
+        const rawPercepito = row['coeffPercepito'] || "";
+        const rawTicket = row['coeffTicket'] || "";
         const valPercepito = parseInputToNumber(rawPercepito);
         const valTicket = parseInputToNumber(rawTicket);
 
-        // Calcoli basati su GIORNI UTILI
+        // CALCOLO ECONOMICO: Giorni Utili * Media Applicata (NON valori del mese)
         let indennitaSpettante = 0;
-        if (giorniLav > 0) {
-          indennitaSpettante = (indennitaMensile / giorniLav) * giorniUtili;
+        if (giorniUtili > 0) {
+          indennitaSpettante = giorniUtili * avgApplied;
         }
 
         const indennitaPercepita = giorniUtili * valPercepito;
         const buoniPasto = giorniUtili * valTicket;
-        const netto = indennitaSpettante - indennitaPercepita + buoniPasto;
+        const netto = (indennitaSpettante - indennitaPercepita) + buoniPasto;
 
-        sumIndennitaTotali += indennitaMensile;
-        sumGiorniLav += giorniLav;
+        // Accumulatori Annuali
         sumGiorniFerieReali += giorniFerieReali;
         sumGiorniFerieUtili += giorniUtili;
         sumIndennitaSpettante += indennitaSpettante;
@@ -179,13 +213,13 @@ const AnnualCalculationTable: React.FC<AnnualCalculationTableProps> = ({ data = 
         sumNetto += netto;
 
         return {
-          index,
-          name: monthName,
-          indennitaMensile,
+          index: row.monthIndex,
+          name: MONTH_NAMES[row.monthIndex],
+          indennitaMensile, // Grezzo
           giorniLav,
           giorniFerieReali,
           giorniUtili,
-          indennitaSpettante,
+          indennitaSpettante, // Calcolato con media
           indennitaPercepita,
           buoniPasto,
           netto,
@@ -196,7 +230,7 @@ const AnnualCalculationTable: React.FC<AnnualCalculationTableProps> = ({ data = 
 
       return {
         year,
-        sumIndennitaTotali,
+        sumIndennitaTotali, // Somma grezza delle variabili (per info)
         sumGiorniLav,
         sumGiorniFerieReali,
         sumGiorniFerieUtili,
@@ -204,10 +238,12 @@ const AnnualCalculationTable: React.FC<AnnualCalculationTableProps> = ({ data = 
         sumIndennitaPercepita,
         sumBuoniPasto,
         sumNetto,
-        monthlyDetails
+        monthlyDetails,
+        avgApplied, // Per mostrarla in tabella
+        isFallback
       };
     });
-  }, [data, profilo, includeExFest]); // Dipendenza aggiunta: includeExFest
+  }, [data, profilo, includeExFest]);
 
   // Totale Generale + Interessi
   const summary = useMemo(() => {
@@ -277,6 +313,9 @@ const AnnualCalculationTable: React.FC<AnnualCalculationTableProps> = ({ data = 
               <th className="p-2 text-left font-bold border-r border-slate-300 w-48 pl-4 sticky left-0 bg-slate-100 z-20">ANNO / MESE</th>
               <th className="p-2 text-right font-bold border-r border-slate-300 w-32 bg-blue-50/50">Indennità<br />Totali Mensili</th>
               <th className="p-2 text-right font-bold border-r border-slate-300 w-24">Giorni<br />Lavorati</th>
+              {/* NUOVA COLONNA MEDIA */}
+              <th className="p-2 text-right font-bold border-r border-slate-300 w-28 bg-amber-50 text-amber-800">Media<br />Giornaliera</th>
+
               <th className="p-2 text-right font-bold border-r border-slate-300 w-28">
                 Giorni<br />{includeExFest ? "Ferie+ExF" : "Ferie"} <span className="text-[9px] lowercase font-normal text-slate-500">(utili)</span>
               </th>
@@ -284,7 +323,7 @@ const AnnualCalculationTable: React.FC<AnnualCalculationTableProps> = ({ data = 
 
               {showDetails && (
                 <>
-                  <th className="p-2 text-center font-bold border-r border-slate-300 w-24 bg-orange-50 text-orange-700">Coeff.<br />Variabile</th>
+                  <th className="p-2 text-center font-bold border-r border-slate-300 w-24 bg-orange-50 text-orange-700">Coeff.<br />Percepito</th>
                   <th className="p-2 text-right font-bold border-r border-slate-300 w-32 bg-orange-50 text-orange-700">Indennità<br />Percepita</th>
                   <th className="p-2 text-center font-bold border-r border-slate-300 w-24 bg-teal-50 text-teal-700">Coeff.<br />Ticket</th>
                   <th className="p-2 text-right font-bold border-r border-slate-300 w-32 bg-teal-50 text-teal-700">Buoni<br />Pasto</th>
@@ -309,6 +348,20 @@ const AnnualCalculationTable: React.FC<AnnualCalculationTableProps> = ({ data = 
                     </td>
                     <td className="p-2 border-r border-slate-300 text-right font-bold text-slate-700">{formatCurrency(row.sumIndennitaTotali)}</td>
                     <td className="p-2 border-r border-slate-300 text-right font-bold text-slate-700">{formatInteger(row.sumGiorniLav)}</td>
+
+                    {/* Visualizzazione Media Applicata con Indicatore Fallback */}
+                    <td className="p-2 border-r border-slate-300 text-right font-mono font-bold text-amber-800 bg-amber-50 relative group cursor-help">
+                      {formatCurrency(row.avgApplied)}
+                      {row.isFallback && (
+                        <>
+                          <div className="absolute top-1 right-1 w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></div>
+                          <div className="hidden group-hover:block absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2 bg-slate-800 text-white text-[10px] rounded shadow-lg z-50 text-center font-sans">
+                            Dati anno precedente mancanti.<br />Usata media anno corrente.
+                          </div>
+                        </>
+                      )}
+                    </td>
+
                     <td className="p-2 border-r border-slate-300 text-right font-bold text-slate-700">
                       <div className="flex flex-col items-end leading-none">
                         <span>{formatInteger(row.sumGiorniFerieUtili)}</span>
@@ -358,6 +411,10 @@ const AnnualCalculationTable: React.FC<AnnualCalculationTableProps> = ({ data = 
 
                       <td className="px-2 border-r border-slate-200 text-right text-xs text-slate-600">{month.indennitaMensile !== 0 ? formatCurrency(month.indennitaMensile) : '-'}</td>
                       <td className="px-2 border-r border-slate-200 text-right text-xs text-slate-600">{month.giorniLav !== 0 ? formatInteger(month.giorniLav) : '-'}</td>
+
+                      {/* Media Applicata (uguale per tutto l'anno) */}
+                      <td className="px-2 border-r border-slate-200 text-right text-xs font-mono text-amber-700/50">{formatCurrency(row.avgApplied)}</td>
+
                       <td className="px-2 border-r border-slate-200 text-right text-xs bg-yellow-50/50">
                         <div className="flex flex-col items-end">
                           <span className={month.giorniFerieReali > month.giorniUtili ? "text-red-600 font-bold" : "text-emerald-700 font-bold"}>
@@ -443,7 +500,7 @@ const AnnualCalculationTable: React.FC<AnnualCalculationTableProps> = ({ data = 
 
           <div className="flex flex-col gap-3">
             <div className="flex justify-between items-center border-b border-slate-200 pb-2 border-dashed">
-              <span className="text-xs uppercase text-slate-500 font-bold tracking-wide">TOT. SPETTANTE LORDO (Sui GG Utili)</span>
+              <span className="text-xs uppercase text-slate-500 font-bold tracking-wide">TOT. SPETTANTE LORDO (Media Applicata)</span>
               <span className="text-lg font-bold text-indigo-700 tabular-nums">{formatCurrency(summary.totalGrossIndemnity)}</span>
             </div>
             <div className="flex justify-between items-center border-b border-slate-200 pb-2 border-dashed">
@@ -468,7 +525,10 @@ const AnnualCalculationTable: React.FC<AnnualCalculationTableProps> = ({ data = 
             <div className="flex justify-between items-center mt-2 bg-white p-3 rounded-lg border border-emerald-200 shadow-sm">
               <div className="flex flex-col">
                 <span className="text-xs uppercase text-emerald-700 font-black tracking-wide">TOTALE DA LIQUIDARE</span>
-                {summary.interestAmount > 0 && <span className="text-[9px] text-emerald-500 font-medium">Comprensivo di interessi</span>}
+                <div className="flex items-center gap-1">
+                  <Info size={10} className="text-emerald-400" />
+                  <span className="text-[9px] text-emerald-500 font-medium">Netto = (Spettante - Percepito) + Ticket {summary.interestAmount > 0 ? "+ Interessi" : ""}</span>
+                </div>
               </div>
               <div className="flex items-center gap-3">
                 <span className="text-2xl font-black text-emerald-700 tabular-nums tracking-tight">{formatCurrency(summary.grandTotal)}</span>
