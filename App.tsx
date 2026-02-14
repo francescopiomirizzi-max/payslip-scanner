@@ -438,6 +438,8 @@ const App: React.FC = () => {
     // AGGIUNGI QUESTO STATO
     const [activeFilter, setActiveFilter] = useState<'ALL' | 'RFI' | 'ELIOR' | 'REKEEP'>('ALL');
     const [showScrollTop, setShowScrollTop] = useState(false);
+    // Trigger per forzare il ricalcolo quando si torna dalla scheda dettaglio
+    const [refreshStats, setRefreshStats] = useState(0);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     // --- STATO TOAST ---
@@ -498,7 +500,11 @@ const App: React.FC = () => {
     // --- NAVIGAZIONE ---
     const handleOpenSimple = (id: number) => { setSelectedWorker(workers.find(w => w.id === id) || null); setViewMode('simple'); };
     const handleOpenComplex = (id: number) => { setSelectedWorker(workers.find(w => w.id === id) || null); setViewMode('complex'); };
-    const handleBack = () => { setSelectedWorker(null); setViewMode('home'); };
+    const handleBack = () => {
+        setSelectedWorker(null);
+        setViewMode('home');
+        setRefreshStats(prev => prev + 1); // <--- Forza ricalcolo statistiche
+    };
 
     // --- CRUD ---
     const openCreateModal = () => {
@@ -570,23 +576,28 @@ const App: React.FC = () => {
     };
 
     const getEditingWorkerData = () => editingWorkerId ? workers.find(w => w.id === editingWorkerId) : null;
-    // --- CALCOLO STATISTICHE DASHBOARD (CORRETTO E UNIFICATO) ---
+    // --- 1. CALCOLO STATISTICHE DASHBOARD (COERENZA TOTALE) ---
     const dashboardStats = useMemo(() => {
         return workers.reduce((acc, worker) => {
-            const safeAnni = Array.isArray(worker.anni) ? worker.anni : [];
-            const TETTO_FERIE = 28; // Standard per la dashboard generale
+            // A. LEGGIAMO LA MEMORIA
+            const storedTicketPref = localStorage.getItem(`tickets_${worker.id}`);
+            const includeTickets = storedTicketPref !== null ? JSON.parse(storedTicketPref) : true;
 
-            // Filtra colonne indennità
+            const storedExFestPref = localStorage.getItem(`exFest_${worker.id}`);
+            const includeExFest = storedExFestPref !== null ? JSON.parse(storedExFestPref) : false;
+
+            const TETTO_FERIE = includeExFest ? 32 : 28;
+
+            const safeAnni = Array.isArray(worker.anni) ? worker.anni : [];
             const indennitaCols = getColumnsByProfile(worker.profilo || 'RFI').filter(c =>
                 !['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'coeffPercepito', 'coeffTicket', 'note', 'arretrati'].includes(c.id)
             );
 
-            // 1. PRE-CALCOLO MEDIE ANNUALI
+            // B. PRE-CALCOLO MEDIE
             const yearlyRaw: Record<number, { totVar: number; ggLav: number }> = {};
             safeAnni.forEach(row => {
                 const y = Number(row.year);
                 if (!yearlyRaw[y]) yearlyRaw[y] = { totVar: 0, ggLav: 0 };
-
                 const gg = parseFloatSafe(row.daysWorked);
                 if (gg > 0) {
                     let sum = 0;
@@ -599,33 +610,25 @@ const App: React.FC = () => {
             const yearlyAverages: Record<number, number> = {};
             Object.keys(yearlyRaw).forEach(k => {
                 const y = Number(k);
-                const t = yearlyRaw[y];
-                yearlyAverages[y] = t.ggLav > 0 ? t.totVar / t.ggLav : 0;
+                yearlyAverages[y] = yearlyRaw[y].ggLav > 0 ? yearlyRaw[y].totVar / yearlyRaw[y].ggLav : 0;
             });
 
-            // 2. CALCOLO TOTALE
-            let wLordo = 0;
-            let wPercepito = 0;
-            let wTicket = 0;
+            // C. CALCOLO ECONOMICO
+            let wNetto = 0;
+            let wTicketMaturato = 0;
             let ferieCounter = 0;
 
-            // Ordine cronologico
             const sortedRows = [...safeAnni].sort((a, b) => a.year - b.year || a.monthIndex - b.monthIndex);
 
             sortedRows.forEach(row => {
                 const y = Number(row.year);
-
-                // LOGICA FALLBACK: Media Prec -> Corrente
-                let mediaApplied = yearlyAverages[y - 1];
-                if (mediaApplied === undefined || mediaApplied === 0) {
-                    mediaApplied = yearlyAverages[y] || 0;
-                }
+                let media = yearlyAverages[y - 1];
+                if (media === undefined || media === 0) media = yearlyAverages[y] || 0;
 
                 const vacDays = parseFloatSafe(row.daysVacation);
                 const cTicket = parseFloatSafe(row.coeffTicket);
                 const cPercepito = parseFloatSafe(row.coeffPercepito);
 
-                // Tetto
                 const prevTotal = ferieCounter;
                 ferieCounter += vacDays;
 
@@ -634,83 +637,133 @@ const App: React.FC = () => {
                 ggUtili = Math.min(vacDays, spazio);
 
                 if (ggUtili > 0) {
-                    wLordo += (ggUtili * mediaApplied);
-                    wTicket += (ggUtili * cTicket);
-                    wPercepito += (ggUtili * cPercepito);
+                    const lordo = ggUtili * media;
+                    const percepito = ggUtili * cPercepito;
+                    const ticketVal = ggUtili * cTicket;
+
+                    // --- LOGICA COERENTE: Se esclusi, non li contiamo da nessuna parte ---
+                    if (includeTickets) {
+                        wTicketMaturato += ticketVal;
+                        wNetto += (lordo - percepito) + ticketVal;
+                    } else {
+                        // Se esclusi, calcoliamo solo il netto differenze (senza ticket)
+                        wNetto += (lordo - percepito);
+                    }
                 }
             });
 
-            const wNetto = (wLordo - wPercepito) + wTicket;
-
             return {
                 totalNet: acc.totalNet + (wNetto > 0 ? wNetto : 0),
-                totalTicket: acc.totalTicket + wTicket
+                totalTicket: acc.totalTicket + wTicketMaturato
             };
         }, { totalNet: 0, totalTicket: 0 });
-    }, [workers]);
-    // --- LISTA DETTAGLIO MODALE (ALLINEATA) ---
+    }, [workers, refreshStats]);
+
+    // --- 2. LISTA DETTAGLIO MODALE (CON LOGICA POTENZIALE) ---
     const statsList = useMemo(() => {
         if (!activeStatsModal) return [];
 
         return workers.map(worker => {
+            const storedTicketPref = localStorage.getItem(`tickets_${worker.id}`);
+            const includeTickets = storedTicketPref !== null ? JSON.parse(storedTicketPref) : true;
+
+            const storedExFestPref = localStorage.getItem(`exFest_${worker.id}`);
+            const includeExFest = storedExFestPref !== null ? JSON.parse(storedExFestPref) : false;
+
+            const TETTO_FERIE = includeExFest ? 32 : 28;
+
             const safeAnni = Array.isArray(worker.anni) ? worker.anni : [];
             const cols = getColumnsByProfile(worker.profilo || 'RFI').filter(c =>
                 !['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'coeffPercepito', 'coeffTicket', 'note', 'arretrati'].includes(c.id)
             );
 
-            let wNetto = 0;
-            let wTicket = 0;
-
-            const years = Array.from(new Set(safeAnni.map(r => r.year)));
-
-            years.forEach(year => {
-                const yearRows = safeAnni.filter(r => r.year === year).sort((a, b) => a.monthIndex - b.monthIndex);
-                let ferieCounter = 0;
-
-                yearRows.forEach(row => {
-                    let monthlyVars = 0;
-                    cols.forEach(col => { monthlyVars += parseFloatSafe(row[col.id]); });
-
-                    const ggLav = parseFloatSafe(row.daysWorked);
-                    const ggFerieReali = parseFloatSafe(row.daysVacation);
-                    const coeffP = parseFloatSafe(row['coeffPercepito']);
-                    const coeffT = parseFloatSafe(row['coeffTicket']);
-
-                    const prevTotal = ferieCounter;
-                    ferieCounter += ggFerieReali;
-
-                    let ggUtili = 0;
-                    if (prevTotal < 28) {
-                        const spazio = 28 - prevTotal;
-                        ggUtili = Math.min(ggFerieReali, spazio);
-                    }
-
-                    let lordoMese = 0;
-                    if (ggLav > 0) {
-                        lordoMese = (monthlyVars / ggLav) * ggUtili;
-                    }
-
-                    wNetto += (lordoMese - (ggUtili * coeffP) + (ggUtili * coeffT));
-                    wTicket += (ggUtili * coeffT);
-                });
+            // Calcolo Rapido per Lista
+            const yearlyRaw: Record<number, { totVar: number; ggLav: number }> = {};
+            safeAnni.forEach(row => {
+                const y = Number(row.year);
+                if (!yearlyRaw[y]) yearlyRaw[y] = { totVar: 0, ggLav: 0 };
+                const gg = parseFloatSafe(row.daysWorked);
+                if (gg > 0) {
+                    let sum = 0;
+                    cols.forEach(c => sum += parseFloatSafe(row[c.id]));
+                    yearlyRaw[y].totVar += sum;
+                    yearlyRaw[y].ggLav += gg;
+                }
             });
 
-            const finalValue = activeStatsModal === 'net' ? wNetto : wTicket;
+            const yearlyAverages: Record<number, number> = {};
+            Object.keys(yearlyRaw).forEach(k => {
+                const y = Number(k);
+                yearlyAverages[y] = yearlyRaw[y].ggLav > 0 ? yearlyRaw[y].totVar / yearlyRaw[y].ggLav : 0;
+            });
+
+            let wNetto = 0;
+            let wTicketMaturato = 0; // Questo è il POTENZIALE
+            let wTicketLiquidabile = 0; // Questo è l'EFFETTIVO
+            let ferieCounter = 0;
+
+            const sortedRows = [...safeAnni].sort((a, b) => a.year - b.year || a.monthIndex - b.monthIndex);
+
+            sortedRows.forEach(row => {
+                const y = Number(row.year);
+                let media = yearlyAverages[y - 1];
+                if (!media) media = yearlyAverages[y] || 0;
+
+                const vac = parseFloatSafe(row.daysVacation);
+                const spazio = Math.max(0, TETTO_FERIE - ferieCounter);
+                const activeVac = Math.min(vac, spazio);
+                ferieCounter += vac;
+
+                if (activeVac > 0) {
+                    const lordo = activeVac * media;
+                    const perc = activeVac * parseFloatSafe(row.coeffPercepito);
+                    const tick = activeVac * parseFloatSafe(row.coeffTicket);
+
+                    // Calcoliamo sempre il potenziale
+                    wTicketMaturato += tick;
+
+                    // Calcoliamo l'effettivo solo se incluso
+                    if (includeTickets) {
+                        wTicketLiquidabile += tick;
+                        wNetto += (lordo - perc) + tick;
+                    } else {
+                        wNetto += (lordo - perc);
+                    }
+                }
+            });
+
+            // DECIDIAMO COSA MOSTRARE
+            // amount: è quello che viene colorato in nero/grassetto (valore effettivo)
+            // potential: è quello che mostriamo come "avrebbe preso"
+
+            let amount = 0;
+            let potential = 0;
+
+            if (activeStatsModal === 'net') {
+                amount = wNetto;
+            } else {
+                // Se siamo nel modale TICKET
+                amount = wTicketLiquidabile; // Sarà 0 se esclusi
+                potential = wTicketMaturato; // Sarà > 0 anche se esclusi
+            }
 
             return {
                 id: worker.id,
                 fullName: `${worker.cognome} ${worker.nome}`,
                 role: worker.ruolo,
                 profilo: worker.profilo,
-                amount: finalValue > 0 ? finalValue : 0,
-                color: worker.accentColor || 'blue'
+                amount: amount,
+                potential: potential, // Valore ipotetico da mostrare
+                color: worker.accentColor || 'blue',
+                isTicketExcluded: !includeTickets
             };
         })
-            .filter(w => w.amount > 0)
-            .sort((a, b) => b.amount - a.amount);
-    }, [workers, activeStatsModal]);
+            // FILTRO: Mostra se ha un importo reale OPPURE se ha un potenziale nascosto (nel caso ticket)
+            .filter(w => w.amount > 0 || (activeStatsModal === 'ticket' && w.potential > 0))
+            .sort((a, b) => b.amount - a.amount); // Ordina per importo effettivo
+    }, [workers, activeStatsModal, refreshStats]);
 
-    // --- CONFIGURAZIONE MODALE ---
+    // --- 3. CONFIGURAZIONE MODALE (ORDINE CORRETTO: ULTIMO QUESTO) ---
     const modalConfig = useMemo(() => {
         if (activeStatsModal === 'net') {
             return {
@@ -719,7 +772,7 @@ const App: React.FC = () => {
                 color: "emerald" as const,
                 icon: Wallet,
                 totalLabel: "Totale Credito",
-                totalValue: dashboardStats.totalNet
+                totalValue: dashboardStats.totalNet // Ora dashboardStats è già definito sopra!
             };
         }
         return {
@@ -728,7 +781,7 @@ const App: React.FC = () => {
             color: "amber" as const,
             icon: Ticket,
             totalLabel: "Totale Ticket",
-            totalValue: dashboardStats.totalTicket
+            totalValue: dashboardStats.totalTicket // Ora dashboardStats è già definito sopra!
         };
     }, [activeStatsModal, dashboardStats]);
 
@@ -1399,7 +1452,7 @@ const App: React.FC = () => {
                                 </motion.div>
                             ))}
 
-                            {/*  2. CARD "AGGIUNGI NUOVO" (ALLA FINE) */}
+                            {/*  2. CARD "AGGIUNGI NUOVO" (ALLA FINE) */}
                             <motion.div
                                 key="add-new-card"
                                 variants={itemVariants}
@@ -1463,9 +1516,35 @@ const App: React.FC = () => {
                                                             </div>
                                                         </div>
                                                     </div>
-                                                    <div className="text-right">
-                                                        <span className={`block text-lg font-black ${theme.text} ${theme.textDark} tracking-tight`}>{item.amount.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })}</span>
-                                                        <button onClick={() => { setActiveStatsModal(null); handleOpenSimple(item.id); }} className={`text-[10px] font-bold ${theme.textLight} hover:underline flex items-center justify-end gap-1 mt-1 opacity-0 group-hover:opacity-100 transition-opacity`}>Vedi Report <ChevronRight className="w-3 h-3" /></button>
+                                                    <div className="text-right flex flex-col items-end">
+                                                        {/* CASO 1: TICKET ESCLUSI (Solo nel modale ticket) */}
+                                                        {activeStatsModal === 'ticket' && item.isTicketExcluded ? (
+                                                            <>
+                                                                <div className="flex items-center gap-1 mb-0.5">
+                                                                    <span className="px-2 py-0.5 rounded bg-red-100 dark:bg-red-900/30 text-[9px] font-black text-red-600 dark:text-red-400 uppercase tracking-wide border border-red-200 dark:border-red-800">
+                                                                        NON CALCOLATO
+                                                                    </span>
+                                                                </div>
+                                                                <span className="block text-lg font-black text-slate-300 dark:text-slate-600 tracking-tight line-through decoration-2 decoration-red-400/50">
+                                                                    {/* Mostriamo il potenziale barrato, oppure 0 */}
+                                                                    {item.potential.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })}
+                                                                </span>
+                                                                <span className="text-[9px] font-bold text-slate-400 mt-0.5">
+                                                                    Maturati: <span className="text-slate-500 font-mono">{item.potential.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €</span>
+                                                                </span>
+                                                            </>
+                                                        ) : (
+                                                            /* CASO 2: NORMALE */
+                                                            <>
+                                                                <span className={`block text-lg font-black ${theme.text} ${theme.textDark} tracking-tight`}>
+                                                                    {item.amount.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })}
+                                                                </span>
+                                                            </>
+                                                        )}
+
+                                                        <button onClick={() => { setActiveStatsModal(null); handleOpenSimple(item.id); }} className={`text-[10px] font-bold ${theme.textLight} hover:underline flex items-center justify-end gap-1 mt-1 opacity-0 group-hover:opacity-100 transition-opacity`}>
+                                                            Vedi Report <ChevronRight className="w-3 h-3" />
+                                                        </button>
                                                     </div>
                                                 </div>
                                             );
@@ -1536,4 +1615,4 @@ const App: React.FC = () => {
     );
 };
 
-export default App;
+export default App; 

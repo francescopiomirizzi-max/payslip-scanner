@@ -194,19 +194,26 @@ interface StatsDashboardProps {
 
 const StatsDashboard: React.FC<StatsDashboardProps> = ({ workers = [], onBack }) => {
 
-    // --- LOGICA DI CALCOLO UNIFICATA (IDENTICA A TABLECOMPONENT E TICKER) ---
+    // --- LOGICA DI CALCOLO UNIFICATA (COERENTE CON TICKET E EX-FEST) ---
     const stats = useMemo(() => {
 
-        // Per ogni lavoratore, calcoliamo il "Netto Recuperabile" esatto
+        // Per ogni lavoratore, calcoliamo il "Netto Recuperabile" esatto leggendo le preferenze
         const computedWorkers = workers.map(w => {
+            // 1. LEGGIAMO LE PREFERENZE DAL LOCALSTORAGE
+            const storedTicketPref = localStorage.getItem(`tickets_${w.id}`);
+            const includeTickets = storedTicketPref !== null ? JSON.parse(storedTicketPref) : true;
+
+            const storedExFestPref = localStorage.getItem(`exFest_${w.id}`);
+            const includeExFest = storedExFestPref !== null ? JSON.parse(storedExFestPref) : false;
+
             const safeAnni = Array.isArray(w.anni) ? w.anni : [];
-            const TETTO_FERIE = 28; // Tetto standard per reportistica aggregata
+            const TETTO_FERIE = includeExFest ? 32 : 28;
 
             const indennitaCols = getColumnsByProfile(w.profilo).filter(c =>
                 !['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'coeffPercepito', 'coeffTicket', 'note', 'arretrati'].includes(c.id)
             );
 
-            // 1. PRE-CALCOLO MEDIE ANNUALI
+            // A. PRE-CALCOLO MEDIE ANNUALI
             const yearlyRaw: Record<number, { totVar: number; ggLav: number }> = {};
             safeAnni.forEach(row => {
                 const y = Number(row.year);
@@ -227,10 +234,10 @@ const StatsDashboard: React.FC<StatsDashboardProps> = ({ workers = [], onBack })
                 yearlyAverages[y] = t.ggLav > 0 ? t.totVar / t.ggLav : 0;
             });
 
-            // 2. CALCOLO TOTALE
+            // B. CALCOLO TOTALE
             let totalLordo = 0;
             let totalPercepito = 0;
-            let totalTicket = 0;
+            let totalTicket = 0; // Questo accumula solo se inclusi
             let ferieCumulateCounter = 0;
 
             // Ordine cronologico essenziale
@@ -256,8 +263,12 @@ const StatsDashboard: React.FC<StatsDashboardProps> = ({ workers = [], onBack })
 
                 if (ggUtili > 0) {
                     totalLordo += (ggUtili * mediaApplied);
-                    totalTicket += (ggUtili * cTicket);
                     totalPercepito += (ggUtili * cPercepito);
+
+                    // APPLICAZIONE CONDIZIONALE TICKET
+                    if (includeTickets) {
+                        totalTicket += (ggUtili * cTicket);
+                    }
                 }
             });
 

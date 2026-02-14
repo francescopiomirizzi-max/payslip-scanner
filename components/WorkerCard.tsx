@@ -6,7 +6,7 @@ import {
   UserCircle, Trash2, Edit, FileSpreadsheet, LayoutGrid, CalendarRange,
   TrainFront, Briefcase, RotateCw, ArrowLeft, CheckCircle2, AlertCircle,
   Send, FileBarChart, Clock, Wallet, Ticket, Layers, CreditCard, Activity,
-  CalendarClock, TrendingUp
+  TrendingUp, Ban, CalendarClock
 } from 'lucide-react';
 
 // --- STILI CSS PER LA SCROLLBAR PERSONALIZZATA ---
@@ -120,6 +120,12 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [opacity, setOpacity] = useState(0);
 
+  // --- STATO TICKET (LETTURA DALLA MEMORIA) ---
+  const [includeTickets] = useState(() => {
+    const saved = localStorage.getItem(`tickets_${worker.id}`);
+    return saved !== null ? JSON.parse(saved) : true;
+  });
+
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!divRef.current) return;
     const rect = divRef.current.getBoundingClientRect();
@@ -161,7 +167,7 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
     return { percent: percentage, label: percentage === 100 ? 'Completa' : 'In Corso', range: minYear === maxYear ? `${minYear}` : `${minYear}-${maxYear}`, preview };
   }, [worker.anni]);
 
-  // --- CALCOLO FINANZIARIO CORRETTO (ALLINEATO ALLA LOGICA LEGALE) ---
+  // --- CALCOLO FINANZIARIO CORRETTO (CON LOGICA TICKET) ---
   const financialStats = useMemo(() => {
     const TETTO_FERIE = 28; // Standard per la card
     const indennitaCols = getColumnsByProfile(worker.profilo).filter(c => !['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'coeffPercepito', 'coeffTicket', 'note', 'arretrati'].includes(c.id));
@@ -218,7 +224,12 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
 
       if (ggUtili > 0) {
         totalLordo += (ggUtili * mediaApplied);
-        totalTicket += (ggUtili * cTicket);
+
+        // APPLICA IL FILTRO TICKET ANCHE QUI SULLA CARD
+        if (includeTickets) {
+          totalTicket += (ggUtili * cTicket);
+        }
+
         totalPercepito += (ggUtili * cPercepito);
         totalFerieUtili += ggUtili;
       }
@@ -230,7 +241,7 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
       lordo: totalLordo,
       ferie: totalFerieUtili
     };
-  }, [worker]);
+  }, [worker, includeTickets]);
 
   // --- TEMA E STILI ---
   const theme = useMemo(() => {
@@ -390,7 +401,7 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
                   <div className="relative overflow-hidden p-5 rounded-[2rem] bg-white/50 border border-white/60 shadow-lg backdrop-blur-md mb-4 group transition-transform hover:scale-[1.02]">
                     <div className="absolute top-0 left-0 w-1 h-full" style={{ backgroundColor: theme.rawColor.start }}></div>
                     <div className="flex justify-between items-start mb-1">
-                      <p className="text-[9px] uppercase tracking-widest text-slate-400 font-black">RECUPERO TOTALE (Stimato 28gg)</p>
+                      <p className="text-[9px] uppercase tracking-widest text-slate-400 font-black">RECUPERO TOTALE</p>
                       <Wallet className="w-4 h-4 opacity-60" style={theme.iconStyle} />
                     </div>
                     <p className="text-3xl font-black tracking-tight bg-clip-text text-transparent" style={theme.textGradientStyle}>
@@ -407,15 +418,31 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
                     <BackChart worker={worker} theme={theme} />
                   </div>
 
-                  {/* BOX TICKET */}
-                  <div className="p-4 rounded-[1.5rem] bg-white/40 border border-white/50 shadow-sm backdrop-blur-sm flex items-center justify-between mb-3 hover:bg-white/60 transition-colors">
+                  {/* BOX TICKET INTELLIGENTE MIGLIORATO PER LEGGIBILITÀ */}
+                  <div className={`p-4 rounded-[1.5rem] border shadow-sm backdrop-blur-sm flex items-center justify-between mb-3 transition-colors ${includeTickets
+                    ? 'bg-white/40 border-white/50 hover:bg-white/60'
+                    : 'bg-slate-50/90 border-slate-200' // Sfondo più solido e chiaro quando inattivo
+                    }`}>
                     <div className="flex items-center gap-2">
-                      <Ticket className="w-4 h-4 text-amber-500" />
-                      <span className="text-[9px] uppercase tracking-widest text-slate-500 font-bold">Valore Ticket</span>
+                      {/* Icona grigia se inattivo */}
+                      <Ticket className={`w-4 h-4 ${includeTickets ? 'text-amber-500' : 'text-slate-500'}`} />
+                      {/* Testo non più barrato, solo grigio */}
+                      <span className={`text-[9px] uppercase tracking-widest font-bold ${includeTickets ? 'text-slate-500' : 'text-slate-600'}`}>
+                        Valore Ticket
+                      </span>
                     </div>
-                    <p className="text-lg font-black text-slate-600">
-                      {financialStats.ticket.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' }).replace(',00', '')}
-                    </p>
+
+                    {includeTickets ? (
+                      <p className="text-lg font-black text-slate-600">
+                        {financialStats.ticket.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' }).replace(',00', '')}
+                      </p>
+                    ) : (
+                      // Badge ROSSO evidente per indicare l'esclusione
+                      <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-100/80 border border-rose-200 shadow-sm">
+                        <Ban className="w-3.5 h-3.5 text-rose-600" />
+                        <span className="text-[9px] font-black text-rose-700 tracking-wide uppercase">Non Calcolati</span>
+                      </div>
+                    )}
                   </div>
 
                   {/* GRIGLIA FINALE */}

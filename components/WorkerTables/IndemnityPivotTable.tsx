@@ -154,7 +154,7 @@ const IndemnityPivotTable: React.FC<IndemnityPivotTableProps> = ({ data = [], pr
     <div className="bg-white shadow-xl rounded-lg overflow-hidden border border-slate-200 flex flex-col h-full">
       <div className="p-3 bg-slate-800 text-white font-bold text-sm tracking-wide flex justify-between items-center shrink-0">
         <div className="flex items-center gap-2">
-          <span>RIEPILOGO VOCI</span>
+          <span>RIEPILOGO VOCI VARIABILI DELLA RETRIBUZIONE</span>
           <span className={`px-2 py-0.5 rounded text-[10px] border border-slate-600 uppercase tracking-tighter ${badgeClass}`}>
             {profilo}
           </span>

@@ -42,7 +42,10 @@ import {
   FileBarChart,
   Search,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  FileStack,
+  Sparkles,
+  XCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 // IMPORTANTE: Tesseract per il ritaglio (Canvas)
@@ -213,7 +216,22 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
   const [legalStatus, setLegalStatus] = useState<'analisi' | 'pronta' | 'inviata' | 'trattativa' | 'chiusa'>(worker.status || 'analisi'); //
   const [offerAmount, setOfferAmount] = useState<string>('');
   // --- NUOVO STATO: Toggle Ex Festività (Default False = 28gg) ---
-  const [includeExFest, setIncludeExFest] = useState(false);
+  // --- SALVATAGGIO IN MEMORIA DELLE IMPOSTAZIONI ---
+  const [includeExFest, setIncludeExFest] = useState(() => {
+    const saved = localStorage.getItem(`exFest_${worker.id}`);
+    return saved !== null ? JSON.parse(saved) : false;
+  });
+
+  const [includeTickets, setIncludeTickets] = useState(() => {
+    const saved = localStorage.getItem(`tickets_${worker.id}`);
+    return saved !== null ? JSON.parse(saved) : true;
+  });
+
+  // Salva automaticamente le modifiche nel browser appena clicchi i bottoni
+  React.useEffect(() => {
+    localStorage.setItem(`exFest_${worker.id}`, JSON.stringify(includeExFest));
+    localStorage.setItem(`tickets_${worker.id}`, JSON.stringify(includeTickets));
+  }, [includeExFest, includeTickets, worker.id]);
   const scanRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
@@ -224,6 +242,99 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
   const [legalCosts, setLegalCosts] = useState(1500); // Costi stimati (CTU + Spese)
   const [yearsDuration, setYearsDuration] = useState(3); // Durata causa (anni)
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  // --- STATO BATCH UPLOAD ---
+  const [isBatchProcessing, setIsBatchProcessing] = useState(false);
+  // Stato per la notifica personalizzata (sostituisce l'alert brutto)
+  const [batchNotification, setBatchNotification] = useState<{ msg: string, type: 'success' | 'error' } | null>(null);
+
+  const batchInputRef = useRef<HTMLInputElement>(null);
+
+  // --- LOGICA UPLOAD MASSIVO (REALE) ---
+  const handleBatchUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    // Rimosso window.confirm: l'azione è esplicita, partiamo subito!
+    setIsBatchProcessing(true);
+    setBatchNotification(null); // Resetta notifiche precedenti
+
+    let currentAnni = JSON.parse(JSON.stringify(monthlyInputs));
+    let successCount = 0;
+    let errorCount = 0;
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      try {
+        const base64String = await toBase64(file);
+        const response = await fetch('/.netlify/functions/scan-payslip', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fileData: base64String,
+            mimeType: file.type || "application/pdf"
+          })
+        });
+
+        const aiResult = await response.json();
+
+        if (!response.ok || aiResult.error) {
+          console.error(`Errore file ${file.name}`, aiResult.error);
+          errorCount++;
+          continue;
+        }
+
+        if (aiResult.month && aiResult.year) {
+          const targetYear = Number(aiResult.year);
+          const targetMonthIndex = Number(aiResult.month) - 1;
+
+          let rowIndex = currentAnni.findIndex((r: AnnoDati) =>
+            Number(r.year) === targetYear && r.monthIndex === targetMonthIndex
+          );
+
+          if (rowIndex !== -1) {
+            const row = currentAnni[rowIndex];
+            if (typeof aiResult.daysWorked === 'number') row.daysWorked = aiResult.daysWorked;
+            if (typeof aiResult.daysVacation === 'number') row.daysVacation = aiResult.daysVacation;
+            const ticketVal = Number(aiResult.ticketRate);
+            if (!isNaN(ticketVal) && ticketVal > 0) row.coeffTicket = ticketVal;
+
+            if (aiResult.codes && typeof aiResult.codes === 'object') {
+              Object.entries(aiResult.codes).forEach(([code, value]) => {
+                const numValue = parseFloat(value as string);
+                if (!isNaN(numValue) && numValue > 0) row[code] = numValue;
+              });
+            }
+            currentAnni[rowIndex] = row;
+            successCount++;
+          }
+        }
+      } catch (error) {
+        errorCount++;
+      }
+    }
+
+    setMonthlyInputs(currentAnni);
+    onUpdateData(currentAnni);
+    setIsBatchProcessing(false);
+    if (batchInputRef.current) batchInputRef.current.value = '';
+
+    // --- NOTIFICA ELEGANTE INVECE DI ALERT ---
+    if (successCount > 0) {
+      setBatchNotification({
+        msg: `Caricamento riuscito! ${successCount} buste paga elaborate con successo.`,
+        type: 'success'
+      });
+
+    } else {
+      setBatchNotification({
+        msg: `Qualcosa non va. 0 buste elaborate su ${files.length}.`,
+        type: 'error'
+      });
+    }
+
+    // Nascondi la notifica dopo 5 secondi
+    setTimeout(() => setBatchNotification(null), 5000);
+  };
   const handleDataChange = (newData: AnnoDati[]) => {
     setMonthlyInputs(newData);
     onUpdateData(newData);
@@ -240,12 +351,13 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
     reader.onload = () => resolve(reader.result as string);
     reader.onerror = error => reject(error);
   });
-  // --- FUNZIONE V11: GESTIONE ERRORI E DATI SICURI ---
+  // --- FUNZIONE V11: GESTIONE ERRORI E DATI SICURI (AGGIORNATA CON NOTIFICHE ELEGANTI) ---
   const handleAnalyzePaySlip = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
     setIsAnalyzing(true);
+    setBatchNotification(null); // Resetta eventuali notifiche precedenti
 
     try {
       const convertFileToBase64 = (file: File): Promise<string> => {
@@ -328,23 +440,19 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
 
       const row = currentAnni[rowIndex];
 
-      // --- ASSEGNAZIONE SICURA (Con Fallback a 0) ---
+      // --- ASSEGNAZIONE SICURA ---
 
       // 1. Presenze
       if (typeof aiResult.daysWorked === 'number') row.daysWorked = aiResult.daysWorked;
       if (typeof aiResult.daysVacation === 'number') row.daysVacation = aiResult.daysVacation;
 
-      // 2. Ticket Rate (Logica 0E99 vs Welfare)
+      // 2. Ticket Rate
       const ticketVal = Number(aiResult.ticketRate);
       if (!isNaN(ticketVal) && ticketVal > 0) {
         row.coeffTicket = ticketVal;
-        // Aggiungi nota solo se non esiste già
         if (!row.note?.includes('Aliq.')) {
           row.note = (row.note ? row.note + ' ' : '') + `[Aliq. Ticket: €${ticketVal.toFixed(2)}]`;
         }
-      } else {
-        // Se 0, esplicita che non ci sono ticket (es. Welfare)
-        // Opzionale: row.coeffTicket = 0; // Se vuoi sovrascrivere
       }
 
       // 3. Arretrati / Eventi
@@ -361,15 +469,13 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
         }
       }
 
-      // 5. Voci Variabili (Indennità)
-      let countVoci = 0;
+      // 5. Voci Variabili
       if (aiResult.codes && typeof aiResult.codes === 'object') {
         Object.entries(aiResult.codes).forEach(([code, value]) => {
           const numValue = parseFloat(value as string);
           if (!isNaN(numValue) && numValue > 0) {
             // @ts-ignore
             row[code] = numValue;
-            countVoci++;
           }
         });
       }
@@ -380,14 +486,25 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
       if (targetYear !== currentYear) setCurrentYear(targetYear);
       handleDataChange(currentAnni);
 
-      alert(`✅ Analisi Completata!\n\n📅 ${MONTH_NAMES[targetMonthIndex]} ${targetYear}\n- GG Lav: ${row.daysWorked}\n- Ticket: ${row.coeffTicket ? '€' + row.coeffTicket : '0'}\n- Eventi: ${aiResult.eventNote || "Nessuno"}`);
+      // --- 🟢 SUCCESSO: NOTIFICA ELEGANTE ---
+      setBatchNotification({
+        msg: `Busta paga di ${MONTH_NAMES[targetMonthIndex]} ${targetYear} analizzata e inserita correttamente!`,
+        type: 'success'
+      });
 
     } catch (error: any) {
       console.error("Errore Frontend:", error);
-      alert(`❌ Errore durante l'analisi:\n${error.message}`);
+      // --- 🔴 ERRORE: NOTIFICA ELEGANTE ---
+      setBatchNotification({
+        msg: `Errore durante l'analisi: ${error.message}`,
+        type: 'error'
+      });
     } finally {
       setIsAnalyzing(false);
       if (scanRef.current) scanRef.current.value = '';
+
+      // Nascondi notifica dopo 5 secondi
+      setTimeout(() => setBatchNotification(null), 5000);
     }
   };
   // --- HELPER PARSING (AGGIUNGERE QUESTO) ---
@@ -464,7 +581,9 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
         globalLordo += (giorniUtili * avgToUse);
 
         // E. Calcolo Ticket (Questo resta puntuale mese su mese)
-        globalTicket += (giorniUtili * coeffTicket);
+        if (includeTickets) {
+          globalTicket += (giorniUtili * coeffTicket);
+        }
 
         globalFerieEffettive += ferieMese;
         globalFeriePagate += giorniUtili;
@@ -650,8 +769,14 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
         // Calcolo Euro (Se ci sono giorni utili)
         if (ggUtili > 0) {
           yLordo += (ggUtili * mediaApplicata); // Usiamo la media corretta!
-          yTicket += (ggUtili * cTicket);
           yPercepito += (ggUtili * cPercepito);
+
+          // Applichiamo il bottone ai Ticket
+          if (includeTickets) {
+            yTicket += (ggUtili * cTicket);
+          } else {
+            yTicket = 0;
+          }
         }
       });
 
@@ -711,7 +836,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
 
     // --- TABELLA 1 ---
     doc.setFontSize(12); doc.setTextColor(23, 37, 84); doc.setFont('helvetica', 'bold');
-    doc.text("1. RIEPILOGO ANNUALE (Applicazione Sent. Cass. 20216/2022)", 14, currentY);
+    doc.text("1. CALCOLO DIFFERENZE PER ANNO (Applicazione Sent. Cass. 20216/2022)", 14, currentY);
 
     autoTable(doc, {
       startY: currentY + 5,
@@ -738,7 +863,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
     if (currentY > 150) { doc.addPage(); currentY = 30; }
 
     doc.setFontSize(12); doc.setTextColor(23, 37, 84);
-    doc.text("2. ANALISI ANALITICA VOCI (Breakdown)", 14, currentY);
+    doc.text("2. RIEPILOGO VOCI VARIABILI DELLA RETRIBUZIONE", 14, currentY);
 
     const pivotHead = ['VOCE', ...yearsToPrint.map(String), 'TOTALE'];
     const pivotBody = Object.keys(pivotData).sort().map(key => {
@@ -816,7 +941,11 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
         // Calcoli Row
         let rLordo = 0;
         if (gu > 0) rLordo = gu * media;
-        const rTicket = gu * parseLocalFloat(row.coeffTicket);
+
+        // --- MODIFICA QUI ---
+        // Se il bottone includeTickets è attivo calcola il ticket, altrimenti forzalo a 0.
+        const rTicket = includeTickets ? (gu * parseLocalFloat(row.coeffTicket)) : 0;
+
         const rPercepito = gu * parseLocalFloat(row.coeffPercepito);
         const rNetto = (rLordo - rPercepito) + rTicket;
 
@@ -1166,7 +1295,12 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
       if (giorniUtili > 0) {
         // Calcolo Economico
         totLordoSpettante += (giorniUtili * mediaDaUsare);
-        totTicket += (giorniUtili * coeffTicket);
+
+        // Applichiamo il bottone ai Ticket per le statistiche in alto
+        if (includeTickets) {
+          totTicket += (giorniUtili * coeffTicket);
+        }
+
         totGiaPercepito += (giorniUtili * coeffPercepito);
       }
     });
@@ -1205,8 +1339,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
         note: "Indennità sostitutiva"
       },
     ];
-  }, [monthlyInputs, worker.profilo, includeExFest]);
-  // --- AGGIUNGI QUESTA RIGA QUI SOTTO ---
+  }, [monthlyInputs, worker.profilo, includeExFest, includeTickets]); // <--- Aggiunto includeTickets qui!
   const tickerItems = [...globalStats, ...globalStats, ...globalStats];
   // COMPONENTE TIMELINE (Semaforo Style)
   const TimelineStep = ({ step, label, icon: Icon, activeStatus }: any) => {
@@ -1288,17 +1421,6 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
                 <div className="flex items-center gap-3 text-xs font-bold text-slate-400 uppercase tracking-wider mt-1">
                   <Briefcase className="w-3 h-3" />
                   <span>{worker.ruolo}</span>
-                  {/* NUOVO BOTTONE TOGGLE EX-FEST */}
-                  <button
-                    onClick={() => setIncludeExFest(!includeExFest)}
-                    className={`ml-4 flex items-center gap-1.5 px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border transition-all ${includeExFest
-                      ? 'bg-amber-100 text-amber-700 border-amber-300 shadow-sm'
-                      : 'bg-slate-100 text-slate-400 border-slate-200 hover:bg-slate-200'
-                      }`}
-                  >
-                    <CalendarPlus size={10} />
-                    {includeExFest ? "Tetto 32gg (ExF)" : "Tetto 28gg (Std)"}
-                  </button>
                 </div>
               </div>
             </div>
@@ -1491,6 +1613,29 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
               />
 
               <div className="w-px bg-slate-300 dark:bg-slate-700 mx-1"></div>
+
+              {/* --- NUOVI TOGGLE CONFIGURAZIONI (TETTO E TICKET) --- */}
+              <div className="flex bg-slate-100/50 dark:bg-slate-800/50 p-1 rounded-xl border border-slate-200 dark:border-slate-700 shrink-0">
+                <button
+                  onClick={() => setIncludeExFest(!includeExFest)}
+                  className={`px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-all ${includeExFest ? 'bg-amber-100 text-amber-700 shadow-sm' : 'text-slate-500 hover:text-amber-600 hover:bg-white/50'
+                    }`}
+                  title="Includi/Escludi Ex-Festività"
+                >
+                  <CalendarPlus size={18} />
+                  {includeExFest ? "32gg (ExF)" : "28gg (Std)"}
+                </button>
+                <button
+                  onClick={() => setIncludeTickets(!includeTickets)}
+                  className={`px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-all ${includeTickets ? 'bg-indigo-100 text-indigo-700 shadow-sm' : 'text-slate-400 hover:text-indigo-600 hover:bg-white/50 line-through opacity-80'
+                    }`}
+                  title="Includi/Escludi Ticket Restaurant"
+                >
+                  <Ticket size={18} />
+                  Ticket
+                </button>
+              </div>
+
               <div className="w-px bg-slate-300 dark:bg-slate-700 mx-1"></div>
 
               {/* TASTO INSERIMENTO MENSILE (Blue) */}
@@ -1601,7 +1746,8 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
 
                   {activeTab === 'calc' && (
                     <div className="h-full overflow-auto custom-scrollbar pr-2">
-                      <AnnualCalculationTable data={monthlyInputs} profilo={worker.profilo} onDataChange={handleDataChange} />
+                      {/* Passiamo l'interruttore alla tabella aggiungendo includeTickets={includeTickets} */}
+                      <AnnualCalculationTable data={monthlyInputs} profilo={worker.profilo} onDataChange={handleDataChange} includeTickets={includeTickets} />
                     </div>
                   )}
 
@@ -1641,6 +1787,47 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
               {/* HEADER VISORE CON NAVIGAZIONE */}
               <div className="p-4 bg-slate-800/80 backdrop-blur border-b border-slate-700 flex justify-between items-center z-20">
                 <div className="flex items-center gap-3">
+                  {/* TASTO BATCH UPLOAD - PREMIUM AI STYLE */}
+                  <div className="relative mr-2">
+                    <input
+                      type="file"
+                      multiple
+                      accept="application/pdf,image/*"
+                      ref={batchInputRef}
+                      onChange={handleBatchUpload}
+                      className="hidden"
+                    />
+                    <button
+                      onClick={() => batchInputRef.current?.click()}
+                      disabled={isBatchProcessing}
+                      className={`group relative px-5 py-2 rounded-xl font-bold text-sm text-white shadow-lg transition-all duration-300 overflow-hidden flex items-center gap-2.5 border border-white/10
+                        ${isBatchProcessing
+                          ? 'bg-slate-800 cursor-wait opacity-80'
+                          : 'bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 shadow-indigo-500/30 hover:shadow-indigo-500/50 hover:-translate-y-0.5 active:scale-95'
+                        }`}
+                    >
+                      {/* Effetto Luce "Shimmer" al passaggio del mouse */}
+                      {!isBatchProcessing && (
+                        <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500 rotate-12"></div>
+                      )}
+
+                      {isBatchProcessing ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin text-violet-200" />
+                          <span className="tracking-wide text-xs">AI WORKING...</span>
+                        </>
+                      ) : (
+                        <>
+                          <div className="relative">
+                            <FileStack className="w-4 h-4 text-white" strokeWidth={2.5} />
+                            {/* Piccola stellina che pulsa per indicare l'AI */}
+                            <Sparkles className="w-2.5 h-2.5 absolute -top-2 -right-2 text-amber-300 animate-pulse" fill="currentColor" />
+                          </div>
+                          <span className="tracking-wide">Smart Upload 12</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
                   {payslipFiles.length > 1 ? (
                     <div className="flex items-center gap-2 bg-slate-950/50 rounded-lg p-1 border border-slate-700">
                       <button onClick={prevFile} disabled={currentFileIndex === 0} className="p-1.5 hover:bg-slate-700 rounded text-white disabled:opacity-30 transition-colors"><ChevronLeft size={14} /></button>
@@ -1650,7 +1837,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
                   ) : (
                     <div className="flex items-center gap-2 text-slate-300">
                       {isSniperMode ? <Crosshair className="w-5 h-5 text-red-500 animate-pulse" /> : <Eye className="w-5 h-5 text-indigo-400" />}
-                      <span className="text-xs font-bold uppercase tracking-wider">{isSniperMode ? 'MODALITÀ CECCHINO' : 'Visore Busta'}</span>
+                      <span className="text-xs font-bold uppercase tracking-wider">{isSniperMode ? 'MODALITÀ CECCHINO' : 'Visore Buste paga'}</span>
                     </div>
                   )}
                 </div>
@@ -1914,6 +2101,42 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
         {showCalc && (
           <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}>
             <FloatingCalculator onClose={() => setShowCalc(false)} />
+          </motion.div>
+        )}
+      </AnimatePresence>
+      {/* NOTIFICA BATCH FLUTTUANTE (Elegant Toast) */}
+      <AnimatePresence>
+        {batchNotification && (
+          <motion.div
+            initial={{ opacity: 0, y: 50, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 20, scale: 0.9 }}
+            className="fixed bottom-10 left-1/2 -translate-x-1/2 z-[100]"
+          >
+            <div className={`flex items-center gap-4 px-6 py-4 rounded-2xl shadow-2xl backdrop-blur-xl border ${batchNotification.type === 'success'
+              ? 'bg-slate-900/90 border-emerald-500/30 text-white'
+              : 'bg-red-900/90 border-red-500/30 text-white'
+              }`}>
+              <div className={`p-2 rounded-full ${batchNotification.type === 'success' ? 'bg-emerald-500' : 'bg-red-500'
+                }`}>
+                {batchNotification.type === 'success'
+                  ? <CheckCircle className="w-6 h-6 text-white" />
+                  : <XCircle className="w-6 h-6 text-white" />
+                }
+              </div>
+              <div>
+                <h4 className="font-black text-sm uppercase tracking-wider mb-0.5">
+                  {batchNotification.type === 'success' ? 'Smart Upload Completato' : 'Errore Upload'}
+                </h4>
+                <p className="text-sm font-medium opacity-90">{batchNotification.msg}</p>
+              </div>
+              <button
+                onClick={() => setBatchNotification(null)}
+                className="ml-4 p-1 hover:bg-white/10 rounded-full transition-colors"
+              >
+                <X className="w-4 h-4 opacity-50" />
+              </button>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>

@@ -10,10 +10,13 @@ import {
   Gavel,
   CalendarPlus,
   AlertCircle,
-  Info // <--- 1. IMPORTIAMO L'ICONA INFO
+  Info,
+  Ticket,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { RelazioneModal } from '../RelazioneModal';
-import { motion, AnimatePresence } from 'framer-motion'; // <--- 2. IMPORTIAMO FRAMER MOTION
+import { motion, AnimatePresence } from 'framer-motion';
 // LIBRERIE PDF NATIVE
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -30,23 +33,183 @@ const formatCurrency = (value: number) =>
 const formatNumber = (value: number) =>
   new Intl.NumberFormat('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
 
+// --- FUNZIONE PDF SPOSTATA QUI IN ALTO PER EVITARE ERRORI ---
+const handleDownloadPDF = (
+  doc: any, // Usa 'any' per evitare l'errore "Cannot find name doc" o conflitti di tipo
+  worker: Worker,
+  startYear: number,
+  endYear: number,
+  tableData: any[],
+  totals: any,
+  includeTickets: boolean,
+  showPercepito: boolean
+) => {
+  const fmt = (n: number) => n !== 0 ? n.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €' : '-';
+  const fmtNum = (n: number) => n !== 0 ? n.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-';
+
+  doc.setFillColor(23, 37, 84);
+  doc.rect(0, 0, 297, 25, 'F');
+
+  doc.setFontSize(18);
+  doc.setTextColor(255, 255, 255);
+  doc.setFont("helvetica", "bold");
+  doc.text("PROSPETTO UFFICIALE DI RICALCOLO", 14, 12);
+
+  doc.setFontSize(10);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(200, 200, 200);
+  doc.text(`Dipendente: ${worker.cognome} ${worker.nome} (Matr. ${worker.id})`, 14, 18);
+  doc.text(`Periodo: ${startYear} - ${endYear}`, 14, 22);
+
+  // Costruzione dinamica Header e Righe PDF in base ai tasti premuti
+  const headRow = ['ANNO', 'TOT. VOCI\nRETRIBUTIVE', 'DIVISORE\nANNUO', 'INCIDENZA\nGIORNALIERA', 'GIORNI FERIE\n(PAGABILI)', 'LORDO\nFERIE'];
+
+  if (showPercepito) {
+    headRow.push('INDENNITÀ\nPERCEPITA');
+  }
+
+  headRow.push('NETTO DA\nPERCEPIRE');
+
+  if (includeTickets) {
+    headRow.push('CREDITO\nTICKET');
+  }
+
+  const tableBody = tableData.map(row => {
+    const rowData: any[] = [
+      row.anno,
+      fmt(row.totaleVoci),
+      fmtNum(row.divisore),
+      fmt(row.incidenzaGiornata),
+      fmtNum(row.giornateFerie),
+      fmt(row.incidenzaTotale)
+    ];
+
+    if (showPercepito) {
+      rowData.push(fmt(row.indennitaPercepita));
+    }
+
+    rowData.push(fmt(row.totaleDaPercepire));
+
+    if (includeTickets) {
+      rowData.push(fmt(row.indennitaPasto));
+    }
+
+    return rowData;
+  });
+
+  const totRow: any[] = ['TOTALE', '-', '-', '-', '-', fmt(totals.incidenzaTotale)];
+  if (showPercepito) totRow.push(fmt(totals.indennitaPercepita));
+  totRow.push(fmt(totals.totaleDaPercepire));
+  if (includeTickets) totRow.push(fmt(totals.indennitaPasto));
+  tableBody.push(totRow);
+
+  // Calcolo indici colonne per stili
+  const indexNetto = headRow.indexOf('NETTO DA\nPERCEPIRE');
+  const indexTicket = includeTickets ? headRow.indexOf('CREDITO\nTICKET') : -1;
+
+  const dynamicColumnStyles: any = {
+    0: { halign: 'center', fontStyle: 'bold', fillColor: [241, 245, 249] },
+    3: { textColor: [30, 64, 175], fontStyle: 'bold' }
+  };
+
+  if (indexNetto !== -1) {
+    dynamicColumnStyles[indexNetto] = { fontStyle: 'bold', fillColor: [254, 249, 195], textColor: [0, 0, 0], fontSize: 10 };
+  }
+
+  if (indexTicket !== -1) {
+    dynamicColumnStyles[indexTicket] = { textColor: [22, 163, 74] };
+  }
+
+  autoTable(doc, {
+    startY: 35,
+    head: [headRow],
+    body: tableBody,
+    theme: 'grid',
+    styles: {
+      fontSize: 9,
+      cellPadding: 3,
+      valign: 'middle',
+      halign: 'right',
+      lineColor: [220, 220, 220],
+      lineWidth: 0.1,
+      textColor: [50, 50, 50]
+    },
+    headStyles: {
+      fillColor: [23, 37, 84],
+      textColor: [255, 255, 255],
+      fontSize: 10,
+      fontStyle: 'bold',
+      halign: 'center'
+    },
+    columnStyles: dynamicColumnStyles,
+    didParseCell: (data) => {
+      if (data.row.index === tableBody.length - 1) {
+        data.cell.styles.fontStyle = 'bold';
+        data.cell.styles.fontSize = 10;
+        if (data.column.index === 0) {
+          data.cell.styles.halign = 'left';
+          data.cell.styles.fillColor = [22, 163, 74];
+          data.cell.styles.textColor = [255, 255, 255];
+        } else if (data.column.index === indexNetto) {
+          data.cell.styles.fillColor = [220, 38, 38];
+          data.cell.styles.textColor = [255, 255, 255];
+        }
+      }
+    }
+  });
+
+  // @ts-ignore
+  let finalY = doc.lastAutoTable.finalY + 30;
+  if (finalY > 170) { doc.addPage(); finalY = 40; }
+
+  doc.setFontSize(10);
+  doc.setTextColor(0);
+
+  doc.text("Firma del Dipendente", 60, finalY, { align: 'center' });
+  doc.setLineWidth(0.5);
+  doc.line(30, finalY + 10, 90, finalY + 10);
+
+  doc.text("Timbro e Firma Responsabile", 230, finalY, { align: 'center' });
+  doc.line(200, finalY + 10, 260, finalY + 10);
+
+  doc.save(`Prospetto_${worker.cognome}_${worker.nome}.pdf`);
+};
+
+// --- COMPONENTE PRINCIPALE ---
 const TableComponent: React.FC<TableComponentProps> = ({ worker, onBack, onEdit }) => {
 
   const [isRelazioneOpen, setIsRelazioneOpen] = useState(false);
-
-  // --- STATO PER IL TETTO FERIE (28 vs 32) ---
-  const [includeExFest, setIncludeExFest] = useState(false);
-
-  // --- STATO PER IL TOOLTIP INFORMATIVO ---
   const [showInfoTetto, setShowInfoTetto] = useState(false);
 
-  // --- 1. LOGICA DATI CORRETTA (ALLINEATA ALLA PERIZIA LEGALE) ---
+  // --- STATI CON MEMORIA (LOCALSTORAGE) ---
+  const [includeExFest, setIncludeExFest] = useState(() => {
+    const saved = localStorage.getItem(`report_exfest_${worker.id}`);
+    return saved !== null ? JSON.parse(saved) : false;
+  });
+
+  const [includeTickets, setIncludeTickets] = useState(() => {
+    const saved = localStorage.getItem(`report_tickets_${worker.id}`);
+    return saved !== null ? JSON.parse(saved) : true;
+  });
+
+  const [showPercepito, setShowPercepito] = useState(() => {
+    const saved = localStorage.getItem(`report_percepito_${worker.id}`);
+    return saved !== null ? JSON.parse(saved) : true;
+  });
+
+  React.useEffect(() => {
+    localStorage.setItem(`report_exfest_${worker.id}`, JSON.stringify(includeExFest));
+    localStorage.setItem(`report_tickets_${worker.id}`, JSON.stringify(includeTickets));
+    localStorage.setItem(`report_percepito_${worker.id}`, JSON.stringify(showPercepito));
+  }, [includeExFest, includeTickets, showPercepito, worker.id]);
+
+  // --- 1. LOGICA DATI CORRETTA ---
   const tableData = useMemo(() => {
     const sortedYears = [...YEARS].sort((a: number, b: number) => a - b);
     const TETTO_FERIE = includeExFest ? 32 : 28;
     const profileColumns = getColumnsByProfile(worker.profilo);
 
-    // --- STEP A: PRE-CALCOLO MEDIE ANNUALI ---
+    // STEP A: PRE-CALCOLO MEDIE ANNUALI
     const yearlyRawStats: Record<number, { totVar: number; ggLav: number }> = {};
     const safeRows = worker.anni || [];
 
@@ -67,7 +230,6 @@ const TableComponent: React.FC<TableComponentProps> = ({ worker, onBack, onEdit 
       }
     });
 
-    // Mappa Medie Giornaliere
     const yearlyAverages: Record<number, number> = {};
     Object.keys(yearlyRawStats).forEach(yStr => {
       const y = Number(yStr);
@@ -75,34 +237,28 @@ const TableComponent: React.FC<TableComponentProps> = ({ worker, onBack, onEdit 
       yearlyAverages[y] = s.ggLav > 0 ? s.totVar / s.ggLav : 0;
     });
 
-    // --- STEP B: COSTRUZIONE RIGHE REPORT ---
-    let ferieCumulateCounter = 0; // Tetto progressivo globale
+    // STEP B: COSTRUZIONE RIGHE REPORT
+    let ferieCumulateCounter = 0;
 
     return sortedYears.map(year => {
-      // Filtra solo le righe di quell'anno
       const yearRows = safeRows.filter(r => r.year === year).sort((a, b) => a.monthIndex - b.monthIndex);
-      if (yearRows.length === 0) return null; // Salta anni vuoti
+      if (yearRows.length === 0) return null;
 
-      // Logica Media: Anno Prec o Corrente
       let avgApplied = yearlyAverages[year - 1];
       if (avgApplied === undefined || avgApplied === 0) {
         avgApplied = yearlyAverages[year] || 0;
       }
 
-      // Totali Annuali
       let yearlyDaysVacationUtili = 0;
-      let yearlyGrossAmount = 0;     // Lordo Spettante
-      let yearlyPercepitoVal = 0;    // Già pagato
-      let yearlyTicketVal = 0;       // Ticket
+      let yearlyGrossAmount = 0;
+      let yearlyPercepitoVal = 0;
+      let yearlyTicketVal = 0;
 
-      // Totali Statistici (per visualizzazione colonne 2 e 3)
       let displayTotalVoci = yearlyRawStats[year]?.totVar || 0;
       let displayTotalDaysWorked = yearlyRawStats[year]?.ggLav || 0;
 
       yearRows.forEach(row => {
         const gFerieReali = parseFloatSafe(row.daysVacation);
-
-        // Calcolo Giorni Utili (Tetto)
         const prevTotal = ferieCumulateCounter;
         ferieCumulateCounter += gFerieReali;
 
@@ -111,38 +267,38 @@ const TableComponent: React.FC<TableComponentProps> = ({ worker, onBack, onEdit 
         gFerieUtili = Math.min(gFerieReali, spazioRimanente);
 
         if (gFerieUtili > 0) {
-          // CALCOLO ECONOMICO: Giorni Utili * Media Applicata
           yearlyGrossAmount += (gFerieUtili * avgApplied);
 
-          // Ticket e Percepito sono puntuali
           const coeffPercepito = parseFloatSafe(row.coeffPercepito);
           const coeffTicket = parseFloatSafe(row.coeffTicket);
 
           yearlyPercepitoVal += (gFerieUtili * coeffPercepito);
-          yearlyTicketVal += (gFerieUtili * coeffTicket);
+
+          // APPLICA IL TOGGLE TICKET
+          yearlyTicketVal += includeTickets ? (gFerieUtili * coeffTicket) : 0;
+
           yearlyDaysVacationUtili += gFerieUtili;
         }
       });
 
-      // Calcolo Netto: (Spettante - Percepito) + Ticket
       const netAmount = (yearlyGrossAmount - yearlyPercepitoVal) + yearlyTicketVal;
 
       return {
         anno: year,
-        totaleVoci: displayTotalVoci,         // Colonna 2 (Totale Voci)
-        divisore: displayTotalDaysWorked,     // Colonna 3 (Divisore)
-        incidenzaGiornata: avgApplied,        // Colonna 4 (Media Giornaliera USATA)
-        giornateFerie: yearlyDaysVacationUtili, // Colonna 5 (Giorni Pagati)
-        incidenzaTotale: yearlyGrossAmount,   // Colonna 6 (Lordo Spettante)
-        indennitaPercepita: yearlyPercepitoVal,// Colonna 7 (Già Percepito)
-        totaleDaPercepire: netAmount,         // Colonna 8 (Netto Finale)
-        indennitaPasto: yearlyTicketVal       // Colonna 9 (Ticket)
+        totaleVoci: displayTotalVoci,
+        divisore: displayTotalDaysWorked,
+        incidenzaGiornata: avgApplied,
+        giornateFerie: yearlyDaysVacationUtili,
+        incidenzaTotale: yearlyGrossAmount,
+        indennitaPercepita: yearlyPercepitoVal,
+        totaleDaPercepire: netAmount,
+        indennitaPasto: yearlyTicketVal
       };
     })
-      .filter(Boolean) // Rimuove anni nulli
+      .filter(Boolean)
       // @ts-ignore
-      .filter(row => row.anno >= 2008); // Filtro sicurezza anni vecchi
-  }, [worker, includeExFest]);
+      .filter(row => row.anno >= 2008);
+  }, [worker, includeExFest, includeTickets]); // Aggiunto includeTickets alle dipendenze
 
   // 2. CALCOLO TOTALI GENERALI
   const totals = useMemo(() => {
@@ -159,25 +315,20 @@ const TableComponent: React.FC<TableComponentProps> = ({ worker, onBack, onEdit 
     });
   }, [tableData]);
 
-  // Prende il primo anno effettivamente visibile in tabella (es. 2008)
   const startYear = tableData.length > 0 ? tableData[0].anno : 2008;
   const endYear = tableData.length > 0 ? tableData[tableData.length - 1].anno : 2025;
 
-  // STAMPA SCHERMO
   const handlePrint = () => {
     window.print();
   };
 
-  // --- GENERAZIONE DIFFIDA LEGALE (AGGIORNATA CASS. 20216/2022) ---
   const handlePrintDiffida = () => {
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
     const today = new Date().toLocaleDateString('it-IT', { year: 'numeric', month: 'long', day: 'numeric' });
 
-    // Configurazione Font
     doc.setFont("times", "roman");
     doc.setTextColor(0, 0, 0);
 
-    // 1. INTESTAZIONE STUDIO / UFFICIO
     doc.setFontSize(14);
     doc.setFont("times", "bold");
     doc.text("UFFICIO VERTENZE E LEGALE", 20, 20);
@@ -185,7 +336,6 @@ const TableComponent: React.FC<TableComponentProps> = ({ worker, onBack, onEdit 
     doc.setFont("times", "normal");
     doc.text("SEDE TERRITORIALE", 20, 25);
 
-    // 2. DATI E OGGETTO
     doc.setFontSize(11);
     doc.text(`Luogo, lì ${today}`, 140, 40);
 
@@ -199,10 +349,8 @@ const TableComponent: React.FC<TableComponentProps> = ({ worker, onBack, onEdit 
     doc.text(`OGGETTO: Diffida ad adempiere e costituzione in mora - Ricalcolo Retribuzione Feriale.`, 20, 90);
     doc.text(`Lavoratore: ${worker.cognome} ${worker.nome} (Matr. ${worker.id})`, 20, 95);
 
-    // 3. CORPO DEL TESTO (Basato su Cass. 20216/2022 e Documenti Utente)
     doc.setFont("times", "normal");
 
-    // Logica per i codici specifici (da foto ricorso)
     let testoCodici = "";
     if (worker.profilo === 'RFI' || !worker.profilo) {
       testoCodici = "L'analisi ha evidenziato la mancata inclusione delle voci variabili ricorrenti, tra cui a titolo esemplificativo: Straordinario Diurno (0152), Notturno (0421), Chiamata (0470, 0496), Reperibilità (0482), Ind. Linea (0687), Trasferta (0AA1) e altre indennità accessorie contrattualmente previste.";
@@ -234,11 +382,9 @@ In difetto di riscontro entro il termine assegnato, sarò costretto ad adire l'A
 Distinti saluti.
     `;
 
-    // Gestione del testo lungo su più pagine se necessario
     const splitText = doc.splitTextToSize(bodyText.trim(), 170);
     let currentY = 110;
 
-    // Controllo se il testo sfora la pagina
     if (splitText.length > 30) {
       doc.addPage();
       currentY = 20;
@@ -246,10 +392,8 @@ Distinti saluti.
 
     doc.text(splitText, 20, currentY);
 
-    // 4. FIRME
-    const signY = currentY + (splitText.length * 5) + 20; // Posizione dinamica in base alla lunghezza testo
+    const signY = currentY + (splitText.length * 5) + 20;
 
-    // Se siamo troppo in basso, nuova pagina per le firme
     if (signY > 250) {
       doc.addPage();
       doc.text("Firme:", 20, 20);
@@ -263,123 +407,14 @@ Distinti saluti.
     doc.line(30, (signY > 250 ? 40 : signY) + 15, 90, (signY > 250 ? 40 : signY) + 15);
     doc.line(120, (signY > 250 ? 40 : signY) + 15, 180, (signY > 250 ? 40 : signY) + 15);
 
-    // Salvataggio
     doc.save(`Diffida_${worker.cognome}_${worker.nome}.pdf`);
   };
 
-  // --- GENERAZIONE REPORT PDF UFFICIALE ---
-  const handleDownloadPDF = () => {
+  // --- GENERAZIONE REPORT PDF UFFICIALE (Locale) ---
+  const handleDownloadPDFLocal = () => {
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-
-    const fmt = (n: number) => n !== 0 ? n.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €' : '-';
-    const fmtNum = (n: number) => n !== 0 ? n.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-';
-
-    doc.setFillColor(23, 37, 84);
-    doc.rect(0, 0, 297, 25, 'F');
-
-    doc.setFontSize(18);
-    doc.setTextColor(255, 255, 255);
-    doc.setFont("helvetica", "bold");
-    doc.text("PROSPETTO UFFICIALE DI RICALCOLO", 14, 12);
-
-    doc.setFontSize(10);
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(200, 200, 200);
-    doc.text(`Dipendente: ${worker.cognome} ${worker.nome} (Matr. ${worker.id})`, 14, 18);
-    doc.text(`Periodo: ${startYear} - ${endYear}`, 14, 22);
-
-    const tableBody = tableData.map(row => [
-      row.anno,
-      fmt(row.totaleVoci),
-      fmtNum(row.divisore),
-      fmt(row.incidenzaGiornata),
-      fmtNum(row.giornateFerie), // Usa giorni UTILI
-      fmt(row.incidenzaTotale),
-      fmt(row.indennitaPercepita),
-      fmt(row.totaleDaPercepire),
-      fmt(row.indennitaPasto)
-    ]);
-
-    tableBody.push([
-      'TOTALE',
-      '-',
-      '-',
-      '-',
-      '-',
-      fmt(totals.incidenzaTotale),
-      fmt(totals.indennitaPercepita),
-      fmt(totals.totaleDaPercepire),
-      fmt(totals.indennitaPasto)
-    ]);
-
-    autoTable(doc, {
-      startY: 35,
-      head: [[
-        'ANNO',
-        'TOT. VOCI\nRETRIBUTIVE',
-        'DIVISORE\nANNUO',
-        'INCIDENZA\nGIORNALIERA',
-        'GIORNI FERIE\n(PAGABILI)',
-        'LORDO\nFERIE',
-        'INDENNITÀ\nPERCEPITA',
-        'NETTO DA\nPERCEPIRE',
-        'CREDITO\nTICKET'
-      ]],
-      body: tableBody,
-      theme: 'grid',
-      styles: {
-        fontSize: 9,
-        cellPadding: 3,
-        valign: 'middle',
-        halign: 'right',
-        lineColor: [220, 220, 220],
-        lineWidth: 0.1,
-        textColor: [50, 50, 50]
-      },
-      headStyles: {
-        fillColor: [23, 37, 84],
-        textColor: [255, 255, 255],
-        fontSize: 10,
-        fontStyle: 'bold',
-        halign: 'center'
-      },
-      columnStyles: {
-        0: { halign: 'center', fontStyle: 'bold', fillColor: [241, 245, 249] },
-        3: { textColor: [30, 64, 175], fontStyle: 'bold' },
-        7: { fontStyle: 'bold', fillColor: [254, 249, 195], textColor: [0, 0, 0], fontSize: 10 },
-        8: { textColor: [22, 163, 74] }
-      },
-      didParseCell: (data) => {
-        if (data.row.index === tableBody.length - 1) {
-          data.cell.styles.fontStyle = 'bold';
-          data.cell.styles.fontSize = 10;
-          if (data.column.index === 0) {
-            data.cell.styles.halign = 'left';
-            data.cell.styles.fillColor = [22, 163, 74];
-            data.cell.styles.textColor = [255, 255, 255];
-          } else if (data.column.index === 7) {
-            data.cell.styles.fillColor = [220, 38, 38];
-            data.cell.styles.textColor = [255, 255, 255];
-          }
-        }
-      }
-    });
-
-    // @ts-ignore
-    let finalY = doc.lastAutoTable.finalY + 30;
-    if (finalY > 170) { doc.addPage(); finalY = 40; }
-
-    doc.setFontSize(10);
-    doc.setTextColor(0);
-
-    doc.text("Firma del Dipendente", 60, finalY, { align: 'center' });
-    doc.setLineWidth(0.5);
-    doc.line(30, finalY + 10, 90, finalY + 10);
-
-    doc.text("Timbro e Firma Responsabile", 230, finalY, { align: 'center' });
-    doc.line(200, finalY + 10, 260, finalY + 10);
-
-    doc.save(`Prospetto_${worker.cognome}_${worker.nome}.pdf`);
+    // Chiamata alla funzione esterna
+    handleDownloadPDF(doc, worker, startYear, endYear, tableData, totals, includeTickets, showPercepito);
   };
 
   return (
@@ -403,7 +438,6 @@ Distinti saluti.
       {/* HEADER NAV */}
       <div className="no-print w-full p-5 bg-slate-900 text-white flex justify-between items-center shadow-2xl sticky top-0 z-50 border-b border-slate-700">
         <div className="flex items-center gap-8">
-          {/* TASTO DASHBOARD */}
           <button
             onClick={onBack}
             className="group relative px-6 py-3 rounded-xl font-bold text-lg text-white shadow-lg hover:-translate-y-0.5 active:scale-95 transition-all duration-300 border border-white/10 overflow-hidden flex items-center gap-3"
@@ -422,8 +456,6 @@ Distinti saluti.
               <h1 className="text-2xl font-bold tracking-wide text-slate-100">Prospetto Ufficiale</h1>
               <div className="flex items-center gap-2">
                 <p className="text-sm uppercase font-medium text-slate-400 tracking-wider">Report Annuale</p>
-
-                {/* BADGE INDICATORE TETTO */}
                 <span className={`text-[10px] px-2 py-0.5 rounded border flex items-center gap-1 ${includeExFest ? 'text-amber-400 border-amber-500 bg-amber-500/10' : 'text-slate-400 border-slate-500'}`}>
                   {includeExFest ? <AlertCircle size={10} /> : null}
                   {includeExFest ? 'Tetto 32gg' : 'Tetto 28gg'}
@@ -435,10 +467,10 @@ Distinti saluti.
 
         <div className="flex items-center gap-4">
 
-          {/* --- NUOVO GRUPPO TOGGLE CON INFO --- */}
+          {/* --- GRUPPO TOGGLE --- */}
           <div className="relative flex items-center gap-2 bg-slate-800 p-1.5 rounded-2xl border border-slate-700">
 
-            {/* Tasto Toggle */}
+            {/* Tasto Tetto Ferie */}
             <button
               onClick={() => setIncludeExFest(!includeExFest)}
               className={`group relative px-4 py-2 rounded-xl font-bold text-xs shadow-lg transition-all duration-300 flex items-center gap-2 ${includeExFest
@@ -446,11 +478,35 @@ Distinti saluti.
                 : 'bg-slate-700 text-slate-300 border border-slate-600 hover:text-white'
                 }`}
             >
-              <CalendarPlus className="w-4 h-4" />
+              <CalendarPlus className="w-4 h-4 shrink-0" />
               <div className="flex flex-col items-start leading-none">
-                <span>{includeExFest ? "Includi Ex-Fest" : "Escludi Ex-Fest"}</span>
-                <span className="text-[9px] opacity-80 font-normal mt-0.5">{includeExFest ? "Max 32gg/anno" : "Max 28gg/anno"}</span>
+                <span className="whitespace-nowrap">{includeExFest ? "32gg (ExF)" : "28gg (Std)"}</span>
               </div>
+            </button>
+
+            {/* Tasto Ticket */}
+            <button
+              onClick={() => setIncludeTickets(!includeTickets)}
+              className={`group relative px-4 py-2 rounded-xl font-bold text-xs shadow-lg transition-all duration-300 flex items-center gap-2 ${includeTickets
+                ? 'bg-indigo-600 text-white border border-indigo-400'
+                : 'bg-slate-700 text-slate-400 border border-slate-600 hover:text-white line-through opacity-70'
+                }`}
+            >
+              <Ticket className="w-4 h-4 shrink-0" />
+              <span>Ticket</span>
+            </button>
+
+            {/* Tasto Colonna Percepito */}
+            <button
+              onClick={() => setShowPercepito(!showPercepito)}
+              className={`group relative px-4 py-2 rounded-xl font-bold text-xs shadow-lg transition-all duration-300 flex items-center gap-2 ${showPercepito
+                ? 'bg-orange-600 text-white border border-orange-400'
+                : 'bg-slate-700 text-slate-400 border border-slate-600 hover:text-white opacity-70'
+                }`}
+              title="Mostra/Nascondi colonna Indennità Già Percepita"
+            >
+              {showPercepito ? <Eye className="w-4 h-4 shrink-0" /> : <EyeOff className="w-4 h-4 shrink-0" />}
+              <span className="whitespace-nowrap">Già Perc.</span>
             </button>
 
             {/* Tasto Info */}
@@ -461,7 +517,7 @@ Distinti saluti.
               <Info className="w-5 h-5" />
             </button>
 
-            {/* --- TOOLTIP/MODALE INFORMATIVO FLUTTUANTE --- */}
+            {/* TOOLTIP/MODALE INFO */}
             <AnimatePresence>
               {showInfoTetto && (
                 <motion.div
@@ -470,25 +526,20 @@ Distinti saluti.
                   exit={{ opacity: 0, y: 10, scale: 0.95 }}
                   className="absolute top-full right-0 mt-4 w-96 bg-white text-slate-800 p-5 rounded-2xl shadow-2xl border border-slate-200 z-[100] text-left"
                 >
-                  {/* Freccetta in alto */}
                   <div className="absolute -top-2 right-12 w-4 h-4 bg-white transform rotate-45 border-t border-l border-slate-200"></div>
-
                   <h4 className="text-sm font-black uppercase tracking-widest text-indigo-600 mb-3 flex items-center gap-2">
                     <Info className="w-4 h-4" /> Nota Metodologica
                   </h4>
-
                   <div className="space-y-3 text-xs leading-relaxed text-slate-600">
                     <div className="p-3 bg-green-50 rounded-xl border border-green-100">
                       <strong className="block text-green-700 mb-1">🟢 Tetto 28 Giorni (Standard Legale)</strong>
                       Si basa sul periodo minimo di ferie (4 settimane) garantito dalla <strong>Direttiva UE 2003/88</strong> e dall'Art. 36 Cost. È il parametro "blindato" confermato dalla Cassazione n. 20216/2022. <span className="underline decoration-green-300">Opzione consigliata per evitare contestazioni.</span>
                     </div>
-
                     <div className="p-3 bg-amber-50 rounded-xl border border-amber-100">
                       <strong className="block text-amber-700 mb-1">🟠 Tetto 32 Giorni (Esteso)</strong>
                       Include nel calcolo anche le 4 giornate di <strong>Ex-Festività</strong> (permessi soppressi). Sebbene aumenti l'importo recuperabile, questa estensione non è esplicitamente coperta dalla sentenza 20216/2022 e potrebbe essere oggetto di eccezione da parte dell'azienda.
                     </div>
                   </div>
-
                   <button
                     onClick={() => setShowInfoTetto(false)}
                     className="w-full mt-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-lg text-xs transition-colors"
@@ -500,7 +551,6 @@ Distinti saluti.
             </AnimatePresence>
           </div>
 
-          {/* TASTO DIFFIDA */}
           <button
             onClick={handlePrintDiffida}
             className="group relative px-6 py-3 rounded-xl font-bold text-lg text-white shadow-lg hover:-translate-y-0.5 active:scale-95 transition-all duration-300 border border-white/10 overflow-hidden flex items-center gap-3"
@@ -511,7 +561,6 @@ Distinti saluti.
             <span>Diffida</span>
           </button>
 
-          {/* TASTO RELAZIONE */}
           <button
             onClick={() => setIsRelazioneOpen(true)}
             className="group relative px-6 py-3 rounded-xl font-bold text-lg text-white shadow-lg hover:-translate-y-0.5 active:scale-95 transition-all duration-300 border border-white/10 overflow-hidden flex items-center gap-3"
@@ -522,20 +571,19 @@ Distinti saluti.
             <span>Relazione</span>
           </button>
 
-          {/* TASTO GESTIONE DATI */}
           <button
             onClick={onEdit}
             className="group relative px-6 py-3 rounded-xl font-bold text-lg text-white shadow-lg hover:-translate-y-0.5 active:scale-95 transition-all duration-300 border border-white/10 overflow-hidden flex items-center gap-3"
             style={{ background: 'linear-gradient(90deg, #059669 0%, #14b8a6 100%)' }}
           >
+            {/* Corretto rotate-90 in rotate-12 e rimosso strokeWidth inutile */}
             <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500 rotate-12"></div>
             <LayoutGrid className="w-5 h-5 transition-transform duration-500 group-hover:rotate-90" strokeWidth={2.5} />
             <span>Gestione Dati</span>
           </button>
 
-          {/* TASTO DOWNLOAD PDF */}
           <button
-            onClick={handleDownloadPDF}
+            onClick={handleDownloadPDFLocal}
             className="group relative px-6 py-3 rounded-xl font-bold text-lg text-white shadow-lg hover:-translate-y-0.5 active:scale-95 transition-all duration-300 border border-white/10 overflow-hidden flex items-center gap-3"
             style={{ background: 'linear-gradient(90deg, #dc2626 0%, #e11d48 100%)' }}
           >
@@ -544,7 +592,6 @@ Distinti saluti.
             <span>PDF</span>
           </button>
 
-          {/* TASTO STAMPA */}
           <button
             onClick={handlePrint}
             className="group relative px-8 py-3 rounded-xl font-bold text-lg text-white shadow-lg hover:-translate-y-0.5 active:scale-95 transition-all duration-300 border border-white/10 overflow-hidden flex items-center gap-3"
@@ -586,9 +633,17 @@ Distinti saluti.
                     <span className="text-xs font-normal">(Pagabili {includeExFest ? "32" : "28"})</span>
                   </th>
                   <th className="border border-black p-2 font-bold text-base w-28 align-middle">Incidenza<br />(Lordo)</th>
-                  <th className="border border-black p-2 font-bold text-base w-40 align-middle">INDENNITA'<br />PERCEPITA X<br />gg DI FERIE</th>
+
+                  {/* Visualizzazione Condizionale Intestazioni */}
+                  {showPercepito && (
+                    <th className="border border-black p-2 font-bold text-base w-40 align-middle">INDENNITA'<br />PERCEPITA X<br />gg DI FERIE</th>
+                  )}
+
                   <th className="border border-black p-2 font-black text-base w-40 align-middle">TOTALE<br />INDENNITA' DA<br />PERCEPIRE</th>
-                  <th className="border border-black p-2 font-bold text-base w-40 align-middle">CREDITO<br />TICKET<br />RESTAURANT</th>
+
+                  {includeTickets && (
+                    <th className="border border-black p-2 font-bold text-base w-40 align-middle">CREDITO<br />TICKET<br />RESTAURANT</th>
+                  )}
                 </tr>
               </thead>
               <tbody>
@@ -600,9 +655,17 @@ Distinti saluti.
                     <td className="border border-black px-2 py-1 text-right text-blue-800 font-medium">{formatCurrency(row.incidenzaGiornata)}</td>
                     <td className="border border-black px-2 py-1 text-center font-bold bg-yellow-50 print:bg-yellow-50">{formatNumber(row.giornateFerie)}</td>
                     <td className="border border-black px-2 py-1 text-right font-medium">{formatCurrency(row.incidenzaTotale)}</td>
-                    <td className="border border-black px-2 py-1 text-right text-orange-600 font-medium">{formatCurrency(row.indennitaPercepita)}</td>
+
+                    {/* Visualizzazione Condizionale Celle */}
+                    {showPercepito && (
+                      <td className="border border-black px-2 py-1 text-right text-orange-600 font-medium">{formatCurrency(row.indennitaPercepita)}</td>
+                    )}
+
                     <td className="border border-black px-2 py-1 text-right font-black bg-yellow-100 bg-yellow-cell print:bg-yellow-50 text-lg">{formatCurrency(row.totaleDaPercepire)}</td>
-                    <td className="border border-black px-2 py-1 text-right text-green-700 font-medium">{formatCurrency(row.indennitaPasto)}</td>
+
+                    {includeTickets && (
+                      <td className="border border-black px-2 py-1 text-right text-green-700 font-medium">{formatCurrency(row.indennitaPasto)}</td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -610,9 +673,16 @@ Distinti saluti.
                 <tr className="h-14 font-black text-lg">
                   <td colSpan={5} className="border border-black bg-[#92D050] bg-green-total text-left px-6 relative align-middle uppercase print:bg-[#92D050]" style={{ backgroundColor: '#92D050' }}>TOTALE DOVUTO</td>
                   <td className="border border-black bg-[#92D050] bg-green-total text-right px-2 align-middle print:bg-[#92D050]" style={{ backgroundColor: '#92D050' }}>{formatCurrency(totals.incidenzaTotale)}</td>
-                  <td className="border border-black bg-[#92D050] bg-green-total text-right px-2 align-middle text-orange-800 print:bg-[#92D050]" style={{ backgroundColor: '#92D050' }}>{formatCurrency(totals.indennitaPercepita)}</td>
+
+                  {showPercepito && (
+                    <td className="border border-black bg-[#92D050] bg-green-total text-right px-2 align-middle text-orange-800 print:bg-[#92D050]" style={{ backgroundColor: '#92D050' }}>{formatCurrency(totals.indennitaPercepita)}</td>
+                  )}
+
                   <td className="border border-black bg-[#FF5050] bg-red-total text-right px-2 align-middle text-white text-xl print:bg-[#FF5050] print:text-white" style={{ backgroundColor: '#FF5050', color: 'white' }}>{formatCurrency(totals.totaleDaPercepire)}</td>
-                  <td className="border border-black bg-[#92D050] bg-green-total text-right px-2 align-middle text-green-900 print:bg-[#92D050]" style={{ backgroundColor: '#92D050' }}>{formatCurrency(totals.indennitaPasto)}</td>
+
+                  {includeTickets && (
+                    <td className="border border-black bg-[#92D050] bg-green-total text-right px-2 align-middle text-green-900 print:bg-[#92D050]" style={{ backgroundColor: '#92D050' }}>{formatCurrency(totals.indennitaPasto)}</td>
+                  )}
                 </tr>
               </tfoot>
             </table>
@@ -630,14 +700,13 @@ Distinti saluti.
           isOpen={isRelazioneOpen}
           onClose={() => setIsRelazioneOpen(false)}
           worker={worker}
-          includeExFest={includeExFest} // <--- FONDAMENTALE: Dice alla relazione se è 28 o 32 gg
+          includeExFest={includeExFest}
           totals={{
             grandTotal: {
-              // Passiamo tutti i dati disaggregati per la tabella della perizia
-              incidenzaTotale: totals.incidenzaTotale,       // Lordo Spettante
-              indennitaPercepita: totals.indennitaPercepita, // Già Percepito
-              indennitaPasto: totals.indennitaPasto,         // Ticket
-              totalNet: totals.totaleDaPercepire             // Netto Finale
+              incidenzaTotale: totals.incidenzaTotale,
+              indennitaPercepita: totals.indennitaPercepita,
+              indennitaPasto: totals.indennitaPasto,
+              totalNet: totals.totaleDaPercepire
             }
           }}
         />

@@ -27,6 +27,7 @@ interface AnnualCalculationTableProps {
   data: AnnoDati[];
   profilo: ProfiloAzienda;
   onDataChange: (newData: AnnoDati[]) => void;
+  includeTickets?: boolean;
 }
 
 const MONTH_COLORS = [
@@ -36,7 +37,7 @@ const MONTH_COLORS = [
   'bg-orange-600 shadow-orange-200', 'bg-slate-500 shadow-slate-200', 'bg-indigo-500 shadow-indigo-200'
 ];
 
-const AnnualCalculationTable: React.FC<AnnualCalculationTableProps> = ({ data = [], profilo, onDataChange }) => {
+const AnnualCalculationTable: React.FC<AnnualCalculationTableProps> = ({ data = [], profilo, onDataChange, includeTickets = true }) => {
   const [expandedYears, setExpandedYears] = useState<Set<number>>(new Set());
   const [isCopied, setIsCopied] = useState(false);
 
@@ -201,7 +202,8 @@ const AnnualCalculationTable: React.FC<AnnualCalculationTableProps> = ({ data = 
         }
 
         const indennitaPercepita = giorniUtili * valPercepito;
-        const buoniPasto = giorniUtili * valTicket;
+        // Applica il toggle ai Ticket della tabella
+        const buoniPasto = includeTickets ? (giorniUtili * valTicket) : 0;
         const netto = (indennitaSpettante - indennitaPercepita) + buoniPasto;
 
         // Accumulatori Annuali
@@ -243,7 +245,7 @@ const AnnualCalculationTable: React.FC<AnnualCalculationTableProps> = ({ data = 
         isFallback
       };
     });
-  }, [data, profilo, includeExFest]);
+  }, [data, profilo, includeExFest, includeTickets]);
 
   // Totale Generale + Interessi
   const summary = useMemo(() => {
@@ -279,7 +281,7 @@ const AnnualCalculationTable: React.FC<AnnualCalculationTableProps> = ({ data = 
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
             <Calculator className="w-4 h-4 text-emerald-400" />
-            <span>CALCOLO DIFFERENZE</span>
+            <span>CALCOLO DIFFERENZE PER ANNO</span>
             <span className="px-2 py-0.5 bg-slate-700 rounded text-[10px] text-blue-400 border border-slate-600">{profilo}</span>
           </div>
 
