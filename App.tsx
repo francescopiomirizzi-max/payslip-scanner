@@ -576,7 +576,7 @@ const App: React.FC = () => {
     };
 
     const getEditingWorkerData = () => editingWorkerId ? workers.find(w => w.id === editingWorkerId) : null;
-    // --- 1. CALCOLO STATISTICHE DASHBOARD (COERENZA TOTALE) ---
+    // --- 1. CALCOLO STATISTICHE DASHBOARD (CORRETTO CON FILTRO ANNO) ---
     const dashboardStats = useMemo(() => {
         return workers.reduce((acc, worker) => {
             // A. LEGGIAMO LA MEMORIA
@@ -585,6 +585,10 @@ const App: React.FC = () => {
 
             const storedExFestPref = localStorage.getItem(`exFest_${worker.id}`);
             const includeExFest = storedExFestPref !== null ? JSON.parse(storedExFestPref) : false;
+
+            // --- NUOVO: LEGGIAMO L'ANNO DI INIZIO ---
+            const storedStartYear = localStorage.getItem(`startYear_${worker.id}`);
+            const startClaimYear = storedStartYear ? parseInt(storedStartYear) : 2008;
 
             const TETTO_FERIE = includeExFest ? 32 : 28;
 
@@ -622,6 +626,10 @@ const App: React.FC = () => {
 
             sortedRows.forEach(row => {
                 const y = Number(row.year);
+
+                // --- FILTRO FONDAMENTALE: Salta anni precedenti allo start ---
+                if (y < startClaimYear) return;
+
                 let media = yearlyAverages[y - 1];
                 if (media === undefined || media === 0) media = yearlyAverages[y] || 0;
 
@@ -641,12 +649,10 @@ const App: React.FC = () => {
                     const percepito = ggUtili * cPercepito;
                     const ticketVal = ggUtili * cTicket;
 
-                    // --- LOGICA COERENTE: Se esclusi, non li contiamo da nessuna parte ---
                     if (includeTickets) {
                         wTicketMaturato += ticketVal;
                         wNetto += (lordo - percepito) + ticketVal;
                     } else {
-                        // Se esclusi, calcoliamo solo il netto differenze (senza ticket)
                         wNetto += (lordo - percepito);
                     }
                 }
@@ -1064,15 +1070,19 @@ const App: React.FC = () => {
         );
     }
 
-    // --- BLOCCO VISTA REPORT (CORRETTO A TUTTO SCHERMO) ---
+    // --- BLOCCO VISTA REPORT (CORRETTO CON START YEAR) ---
     if (viewMode === 'simple' && selectedWorker) {
+        // Recuperiamo al volo l'anno di partenza salvato per questo lavoratore
+        const savedStart = localStorage.getItem(`startYear_${selectedWorker.id}`);
+        const startYearToPass = savedStart ? parseInt(savedStart) : 2008;
+
         return (
             <div className="min-h-screen bg-white">
                 <TableComponent
                     worker={selectedWorker}
                     onBack={() => setViewMode('home')}
-                    // MODIFICA EFFETTUATA: Ora porta alla pagina delle tabelle
                     onEdit={() => setViewMode('complex')}
+                    startClaimYear={startYearToPass} // <--- Passaggio fondamentale aggiunto
                 />
             </div>
         );

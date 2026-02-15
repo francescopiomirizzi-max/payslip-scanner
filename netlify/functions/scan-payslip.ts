@@ -54,70 +54,62 @@ export const handler: Handler = async (event, context) => {
     // ... (tutto il codice prima rimane uguale)
 
     const prompt = `
-      Sei un software OCR avanzato specializzato in Buste Paga RFI.
-      Il tuo compito è scansionare il documento riga per riga e estrarre i valori numerici associati a specifici codici.
+     Sei un motore OCR specializzato esclusivamente in Buste Paga RFI (Ferrovie dello Stato).
+      Il tuo obiettivo è estrarre dati numerici con precisione assoluta, ignorando il "rumore" del documento.
 
-      ⚠️ ISTRUZIONI DI SCANSIONE (MOLTO IMPORTANTE):
-      1. Il documento è spesso su 2 pagine.
-      2. La tabella "Competenze" inizia nella PARTE ALTA della Pagina 1.
-      3. NON saltare le prime righe. Scansiona dalla prima riga della tabella in giù.
-      4. Se un codice è presente nel documento, DEVI estrarre il suo importo.
+      ### 1. ISTRUZIONI PER "PRESENZE" E "FERIE" (CRITICO)
+      La tabella delle presenze è strutturata orizzontalmente. 
+      Cerca la riga di testo che contiene le etichette: "Presenze", "Riposi", "Ferie".
+      I dati si trovano nella riga numerica SUBITO SOTTO.
 
-      DATI DA ESTRARRE (JSON):
-      1. "month" (numero 1-12), "year" (numero 4 cifre).
+      Devi applicare questa LOGICA POSIZIONALE RIGIDA:
+      - Il **1° NUMERO** (sinistra) è "daysWorked" (Giorni Lavorati). Esempio: 22,00 o 20.00.
+      - Il **3° VALORE** è "daysVacation" (Ferie Godute).
       
-      2. "daysWorked" (Giorni Lavorati):
-         - Cerca la casella "Presenze" nel riquadro in alto.
-         - ATTENZIONE: Se vedi "Riposi" o "RR", IGNORA quel numero.
-         - Estrai ESCLUSIVAMENTE il valore numerico sotto "Presenze".
+      ⚠️ REGOLE DI SICUREZZA PER LE FERIE:
+      1. Se tra il 2° numero (Riposi) e il successivo c'è un vuoto, un doppio spazio o ",,", allora daysVacation = 0.00.
+      2. Se leggi un numero > 22 nella posizione delle ferie (es. 25,00 o 100), STAI SBAGLIANDO colonna (stai leggendo i residui a destra). In quel caso, usa 0.00.
+      3. Ignora SEMPRE le colonne finali "Ferie anno prec." e "Ferie anno corrente".
 
-      3. "daysVacation" (Giorni Ferie Goduti):
-         - Vai alla sezione "Ferie". Ci sono più colonne (Residuo, Maturato, Goduto).
-         - Estrai SOLO il valore della colonna "Goduto" (o "Fruit." o mese corrente).
-         - ATTENZIONE: IGNORA ASSOLUTAMENTE "Ferie Anno Prec." e "Ferie Anno Corr." (Residui).
-      
-      4. "ticketRate": Valore unitario (cerca 0E99 o 0299). Se Welfare/Assente: 0.00.
-      5. "arretrati": Somma importi: Malattia (3E..), Una Tantum (0K.., 0C..), Arretrati anni prec (74..), Premi.
-      6. "eventNote": "Malattia" o "Premi" se presenti in arretrati.
+      ### 2. ISTRUZIONI PER I CODICI (IMPORTI)
+      Scansiona TUTTO il documento (spesso è su 2 colonne o 2 pagine) cercando i codici nella colonna "Cod. Voce".
+      Se un codice appare più volte (es. 0AA1 o 0470), SOMMA i valori della colonna "Competenze".
 
-      🔍 MASTER LIST CODICI DA CERCARE (TUTTI):
-      - 0152 (Straordinario feriale)
-      - 0421 (Turno notturno)
-      - 0423 (Festivo)
+      🔍 MASTER LIST (Cerca SOLO questi):
+      - 0152 (Str. feriale)
+      - 0421 (Notturno)
+      - 0423 (Festivo/Cantiere)
       - 0457 (Festivo notturno)
-      - 0470 (Indennità turno - SPESSO A PAGINA 1)
-      - 0482 (Domenicale - SPESSO A PAGINA 1)
-      - 0AA1 (Mancata mensa)
+      - 0470 (Indennità turno - SOMMA se multipli)
+      - 0482 (Reperibilità)
+      - 0AA1 (Trasferta - SOMMA se multipli)
       - 0293, 0299 (Ticket vecchi)
       - 0496, 0576, 0584
-      - 0687 (Mancata mensa)
-      - 0376, 0686
-      - 0919, 0920, 0932, 0933, 0995, 0996 (Indennità varie)
-      - 3B70, 3B71 (Produttività)
+      - 0687, 0686 (Ind. linea)
+      - 0376
+      - 0919, 0920, 0932, 0933, 0995, 0996 (Vari straordinari)
+      - 3B70, 3B71
 
-      🔍 CODICI SPECIALI (ARRETRATI/MALATTIA):
-      - 3E01, 3E02, 3E10, 3E.. (Tutti i codici Malattia/Infortunio)
-      - 0K.., 0C.., 0U.. (Una Tantum, Premi Risultato)
-      - 74.. (Arretrati anni prec.)
-      - 6INT (Arretrati contrattuali)
+      ### 3. ISTRUZIONI PER ARRETRATI E NOTE
+      - "ticketRate": Cerca il codice 0E99. Il valore unitario è spesso sotto la colonna "Parametro" o "Dati base" (es. 7,00 o 8,00). Se non lo trovi, metti 0.00.
+      - "arretrati": Somma gli importi di codici che iniziano con 3E (Malattia), 74 (Arretrati anni prec.), 0K/0C (Una tantum), 6INT.
+      - "eventNote": Se trovi codici 3E.., scrivi "Malattia". Se trovi 74.., scrivi "Arretrati AP".
 
-      🔍 CODICE TICKET RESTAURANT:
-      - Cerca 0E99 (Valore 8.00 o 7.00). Se manca, cerca 0299.
-      - Se trovi solo Welfare (9WLF), il ticket è 0.00.
+      ### 4. FORMATO OUTPUT JSON (RIGIDO)
+      Restituisci SOLO un oggetto JSON valido.
+      Usa il punto (.) come separatore decimale per tutti i numeri (es. 14.50, non 14,50).
 
-      OUTPUT JSON RICHIESTO:
       {
-        "month": 1,
-        "year": 2024,
-        "daysWorked": 0,
-        "daysVacation": 0,
-        "ticketRate": 0.00,
-        "arretrati": 0.00,
-        "eventNote": "",
+        "month": numero (1-12),
+        "year": numero (4 cifre),
+        "daysWorked": numero (float, es. 21.00),
+        "daysVacation": numero (float, es. 3.50. Se vuoto o >22 metti 0.00),
+        "ticketRate": numero (float, es. 8.00),
+        "arretrati": numero (float),
+        "eventNote": stringa,
         "codes": {
-           "0470": 0.00,
-           "0482": 0.00,
-           "0152": 0.00,
+           "0152": numero,
+           "0421": numero,
            ... (inserisci qui TUTTI i codici trovati della Master List)
         }
       }

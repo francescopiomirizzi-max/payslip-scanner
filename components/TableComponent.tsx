@@ -25,6 +25,7 @@ interface TableComponentProps {
   worker: Worker;
   onBack: () => void;
   onEdit: () => void;
+  startClaimYear: number; // <--- NUOVA PROP AGGIUNTA
 }
 
 const formatCurrency = (value: number) =>
@@ -33,16 +34,17 @@ const formatCurrency = (value: number) =>
 const formatNumber = (value: number) =>
   new Intl.NumberFormat('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
 
-// --- FUNZIONE PDF SPOSTATA QUI IN ALTO PER EVITARE ERRORI ---
+// --- FUNZIONE PDF AGGIORNATA CON LOGICA ANNO RIFERIMENTO ---
 const handleDownloadPDF = (
-  doc: any, // Usa 'any' per evitare l'errore "Cannot find name doc" o conflitti di tipo
+  doc: any,
   worker: Worker,
   startYear: number,
   endYear: number,
   tableData: any[],
   totals: any,
   includeTickets: boolean,
-  showPercepito: boolean
+  showPercepito: boolean,
+  startClaimYear: number // <--- Passiamo l'anno di start
 ) => {
   const fmt = (n: number) => n !== 0 ? n.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €' : '-';
   const fmtNum = (n: number) => n !== 0 ? n.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-';
@@ -59,9 +61,9 @@ const handleDownloadPDF = (
   doc.setFont("helvetica", "normal");
   doc.setTextColor(200, 200, 200);
   doc.text(`Dipendente: ${worker.cognome} ${worker.nome} (Matr. ${worker.id})`, 14, 18);
-  doc.text(`Periodo: ${startYear} - ${endYear}`, 14, 22);
+  doc.text(`Periodo Conteggi: ${startClaimYear} - ${endYear}`, 14, 22);
 
-  // Costruzione dinamica Header e Righe PDF in base ai tasti premuti
+  // Costruzione dinamica Header e Righe PDF
   const headRow = ['ANNO', 'TOT. VOCI\nRETRIBUTIVE', 'DIVISORE\nANNUO', 'INCIDENZA\nGIORNALIERA', 'GIORNI FERIE\n(PAGABILI)', 'LORDO\nFERIE'];
 
   if (showPercepito) {
@@ -75,23 +77,26 @@ const handleDownloadPDF = (
   }
 
   const tableBody = tableData.map(row => {
+    // Check se è anno di riferimento (precedente allo start)
+    const isRef = row.anno < startClaimYear;
+
     const rowData: any[] = [
-      row.anno,
+      isRef ? `${row.anno} (Rif.)` : row.anno,
       fmt(row.totaleVoci),
       fmtNum(row.divisore),
       fmt(row.incidenzaGiornata),
       fmtNum(row.giornateFerie),
-      fmt(row.incidenzaTotale)
+      isRef ? '(Solo Media)' : fmt(row.incidenzaTotale) // Nascondi soldi se Rif.
     ];
 
     if (showPercepito) {
-      rowData.push(fmt(row.indennitaPercepita));
+      rowData.push(isRef ? '-' : fmt(row.indennitaPercepita));
     }
 
-    rowData.push(fmt(row.totaleDaPercepire));
+    rowData.push(isRef ? '-' : fmt(row.totaleDaPercepire));
 
     if (includeTickets) {
-      rowData.push(fmt(row.indennitaPasto));
+      rowData.push(isRef ? '-' : fmt(row.indennitaPasto));
     }
 
     return rowData;
@@ -143,6 +148,7 @@ const handleDownloadPDF = (
     },
     columnStyles: dynamicColumnStyles,
     didParseCell: (data) => {
+      // Stile Totali
       if (data.row.index === tableBody.length - 1) {
         data.cell.styles.fontStyle = 'bold';
         data.cell.styles.fontSize = 10;
@@ -154,6 +160,15 @@ const handleDownloadPDF = (
           data.cell.styles.fillColor = [220, 38, 38];
           data.cell.styles.textColor = [255, 255, 255];
         }
+      }
+
+      // Stile Righe Anno Riferimento (Grigino e testo chiaro)
+      // @ts-ignore
+      if (data.row.raw && typeof data.row.raw[0] === 'string' && data.row.raw[0].includes('(Rif.)')) {
+        data.cell.styles.fillColor = [245, 245, 245];
+        data.cell.styles.textColor = [150, 150, 150];
+        // Mantiene leggibile la media (colonna 3)
+        if (data.column.index === 3) data.cell.styles.textColor = [180, 83, 9];
       }
     }
   });
@@ -176,7 +191,7 @@ const handleDownloadPDF = (
 };
 
 // --- COMPONENTE PRINCIPALE ---
-const TableComponent: React.FC<TableComponentProps> = ({ worker, onBack, onEdit }) => {
+const TableComponent: React.FC<TableComponentProps> = ({ worker, onBack, onEdit, startClaimYear }) => {
 
   const [isRelazioneOpen, setIsRelazioneOpen] = useState(false);
   const [showInfoTetto, setShowInfoTetto] = useState(false);
@@ -203,7 +218,7 @@ const TableComponent: React.FC<TableComponentProps> = ({ worker, onBack, onEdit 
     localStorage.setItem(`report_percepito_${worker.id}`, JSON.stringify(showPercepito));
   }, [includeExFest, includeTickets, showPercepito, worker.id]);
 
-  // --- 1. LOGICA DATI CORRETTA ---
+  // --- 1. LOGICA DATI CORRETTA (FILTRO DINAMICO) ---
   const tableData = useMemo(() => {
     const sortedYears = [...YEARS].sort((a: number, b: number) => a - b);
     const TETTO_FERIE = includeExFest ? 32 : 28;
@@ -241,6 +256,9 @@ const TableComponent: React.FC<TableComponentProps> = ({ worker, onBack, onEdit 
     let ferieCumulateCounter = 0;
 
     return sortedYears.map(year => {
+      // FILTRO: Ignora anni precedenti al "Reference Year" (Start - 1)
+      if (year < startClaimYear - 1) return null;
+
       const yearRows = safeRows.filter(r => r.year === year).sort((a, b) => a.monthIndex - b.monthIndex);
       if (yearRows.length === 0) return null;
 
@@ -294,34 +312,38 @@ const TableComponent: React.FC<TableComponentProps> = ({ worker, onBack, onEdit 
         totaleDaPercepire: netAmount,
         indennitaPasto: yearlyTicketVal
       };
-    })
-      .filter(Boolean)
-      // @ts-ignore
-      .filter(row => row.anno >= 2008);
-  }, [worker, includeExFest, includeTickets]); // Aggiunto includeTickets alle dipendenze
+    }).filter(Boolean);
+  }, [worker, includeExFest, includeTickets, startClaimYear]); // Dipendenze aggiornate
 
   // 2. CALCOLO TOTALI GENERALI
   const totals = useMemo(() => {
-    return tableData.reduce((acc, row) => ({
-      incidenzaTotale: acc.incidenzaTotale + row.incidenzaTotale,
-      indennitaPercepita: acc.indennitaPercepita + row.indennitaPercepita,
-      totaleDaPercepire: acc.totaleDaPercepire + row.totaleDaPercepire,
-      indennitaPasto: acc.indennitaPasto + row.indennitaPasto
-    }), {
+    return tableData.reduce((acc, row) => {
+      // --- MODIFICA CRUCIALE: Se è anno di riferimento, NON sommare ---
+      if (row.anno < startClaimYear) return acc;
+
+      return {
+        incidenzaTotale: acc.incidenzaTotale + row.incidenzaTotale,
+        indennitaPercepita: acc.indennitaPercepita + row.indennitaPercepita,
+        totaleDaPercepire: acc.totaleDaPercepire + row.totaleDaPercepire,
+        indennitaPasto: acc.indennitaPasto + row.indennitaPasto
+      };
+    }, {
       incidenzaTotale: 0,
       indennitaPercepita: 0,
       totaleDaPercepire: 0,
       indennitaPasto: 0
     });
-  }, [tableData]);
+  }, [tableData, startClaimYear]);
 
-  const startYear = tableData.length > 0 ? tableData[0].anno : 2008;
+  // Start/End per visualizzazione (Mostriamo anche il 2007 se presente come riferimento)
+  const startYear = tableData.length > 0 ? tableData[0].anno : startClaimYear;
   const endYear = tableData.length > 0 ? tableData[tableData.length - 1].anno : 2025;
 
   const handlePrint = () => {
     window.print();
   };
 
+  // --- FUNZIONE DIFFIDA COMPLETA (Testo Ripristinato) ---
   const handlePrintDiffida = () => {
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
     const today = new Date().toLocaleDateString('it-IT', { year: 'numeric', month: 'long', day: 'numeric' });
@@ -361,7 +383,7 @@ const TableComponent: React.FC<TableComponentProps> = ({ worker, onBack, onEdit 
     const bodyText = `
 Scrivo in nome e per conto del Sig. ${worker.nome} ${worker.cognome}, vostro dipendente, il quale mi ha conferito espresso mandato per la tutela dei suoi diritti patrimoniali.
 
-Dall'esame della documentazione retributiva relativa al periodo ${startYear} - ${endYear}, è emerso che la Vostra Società non ha correttamente incluso le voci retributive accessorie e variabili nella base di calcolo della retribuzione feriale, in violazione dell'Art. 36 della Costituzione, della Direttiva 2003/88/CE e dei principi di diritto consolidati dalla Corte di Cassazione (Sent. n. 20216 del 23/06/2022).
+Dall'esame della documentazione retributiva relativa al periodo ${startClaimYear} - ${endYear}, è emerso che la Vostra Società non ha correttamente incluso le voci retributive accessorie e variabili nella base di calcolo della retribuzione feriale, in violazione dell'Art. 36 della Costituzione, della Direttiva 2003/88/CE e dei principi di diritto consolidati dalla Corte di Cassazione (Sent. n. 20216 del 23/06/2022).
 
 Nello specifico, il ricalcolo è stato effettuato applicando il "principio di onnicomprensività" della retribuzione feriale, utilizzando come divisore le giornate lavorative effettive e come moltiplicatore i giorni di ferie fruiti (entro il limite del periodo minimo protetto di ${includeExFest ? "32" : "28"} giorni annui).
 
@@ -413,8 +435,8 @@ Distinti saluti.
   // --- GENERAZIONE REPORT PDF UFFICIALE (Locale) ---
   const handleDownloadPDFLocal = () => {
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-    // Chiamata alla funzione esterna
-    handleDownloadPDF(doc, worker, startYear, endYear, tableData, totals, includeTickets, showPercepito);
+    // Chiamata alla funzione esterna passando startClaimYear
+    handleDownloadPDF(doc, worker, startYear, endYear, tableData, totals, includeTickets, showPercepito, startClaimYear);
   };
 
   return (
@@ -432,6 +454,7 @@ Distinti saluti.
           td.bg-green-total { background-color: #92D050 !important; }
           td.bg-red-total { background-color: #FF5050 !important; color: white !important; }
           td.bg-yellow-cell { background-color: #fef08a !important; }
+          td.row-ref { background-color: #f3f4f6 !important; color: #9ca3af !important; }
         }
       `}</style>
 
@@ -455,7 +478,7 @@ Distinti saluti.
             <div>
               <h1 className="text-2xl font-bold tracking-wide text-slate-100">Prospetto Ufficiale</h1>
               <div className="flex items-center gap-2">
-                <p className="text-sm uppercase font-medium text-slate-400 tracking-wider">Report Annuale</p>
+                <p className="text-sm uppercase font-medium text-slate-400 tracking-wider">Report {startClaimYear} - {endYear}</p>
                 <span className={`text-[10px] px-2 py-0.5 rounded border flex items-center gap-1 ${includeExFest ? 'text-amber-400 border-amber-500 bg-amber-500/10' : 'text-slate-400 border-slate-500'}`}>
                   {includeExFest ? <AlertCircle size={10} /> : null}
                   {includeExFest ? 'Tetto 32gg' : 'Tetto 28gg'}
@@ -576,9 +599,8 @@ Distinti saluti.
             className="group relative px-6 py-3 rounded-xl font-bold text-lg text-white shadow-lg hover:-translate-y-0.5 active:scale-95 transition-all duration-300 border border-white/10 overflow-hidden flex items-center gap-3"
             style={{ background: 'linear-gradient(90deg, #059669 0%, #14b8a6 100%)' }}
           >
-            {/* Corretto rotate-90 in rotate-12 e rimosso strokeWidth inutile */}
             <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500 rotate-12"></div>
-            <LayoutGrid className="w-5 h-5 transition-transform duration-500 group-hover:rotate-90" strokeWidth={2.5} />
+            <LayoutGrid className="w-5 h-5 transition-transform duration-500 group-hover:rotate-12" strokeWidth={2.5} />
             <span>Gestione Dati</span>
           </button>
 
@@ -611,13 +633,13 @@ Distinti saluti.
 
             <div className="bg-gray-200 border-b border-black text-center py-6 print:bg-gray-200 print:border-black print:py-4 relative">
               <div className="font-black text-2xl uppercase mb-2 print:text-xl">
-                Incidenza degli elementi accessori ai fini del calcolo annuale della retribuzione feriale lavoratore:
+                Incidenza degli elementi accessori ai fini del calcolo annuale della retribuzione feriale
               </div>
               <div className="text-lg font-normal normal-case print:text-base">
-                <span className="font-bold mr-2">{worker.cognome} {worker.nome}</span> (Matr. {worker.id})
+                Lavoratore: <span className="font-bold mr-2">{worker.cognome} {worker.nome}</span> (Matr. {worker.id})
               </div>
               <div className="text-lg font-normal normal-case print:text-base">
-                Periodo interessato: dal 01-01-{startYear} al 31-12-{endYear}
+                Periodo Conteggi: dal 01-01-{startClaimYear} al 31-12-{endYear}
               </div>
             </div>
 
@@ -647,27 +669,42 @@ Distinti saluti.
                 </tr>
               </thead>
               <tbody>
-                {tableData.map((row) => (
-                  <tr key={row.anno} className="h-10 text-base">
-                    <td className="border border-black px-2 py-1 text-center bg-gray-100 bg-gray-row font-bold print:bg-gray-100">{row.anno}</td>
-                    <td className="border border-black px-2 py-1 text-right">{formatCurrency(row.totaleVoci)}</td>
-                    <td className="border border-black px-2 py-1 text-center">{formatNumber(row.divisore)}</td>
-                    <td className="border border-black px-2 py-1 text-right text-blue-800 font-medium">{formatCurrency(row.incidenzaGiornata)}</td>
-                    <td className="border border-black px-2 py-1 text-center font-bold bg-yellow-50 print:bg-yellow-50">{formatNumber(row.giornateFerie)}</td>
-                    <td className="border border-black px-2 py-1 text-right font-medium">{formatCurrency(row.incidenzaTotale)}</td>
+                {tableData.map((row) => {
+                  const isRef = row.anno < startClaimYear;
+                  return (
+                    <tr key={row.anno} className={`h-10 text-base ${isRef ? 'bg-gray-100 row-ref text-gray-500' : ''}`}>
+                      <td className={`border border-black px-2 py-1 text-center font-bold ${isRef ? 'bg-gray-200' : 'bg-gray-100 bg-gray-row print:bg-gray-100'}`}>
+                        {row.anno} {isRef && <span className="text-[9px] uppercase block">(Rif.)</span>}
+                      </td>
+                      <td className="border border-black px-2 py-1 text-right">{formatCurrency(row.totaleVoci)}</td>
+                      <td className="border border-black px-2 py-1 text-center">{formatNumber(row.divisore)}</td>
+                      <td className={`border border-black px-2 py-1 text-right font-medium ${isRef ? 'text-gray-500' : 'text-blue-800'}`}>{formatCurrency(row.incidenzaGiornata)}</td>
+                      <td className="border border-black px-2 py-1 text-center font-bold bg-yellow-50 print:bg-yellow-50">{formatNumber(row.giornateFerie)}</td>
 
-                    {/* Visualizzazione Condizionale Celle */}
-                    {showPercepito && (
-                      <td className="border border-black px-2 py-1 text-right text-orange-600 font-medium">{formatCurrency(row.indennitaPercepita)}</td>
-                    )}
+                      {/* CELLE MONETARIE (Nascoste se anno riferimento) */}
+                      <td className="border border-black px-2 py-1 text-right font-medium">
+                        {isRef ? '(Solo Media)' : formatCurrency(row.incidenzaTotale)}
+                      </td>
 
-                    <td className="border border-black px-2 py-1 text-right font-black bg-yellow-100 bg-yellow-cell print:bg-yellow-50 text-lg">{formatCurrency(row.totaleDaPercepire)}</td>
+                      {/* Visualizzazione Condizionale Celle */}
+                      {showPercepito && (
+                        <td className="border border-black px-2 py-1 text-right text-orange-600 font-medium">
+                          {isRef ? '-' : formatCurrency(row.indennitaPercepita)}
+                        </td>
+                      )}
 
-                    {includeTickets && (
-                      <td className="border border-black px-2 py-1 text-right text-green-700 font-medium">{formatCurrency(row.indennitaPasto)}</td>
-                    )}
-                  </tr>
-                ))}
+                      <td className={`border border-black px-2 py-1 text-right font-black ${isRef ? 'text-gray-400' : 'bg-yellow-100 bg-yellow-cell print:bg-yellow-50 text-lg'}`}>
+                        {isRef ? '-' : formatCurrency(row.totaleDaPercepire)}
+                      </td>
+
+                      {includeTickets && (
+                        <td className="border border-black px-2 py-1 text-right text-green-700 font-medium">
+                          {isRef ? '-' : formatCurrency(row.indennitaPasto)}
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })}
               </tbody>
               <tfoot>
                 <tr className="h-14 font-black text-lg">

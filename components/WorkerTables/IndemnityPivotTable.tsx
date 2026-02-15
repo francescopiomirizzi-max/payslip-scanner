@@ -12,8 +12,7 @@ import {
 } from '../../types';
 import { Info, TrendingUp, DollarSign } from 'lucide-react';
 
-// --- MAPPATURA DESCRIZIONI (Ripresa per coerenza) ---
-// In un'app reale, questa dovrebbe stare in un file condiviso (es. constants.ts)
+// --- MAPPATURA DESCRIZIONI ---
 const INDENNITA_DESCRIPTIONS: Record<string, string> = {
   "0152": "Straordinario Feriale Diurno non recup.",
   "0421": "Indennità Lavoro Notturno",
@@ -31,20 +30,29 @@ const INDENNITA_DESCRIPTIONS: Record<string, string> = {
   "0933": "Str. Reperibilità Notturno",
   "0995": "Str. Disponibilità Diurno",
   "0996": "Str. Disponibilità Notturno"
-  // Aggiungere qui eventuali codici Elior/Rekeep se noti
 };
 
 interface IndemnityPivotTableProps {
   data: AnnoDati[];
   profilo: ProfiloAzienda;
+  startClaimYear?: number; // <--- NUOVA PROP OPZIONALE
 }
 
 type ViewMode = 'total' | 'average';
 
-const IndemnityPivotTable: React.FC<IndemnityPivotTableProps> = ({ data = [], profilo }) => {
+const IndemnityPivotTable: React.FC<IndemnityPivotTableProps> = ({
+  data = [],
+  profilo,
+  startClaimYear = 2008 // Default di sicurezza
+}) => {
 
-  // --- STATO PER IL TOGGLE DI VISUALIZZAZIONE ---
   const [viewMode, setViewMode] = useState<ViewMode>('total');
+
+  // --- FILTRO ANNI VISIBILI ---
+  // Mostriamo solo gli anni dal startClaimYear in poi
+  const visibleYears = useMemo(() => {
+    return YEARS.filter(y => y >= startClaimYear);
+  }, [startClaimYear]);
 
   const pivotConfig = useMemo(() => {
     switch (profilo) {
@@ -60,21 +68,23 @@ const IndemnityPivotTable: React.FC<IndemnityPivotTableProps> = ({ data = [], pr
 
     // 1. Calcoliamo i giorni lavorati totali per ogni anno (il Divisore)
     const yearlyDaysWorked: { [year: number]: number } = {};
-    YEARS.forEach(year => {
+    visibleYears.forEach(year => {
       const months = safeData.filter(d => d.year === year);
       const totalDays = months.reduce((acc, m) => acc + parseFloatSafe(m.daysWorked), 0);
-      yearlyDaysWorked[year] = totalDays > 0 ? totalDays : 1; // Evita div/0
+      yearlyDaysWorked[year] = totalDays > 0 ? totalDays : 1;
     });
 
     const calculatedRows = pivotConfig.map(def => {
       const yearValues: { [year: number]: number } = {};
       let rowSumAmount = 0;
 
-      YEARS.forEach(year => {
+      visibleYears.forEach(year => {
+        // Filtro di sicurezza ridondante ma utile
+        if (year < startClaimYear) return;
+
         const months = safeData.filter(d => d.year === year);
         const yearSum = months.reduce((acc, month) => acc + parseFloatSafe(month[def.id]), 0);
 
-        // Se siamo in modalità "Average", dividiamo per i giorni lavorati di quell'anno
         if (viewMode === 'average') {
           yearValues[year] = yearSum / yearlyDaysWorked[year];
         } else {
@@ -87,7 +97,6 @@ const IndemnityPivotTable: React.FC<IndemnityPivotTableProps> = ({ data = [], pr
       // Calcolo totale riga
       let rowTotal = 0;
       if (viewMode === 'average') {
-        // Media ponderata totale: (Somma Totale Euro) / (Somma Totale Giorni Lavorati di tutti gli anni)
         const totalDaysAllYears = Object.values(yearlyDaysWorked).reduce((a, b) => a + b, 0);
         rowTotal = totalDaysAllYears > 0 ? rowSumAmount / totalDaysAllYears : 0;
       } else {
@@ -100,7 +109,7 @@ const IndemnityPivotTable: React.FC<IndemnityPivotTableProps> = ({ data = [], pr
         code: def.subLabel,
         yearValues,
         rowTotal,
-        description: INDENNITA_DESCRIPTIONS[def.id] || def.label // Fallback descrizione
+        description: INDENNITA_DESCRIPTIONS[def.id] || def.label
       };
     });
 
@@ -108,31 +117,29 @@ const IndemnityPivotTable: React.FC<IndemnityPivotTableProps> = ({ data = [], pr
     const yearlyTotals: { [year: number]: number } = {};
     let grandTotal = 0;
 
-    YEARS.forEach(year => {
+    visibleYears.forEach(year => {
       let yearSum = 0;
       calculatedRows.forEach(row => {
-        yearSum += row.yearValues[year];
+        yearSum += (row.yearValues[year] || 0);
       });
       yearlyTotals[year] = yearSum;
-      grandTotal += yearSum; // Nota: somma delle medie se in average mode
+      grandTotal += yearSum;
     });
 
-    // Fix grandTotal per average mode (non ha senso sommare le medie, ha senso la media totale)
+    // Fix grandTotal per average mode
     if (viewMode === 'average') {
       let totalEuroAll = 0;
       let totalDaysAll = 0;
-      YEARS.forEach(y => {
-        // Ricostruiamo i totali assoluti per il calcolo finale corretto
+      visibleYears.forEach(y => {
         const days = yearlyDaysWorked[y];
-        totalEuroAll += yearlyTotals[y] * days;
+        totalEuroAll += (yearlyTotals[y] || 0) * days;
         totalDaysAll += days;
       });
-      // Il grandTotal visualizzato è la somma delle medie delle singole righe (Total Average Daily Value)
-      // Questo è utile perché dice: "Mediamente prendi X euro al giorno di indennità totali"
+      // Qui potremmo ricalcolare la media globale se necessario
     }
 
     return { rows: calculatedRows, yearlyTotals, grandTotal, yearlyDaysWorked };
-  }, [data, pivotConfig, viewMode]);
+  }, [data, pivotConfig, viewMode, visibleYears, startClaimYear]);
 
   const badgeClass = useMemo(() => {
     switch (profilo) {
@@ -154,7 +161,7 @@ const IndemnityPivotTable: React.FC<IndemnityPivotTableProps> = ({ data = [], pr
     <div className="bg-white shadow-xl rounded-lg overflow-hidden border border-slate-200 flex flex-col h-full">
       <div className="p-3 bg-slate-800 text-white font-bold text-sm tracking-wide flex justify-between items-center shrink-0">
         <div className="flex items-center gap-2">
-          <span>RIEPILOGO VOCI VARIABILI DELLA RETRIBUZIONE</span>
+          <span>RIEPILOGO VOCI VARIABILI</span>
           <span className={`px-2 py-0.5 rounded text-[10px] border border-slate-600 uppercase tracking-tighter ${badgeClass}`}>
             {profilo}
           </span>
@@ -165,8 +172,8 @@ const IndemnityPivotTable: React.FC<IndemnityPivotTableProps> = ({ data = [], pr
           <button
             onClick={() => setViewMode('total')}
             className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-[10px] font-bold transition-all ${viewMode === 'total'
-                ? 'bg-slate-700 text-white shadow-sm'
-                : 'text-slate-400 hover:text-slate-200'
+              ? 'bg-slate-700 text-white shadow-sm'
+              : 'text-slate-400 hover:text-slate-200'
               }`}
           >
             <DollarSign size={12} /> TOTALI (€)
@@ -174,8 +181,8 @@ const IndemnityPivotTable: React.FC<IndemnityPivotTableProps> = ({ data = [], pr
           <button
             onClick={() => setViewMode('average')}
             className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-[10px] font-bold transition-all ${viewMode === 'average'
-                ? 'bg-indigo-600 text-white shadow-sm'
-                : 'text-slate-400 hover:text-slate-200'
+              ? 'bg-indigo-600 text-white shadow-sm'
+              : 'text-slate-400 hover:text-slate-200'
               }`}
             title="Mostra la media giornaliera (Totale / Giorni Lavorati)"
           >
@@ -185,19 +192,18 @@ const IndemnityPivotTable: React.FC<IndemnityPivotTableProps> = ({ data = [], pr
       </div>
 
       <div className="flex-1 overflow-auto">
-        <table className="w-full text-xs border-collapse table-fixed" style={{ minWidth: `${(YEARS.length + 2) * 100}px` }}>
+        <table className="w-full text-xs border-collapse table-fixed" style={{ minWidth: `${(visibleYears.length + 2) * 100}px` }}>
           <thead className="sticky top-0 z-20 shadow-sm bg-slate-100">
             <tr>
               <th className={`p-3 text-left font-bold border-r border-slate-300 w-64 min-w-[250px] sticky left-0 z-30 bg-slate-100 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] uppercase tracking-wider ${headerColorClass}`}>
                 VOCE RETRIBUTIVA
               </th>
-              {YEARS.map(year => (
+              {visibleYears.map(year => (
                 <th key={year} className="px-3 py-3 text-right font-bold border-r border-slate-300 min-w-[90px] text-slate-600 bg-slate-50">
                   <div className="flex flex-col items-end">
                     <span>{year}</span>
-                    {/* Mostra i giorni lavorati nell'header se siamo in modalità media */}
                     {viewMode === 'average' && (
-                      <span className="text-[9px] font-normal text-slate-400">Div: {formatInteger(yearlyDaysWorked[year])} gg</span>
+                      <span className="text-[9px] font-normal text-slate-400">Div: {formatInteger(yearlyDaysWorked[year] || 0)} gg</span>
                     )}
                   </div>
                 </th>
@@ -217,7 +223,6 @@ const IndemnityPivotTable: React.FC<IndemnityPivotTableProps> = ({ data = [], pr
                       <span className="truncate" title={row.description}>{row.label}</span>
                       <span className="text-[10px] text-slate-400 font-normal font-mono">{row.code}</span>
                     </div>
-                    {/* Tooltip Descrizione */}
                     <div className="relative">
                       <Info size={12} className="text-slate-300 opacity-0 group-hover/label:opacity-100 transition-opacity" />
                       <div className="hidden group-hover/label:block absolute left-4 top-0 w-48 p-2 bg-slate-800 text-white text-[10px] rounded z-50 pointer-events-none shadow-xl">
@@ -226,8 +231,8 @@ const IndemnityPivotTable: React.FC<IndemnityPivotTableProps> = ({ data = [], pr
                     </div>
                   </div>
                 </td>
-                {YEARS.map(year => {
-                  const val = row.yearValues[year];
+                {visibleYears.map(year => {
+                  const val = row.yearValues[year] || 0;
                   return (
                     <td key={year} className={`px-2 py-1 border-r border-slate-200 text-right tabular-nums ${viewMode === 'average' && val > 0 ? 'text-indigo-600 font-medium' : 'text-slate-600'}`}>
                       {val !== 0 ? formatCurrency(val) : <span className="text-slate-200">-</span>}
@@ -246,9 +251,9 @@ const IndemnityPivotTable: React.FC<IndemnityPivotTableProps> = ({ data = [], pr
               <td className="p-3 font-bold text-slate-800 border-r border-slate-300 sticky left-0 z-30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] bg-amber-100">
                 {viewMode === 'total' ? 'TOTALE VOCI' : 'MEDIA GIORNALIERA TOTALE'}
               </td>
-              {YEARS.map(year => (
+              {visibleYears.map(year => (
                 <td key={year} className="px-2 py-2 text-right font-bold text-slate-800 border-r border-slate-300 tabular-nums bg-amber-50">
-                  {yearlyTotals[year] !== 0 ? formatCurrency(yearlyTotals[year]) : '-'}
+                  {yearlyTotals[year] !== 0 ? formatCurrency(yearlyTotals[year] || 0) : '-'}
                 </td>
               ))}
               <td className="px-2 py-2 text-right font-black text-white bg-slate-700 tabular-nums text-sm">

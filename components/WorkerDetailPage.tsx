@@ -1,9 +1,10 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import MonthlyDataGrid from './WorkerTables/MonthlyDataGrid';
 import AnnualCalculationTable from './WorkerTables/AnnualCalculationTable';
 import IndemnityPivotTable from './WorkerTables/IndemnityPivotTable';
+import TableComponent from './TableComponent'; // Assicurati che il percorso sia corretto
 // Import necessario per i calcoli della stampa
-import { Worker, AnnoDati, parseFloatSafe, getColumnsByProfile, MONTH_NAMES, formatCurrency } from '../types';
+import { Worker, AnnoDati, parseFloatSafe, getColumnsByProfile, MONTH_NAMES, formatCurrency, YEARS } from '../types';
 import {
   ArrowLeft,
   FileSpreadsheet,
@@ -43,9 +44,12 @@ import {
   Search,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   FileStack,
   Sparkles,
-  XCircle
+  XCircle,
+  AlertTriangle,
+  Check
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 // IMPORTANTE: Tesseract per il ritaglio (Canvas)
@@ -189,7 +193,38 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
   const [monthlyInputs, setMonthlyInputs] = useState<AnnoDati[]>(Array.isArray(worker?.anni) ? worker.anni : []);
   const [activeTab, setActiveTab] = useState<'input' | 'calc' | 'pivot'>('input');
   const [currentYear, setCurrentYear] = useState(2024);
+  // --- STATO CONFIGURAZIONE CAUSA ---
+  // Legge o imposta l'anno di inizio calcoli (Default al primo anno trovato + 1, o 2008)
+  const [startClaimYear, setStartClaimYear] = useState<number>(() => {
+    const saved = localStorage.getItem(`startYear_${worker.id}`);
+    return saved ? parseInt(saved) : 2008; // Default 2008 come da fogli
+  });
+  // Stato per mostrare/nascondere il report ufficiale
+  const [showReport, setShowReport] = useState(false);
+  // Salva preferenza
+  useEffect(() => {
+    localStorage.setItem(`startYear_${worker.id}`, startClaimYear.toString());
+  }, [startClaimYear, worker.id]);
+  // Stato per la tendina personalizzata dell'anno
+  const [isYearSelectorOpen, setIsYearSelectorOpen] = useState(false);
+  // --- EFFETTO: AVVISO MEDIA MANCANTE (Al cambio anno) ---
+  useEffect(() => {
+    // Controlla se abbiamo dati dell'anno precedente
+    const prevYear = startClaimYear - 1;
+    const hasPrevData = monthlyInputs.some(r => Number(r.year) === prevYear);
 
+    // Se mancano i dati, mostra notifica GIALLA per 5 secondi
+    if (!hasPrevData) {
+      setBatchNotification({
+        msg: `⚠️ Attenzione: Hai impostato il ${startClaimYear}.\nRicorda di caricare le buste del ${prevYear} per calcolare la media corretta!`,
+        type: 'warning'
+      });
+
+      // Nascondi dopo 6 secondi
+      const timer = setTimeout(() => setBatchNotification(null), 6000);
+      return () => clearTimeout(timer);
+    }
+  }, [startClaimYear, monthlyInputs]); // Aggiunto monthlyInputs alle dipendenze per sicurezza
   // --- STATO SPLIT SCREEN / VISORE ---
   const [showSplit, setShowSplit] = useState(false);
   const [showDealMaker, setShowDealMaker] = useState(false);
@@ -245,27 +280,33 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
   // --- STATO BATCH UPLOAD ---
   const [isBatchProcessing, setIsBatchProcessing] = useState(false);
   // Stato per la notifica personalizzata (sostituisce l'alert brutto)
-  const [batchNotification, setBatchNotification] = useState<{ msg: string, type: 'success' | 'error' } | null>(null);
+  // Aggiorna questa riga aggiungendo | 'warning'
+  const [batchNotification, setBatchNotification] = useState<{ msg: string, type: 'success' | 'error' | 'warning' } | null>(null);
 
   const batchInputRef = useRef<HTMLInputElement>(null);
 
-  // --- LOGICA UPLOAD MASSIVO (REALE) ---
+  // --- LOGICA UPLOAD MASSIVO (CORRETTA: SCRITTURA DATI GARANTITA) ---
   const handleBatchUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
-    // Rimosso window.confirm: l'azione è esplicita, partiamo subito!
     setIsBatchProcessing(true);
-    setBatchNotification(null); // Resetta notifiche precedenti
+    setBatchNotification(null);
 
+    // 1. Copia profonda dei dati attuali
     let currentAnni = JSON.parse(JSON.stringify(monthlyInputs));
     let successCount = 0;
     let errorCount = 0;
+
+    // Variabile per ricordare l'anno processato
+    let lastDetectedYear = null;
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       try {
         const base64String = await toBase64(file);
+
+        // Chiamata API
         const response = await fetch('/.netlify/functions/scan-payslip', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -283,57 +324,113 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
           continue;
         }
 
+        // 2. MAPPING E CREAZIONE RIGA
         if (aiResult.month && aiResult.year) {
           const targetYear = Number(aiResult.year);
           const targetMonthIndex = Number(aiResult.month) - 1;
 
+          lastDetectedYear = targetYear; // Memorizza l'anno
+
+          // A. CERCA SE ESISTE GIÀ LA RIGA
           let rowIndex = currentAnni.findIndex((r: AnnoDati) =>
             Number(r.year) === targetYear && r.monthIndex === targetMonthIndex
           );
 
+          // B. SE NON ESISTE, CREALA SUBITO
+          if (rowIndex === -1) {
+            const newRow: AnnoDati = {
+              id: Date.now().toString() + Math.random(),
+              year: targetYear,
+              monthIndex: targetMonthIndex,
+              month: MONTH_NAMES[targetMonthIndex],
+              daysWorked: 0,
+              daysVacation: 0,
+              ticket: 0,
+              arretrati: 0,
+              note: ''
+            };
+            currentAnni.push(newRow);
+
+            // 🔥 FIX FONDAMENTALE: Aggiorniamo rowIndex per puntare alla nuova riga!
+            rowIndex = currentAnni.length - 1;
+          }
+
+          // C. ORA AGGIORNA I DATI (Ora rowIndex è sempre valido)
           if (rowIndex !== -1) {
             const row = currentAnni[rowIndex];
+
+            // 1. PRESENZE (Queste di solito non si sommano, meglio prendere il max o l'ultimo)
             if (typeof aiResult.daysWorked === 'number') row.daysWorked = aiResult.daysWorked;
             if (typeof aiResult.daysVacation === 'number') row.daysVacation = aiResult.daysVacation;
+
+            // 2. TICKET (Se c'è, lo prendiamo)
             const ticketVal = Number(aiResult.ticketRate);
             if (!isNaN(ticketVal) && ticketVal > 0) row.coeffTicket = ticketVal;
 
+            // 3. ARRETRATI (Somma)
+            const arretratiVal = Number(aiResult.arretrati);
+            if (!isNaN(arretratiVal) && arretratiVal > 0) {
+              // MODIFICA: Somma al valore esistente invece di sovrascrivere
+              row.arretrati = (parseFloatSafe(row.arretrati) + arretratiVal);
+            }
+
+            // 4. VOCI VARIABILI (ACCORPAMENTO E SOMMA)
             if (aiResult.codes && typeof aiResult.codes === 'object') {
               Object.entries(aiResult.codes).forEach(([code, value]) => {
                 const numValue = parseFloat(value as string);
-                if (!isNaN(numValue) && numValue > 0) row[code] = numValue;
+                if (!isNaN(numValue) && numValue > 0) {
+                  // MODIFICA CRUCIALE: Somma al valore esistente!
+                  // @ts-ignore
+                  const existingVal = parseFloatSafe(row[code]);
+                  // @ts-ignore
+                  row[code] = existingVal + numValue;
+                }
               });
             }
+
+            // Salvataggio riga nell'array temporaneo
             currentAnni[rowIndex] = row;
             successCount++;
           }
         }
       } catch (error) {
+        console.error("Errore generico batch", error);
         errorCount++;
       }
     }
 
+    // 3. RIORDINA, SALVA E AGGIORNA VISTA
+    // Riordiniamo tutto cronologicamente alla fine
+    currentAnni.sort((a: AnnoDati, b: AnnoDati) => {
+      if (a.year !== b.year) return a.year - b.year;
+      return a.monthIndex - b.monthIndex;
+    });
+
     setMonthlyInputs(currentAnni);
     onUpdateData(currentAnni);
+
+    // Se abbiamo trovato un anno (es. 2007), sposta la visualizzazione su quell'anno
+    if (lastDetectedYear) {
+      setCurrentYear(lastDetectedYear);
+    }
+
     setIsBatchProcessing(false);
     if (batchInputRef.current) batchInputRef.current.value = '';
 
-    // --- NOTIFICA ELEGANTE INVECE DI ALERT ---
     if (successCount > 0) {
       setBatchNotification({
-        msg: `Caricamento riuscito! ${successCount} buste paga elaborate con successo.`,
+        msg: `Caricamento riuscito! ${successCount} buste elaborate.\nAnno rilevato: ${lastDetectedYear}`,
         type: 'success'
       });
-
+      // Feedback sonoro o visivo opzionale qui
     } else {
       setBatchNotification({
-        msg: `Qualcosa non va. 0 buste elaborate su ${files.length}.`,
+        msg: `Nessuna busta elaborata. Errori: ${errorCount}.`,
         type: 'error'
       });
     }
 
-    // Nascondi la notifica dopo 5 secondi
-    setTimeout(() => setBatchNotification(null), 5000);
+    setTimeout(() => setBatchNotification(null), 6000);
   };
   const handleDataChange = (newData: AnnoDati[]) => {
     setMonthlyInputs(newData);
@@ -516,15 +613,15 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
     return isNaN(num) ? 0 : num;
   };
 
-  // --- FUNZIONE CERVELLO CORRETTA (Logica Anno Precedente) ---
-  const calculateAnnualLegalData = (data: AnnoDati[], profile: any, withExFest: boolean) => {
+  // --- FUNZIONE CERVELLO CORRETTA (Logica Anno Precedente + Filtro Anno Inizio) ---
+  const calculateAnnualLegalData = (data: AnnoDati[], profile: any, withExFest: boolean, startClaimYear: number) => {
     const years = Array.from(new Set(data.map(d => Number(d.year)))).sort((a, b) => a - b);
 
     const indennitaCols = getColumnsByProfile(profile).filter(c =>
       !['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'coeffPercepito', 'coeffTicket', 'note', 'arretrati'].includes(c.id)
     );
 
-    // 1. PASSO PRELIMINARE: Calcoliamo le medie giornaliere per OGNI anno disponibile
+    // 1. PASSO PRELIMINARE: Calcoliamo le medie giornaliere per OGNI anno disponibile (anche il 2007)
     const yearlyAverages: Record<number, number> = {};
 
     years.forEach(year => {
@@ -540,7 +637,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
         totGiorniLavoratiAnno += parseLocalFloat(m.daysWorked);
       });
 
-      // Calcolo media giornaliera dell'anno (Voci Variabili / Giorni Lavorati)
+      // Calcolo media giornaliera dell'anno
       if (totGiorniLavoratiAnno > 0) {
         yearlyAverages[year] = totIndennitaAnno / totGiorniLavoratiAnno;
       } else {
@@ -548,7 +645,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
       }
     });
 
-    // 2. PASSO FINALE: Calcolo Spettanze usando l'anno precedente (se esiste)
+    // 2. PASSO FINALE: Calcolo Spettanze (Escludendo importi anni precedenti allo start)
     let globalLordo = 0;
     let globalTicket = 0;
     let globalFerieEffettive = 0;
@@ -557,30 +654,31 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
     const TETTO_FERIE = withExFest ? 32 : 28;
 
     years.forEach(year => {
+      // --- MODIFICA FONDAMENTALE ---
+      // Se l'anno è precedente all'inizio della vertenza (es. 2007 < 2008), 
+      // NON sommare nulla ai totali globali. Serve solo per la media calcolata sopra.
+      if (year < startClaimYear) return;
+
       const monthsInYear = data.filter(d => Number(d.year) === year).sort((a, b) => a.monthIndex - b.monthIndex);
       let ferieCumulateAnno = 0;
 
-      // RECUPERO LA MEDIA DA USARE:
-      // Se esiste l'anno prima (es. per il 2024 cerco il 2023), uso quella.
-      // Altrimenti uso quella dell'anno corrente (fallback per il primo anno inserito).
+      // RECUPERO LA MEDIA DA USARE (Anno prec o corrente)
       const prevYear = year - 1;
       const avgToUse = yearlyAverages[prevYear] !== undefined ? yearlyAverages[prevYear] : yearlyAverages[year];
 
       monthsInYear.forEach(m => {
-        // Dati Giorni
         const ferieMese = parseLocalFloat(m.daysVacation);
         const coeffTicket = parseLocalFloat(m['coeffTicket']);
 
-        // Logica Tetto (Bucket)
+        // Logica Tetto
         const spazioRimanente = Math.max(0, TETTO_FERIE - ferieCumulateAnno);
         const giorniUtili = Math.min(ferieMese, spazioRimanente);
         ferieCumulateAnno += ferieMese;
 
-        // D. Calcolo Lordo Mensile BASATO SULLA MEDIA (Anno Prec o Corrente)
-        // Formula: Giorni di ferie utili * Media Giornaliera Variabili
+        // Calcolo Lordo Mensile
         globalLordo += (giorniUtili * avgToUse);
 
-        // E. Calcolo Ticket (Questo resta puntuale mese su mese)
+        // Calcolo Ticket
         if (includeTickets) {
           globalTicket += (giorniUtili * coeffTicket);
         }
@@ -593,18 +691,20 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
     return { globalLordo, globalTicket, globalFerieEffettive, globalFeriePagate };
   };
 
-
-  // --- PUNTO 2: DEAL MAKER STRATEGICO (CORRETTO ANTICRASH) ---
+  // --- PUNTO 2: DEAL MAKER STRATEGICO (AGGIORNATO CON FILTRO ANNI) ---
   const dealStats = useMemo(() => {
-    // 1. Dati Base (Lordo + Ticket)
-    const { globalLordo, globalTicket } = calculateAnnualLegalData(monthlyInputs, worker.profilo, includeExFest);
+    // 1. Passiamo startClaimYear alla funzione di calcolo
+    const { globalLordo, globalTicket } = calculateAnnualLegalData(monthlyInputs, worker.profilo, includeExFest, startClaimYear);
 
-    // Calcolo Percepito da detrarre (solo su gg utili)
+    // 2. Calcolo Percepito da detrarre (solo su gg utili e ANNI VALIDI)
     const TETTO = includeExFest ? 32 : 28;
     let totalPercepito = 0;
 
     const years = Array.from(new Set(monthlyInputs.map(d => Number(d.year))));
     years.forEach(year => {
+      // --- FILTRO: Se l'anno è precedente all'inizio della vertenza, lo ignoriamo ---
+      if (year < startClaimYear) return;
+
       const months = monthlyInputs.filter(d => Number(d.year) === year).sort((a, b) => a.monthIndex - b.monthIndex);
       let acc = 0;
       months.forEach(m => {
@@ -634,13 +734,13 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
     const courtRealValue = courtExpectedValue / inflationFactor;
 
     return {
-      netDifference: grossClaim, // <--- QUESTA RIGA EVITA IL CRASH (Compatibilità)
+      netDifference: grossClaim,
       grossClaim: grossClaim > 0 ? grossClaim : 0,
       netClaim: netClaim > 0 ? netClaim : 0,
       courtRealValue: courtRealValue > 0 ? courtRealValue : 0,
       displayTarget: isNetMode ? netClaim : grossClaim
     };
-  }, [monthlyInputs, worker.profilo, includeExFest, isNetMode, winProb, legalCosts, yearsDuration]);
+  }, [monthlyInputs, worker.profilo, includeExFest, isNetMode, winProb, legalCosts, yearsDuration, startClaimYear]); // <--- Aggiunto startClaimYear qui!
 
   // --- GESTIONE INVIO PEC ---
   const handleSendPec = () => {
@@ -782,25 +882,32 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
 
       const yNetto = (yLordo - yPercepito) + yTicket;
 
+      // --- LOGICA ANNO RIFERIMENTO VS CONTEGGIO ---
+      const isReferenceYear = year < startClaimYear;
+
       yearlyRows.push([
-        year,
+        isReferenceYear ? `${year} (Rif.)` : year, // Segnala visivamente che è solo riferimento
         fmt(yIndemnity),
         fmtInt(yWorkDays),
-        fmt(mediaApplicata), // Mostriamo la media usata
+        fmt(mediaApplicata),
         `${fmtInt(yFeriePagate)} / ${fmtInt(yFerieEffettive)}`,
-        fmt(yLordo),
-        fmt(yTicket),
-        fmt(yNetto)
+        // Se è anno di riferimento, non mostriamo gli importi perché non si chiedono
+        isReferenceYear ? '(Media)' : fmt(yLordo),
+        isReferenceYear ? '-' : fmt(yTicket),
+        isReferenceYear ? '-' : fmt(yNetto)
       ]);
 
-      grandTotalIndemnity += yIndemnity;
-      grandTotalLordo += yLordo;
-      grandTotalTicket += yTicket;
-      grandTotalNet += yNetto;
-      grandTotalFerieEffettive += yFerieEffettive;
-      grandTotalFeriePagate += yFeriePagate;
+      // --- MODIFICA CRUCIALE: SOMMA AI TOTALI SOLO SE ANNO >= ANNO INIZIO ---
+      // Se siamo nel 2007 (isReferenceYear = true), saltiamo la somma.
+      if (!isReferenceYear) {
+        grandTotalIndemnity += yIndemnity;
+        grandTotalLordo += yLordo;
+        grandTotalTicket += yTicket;
+        grandTotalNet += yNetto;
+        grandTotalFerieEffettive += yFerieEffettive;
+        grandTotalFeriePagate += yFeriePagate;
+      }
     });
-
     // Riga Totale Finale
     yearlyRows.push([
       'TOTALE',
@@ -1372,7 +1479,17 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
       </div>
     );
   };
-
+  // --- RENDER CONDIZIONALE DEL REPORT ---
+  if (showReport) {
+    return (
+      <TableComponent
+        worker={worker}
+        onBack={() => setShowReport(false)}
+        onEdit={() => setShowReport(false)}
+        startClaimYear={startClaimYear}
+      />
+    );
+  }
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900 relative flex flex-col overflow-hidden">
 
@@ -1390,36 +1507,84 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
           className="glass-panel max-w-[1800px] mx-auto rounded-[2rem] p-4 flex justify-between items-center gap-6"
         >
           <div className="flex items-center gap-6 shrink-0">
-            <button
-              onClick={onBack}
-              className="group relative px-5 py-2.5 rounded-xl font-bold text-white shadow-lg hover:-translate-y-0.5 active:scale-95 transition-all duration-300 border border-white/10 overflow-hidden flex items-center gap-2"
-              style={{ background: 'linear-gradient(90deg, #2563eb 0%, #06b6d4 100%)' }} // Blue -> Cyan
-            >
-              <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500 rotate-12"></div>
-              <ArrowLeft className="w-4 h-4 transition-transform duration-300 group-hover:-translate-x-1" strokeWidth={2.5} />
-              <span className="hidden xl:inline">Dashboard</span>
-            </button>
 
-            <div className="flex items-center gap-4 border-l border-slate-200 pl-6">
-              <div className="w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg text-white"
-                style={{ background: `linear-gradient(135deg, ${worker.accentColor === 'indigo' ? '#6366f1' : worker.accentColor === 'emerald' ? '#10b981' : worker.accentColor === 'orange' ? '#f97316' : '#3b82f6'}, ${worker.accentColor === 'indigo' ? '#4f46e5' : worker.accentColor === 'emerald' ? '#059669' : worker.accentColor === 'orange' ? '#ea580c' : '#2563eb'})` }}>
-                <User className="w-6 h-6" />
+            {/* COLONNA NAVIGAZIONE (Versione BIG & BOLD) */}
+            <div className="flex flex-col gap-3 w-44"> {/* w-44 allarga tutta la colonna */}
+
+              {/* 1. TASTO DASHBOARD (Grande e Leggibile) */}
+              <button
+                onClick={onBack}
+                className="group relative h-11 w-full rounded-xl font-bold text-white shadow-lg shadow-blue-900/20 hover:-translate-y-0.5 active:scale-95 transition-all duration-300 border border-white/10 overflow-hidden flex items-center justify-center gap-3 text-sm"
+                style={{ background: 'linear-gradient(90deg, #2563eb 0%, #06b6d4 100%)' }}
+              >
+                {/* Effetto luce di sfondo */}
+                <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500 rotate-12"></div>
+
+                <ArrowLeft className="w-5 h-5 transition-transform duration-300 group-hover:-translate-x-1" strokeWidth={2.5} />
+                <span className="tracking-wide">DASHBOARD</span>
+              </button>
+
+              {/* 2. NUOVO SELETTORE ANNO (Stile "Capsula Spaziale") */}
+              <div className="relative group h-11 w-full">
+                {/* Glow arancione dietro */}
+                <div className="absolute inset-0 bg-orange-500 rounded-xl blur opacity-20 group-hover:opacity-50 transition duration-500"></div>
+
+                <div className="relative flex items-center justify-between bg-slate-900 text-white rounded-xl border border-slate-700 group-hover:border-orange-500/50 transition-colors w-full h-full px-3 shadow-xl overflow-hidden">
+
+                  {/* Icona e Label */}
+                  <div className="flex items-center gap-3 z-10 pointer-events-none">
+                    <div className="p-1.5 bg-orange-500/10 rounded-lg text-orange-500 group-hover:text-orange-400 transition-colors">
+                      <CalendarClock size={18} strokeWidth={2.5} />
+                    </div>
+                    <div className="flex flex-col justify-center">
+                      <span className="text-[8px] uppercase font-bold text-slate-400 leading-none mb-0.5 tracking-widest">Start Year</span>
+                      <span className="text-lg font-black text-white leading-none tracking-tight">{startClaimYear}</span>
+                    </div>
+                  </div>
+
+                  {/* Freccia decorativa */}
+                  <ChevronDown size={16} className="text-slate-500 group-hover:text-orange-500 transition-colors z-10 pointer-events-none" />
+
+                  {/* IL VERO SELECT (Invisibile sopra, ma con opzioni stilizzate) */}
+                  <select
+                    value={startClaimYear}
+                    onChange={(e) => setStartClaimYear(Number(e.target.value))}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
+                  >
+                    {/* Opzioni stilizzate per evitare l'effetto "lenzuolo bianco" su Windows/Chrome */}
+                    {YEARS.filter(y => y >= 2008 && y <= 2025).map(y => (
+                      <option key={y} value={y} className="bg-slate-800 text-white py-2 font-bold">
+                        Inizio Calcoli: {y}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
+
+            </div>
+
+            {/* USER INFO (Separato da riga verticale - Invariato ma aumentata altezza riga) */}
+            <div className="flex items-center gap-5 border-l-2 border-slate-200/60 pl-8 h-20">
+              <div className="w-14 h-14 rounded-2xl flex items-center justify-center shadow-xl text-white shadow-indigo-200 ring-4 ring-white"
+                style={{ background: `linear-gradient(135deg, ${worker.accentColor === 'indigo' ? '#6366f1' : worker.accentColor === 'emerald' ? '#10b981' : worker.accentColor === 'orange' ? '#f97316' : '#3b82f6'}, ${worker.accentColor === 'indigo' ? '#4f46e5' : worker.accentColor === 'emerald' ? '#059669' : worker.accentColor === 'orange' ? '#ea580c' : '#2563eb'})` }}>
+                <User className="w-7 h-7" strokeWidth={2} />
+              </div>
+              {/* ... resto del blocco User Info (puoi lasciare quello di prima) ... */}
               <div className="hidden md:block">
                 <div className="flex items-center gap-2">
-                  <h1 className="text-xl font-black text-slate-800 tracking-tight leading-none">
+                  <h1 className="text-2xl font-black text-slate-800 tracking-tight leading-none">
                     {worker.cognome} {worker.nome}
                   </h1>
-                  <BadgeCheck className="w-5 h-5 text-blue-500" />
-                  <div className={`ml-2 px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-tighter border ${worker.profilo === 'ELIOR'
+                  <BadgeCheck className="w-6 h-6 text-blue-500" />
+                  <div className={`ml-2 px-2.5 py-1 rounded-md text-[11px] font-black uppercase tracking-tighter border ${worker.profilo === 'ELIOR'
                     ? 'bg-orange-50 text-orange-600 border-orange-200'
                     : 'bg-blue-50 text-blue-600 border-blue-200'
                     }`}>
                     {worker.profilo}
                   </div>
                 </div>
-                <div className="flex items-center gap-3 text-xs font-bold text-slate-400 uppercase tracking-wider mt-1">
-                  <Briefcase className="w-3 h-3" />
+                <div className="flex items-center gap-3 text-sm font-bold text-slate-400 uppercase tracking-wider mt-1.5">
+                  <Briefcase className="w-4 h-4" />
                   <span>{worker.ruolo}</span>
                 </div>
               </div>
@@ -1462,6 +1627,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
           </div>
 
           <div className="flex items-center gap-3 shrink-0">
+
             {/* TASTO PEC */}
             <button
               onClick={handleSendPec}
@@ -1486,7 +1652,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
 
             {/* TASTO VAI AL REPORT */}
             <button
-              onClick={onOpenReport}
+              onClick={() => setShowReport(true)}
               className="group relative px-6 py-2.5 rounded-xl font-bold text-white shadow-lg hover:shadow-xl hover:-translate-y-0.5 active:scale-95 transition-all duration-300 border border-white/10 overflow-hidden flex items-center gap-2"
               style={{ background: 'linear-gradient(90deg, #7c3aed 0%, #4f46e5 100%)' }} // Violet -> Indigo
             >
@@ -2104,31 +2270,36 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
           </motion.div>
         )}
       </AnimatePresence>
-      {/* NOTIFICA BATCH FLUTTUANTE (Elegant Toast) */}
+      {/* NOTIFICA FLUTTUANTE UNIVERSALE (Success / Error / Warning) */}
       <AnimatePresence>
         {batchNotification && (
           <motion.div
             initial={{ opacity: 0, y: 50, scale: 0.9 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 20, scale: 0.9 }}
-            className="fixed bottom-10 left-1/2 -translate-x-1/2 z-[100]"
+            className="fixed bottom-10 left-1/2 -translate-x-1/2 z-[150]"
           >
-            <div className={`flex items-center gap-4 px-6 py-4 rounded-2xl shadow-2xl backdrop-blur-xl border ${batchNotification.type === 'success'
-              ? 'bg-slate-900/90 border-emerald-500/30 text-white'
-              : 'bg-red-900/90 border-red-500/30 text-white'
+            <div className={`flex items-center gap-4 px-6 py-4 rounded-2xl shadow-2xl backdrop-blur-xl border ${batchNotification.type === 'success' ? 'bg-slate-900/90 border-emerald-500/30 text-white' :
+              batchNotification.type === 'warning' ? 'bg-amber-900/95 border-amber-500/50 text-white' : // Stile Giallo
+                'bg-red-900/90 border-red-500/30 text-white'
               }`}>
-              <div className={`p-2 rounded-full ${batchNotification.type === 'success' ? 'bg-emerald-500' : 'bg-red-500'
+              <div className={`p-2 rounded-full ${batchNotification.type === 'success' ? 'bg-emerald-500' :
+                batchNotification.type === 'warning' ? 'bg-amber-500 text-slate-900' :
+                  'bg-red-500'
                 }`}>
-                {batchNotification.type === 'success'
-                  ? <CheckCircle className="w-6 h-6 text-white" />
-                  : <XCircle className="w-6 h-6 text-white" />
-                }
+                {batchNotification.type === 'success' && <CheckCircle2 className="w-6 h-6" />}
+                {batchNotification.type === 'warning' && <AlertTriangle className="w-6 h-6" />}
+                {batchNotification.type === 'error' && <AlertCircle className="w-6 h-6" />}
               </div>
               <div>
-                <h4 className="font-black text-sm uppercase tracking-wider mb-0.5">
-                  {batchNotification.type === 'success' ? 'Smart Upload Completato' : 'Errore Upload'}
+                <h4 className={`font-black text-sm uppercase tracking-wider mb-0.5 ${batchNotification.type === 'warning' ? 'text-amber-400' : 'text-white'
+                  }`}>
+                  {batchNotification.type === 'success' ? 'Operazione Completata' :
+                    batchNotification.type === 'warning' ? 'Attenzione Media' : 'Errore'}
                 </h4>
-                <p className="text-sm font-medium opacity-90">{batchNotification.msg}</p>
+                <p className="text-sm font-medium opacity-90 whitespace-pre-line leading-snug">
+                  {batchNotification.msg}
+                </p>
               </div>
               <button
                 onClick={() => setBatchNotification(null)}

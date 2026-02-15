@@ -1,4 +1,4 @@
-import React, { useMemo, useEffect, useRef, useState } from 'react';
+import React, { useMemo, useState, useRef, useEffect } from 'react';
 import {
     TrendingUp,
     Users,
@@ -194,10 +194,10 @@ interface StatsDashboardProps {
 
 const StatsDashboard: React.FC<StatsDashboardProps> = ({ workers = [], onBack }) => {
 
-    // --- LOGICA DI CALCOLO UNIFICATA (COERENTE CON TICKET E EX-FEST) ---
+    // --- LOGICA DI CALCOLO UNIFICATA E CORRETTA (FILTRO ANNI + OPZIONI) ---
     const stats = useMemo(() => {
 
-        // Per ogni lavoratore, calcoliamo il "Netto Recuperabile" esatto leggendo le preferenze
+        // Per ogni lavoratore, calcoliamo il "Netto Recuperabile" esatto
         const computedWorkers = workers.map(w => {
             // 1. LEGGIAMO LE PREFERENZE DAL LOCALSTORAGE
             const storedTicketPref = localStorage.getItem(`tickets_${w.id}`);
@@ -205,6 +205,10 @@ const StatsDashboard: React.FC<StatsDashboardProps> = ({ workers = [], onBack })
 
             const storedExFestPref = localStorage.getItem(`exFest_${w.id}`);
             const includeExFest = storedExFestPref !== null ? JSON.parse(storedExFestPref) : false;
+
+            // --- FIX FONDAMENTALE: Leggiamo l'anno di Start ---
+            const storedStartYear = localStorage.getItem(`startYear_${w.id}`);
+            const startClaimYear = storedStartYear ? parseInt(storedStartYear) : 2008;
 
             const safeAnni = Array.isArray(w.anni) ? w.anni : [];
             const TETTO_FERIE = includeExFest ? 32 : 28;
@@ -237,14 +241,17 @@ const StatsDashboard: React.FC<StatsDashboardProps> = ({ workers = [], onBack })
             // B. CALCOLO TOTALE
             let totalLordo = 0;
             let totalPercepito = 0;
-            let totalTicket = 0; // Questo accumula solo se inclusi
+            let totalTicket = 0;
             let ferieCumulateCounter = 0;
 
-            // Ordine cronologico essenziale
             const sortedRows = [...safeAnni].sort((a, b) => a.year - b.year || a.monthIndex - b.monthIndex);
 
             sortedRows.forEach(row => {
                 const y = Number(row.year);
+
+                // --- FILTRO: SE L'ANNO E' PRECEDENTE ALLO START, SALTA IL CONTEGGIO ---
+                if (y < startClaimYear) return;
+
                 // Fallback Logic: Media Prec o Corrente
                 let mediaApplied = yearlyAverages[y - 1];
                 if (mediaApplied === undefined || mediaApplied === 0) {
@@ -265,7 +272,6 @@ const StatsDashboard: React.FC<StatsDashboardProps> = ({ workers = [], onBack })
                     totalLordo += (ggUtili * mediaApplied);
                     totalPercepito += (ggUtili * cPercepito);
 
-                    // APPLICAZIONE CONDIZIONALE TICKET
                     if (includeTickets) {
                         totalTicket += (ggUtili * cTicket);
                     }
@@ -317,7 +323,7 @@ const StatsDashboard: React.FC<StatsDashboardProps> = ({ workers = [], onBack })
 
         let y = 45;
         doc.setTextColor(30); doc.setFontSize(12); doc.setFont('helvetica', 'bold');
-        doc.text("1. SINTESI FINANZIARIA (Tetto 28gg applicato)", 15, y);
+        doc.text("1. SINTESI FINANZIARIA (Dati Aggregati)", 15, y);
         doc.setDrawColor(200); doc.line(15, y + 2, 100, y + 2);
 
         const printKpi = (lbl: string, val: string, x: number) => {
@@ -337,7 +343,7 @@ const StatsDashboard: React.FC<StatsDashboardProps> = ({ workers = [], onBack })
         const tableBody = stats.list.map(w => [
             `${w.cognome} ${w.nome}`,
             w.profilo,
-            'ANALISI', // Placeholder stato
+            'ANALISI',
             w.computedTotal.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })
         ]);
 

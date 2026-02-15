@@ -2,7 +2,7 @@
 import { AnnoDati } from './types';
 
 // 1. CONFIGURAZIONE ANNI (Modifica qui per andare indietro nel tempo)
-export const START_YEAR = 2007; // <--- Ora parte dal 2007
+export const START_YEAR = 2007; // <--- Parte dal 2007 (Anno Rif.)
 export const END_YEAR = 2025;   // Arriva fino al 2025
 
 // 2. GENERAZIONE DINAMICA DEGLI ANNI (Dal più recente al più vecchio)
@@ -20,7 +20,7 @@ export const MONTH_NAMES = [
 // 4. GENERAZIONE TEMPLATE DATI (Struttura vuota per ogni mese/anno)
 export const DEFAULT_YEARS_TEMPLATE: AnnoDati[] = YEARS.flatMap((year) =>
     MONTH_NAMES.map((month, index) => ({
-        id: `${year}-${index}`, // ID unico come stringa (es. "2024-0")
+        id: `${year}-${index}`, // ID unico come stringa
         year: year,
         monthIndex: index,
         month: month,
@@ -28,6 +28,9 @@ export const DEFAULT_YEARS_TEMPLATE: AnnoDati[] = YEARS.flatMap((year) =>
         daysVacation: 0,
         ticket: 0,
         arretrati: 0,
-        note: ''
+        note: '',
+        // --- AGGIUNTA CONSIGLIATA: Inizializza i campi calcolo ---
+        coeffPercepito: 0,
+        coeffTicket: 0
     }))
 );

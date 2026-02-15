@@ -4,21 +4,25 @@ import {
     INDENNITA_RFI,
     INDENNITA_ELIOR,
     INDENNITA_REKEEP,
-    COLONNA_ARRETRATI, // <--- 1. AGGIUNTO QUI
+    COLONNA_ARRETRATI,
     YEARS
 } from '../types';
 
 // --- STRATEGIA LISTA MAESTRA ---
-// Uniamo tutte le colonne di tutti i profili + la colonna ARRETRATI.
-// Il calcolatore proverà a sommare tutto ciò che trova.
 const ALL_INDEMNITY_COLUMNS = [
     ...INDENNITA_RFI,
     ...INDENNITA_ELIOR,
     ...INDENNITA_REKEEP,
-    COLONNA_ARRETRATI // <--- 2. AGGIUNTO QUI (Ora viene sommata nel totale!)
+    COLONNA_ARRETRATI
 ];
 
-export const calculateEverything = (inputs: AnnoDati[]) => {
+// MODIFICA 1: La funzione ora accetta le opzioni di calcolo
+export const calculateEverything = (
+    inputs: AnnoDati[],
+    startClaimYear: number = 2008, // Default di sicurezza
+    includeTickets: boolean = true
+) => {
+
     // --- INIZIALIZZAZIONE TOTALI ---
     const grandTotal = {
         totalGross: 0,
@@ -29,8 +33,6 @@ export const calculateEverything = (inputs: AnnoDati[]) => {
     };
 
     const yearlyData: any[] = [];
-
-    // Oggetto per la pivot (chiave: "Nome Voce", valore: { 2020: 100, 2021: 200 })
     const pivotData: any = {};
 
     // --- PROTEZIONE ANTI-CRASH ---
@@ -53,24 +55,32 @@ export const calculateEverything = (inputs: AnnoDati[]) => {
         const year = parseInt(yearStr);
         const rows = dataByYear[year];
 
+        // --- MODIFICA 2: FILTRO ANNO ---
+        // Se l'anno è precedente all'inizio della vertenza, lo ignoriamo nei conteggi
+        // (Nota: Per la Pivot potremmo volerlo vedere, ma per i totali no. Qui lo escludiamo per coerenza).
+        if (year < startClaimYear) return;
+
         let totalIndemnity = 0;
         let workDays = 0;
         let vacationDays = 0;
-        let ticketAmount = 0;
+
+        // Accumulatori economici
+        let totalLordoYear = 0;
+        let totalPercepitoYear = 0;
+        let totalTicketYear = 0;
 
         // Ciclo sui mesi dell'anno
         rows.forEach(row => {
-            // A. Somma Indennità (Usando la Lista Maestra Universale)
+
+            // A. Somma Indennità (Per la visualizzazione Pivot)
             ALL_INDEMNITY_COLUMNS.forEach(col => {
-                // Escludiamo campi tecnici
                 if (col.id !== 'month' && col.id !== 'total' && col.id !== 'daysWorked' && col.id !== 'daysVacation' && col.id !== 'ticket') {
                     const val = parseFloatSafe(row[col.id]);
 
                     if (val > 0) {
                         totalIndemnity += val;
 
-                        // B. Popolamento Dati Pivot
-                        // Usiamo "Label (Codice)" come chiave univoca
+                        // Popolamento Dati Pivot (Solo se > 0)
                         const pivotKey = col.subLabel ? `${col.label} ${col.subLabel}` : col.label;
                         if (!pivotData[pivotKey]) pivotData[pivotKey] = {};
                         if (!pivotData[pivotKey][year]) pivotData[pivotKey][year] = 0;
@@ -79,24 +89,37 @@ export const calculateEverything = (inputs: AnnoDati[]) => {
                 }
             });
 
-            // C. Somma Variabili Input
-            workDays += parseFloatSafe(row['daysWorked']);
-            vacationDays += parseFloatSafe(row['daysVacation']);
-            ticketAmount += parseFloatSafe(row['ticket']);
+            // B. Recupero Dati Giornalieri
+            const daysW = parseFloatSafe(row.daysWorked);
+            const daysV = parseFloatSafe(row.daysVacation);
+
+            workDays += daysW;
+            vacationDays += daysV;
+
+            // C. Calcolo Ticket & Percepito (Puntuale mese su mese)
+            // Attenzione: Qui stiamo facendo una stima approssimativa per la Pivot.
+            // Il calcolo preciso "legale" (con la media anno precedente) è fatto in WorkerDetailPage.
+            // Qui facciamo una somma statistica.
+
+            const coeffTicket = parseFloatSafe(row.coeffTicket);
+            const coeffPercepito = parseFloatSafe(row.coeffPercepito);
+
+            // Calcolo Ticket (rispetta il toggle)
+            if (includeTickets) {
+                totalTicketYear += (daysV * coeffTicket);
+            }
+
+            totalPercepitoYear += (daysV * coeffPercepito);
         });
 
-        // 3. Calcoli Matematici (La Formula Blindata)
-        const divisore = workDays;
-        const dailyIncidence = divisore > 0 ? totalIndemnity / divisore : 0;
-
-        // Lordo = Media * Ferie Godute
+        // 3. Calcolo Totali Anno (Stimati)
+        const dailyIncidence = workDays > 0 ? totalIndemnity / workDays : 0;
         const grossAmount = dailyIncidence * vacationDays;
 
-        // Netto = Lordo - Ticket
-        const netAmount = grossAmount - ticketAmount;
+        // FORMULA CORRETTA: (Lordo - Percepito) + Ticket
+        const netAmount = (grossAmount - totalPercepitoYear) + totalTicketYear;
 
-        // Salviamo solo se c'è attività nell'anno
-        if (workDays > 0 || vacationDays > 0 || ticketAmount > 0 || totalIndemnity > 0) {
+        if (workDays > 0 || vacationDays > 0 || totalIndemnity > 0) {
             yearlyData.push({
                 year,
                 totalIndemnity,
@@ -104,17 +127,15 @@ export const calculateEverything = (inputs: AnnoDati[]) => {
                 dailyIncidence,
                 vacationDays,
                 grossAmount,
-                ticketAmount,
+                ticketAmount: totalTicketYear,
                 netAmount
             });
 
             // Aggiorna Totali Generali
             grandTotal.totalGross += grossAmount;
-            grandTotal.totalTicket += ticketAmount;
+            grandTotal.totalTicket += totalTicketYear;
             grandTotal.totalVacationDays += vacationDays;
             grandTotal.totalIndemnitySum += totalIndemnity;
-
-            // Nel totale netto sommiamo il risultato algebrico
             grandTotal.totalNet += netAmount;
         }
     });

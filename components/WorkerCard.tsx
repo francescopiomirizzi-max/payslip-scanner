@@ -125,6 +125,11 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
     const saved = localStorage.getItem(`tickets_${worker.id}`);
     return saved !== null ? JSON.parse(saved) : true;
   });
+  // --- STATO ANNO INIZIO (LETTURA DALLA MEMORIA) ---
+  const [startClaimYear] = useState(() => {
+    const saved = localStorage.getItem(`startYear_${worker.id}`);
+    return saved ? parseInt(saved) : 2008;
+  });
 
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!divRef.current) return;
@@ -154,22 +159,51 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
   const statusConfig = getStatusConfig(worker.status);
   const StatusIcon = statusConfig.icon;
 
+  // ✅ CODICE CORRETTO
   const stats = useMemo(() => {
-    if (!worker.anni || worker.anni.length === 0) return { percent: 0, label: 'Nuova', range: 'N.D.', preview: [] };
-    const validMonths = worker.anni.filter(row => parseFloatSafe(row.daysWorked) > 0);
-    const validCount = validMonths.length;
-    const preview = [...validMonths].sort((a, b) => b.year - a.year).slice(0, 3);
-    const years = validMonths.map(m => m.year);
-    const minYear = Math.min(...years);
-    const maxYear = Math.max(...years);
-    const totalPossibleMonths = (maxYear - minYear + 1) * 12;
-    let percentage = Math.min(Math.round((validCount / totalPossibleMonths) * 100), 100);
-    return { percent: percentage, label: percentage === 100 ? 'Completa' : 'In Corso', range: minYear === maxYear ? `${minYear}` : `${minYear}-${maxYear}`, preview };
-  }, [worker.anni]);
+    // Se non ci sono dati, ritorna stato iniziale
+    if (!worker.anni || worker.anni.length === 0) {
+      return { percent: 0, label: 'Nuova', range: 'N.D.', preview: [] };
+    }
 
-  // --- CALCOLO FINANZIARIO CORRETTO (CON LOGICA TICKET) ---
+    // 1. Identifica le righe con dati validi (giorni lavorati > 0)
+    const validRows = worker.anni.filter(row => parseFloatSafe(row.daysWorked) > 0);
+
+    // 2. Trova l'ultimo anno inserito (Fine del periodo attuale)
+    const yearsWithData = validRows.map(m => m.year);
+    const maxYear = yearsWithData.length > 0 ? Math.max(...yearsWithData) : new Date().getFullYear();
+
+    // Se l'ultimo anno inserito è precedente all'anno di start
+    if (maxYear < startClaimYear) {
+      return { percent: 0, label: 'Da Iniziare', range: `${startClaimYear}-...`, preview: [] };
+    }
+
+    // 3. Calcolo Totale Mesi Teorici
+    const totalYearsSpan = maxYear - startClaimYear + 1;
+    const totalMonthsPossible = totalYearsSpan * 12;
+
+    // 4. Conta i mesi effettivamente caricati SOLO nel range
+    const validMonthsCount = validRows.filter(row => row.year >= startClaimYear && row.year <= maxYear).length;
+
+    // 5. Calcolo Percentuale
+    let percentage = 0;
+    if (totalMonthsPossible > 0) {
+      percentage = Math.round((validMonthsCount / totalMonthsPossible) * 100);
+    }
+
+    const preview = [...validRows].sort((a, b) => b.year - a.year || b.monthIndex - a.monthIndex).slice(0, 3);
+
+    return {
+      percent: Math.min(percentage, 100),
+      label: percentage >= 100 ? 'Completa' : percentage === 0 ? 'In Attesa' : 'In Corso',
+      range: `${startClaimYear}-${maxYear}`,
+      preview
+    };
+  }, [worker.anni, startClaimYear]);
+
+  // --- CALCOLO FINANZIARIO CORRETTO (CON LOGICA TICKET E ANNO START) ---
   const financialStats = useMemo(() => {
-    const TETTO_FERIE = 28; // Standard per la card
+    const TETTO_FERIE = 28;
     const indennitaCols = getColumnsByProfile(worker.profilo).filter(c => !['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'coeffPercepito', 'coeffTicket', 'note', 'arretrati'].includes(c.id));
 
     // 1. Pre-Calcolo Medie Annuali
@@ -205,6 +239,10 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
 
     sortedData.forEach(row => {
       const currentYear = Number(row.year);
+
+      // --- FILTRO FONDAMENTALE: Se l'anno è precedente all'inizio, saltalo nei totali ---
+      if (currentYear < startClaimYear) return;
+
       const prevYear = currentYear - 1;
 
       // LOGICA FALLBACK: Media Prec -> Corrente
@@ -225,7 +263,7 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
       if (ggUtili > 0) {
         totalLordo += (ggUtili * mediaApplied);
 
-        // APPLICA IL FILTRO TICKET ANCHE QUI SULLA CARD
+        // APPLICA IL FILTRO TICKET
         if (includeTickets) {
           totalTicket += (ggUtili * cTicket);
         }
@@ -241,7 +279,8 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
       lordo: totalLordo,
       ferie: totalFerieUtili
     };
-  }, [worker, includeTickets]);
+  }, [worker, includeTickets, startClaimYear]); // <--- Aggiunto startClaimYear alle dipendenze
+
 
   // --- TEMA E STILI ---
   const theme = useMemo(() => {
