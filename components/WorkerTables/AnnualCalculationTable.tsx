@@ -28,7 +28,7 @@ interface AnnualCalculationTableProps {
   profilo: ProfiloAzienda;
   onDataChange: (newData: AnnoDati[]) => void;
   includeTickets?: boolean;
-  startClaimYear: number; // <--- NUOVA PROP FONDAMENTALE
+  startClaimYear: number;
 }
 
 const MONTH_COLORS = [
@@ -38,12 +38,30 @@ const MONTH_COLORS = [
   'bg-orange-600 shadow-orange-200', 'bg-slate-500 shadow-slate-200', 'bg-indigo-500 shadow-indigo-200'
 ];
 
+// --- 1. PARSER INTELLIGENTE (LO STESSO DI MonthlyDataGrid) ---
+// Questo garantisce che i numeri siano letti allo stesso modo ovunque
+const parseLocalFloat = (val: any) => {
+  if (!val) return 0;
+  if (typeof val === 'number') return val;
+
+  let str = val.toString();
+
+  // Logica Ibrida: Se c'è la virgola, è input utente (ITA). Se no, è AI (USA).
+  if (str.includes(',')) {
+    str = str.replace(/\./g, ''); // Via i punti migliaia
+    str = str.replace(',', '.');  // Virgola diventa punto
+  }
+
+  const num = parseFloat(str);
+  return isNaN(num) ? 0 : num;
+};
+
 const AnnualCalculationTable: React.FC<AnnualCalculationTableProps> = ({
   data = [],
   profilo,
   onDataChange,
   includeTickets = true,
-  startClaimYear // <--- Destrutturiamo la prop
+  startClaimYear
 }) => {
   const [expandedYears, setExpandedYears] = useState<Set<number>>(new Set());
   const [isCopied, setIsCopied] = useState(false);
@@ -61,31 +79,30 @@ const AnnualCalculationTable: React.FC<AnnualCalculationTableProps> = ({
   };
 
   const handleCoeffChange = (year: number, monthIndex: number, field: 'coeffPercepito' | 'coeffTicket', value: string) => {
-    const cleanValue = value.replace(/[^0-9.,]/g, '');
+    // Non puliamo l'input qui, lasciamo che l'utente scriva virgole
     const existingRowIndex = data.findIndex(d => d.year === year && d.monthIndex === monthIndex);
     let newData = [...data];
 
     if (existingRowIndex >= 0) {
-      newData[existingRowIndex] = { ...newData[existingRowIndex], [field]: cleanValue };
+      newData[existingRowIndex] = { ...newData[existingRowIndex], [field]: value };
     } else {
       newData.push({
-        year, monthIndex, daysWorked: 0, daysVacation: 0, ticket: 0, [field]: cleanValue
+        year, monthIndex, daysWorked: 0, daysVacation: 0, ticket: 0, [field]: value
       } as AnnoDati);
     }
     onDataChange(newData);
   };
 
   const handleAnnualCoeffChange = (year: number, field: 'coeffPercepito' | 'coeffTicket', value: string) => {
-    const cleanValue = value.replace(/[^0-9.,]/g, '');
     let newData = [...data];
 
     for (let i = 0; i < 12; i++) {
       const existingRowIndex = newData.findIndex(d => d.year === year && d.monthIndex === i);
       if (existingRowIndex >= 0) {
-        newData[existingRowIndex] = { ...newData[existingRowIndex], [field]: cleanValue };
+        newData[existingRowIndex] = { ...newData[existingRowIndex], [field]: value };
       } else {
         newData.push({
-          year, monthIndex: i, daysWorked: 0, daysVacation: 0, ticket: 0, [field]: cleanValue
+          year, monthIndex: i, daysWorked: 0, daysVacation: 0, ticket: 0, [field]: value
         } as AnnoDati);
       }
     }
@@ -103,20 +120,15 @@ const AnnualCalculationTable: React.FC<AnnualCalculationTableProps> = ({
     return firstVal || "";
   };
 
-  const parseInputToNumber = (val: string | number | undefined): number => {
-    if (!val) return 0;
-    if (typeof val === 'number') return val;
-    const num = parseFloat(val.toString().replace(',', '.'));
-    return isNaN(num) ? 0 : num;
-  };
-
+  // Funzione interna per sommare le indennità del mese usando il parser corretto
   const calculateMonthIndemnity = (monthRow: any) => {
     if (!monthRow) return 0;
     let sum = 0;
     const specificColumns = getColumnsByProfile(profilo);
     specificColumns.forEach(col => {
+      // Escludiamo i campi tecnici e calcoliamo solo le voci economiche variabili
       if (!['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'coeffPercepito', 'coeffTicket', 'note', 'arretrati'].includes(col.id)) {
-        sum += parseFloatSafe(monthRow[col.id]);
+        sum += parseLocalFloat(monthRow[col.id]); // <--- USO PARSER UNIFICATO
       }
     });
     return sum;
@@ -134,7 +146,7 @@ const AnnualCalculationTable: React.FC<AnnualCalculationTableProps> = ({
       const y = Number(row.year);
       if (!yearlyRawStats[y]) yearlyRawStats[y] = { totVar: 0, ggLav: 0 };
 
-      const gg = parseInputToNumber(row.daysWorked);
+      const gg = parseLocalFloat(row.daysWorked); // <--- USO PARSER UNIFICATO
       if (gg > 0) {
         const indennitaMese = calculateMonthIndemnity(row);
         yearlyRawStats[y].totVar += indennitaMese;
@@ -151,15 +163,20 @@ const AnnualCalculationTable: React.FC<AnnualCalculationTableProps> = ({
 
     // 2. COSTRUZIONE RIGHE ANNUALI
     const availableYears = Array.from(new Set(safeData.map(d => d.year))).sort((a, b) => a - b);
-    let ferieCumulateCounter = 0;
+
+    // FIX FONDAMENTALE: ferieCumulateCounter deve essere DENTRO il .map ma FUORI dal ciclo mesi
+    // In questo modo si resetta ogni anno (nuovo plafond ferie) ma si accumula mese per mese.
 
     return availableYears.map(year => {
+      // RESET CONTATORE FERIE PER IL NUOVO ANNO
+      let ferieCumulateCounter = 0;
+
       const months = safeData.filter(d => d.year === year).sort((a, b) => a.monthIndex - b.monthIndex);
 
       // FLAG ANNO RIFERIMENTO
       const isReferenceYear = year < startClaimYear;
 
-      // Recupero media da applicare
+      // Recupero media da applicare (Anno prec o corrente)
       let avgApplied = yearlyAverages[year - 1];
       let isFallback = false;
 
@@ -180,20 +197,21 @@ const AnnualCalculationTable: React.FC<AnnualCalculationTableProps> = ({
 
       const monthlyDetails = months.map(row => {
         const indennitaMensile = calculateMonthIndemnity(row);
-        const giorniLav = parseInputToNumber(row.daysWorked);
-        const giorniFerieReali = parseInputToNumber(row.daysVacation);
+        const giorniLav = parseLocalFloat(row.daysWorked);
+        const giorniFerieReali = parseLocalFloat(row.daysVacation);
 
         const prevTotal = ferieCumulateCounter;
         ferieCumulateCounter += giorniFerieReali;
 
+        // Calcolo giorni utili (fino al tetto)
         let giorniUtili = 0;
         const spazioRimanente = Math.max(0, TETTO_FERIE - prevTotal);
         giorniUtili = Math.min(giorniFerieReali, spazioRimanente);
 
         const rawPercepito = row['coeffPercepito'] || "";
         const rawTicket = row['coeffTicket'] || "";
-        const valPercepito = parseInputToNumber(rawPercepito);
-        const valTicket = parseInputToNumber(rawTicket);
+        const valPercepito = parseLocalFloat(rawPercepito); // <--- USO PARSER UNIFICATO
+        const valTicket = parseLocalFloat(rawTicket);       // <--- USO PARSER UNIFICATO
 
         // CALCOLO ECONOMICO
         let indennitaSpettante = 0;
@@ -230,7 +248,7 @@ const AnnualCalculationTable: React.FC<AnnualCalculationTableProps> = ({
 
       return {
         year,
-        isReferenceYear, // FLAG IMPORTANTE
+        isReferenceYear,
         sumIndennitaTotali,
         sumGiorniLav,
         sumGiorniFerieReali,
@@ -244,14 +262,14 @@ const AnnualCalculationTable: React.FC<AnnualCalculationTableProps> = ({
         isFallback
       };
     });
-  }, [data, profilo, includeExFest, includeTickets, startClaimYear]); // Aggiunto startClaimYear alle dipendenze
+  }, [data, profilo, includeExFest, includeTickets, startClaimYear]);
 
-  // Totale Generale + Interessi (MODIFICATO PER ESCLUDERE ANNI RIFERIMENTO)
+  // --- CORREZIONE: ESCLUDERE ANNI RIFERIMENTO DAL TOTALE ---
   const summary = useMemo(() => {
     const baseSummary = annualRows.reduce((acc, row) => {
 
-      // SE E' UN ANNO DI RIFERIMENTO (es. 2007 per causa dal 2008), NON SOMMARE
-      if (row.isReferenceYear) return acc;
+      // 🔥 AGGIUNGI QUESTA RIGA: Se l'anno è prima dell'inizio causa, SALTALO
+      if (row.year < startClaimYear) return acc;
 
       return {
         totalGrossIndemnity: acc.totalGrossIndemnity + row.sumIndennitaSpettante,
@@ -266,12 +284,12 @@ const AnnualCalculationTable: React.FC<AnnualCalculationTableProps> = ({
       totalNetDue: 0
     });
 
-    const rate = parseFloat(interestRate.replace(',', '.')) || 0;
+    const rate = parseLocalFloat(interestRate);
     const interestAmount = baseSummary.totalNetDue * (rate / 100);
     const grandTotal = baseSummary.totalNetDue + interestAmount;
 
     return { ...baseSummary, interestAmount, grandTotal };
-  }, [annualRows, interestRate]);
+  }, [annualRows, interestRate, startClaimYear]); // <--- Assicurati che startClaimYear sia qui
 
   const handleCopyTotal = () => {
     navigator.clipboard.writeText(summary.grandTotal.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));

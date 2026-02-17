@@ -169,8 +169,20 @@ interface MonthlyDataGridProps {
 const parseLocalFloat = (val: any) => {
   if (!val) return 0;
   if (typeof val === 'number') return val;
-  const clean = val.toString().replace(/\./g, '').replace(',', '.');
-  return parseFloat(clean) || 0;
+
+  let str = val.toString();
+
+  // LOGICA INTELLIGENTE:
+  // 1. Se la stringa contiene una virgola (es. "345,16" o "1.000,50"),
+  //    allora è formato ITALIANO (Utente).
+  if (str.includes(',')) {
+    str = str.replace(/\./g, ''); // Rimuovi i punti delle migliaia
+    str = str.replace(',', '.');  // Trasforma la virgola in punto
+  }
+  // 2. Altrimenti, se NON c'è virgola (es. "345.16"), 
+  //    assumiamo sia formato AI/INGLESE. Non tocchiamo nulla.
+
+  return parseFloat(str) || 0;
 };
 
 // Helper per ottenere giorni nel mese

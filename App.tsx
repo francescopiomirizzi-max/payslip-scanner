@@ -576,36 +576,136 @@ const App: React.FC = () => {
     };
 
     const getEditingWorkerData = () => editingWorkerId ? workers.find(w => w.id === editingWorkerId) : null;
-    // --- 1. CALCOLO STATISTICHE DASHBOARD (CORRETTO CON FILTRO ANNO) ---
+    // --- HELPER: PARSER ROBUSTO (AGGIUNGI DENTRO App, PRIMA DEI USEMEMO) ---
+    const parseLocalFloat = (val: any) => {
+        if (!val) return 0;
+        if (typeof val === 'number') return val;
+        let str = val.toString();
+        if (str.includes(',')) {
+            str = str.replace(/\./g, '').replace(',', '.');
+        }
+        const num = parseFloat(str);
+        return isNaN(num) ? 0 : num;
+    };
+    // --- 1. CALCOLO STATISTICHE DASHBOARD (FIX: TICKET SOLO SE ATTIVI NEL TOTALE) ---
     const dashboardStats = useMemo(() => {
         return workers.reduce((acc, worker) => {
-            // A. LEGGIAMO LA MEMORIA
-            const storedTicketPref = localStorage.getItem(`tickets_${worker.id}`);
-            const includeTickets = storedTicketPref !== null ? JSON.parse(storedTicketPref) : true;
-
-            const storedExFestPref = localStorage.getItem(`exFest_${worker.id}`);
-            const includeExFest = storedExFestPref !== null ? JSON.parse(storedExFestPref) : false;
-
-            // --- NUOVO: LEGGIAMO L'ANNO DI INIZIO ---
-            const storedStartYear = localStorage.getItem(`startYear_${worker.id}`);
-            const startClaimYear = storedStartYear ? parseInt(storedStartYear) : 2008;
+            // A. LEGGIAMO LE IMPOSTAZIONI
+            const storedTicket = localStorage.getItem(`tickets_${worker.id}`);
+            const includeTickets = storedTicket !== null ? JSON.parse(storedTicket) : true;
+            const storedExFest = localStorage.getItem(`exFest_${worker.id}`);
+            const includeExFest = storedExFest !== null ? JSON.parse(storedExFest) : false;
+            const storedStart = localStorage.getItem(`startYear_${worker.id}`);
+            const startClaimYear = storedStart ? parseInt(storedStart) : 2008;
 
             const TETTO_FERIE = includeExFest ? 32 : 28;
+            const safeAnni = (Array.isArray(worker.anni) ? worker.anni : []) as any[];
 
-            const safeAnni = Array.isArray(worker.anni) ? worker.anni : [];
-            const indennitaCols = getColumnsByProfile(worker.profilo || 'RFI').filter(c =>
+            const indCols = getColumnsByProfile(worker.profilo || 'RFI').filter(c =>
+                !['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'coeffPercepito', 'coeffTicket', 'note', 'arretrati'].includes(c.id)
+            );
+
+            // B. CALCOLO MEDIE
+            const yearlyRaw: Record<number, { totVar: number; ggLav: number }> = {};
+            safeAnni.forEach((row: any) => {
+                const y = Number(row.year);
+                if (!yearlyRaw[y]) yearlyRaw[y] = { totVar: 0, ggLav: 0 };
+                const gg = parseLocalFloat(row.daysWorked);
+                if (gg > 0) {
+                    let sum = 0;
+                    indCols.forEach(c => sum += parseLocalFloat(row[c.id]));
+                    yearlyRaw[y].totVar += sum;
+                    yearlyRaw[y].ggLav += gg;
+                }
+            });
+
+            const yearlyAverages: Record<number, number> = {};
+            Object.keys(yearlyRaw).forEach(k => {
+                const y = Number(k);
+                yearlyAverages[y] = yearlyRaw[y].ggLav > 0 ? yearlyRaw[y].totVar / yearlyRaw[y].ggLav : 0;
+            });
+
+            // C. CALCOLO FINALE
+            let wNetto = 0;
+            let wTicket = 0;
+
+            const uniqueYears = Array.from(new Set(safeAnni.map((r: any) => Number(r.year)))).sort((a, b) => a - b);
+
+            uniqueYears.forEach((yearVal) => {
+                const year = Number(yearVal);
+                if (year < startClaimYear) return;
+
+                let ferieCumulateAnno = 0;
+                let media = yearlyAverages[year - 1];
+                if (media === undefined || media === 0) media = yearlyAverages[year] || 0;
+
+                const monthsInYear = safeAnni
+                    .filter((r: any) => Number(r.year) === year)
+                    .sort((a: any, b: any) => a.monthIndex - b.monthIndex);
+
+                monthsInYear.forEach((row: any) => {
+                    const vacDays = parseLocalFloat(row.daysVacation);
+                    const cTicket = parseLocalFloat(row.coeffTicket);
+                    const cPercepito = parseLocalFloat(row.coeffPercepito);
+
+                    const spazio = Math.max(0, TETTO_FERIE - ferieCumulateAnno);
+                    const ggUtili = Math.min(vacDays, spazio);
+                    ferieCumulateAnno += vacDays;
+
+                    if (ggUtili > 0) {
+                        const lordo = ggUtili * media;
+                        const percepito = ggUtili * cPercepito;
+                        const ticketVal = ggUtili * cTicket;
+
+                        // --- MODIFICA FONDAMENTALE QUI ---
+                        // Sommiamo al totale della card SOLO se l'interruttore è ACCESO
+                        if (includeTickets) {
+                            wTicket += ticketVal;
+                            wNetto += (lordo - percepito) + ticketVal;
+                        } else {
+                            wNetto += (lordo - percepito);
+                            // wTicket rimane 0 per questo lavoratore in questa statistica
+                        }
+                    }
+                });
+            });
+
+            return {
+                totalNet: acc.totalNet + wNetto,
+                totalTicket: acc.totalTicket + wTicket
+            };
+        }, { totalNet: 0, totalTicket: 0 });
+    }, [workers, refreshStats]);
+
+    // --- 2. LISTA DETTAGLIO MODALE (FIX: LOGICA ANNUALE CORRETTA) ---
+    const statsList = useMemo(() => {
+        if (!activeStatsModal) return [];
+
+        return workers.map(worker => {
+            // A. LEGGIAMO LE IMPOSTAZIONI
+            const storedTicket = localStorage.getItem(`tickets_${worker.id}`);
+            const includeTickets = storedTicket !== null ? JSON.parse(storedTicket) : true;
+            const storedExFest = localStorage.getItem(`exFest_${worker.id}`);
+            const includeExFest = storedExFest !== null ? JSON.parse(storedExFest) : false;
+            const storedStart = localStorage.getItem(`startYear_${worker.id}`);
+            const startClaimYear = storedStart ? parseInt(storedStart) : 2008;
+
+            const TETTO_FERIE = includeExFest ? 32 : 28;
+            const safeAnni = (Array.isArray(worker.anni) ? worker.anni : []) as any[];
+
+            const indCols = getColumnsByProfile(worker.profilo || 'RFI').filter(c =>
                 !['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'coeffPercepito', 'coeffTicket', 'note', 'arretrati'].includes(c.id)
             );
 
             // B. PRE-CALCOLO MEDIE
             const yearlyRaw: Record<number, { totVar: number; ggLav: number }> = {};
-            safeAnni.forEach(row => {
+            safeAnni.forEach((row: any) => {
                 const y = Number(row.year);
                 if (!yearlyRaw[y]) yearlyRaw[y] = { totVar: 0, ggLav: 0 };
-                const gg = parseFloatSafe(row.daysWorked);
+                const gg = parseLocalFloat(row.daysWorked);
                 if (gg > 0) {
                     let sum = 0;
-                    indennitaCols.forEach(c => sum += parseFloatSafe(row[c.id]));
+                    indCols.forEach(c => sum += parseLocalFloat(row[c.id]));
                     yearlyRaw[y].totVar += sum;
                     yearlyRaw[y].ggLav += gg;
                 }
@@ -617,140 +717,62 @@ const App: React.FC = () => {
                 yearlyAverages[y] = yearlyRaw[y].ggLav > 0 ? yearlyRaw[y].totVar / yearlyRaw[y].ggLav : 0;
             });
 
-            // C. CALCOLO ECONOMICO
+            // C. CALCOLO IMPORTI (CICLO ANNUALE)
             let wNetto = 0;
-            let wTicketMaturato = 0;
-            let ferieCounter = 0;
+            let wTicketLiq = 0;      // Quello che prende davvero (0 se spento)
+            let wTicketPotenziale = 0; // Quello che avrebbe preso (240€ anche se spento)
 
-            const sortedRows = [...safeAnni].sort((a, b) => a.year - b.year || a.monthIndex - b.monthIndex);
+            const uniqueYears = Array.from(new Set(safeAnni.map((r: any) => Number(r.year)))).sort((a, b) => a - b);
 
-            sortedRows.forEach(row => {
-                const y = Number(row.year);
+            uniqueYears.forEach((yearVal) => {
+                const year = Number(yearVal);
+                if (year < startClaimYear) return; // Filtro Anno
 
-                // --- FILTRO FONDAMENTALE: Salta anni precedenti allo start ---
-                if (y < startClaimYear) return;
+                let ferieCumulateAnno = 0; // RESET FONDAMENTALE DEL TETTO
 
-                let media = yearlyAverages[y - 1];
-                if (media === undefined || media === 0) media = yearlyAverages[y] || 0;
+                let media = yearlyAverages[year - 1];
+                if (media === undefined || media === 0) media = yearlyAverages[year] || 0;
 
-                const vacDays = parseFloatSafe(row.daysVacation);
-                const cTicket = parseFloatSafe(row.coeffTicket);
-                const cPercepito = parseFloatSafe(row.coeffPercepito);
+                const monthsInYear = safeAnni
+                    .filter((r: any) => Number(r.year) === year)
+                    .sort((a: any, b: any) => a.monthIndex - b.monthIndex);
 
-                const prevTotal = ferieCounter;
-                ferieCounter += vacDays;
+                monthsInYear.forEach((row: any) => {
+                    const vacDays = parseLocalFloat(row.daysVacation);
+                    const cTicket = parseLocalFloat(row.coeffTicket);
+                    const cPercepito = parseLocalFloat(row.coeffPercepito);
 
-                let ggUtili = 0;
-                const spazio = Math.max(0, TETTO_FERIE - prevTotal);
-                ggUtili = Math.min(vacDays, spazio);
+                    const spazio = Math.max(0, TETTO_FERIE - ferieCumulateAnno);
+                    const ggUtili = Math.min(vacDays, spazio);
+                    ferieCumulateAnno += vacDays;
 
-                if (ggUtili > 0) {
-                    const lordo = ggUtili * media;
-                    const percepito = ggUtili * cPercepito;
-                    const ticketVal = ggUtili * cTicket;
+                    if (ggUtili > 0) {
+                        const lordo = ggUtili * media;
+                        const percepito = ggUtili * cPercepito;
+                        const ticketVal = ggUtili * cTicket;
 
-                    if (includeTickets) {
-                        wTicketMaturato += ticketVal;
-                        wNetto += (lordo - percepito) + ticketVal;
-                    } else {
-                        wNetto += (lordo - percepito);
+                        // Accumula SEMPRE il potenziale (per mostrarlo barrato)
+                        wTicketPotenziale += ticketVal;
+
+                        if (includeTickets) {
+                            wTicketLiq += ticketVal;
+                            wNetto += (lordo - percepito) + ticketVal;
+                        } else {
+                            wNetto += (lordo - percepito);
+                        }
                     }
-                }
+                });
             });
 
-            return {
-                totalNet: acc.totalNet + (wNetto > 0 ? wNetto : 0),
-                totalTicket: acc.totalTicket + wTicketMaturato
-            };
-        }, { totalNet: 0, totalTicket: 0 });
-    }, [workers, refreshStats]);
-
-    // --- 2. LISTA DETTAGLIO MODALE (CON LOGICA POTENZIALE) ---
-    const statsList = useMemo(() => {
-        if (!activeStatsModal) return [];
-
-        return workers.map(worker => {
-            const storedTicketPref = localStorage.getItem(`tickets_${worker.id}`);
-            const includeTickets = storedTicketPref !== null ? JSON.parse(storedTicketPref) : true;
-
-            const storedExFestPref = localStorage.getItem(`exFest_${worker.id}`);
-            const includeExFest = storedExFestPref !== null ? JSON.parse(storedExFestPref) : false;
-
-            const TETTO_FERIE = includeExFest ? 32 : 28;
-
-            const safeAnni = Array.isArray(worker.anni) ? worker.anni : [];
-            const cols = getColumnsByProfile(worker.profilo || 'RFI').filter(c =>
-                !['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'coeffPercepito', 'coeffTicket', 'note', 'arretrati'].includes(c.id)
-            );
-
-            // Calcolo Rapido per Lista
-            const yearlyRaw: Record<number, { totVar: number; ggLav: number }> = {};
-            safeAnni.forEach(row => {
-                const y = Number(row.year);
-                if (!yearlyRaw[y]) yearlyRaw[y] = { totVar: 0, ggLav: 0 };
-                const gg = parseFloatSafe(row.daysWorked);
-                if (gg > 0) {
-                    let sum = 0;
-                    cols.forEach(c => sum += parseFloatSafe(row[c.id]));
-                    yearlyRaw[y].totVar += sum;
-                    yearlyRaw[y].ggLav += gg;
-                }
-            });
-
-            const yearlyAverages: Record<number, number> = {};
-            Object.keys(yearlyRaw).forEach(k => {
-                const y = Number(k);
-                yearlyAverages[y] = yearlyRaw[y].ggLav > 0 ? yearlyRaw[y].totVar / yearlyRaw[y].ggLav : 0;
-            });
-
-            let wNetto = 0;
-            let wTicketMaturato = 0; // Questo è il POTENZIALE
-            let wTicketLiquidabile = 0; // Questo è l'EFFETTIVO
-            let ferieCounter = 0;
-
-            const sortedRows = [...safeAnni].sort((a, b) => a.year - b.year || a.monthIndex - b.monthIndex);
-
-            sortedRows.forEach(row => {
-                const y = Number(row.year);
-                let media = yearlyAverages[y - 1];
-                if (!media) media = yearlyAverages[y] || 0;
-
-                const vac = parseFloatSafe(row.daysVacation);
-                const spazio = Math.max(0, TETTO_FERIE - ferieCounter);
-                const activeVac = Math.min(vac, spazio);
-                ferieCounter += vac;
-
-                if (activeVac > 0) {
-                    const lordo = activeVac * media;
-                    const perc = activeVac * parseFloatSafe(row.coeffPercepito);
-                    const tick = activeVac * parseFloatSafe(row.coeffTicket);
-
-                    // Calcoliamo sempre il potenziale
-                    wTicketMaturato += tick;
-
-                    // Calcoliamo l'effettivo solo se incluso
-                    if (includeTickets) {
-                        wTicketLiquidabile += tick;
-                        wNetto += (lordo - perc) + tick;
-                    } else {
-                        wNetto += (lordo - perc);
-                    }
-                }
-            });
-
-            // DECIDIAMO COSA MOSTRARE
-            // amount: è quello che viene colorato in nero/grassetto (valore effettivo)
-            // potential: è quello che mostriamo come "avrebbe preso"
-
-            let amount = 0;
-            let potential = 0;
+            // Logica di visualizzazione
+            let amount = 0;     // Cifra in grassetto
+            let potential = 0;  // Cifra barrata (se diversa)
 
             if (activeStatsModal === 'net') {
                 amount = wNetto;
             } else {
-                // Se siamo nel modale TICKET
-                amount = wTicketLiquidabile; // Sarà 0 se esclusi
-                potential = wTicketMaturato; // Sarà > 0 anche se esclusi
+                amount = wTicketLiq;
+                potential = wTicketPotenziale;
             }
 
             return {
@@ -759,14 +781,14 @@ const App: React.FC = () => {
                 role: worker.ruolo,
                 profilo: worker.profilo,
                 amount: amount,
-                potential: potential, // Valore ipotetico da mostrare
+                potential: potential,
                 color: worker.accentColor || 'blue',
                 isTicketExcluded: !includeTickets
             };
         })
-            // FILTRO: Mostra se ha un importo reale OPPURE se ha un potenziale nascosto (nel caso ticket)
+            // Mostra il lavoratore se ha un importo reale OPPURE se ha un potenziale nascosto (ticket spenti)
             .filter(w => w.amount > 0 || (activeStatsModal === 'ticket' && w.potential > 0))
-            .sort((a, b) => b.amount - a.amount); // Ordina per importo effettivo
+            .sort((a, b) => b.amount - a.amount);
     }, [workers, activeStatsModal, refreshStats]);
 
     // --- 3. CONFIGURAZIONE MODALE (ORDINE CORRETTO: ULTIMO QUESTO) ---
@@ -1625,4 +1647,4 @@ const App: React.FC = () => {
     );
 };
 
-export default App; 
+export default App; 

@@ -4,13 +4,31 @@ import {
   YEARS,
   formatCurrency,
   formatInteger,
-  parseFloatSafe,
   INDENNITA_RFI,
   INDENNITA_ELIOR,
   INDENNITA_REKEEP,
   ProfiloAzienda
 } from '../../types';
 import { Info, TrendingUp, DollarSign } from 'lucide-react';
+
+// --- PARSER INTELLIGENTE (IBRIDO AI/UTENTE) ---
+// Sostituiamo parseFloatSafe con questa versione locale più robusta per visualizzazione
+const parseLocalFloat = (val: any) => {
+  if (!val) return 0;
+  if (typeof val === 'number') return val;
+
+  let str = val.toString();
+
+  // Logica Ibrida: Se c'è la virgola, è input utente (ITA).
+  if (str.includes(',')) {
+    str = str.replace(/\./g, ''); // Via i punti migliaia
+    str = str.replace(',', '.');  // Virgola diventa punto
+  }
+  // Se non c'è virgola ma c'è punto, è formato AI -> Lasciamo così
+
+  const num = parseFloat(str);
+  return isNaN(num) ? 0 : num;
+};
 
 // --- MAPPATURA DESCRIZIONI ---
 const INDENNITA_DESCRIPTIONS: Record<string, string> = {
@@ -35,7 +53,7 @@ const INDENNITA_DESCRIPTIONS: Record<string, string> = {
 interface IndemnityPivotTableProps {
   data: AnnoDati[];
   profilo: ProfiloAzienda;
-  startClaimYear?: number; // <--- NUOVA PROP OPZIONALE
+  startClaimYear?: number;
 }
 
 type ViewMode = 'total' | 'average';
@@ -43,13 +61,12 @@ type ViewMode = 'total' | 'average';
 const IndemnityPivotTable: React.FC<IndemnityPivotTableProps> = ({
   data = [],
   profilo,
-  startClaimYear = 2008 // Default di sicurezza
+  startClaimYear = 2008
 }) => {
 
   const [viewMode, setViewMode] = useState<ViewMode>('total');
 
   // --- FILTRO ANNI VISIBILI ---
-  // Mostriamo solo gli anni dal startClaimYear in poi
   const visibleYears = useMemo(() => {
     return YEARS.filter(y => y >= startClaimYear);
   }, [startClaimYear]);
@@ -66,11 +83,12 @@ const IndemnityPivotTable: React.FC<IndemnityPivotTableProps> = ({
   const { rows, yearlyTotals, grandTotal, yearlyDaysWorked } = useMemo(() => {
     const safeData = Array.isArray(data) ? data : [];
 
-    // 1. Calcoliamo i giorni lavorati totali per ogni anno (il Divisore)
+    // 1. Calcoliamo i giorni lavorati totali per ogni anno
     const yearlyDaysWorked: { [year: number]: number } = {};
     visibleYears.forEach(year => {
       const months = safeData.filter(d => d.year === year);
-      const totalDays = months.reduce((acc, m) => acc + parseFloatSafe(m.daysWorked), 0);
+      // USIAMO parseLocalFloat QUI
+      const totalDays = months.reduce((acc, m) => acc + parseLocalFloat(m.daysWorked), 0);
       yearlyDaysWorked[year] = totalDays > 0 ? totalDays : 1;
     });
 
@@ -79,11 +97,12 @@ const IndemnityPivotTable: React.FC<IndemnityPivotTableProps> = ({
       let rowSumAmount = 0;
 
       visibleYears.forEach(year => {
-        // Filtro di sicurezza ridondante ma utile
+        // Filtro di sicurezza
         if (year < startClaimYear) return;
 
         const months = safeData.filter(d => d.year === year);
-        const yearSum = months.reduce((acc, month) => acc + parseFloatSafe(month[def.id]), 0);
+        // USIAMO parseLocalFloat ANCHE QUI per leggere gli importi corretti
+        const yearSum = months.reduce((acc, month) => acc + parseLocalFloat(month[def.id]), 0);
 
         if (viewMode === 'average') {
           yearValues[year] = yearSum / yearlyDaysWorked[year];
@@ -135,7 +154,7 @@ const IndemnityPivotTable: React.FC<IndemnityPivotTableProps> = ({
         totalEuroAll += (yearlyTotals[y] || 0) * days;
         totalDaysAll += days;
       });
-      // Qui potremmo ricalcolare la media globale se necessario
+      // Qui lasciamo la somma delle medie per coerenza visiva o ricalcoliamo la media globale
     }
 
     return { rows: calculatedRows, yearlyTotals, grandTotal, yearlyDaysWorked };

@@ -12,12 +12,26 @@ import {
     ArrowUpRight,
     Target,
     Download,
-    Zap
+    Zap,
+    Ticket,
+    Ban // Icona aggiunta per i ticket esclusi
 } from 'lucide-react';
 import { motion, useSpring, useMotionValue, AnimatePresence } from 'framer-motion';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { Worker, getColumnsByProfile, parseFloatSafe, YEARS } from '../types';
+import { Worker, getColumnsByProfile, YEARS } from '../types';
+
+// --- HELPER PARSER ROBUSTO (INTEGRATO) ---
+const parseFloatSafe = (val: any) => {
+    if (!val) return 0;
+    if (typeof val === 'number') return val;
+    let str = val.toString();
+    if (str.includes(',')) {
+        str = str.replace(/\./g, '').replace(',', '.');
+    }
+    const num = parseFloat(str);
+    return isNaN(num) ? 0 : num;
+};
 
 // --- COMPONENTE NUMERO ANIMATO (TICKING) ---
 const AnimatedCounter = ({ value, currency = false }: { value: number, currency?: boolean }) => {
@@ -195,6 +209,7 @@ interface StatsDashboardProps {
 const StatsDashboard: React.FC<StatsDashboardProps> = ({ workers = [], onBack }) => {
 
     // --- LOGICA DI CALCOLO UNIFICATA E CORRETTA (FILTRO ANNI + OPZIONI) ---
+    // Questa versione usa la logica "Anno per Anno" con reset del tetto ferie
     const stats = useMemo(() => {
 
         // Per ogni lavoratore, calcoliamo il "Netto Recuperabile" esatto
@@ -206,20 +221,19 @@ const StatsDashboard: React.FC<StatsDashboardProps> = ({ workers = [], onBack })
             const storedExFestPref = localStorage.getItem(`exFest_${w.id}`);
             const includeExFest = storedExFestPref !== null ? JSON.parse(storedExFestPref) : false;
 
-            // --- FIX FONDAMENTALE: Leggiamo l'anno di Start ---
             const storedStartYear = localStorage.getItem(`startYear_${w.id}`);
             const startClaimYear = storedStartYear ? parseInt(storedStartYear) : 2008;
 
-            const safeAnni = Array.isArray(w.anni) ? w.anni : [];
+            const safeAnni = (Array.isArray(w.anni) ? w.anni : []) as any[];
             const TETTO_FERIE = includeExFest ? 32 : 28;
 
-            const indennitaCols = getColumnsByProfile(w.profilo).filter(c =>
+            const indennitaCols = getColumnsByProfile(w.profilo || 'RFI').filter(c =>
                 !['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'coeffPercepito', 'coeffTicket', 'note', 'arretrati'].includes(c.id)
             );
 
             // A. PRE-CALCOLO MEDIE ANNUALI
             const yearlyRaw: Record<number, { totVar: number; ggLav: number }> = {};
-            safeAnni.forEach(row => {
+            safeAnni.forEach((row: any) => {
                 const y = Number(row.year);
                 if (!yearlyRaw[y]) yearlyRaw[y] = { totVar: 0, ggLav: 0 };
                 const gg = parseFloatSafe(row.daysWorked);
@@ -238,19 +252,20 @@ const StatsDashboard: React.FC<StatsDashboardProps> = ({ workers = [], onBack })
                 yearlyAverages[y] = t.ggLav > 0 ? t.totVar / t.ggLav : 0;
             });
 
-            // B. CALCOLO TOTALE
+            // B. CALCOLO TOTALE ANNO PER ANNO
             let totalLordo = 0;
             let totalPercepito = 0;
             let totalTicket = 0;
-            let ferieCumulateCounter = 0;
 
-            const sortedRows = [...safeAnni].sort((a, b) => a.year - b.year || a.monthIndex - b.monthIndex);
+            const uniqueYears = Array.from(new Set(safeAnni.map((r: any) => Number(r.year)))).sort((a, b) => a - b);
 
-            sortedRows.forEach(row => {
-                const y = Number(row.year);
+            uniqueYears.forEach((yearVal) => {
+                const y = Number(yearVal);
 
-                // --- FILTRO: SE L'ANNO E' PRECEDENTE ALLO START, SALTA IL CONTEGGIO ---
+                // --- FILTRO ANNO: SE L'ANNO E' PRECEDENTE ALLO START, SALTA ---
                 if (y < startClaimYear) return;
+
+                let ferieCumulateAnno = 0; // RESET FONDAMENTALE
 
                 // Fallback Logic: Media Prec o Corrente
                 let mediaApplied = yearlyAverages[y - 1];
@@ -258,29 +273,41 @@ const StatsDashboard: React.FC<StatsDashboardProps> = ({ workers = [], onBack })
                     mediaApplied = yearlyAverages[y] || 0;
                 }
 
-                const vacDays = parseFloatSafe(row.daysVacation);
-                const cTicket = parseFloatSafe(row.coeffTicket);
-                const cPercepito = parseFloatSafe(row.coeffPercepito);
+                const monthsInYear = safeAnni
+                    .filter((r: any) => Number(r.year) === y)
+                    .sort((a: any, b: any) => a.monthIndex - b.monthIndex);
 
-                // Tetto
-                const prevTotal = ferieCumulateCounter;
-                ferieCumulateCounter += vacDays;
-                const spazio = Math.max(0, TETTO_FERIE - prevTotal);
-                const ggUtili = Math.min(vacDays, spazio);
+                monthsInYear.forEach((row: any) => {
+                    const vacDays = parseFloatSafe(row.daysVacation);
+                    const cTicket = parseFloatSafe(row.coeffTicket);
+                    const cPercepito = parseFloatSafe(row.coeffPercepito);
 
-                if (ggUtili > 0) {
-                    totalLordo += (ggUtili * mediaApplied);
-                    totalPercepito += (ggUtili * cPercepito);
+                    // Tetto
+                    const spazio = Math.max(0, TETTO_FERIE - ferieCumulateAnno);
+                    const ggUtili = Math.min(vacDays, spazio);
+                    ferieCumulateAnno += vacDays;
 
-                    if (includeTickets) {
-                        totalTicket += (ggUtili * cTicket);
+                    if (ggUtili > 0) {
+                        totalLordo += (ggUtili * mediaApplied);
+                        totalPercepito += (ggUtili * cPercepito);
+
+                        // Sommiamo i ticket SEMPRE nel potenziale, ma li usiamo dopo
+                        // Solo se includeTickets è true per il netto
+                        if (includeTickets) {
+                            totalTicket += (ggUtili * cTicket);
+                        }
                     }
-                }
+                });
             });
 
+            // Calcolo finale Netto
             const grandTotalNetto = (totalLordo - totalPercepito) + totalTicket;
 
-            return { ...w, computedTotal: grandTotalNetto > 0 ? grandTotalNetto : 0 };
+            return {
+                ...w,
+                computedTotal: grandTotalNetto > 0 ? grandTotalNetto : 0,
+                isTicketExcluded: !includeTickets // Flag per la UI
+            };
         });
 
         const sortedWorkers = [...computedWorkers].sort((a, b) => b.computedTotal - a.computedTotal);
@@ -343,13 +370,13 @@ const StatsDashboard: React.FC<StatsDashboardProps> = ({ workers = [], onBack })
         const tableBody = stats.list.map(w => [
             `${w.cognome} ${w.nome}`,
             w.profilo,
-            'ANALISI',
+            w.isTicketExcluded ? 'ESCLUSO' : 'Incluso',
             w.computedTotal.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })
         ]);
 
         autoTable(doc, {
             startY: y + 8,
-            head: [['DIPENDENTE', 'PROFILO', 'STATO', 'NETTO RECUPERABILE']],
+            head: [['DIPENDENTE', 'PROFILO', 'TICKET', 'NETTO RECUPERABILE']],
             body: tableBody,
             theme: 'grid',
             headStyles: { fillColor: [30, 41, 59], textColor: 255, fontStyle: 'bold' },
@@ -434,7 +461,7 @@ const StatsDashboard: React.FC<StatsDashboardProps> = ({ workers = [], onBack })
                                 <div className="text-6xl font-black text-white tracking-tighter flex items-baseline gap-4 drop-shadow-2xl">
                                     <AnimatedCounter value={stats.totalRevenue} currency />
 
-                                    {/* BADGE PERCENTUALE TOP TIER (FIXED) */}
+                                    {/* BADGE PERCENTUALE */}
                                     <motion.div
                                         initial={{ opacity: 0, x: -20 }}
                                         animate={{ opacity: 1, x: 0 }}
@@ -558,7 +585,19 @@ const StatsDashboard: React.FC<StatsDashboardProps> = ({ workers = [], onBack })
                                     <div className="flex items-center gap-4">
                                         <span className={`text-sm font-black w-8 h-8 flex items-center justify-center rounded-lg ${idx < 3 ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 shadow-[0_0_10px_-2px_rgba(99,102,241,0.4)]' : 'bg-slate-800 text-slate-500'}`}>#{idx + 1}</span>
                                         <div>
-                                            <p className="font-bold text-white text-sm group-hover:text-indigo-300 transition-colors">{w.cognome} {w.nome}</p>
+                                            <div className="flex items-center gap-2">
+                                                <p className="font-bold text-white text-sm group-hover:text-indigo-300 transition-colors">
+                                                    {w.cognome} {w.nome}
+                                                </p>
+                                                {/* INDICATORE TICKET ESCLUSI */}
+                                                {w.isTicketExcluded && (
+                                                    <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-red-500/10 border border-red-500/20 text-[9px] font-bold text-red-400 uppercase tracking-wide">
+                                                        <Ticket className="w-2.5 h-2.5" />
+                                                        <Ban className="w-2 h-2" />
+                                                        NO
+                                                    </span>
+                                                )}
+                                            </div>
                                             <div className="flex items-center gap-2 mt-1">
                                                 <span className={`text-[9px] font-black px-1.5 py-0.5 rounded border ${w.profilo === 'RFI' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' :
                                                     w.profilo === 'ELIOR' ? 'bg-orange-500/10 text-orange-400 border-orange-500/20' :
@@ -568,7 +607,7 @@ const StatsDashboard: React.FC<StatsDashboardProps> = ({ workers = [], onBack })
                                         </div>
                                     </div>
                                     <div className="text-right">
-                                        <p className="font-black text-emerald-400 text-sm tracking-tight drop-shadow-md">
+                                        <p className={`font-black text-sm tracking-tight drop-shadow-md ${w.computedTotal === 0 ? 'text-slate-500' : 'text-emerald-400'}`}>
                                             {w.computedTotal.toLocaleString('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })}
                                         </p>
                                         <ArrowUpRight className="w-3 h-3 text-slate-500 ml-auto mt-1 opacity-0 group-hover:opacity-100 transition-all -translate-x-2 group-hover:translate-x-0" />

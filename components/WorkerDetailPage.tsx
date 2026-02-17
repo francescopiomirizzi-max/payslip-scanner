@@ -285,7 +285,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
 
   const batchInputRef = useRef<HTMLInputElement>(null);
 
-  // --- LOGICA UPLOAD MASSIVO (CORRETTA: SCRITTURA DATI GARANTITA) ---
+  // --- 🔥 2. LOGICA UPLOAD MASSIVO OTTIMIZZATA (Sostituisci handleBatchUpload) ---
   const handleBatchUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
@@ -293,12 +293,10 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
     setIsBatchProcessing(true);
     setBatchNotification(null);
 
-    // 1. Copia profonda dei dati attuali
+    // Copia profonda per evitare mutazioni dirette
     let currentAnni = JSON.parse(JSON.stringify(monthlyInputs));
     let successCount = 0;
     let errorCount = 0;
-
-    // Variabile per ricordare l'anno processato
     let lastDetectedYear = null;
 
     for (let i = 0; i < files.length; i++) {
@@ -306,7 +304,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
       try {
         const base64String = await toBase64(file);
 
-        // Chiamata API
+        // Chiamata al NUOVO Backend V15/V16
         const response = await fetch('/.netlify/functions/scan-payslip', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -324,22 +322,22 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
           continue;
         }
 
-        // 2. MAPPING E CREAZIONE RIGA
+        // Validazione Dati Minimi
         if (aiResult.month && aiResult.year) {
           const targetYear = Number(aiResult.year);
           const targetMonthIndex = Number(aiResult.month) - 1;
 
-          lastDetectedYear = targetYear; // Memorizza l'anno
+          lastDetectedYear = targetYear;
 
-          // A. CERCA SE ESISTE GIÀ LA RIGA
+          // A. CERCA RIGA ESISTENTE
           let rowIndex = currentAnni.findIndex((r: AnnoDati) =>
             Number(r.year) === targetYear && r.monthIndex === targetMonthIndex
           );
 
-          // B. SE NON ESISTE, CREALA SUBITO
+          // B. CREA SE NON ESISTE
           if (rowIndex === -1) {
             const newRow: AnnoDati = {
-              id: Date.now().toString() + Math.random(),
+              id: Date.now().toString() + Math.random(), // ID unico
               year: targetYear,
               monthIndex: targetMonthIndex,
               month: MONTH_NAMES[targetMonthIndex],
@@ -347,51 +345,57 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
               daysVacation: 0,
               ticket: 0,
               arretrati: 0,
-              note: ''
+              note: '',
+              coeffTicket: 0,    // Importante inizializzare
+              coeffPercepito: 0  // Importante inizializzare
             };
             currentAnni.push(newRow);
-
-            // 🔥 FIX FONDAMENTALE: Aggiorniamo rowIndex per puntare alla nuova riga!
+            // Aggiorniamo l'indice per puntare alla nuova riga
             rowIndex = currentAnni.length - 1;
           }
 
-          // C. ORA AGGIORNA I DATI (Ora rowIndex è sempre valido)
-          if (rowIndex !== -1) {
-            const row = currentAnni[rowIndex];
+          const row = currentAnni[rowIndex];
 
-            // 1. PRESENZE (Queste di solito non si sommano, meglio prendere il max o l'ultimo)
-            if (typeof aiResult.daysWorked === 'number') row.daysWorked = aiResult.daysWorked;
-            if (typeof aiResult.daysVacation === 'number') row.daysVacation = aiResult.daysVacation;
+          // --- C. MAPPING DATI "CHIRURGICO" (NUOVA LOGICA) ---
 
-            // 2. TICKET (Se c'è, lo prendiamo)
-            const ticketVal = Number(aiResult.ticketRate);
-            if (!isNaN(ticketVal) && ticketVal > 0) row.coeffTicket = ticketVal;
+          // 1. PRESENZE & FERIE (Sovrascrivi sempre con il dato OCR più recente)
+          if (typeof aiResult.daysWorked === 'number') row.daysWorked = aiResult.daysWorked;
+          if (typeof aiResult.daysVacation === 'number') row.daysVacation = aiResult.daysVacation;
 
-            // 3. ARRETRATI (Somma)
-            const arretratiVal = Number(aiResult.arretrati);
-            if (!isNaN(arretratiVal) && arretratiVal > 0) {
-              // MODIFICA: Somma al valore esistente invece di sovrascrivere
-              row.arretrati = (parseFloatSafe(row.arretrati) + arretratiVal);
-            }
-
-            // 4. VOCI VARIABILI (ACCORPAMENTO E SOMMA)
-            if (aiResult.codes && typeof aiResult.codes === 'object') {
-              Object.entries(aiResult.codes).forEach(([code, value]) => {
-                const numValue = parseFloat(value as string);
-                if (!isNaN(numValue) && numValue > 0) {
-                  // MODIFICA CRUCIALE: Somma al valore esistente!
-                  // @ts-ignore
-                  const existingVal = parseFloatSafe(row[code]);
-                  // @ts-ignore
-                  row[code] = existingVal + numValue;
-                }
-              });
-            }
-
-            // Salvataggio riga nell'array temporaneo
-            currentAnni[rowIndex] = row;
-            successCount++;
+          // 2. TICKET UNITARIO (La tua richiesta specifica)
+          // Se il backend trova "ticketRate" (es. 7.00), lo mettiamo nel coefficiente
+          const ticketVal = Number(aiResult.ticketRate);
+          if (!isNaN(ticketVal) && ticketVal > 0) {
+            row.coeffTicket = ticketVal; // <--- Assegnazione diretta al coefficiente
           }
+
+          // 3. ARRETRATI E NOTE
+          const arretratiVal = Number(aiResult.arretrati);
+          if (!isNaN(arretratiVal) && arretratiVal !== 0) {
+            // Sovrascriviamo per evitare duplicazioni
+            row.arretrati = arretratiVal;
+          }
+
+          // Aggiunta Note Eventi (es. "Malattia") senza duplicarle
+          if (aiResult.eventNote && !row.note?.includes(aiResult.eventNote)) {
+            row.note = (row.note ? row.note + ' ' : '') + `[${aiResult.eventNote}]`;
+          }
+
+          // 4. VOCI VARIABILI (Codici)
+          // Mappiamo l'oggetto "codes" restituito dal backend alle colonne della griglia
+          if (aiResult.codes && typeof aiResult.codes === 'object') {
+            Object.entries(aiResult.codes).forEach(([code, value]) => {
+              const numValue = parseFloat(value as string);
+              if (!isNaN(numValue) && numValue !== 0) {
+                // Sovrascrittura: Se l'OCR dice 150€, scriviamo 150€.
+                // @ts-ignore
+                row[code] = numValue;
+              }
+            });
+          }
+
+          currentAnni[rowIndex] = row;
+          successCount++;
         }
       } catch (error) {
         console.error("Errore generico batch", error);
@@ -399,8 +403,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
       }
     }
 
-    // 3. RIORDINA, SALVA E AGGIORNA VISTA
-    // Riordiniamo tutto cronologicamente alla fine
+    // 3. ORDINAMENTO E SALVATAGGIO
     currentAnni.sort((a: AnnoDati, b: AnnoDati) => {
       if (a.year !== b.year) return a.year - b.year;
       return a.monthIndex - b.monthIndex;
@@ -409,23 +412,20 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
     setMonthlyInputs(currentAnni);
     onUpdateData(currentAnni);
 
-    // Se abbiamo trovato un anno (es. 2007), sposta la visualizzazione su quell'anno
-    if (lastDetectedYear) {
-      setCurrentYear(lastDetectedYear);
-    }
+    if (lastDetectedYear) setCurrentYear(lastDetectedYear);
 
     setIsBatchProcessing(false);
     if (batchInputRef.current) batchInputRef.current.value = '';
 
+    // Notifica Intelligente
     if (successCount > 0) {
       setBatchNotification({
-        msg: `Caricamento riuscito! ${successCount} buste elaborate.\nAnno rilevato: ${lastDetectedYear}`,
+        msg: `✅ Elaborazione Completata!\n${successCount} cedolini inseriti correttamente.\n${errorCount > 0 ? `⚠️ ${errorCount} errori.` : ''}`,
         type: 'success'
       });
-      // Feedback sonoro o visivo opzionale qui
-    } else {
+    } else if (errorCount > 0) {
       setBatchNotification({
-        msg: `Nessuna busta elaborata. Errori: ${errorCount}.`,
+        msg: `❌ Operazione fallita.\nNessun cedolino valido trovato su ${files.length} file.`,
         type: 'error'
       });
     }
@@ -448,171 +448,29 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
     reader.onload = () => resolve(reader.result as string);
     reader.onerror = error => reject(error);
   });
-  // --- FUNZIONE V11: GESTIONE ERRORI E DATI SICURI (AGGIORNATA CON NOTIFICHE ELEGANTI) ---
+  // --- 🔥 3. FUNZIONE SINGOLA (WRAPPER) ---
+  // Reindirizza il file singolo alla logica Batch che è già perfetta e aggiornata
   const handleAnalyzePaySlip = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    setIsAnalyzing(true);
-    setBatchNotification(null); // Resetta eventuali notifiche precedenti
-
-    try {
-      const convertFileToBase64 = (file: File): Promise<string> => {
-        return new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.readAsDataURL(file);
-          reader.onload = () => resolve(reader.result as string);
-          reader.onerror = error => reject(error);
-        });
-      };
-
-      const base64String = await convertFileToBase64(file);
-
-      const response = await fetch('/.netlify/functions/scan-payslip', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          fileData: base64String,
-          mimeType: file.type || "application/pdf"
-        })
-      });
-
-      // Gestione errori HTTP
-      if (!response.ok) {
-        const errData = await response.json();
-        throw new Error(errData.error || "Errore del server durante l'analisi");
-      }
-
-      const aiResult = await response.json();
-
-      // Controllo se il backend ha restituito un errore JSON
-      if (aiResult.error) {
-        throw new Error(aiResult.error);
-      }
-
-      console.log("✅ Dati Ricevuti e Puliti:", aiResult);
-
-      // Validazione Dati Minimi
-      if (!aiResult.month || !aiResult.year) {
-        throw new Error("Impossibile leggere la data dalla busta paga.");
-      }
-
-      const targetYear = Number(aiResult.year);
-      const targetMonthIndex = Number(aiResult.month) - 1;
-
-      if (isNaN(targetYear) || isNaN(targetMonthIndex) || targetMonthIndex < 0 || targetMonthIndex > 11) {
-        throw new Error(`Data non valida letta: ${aiResult.month}/${aiResult.year}`);
-      }
-
-      // --- AGGIORNAMENTO STATO ---
-      const currentAnni = JSON.parse(JSON.stringify(monthlyInputs));
-
-      // Cerco o creo la riga
-      let rowIndex = currentAnni.findIndex((r: AnnoDati) =>
-        Number(r.year) === targetYear && r.monthIndex === targetMonthIndex
-      );
-
-      if (rowIndex === -1) {
-        const newRow: AnnoDati = {
-          id: Date.now().toString(),
-          year: targetYear,
-          monthIndex: targetMonthIndex,
-          month: MONTH_NAMES[targetMonthIndex],
-          daysWorked: 0,
-          daysVacation: 0,
-          ticket: 0,
-          arretrati: 0,
-          note: ''
-        };
-        currentAnni.push(newRow);
-        // Riordino cronologico
-        currentAnni.sort((a: AnnoDati, b: AnnoDati) => {
-          if (a.year !== b.year) return a.year - b.year;
-          return a.monthIndex - b.monthIndex;
-        });
-        rowIndex = currentAnni.findIndex((r: AnnoDati) =>
-          Number(r.year) === targetYear && r.monthIndex === targetMonthIndex
-        );
-      }
-
-      const row = currentAnni[rowIndex];
-
-      // --- ASSEGNAZIONE SICURA ---
-
-      // 1. Presenze
-      if (typeof aiResult.daysWorked === 'number') row.daysWorked = aiResult.daysWorked;
-      if (typeof aiResult.daysVacation === 'number') row.daysVacation = aiResult.daysVacation;
-
-      // 2. Ticket Rate
-      const ticketVal = Number(aiResult.ticketRate);
-      if (!isNaN(ticketVal) && ticketVal > 0) {
-        row.coeffTicket = ticketVal;
-        if (!row.note?.includes('Aliq.')) {
-          row.note = (row.note ? row.note + ' ' : '') + `[Aliq. Ticket: €${ticketVal.toFixed(2)}]`;
-        }
-      }
-
-      // 3. Arretrati / Eventi
-      const arretratiVal = Number(aiResult.arretrati);
-      if (!isNaN(arretratiVal) && arretratiVal > 0) {
-        row.arretrati = arretratiVal;
-      }
-
-      // 4. Note Eventi
-      if (aiResult.eventNote && typeof aiResult.eventNote === 'string' && aiResult.eventNote.length > 0) {
-        const cleanNote = aiResult.eventNote.replace(/['"]+/g, '').trim();
-        if (cleanNote && !row.note?.includes(cleanNote)) {
-          row.note = (row.note ? row.note + ' ' : '') + `[⚠️ ${cleanNote}]`;
-        }
-      }
-
-      // 5. Voci Variabili
-      if (aiResult.codes && typeof aiResult.codes === 'object') {
-        Object.entries(aiResult.codes).forEach(([code, value]) => {
-          const numValue = parseFloat(value as string);
-          if (!isNaN(numValue) && numValue > 0) {
-            // @ts-ignore
-            row[code] = numValue;
-          }
-        });
-      }
-
-      // Salva
-      currentAnni[rowIndex] = row;
-
-      if (targetYear !== currentYear) setCurrentYear(targetYear);
-      handleDataChange(currentAnni);
-
-      // --- 🟢 SUCCESSO: NOTIFICA ELEGANTE ---
-      setBatchNotification({
-        msg: `Busta paga di ${MONTH_NAMES[targetMonthIndex]} ${targetYear} analizzata e inserita correttamente!`,
-        type: 'success'
-      });
-
-    } catch (error: any) {
-      console.error("Errore Frontend:", error);
-      // --- 🔴 ERRORE: NOTIFICA ELEGANTE ---
-      setBatchNotification({
-        msg: `Errore durante l'analisi: ${error.message}`,
-        type: 'error'
-      });
-    } finally {
-      setIsAnalyzing(false);
-      if (scanRef.current) scanRef.current.value = '';
-
-      // Nascondi notifica dopo 5 secondi
-      setTimeout(() => setBatchNotification(null), 5000);
+    if (event.target.files && event.target.files.length > 0) {
+      // Passiamo l'evento direttamente alla funzione Batch
+      await handleBatchUpload(event);
     }
   };
-  // --- HELPER PARSING (AGGIUNGERE QUESTO) ---
-  const parseLocalFloat = (val: string | number | undefined): number => {
+  // --- 🔥 1. PARSER ROBUSTO (Sostituisci quello esistente) ---
+  const parseLocalFloat = (val: any) => {
     if (!val) return 0;
     if (typeof val === 'number') return val;
-    const cleanStr = val.toString().replace(/\./g, '').replace(',', '.');
-    const num = parseFloat(cleanStr);
+
+    let str = val.toString();
+    // Logica Ibrida: Se c'è la virgola, è input utente (ITA).
+    if (str.includes(',')) {
+      str = str.replace(/\./g, ''); // Via i punti migliaia (1.000 -> 1000)
+      str = str.replace(',', '.');  // Virgola diventa punto (1000,50 -> 1000.50)
+    }
+
+    const num = parseFloat(str);
     return isNaN(num) ? 0 : num;
   };
-
   // --- FUNZIONE CERVELLO CORRETTA (Logica Anno Precedente + Filtro Anno Inizio) ---
   const calculateAnnualLegalData = (data: AnnoDati[], profile: any, withExFest: boolean, startClaimYear: number) => {
     const years = Array.from(new Set(data.map(d => Number(d.year)))).sort((a, b) => a - b);
@@ -1326,93 +1184,86 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
     setIsDragging(false);
   };
 
-  // --- PUNTO 4: STATISTICHE GLOBALI (TICKER CON FALLBACK INTELLIGENTE) ---
+  // --- 🔥 MODIFICA 2: CALCOLO STATISTICHE ALLINEATO AL PDF ---
   const globalStats = useMemo(() => {
     if (!monthlyInputs || !Array.isArray(monthlyInputs)) return [];
 
-    // 1. PRE-CALCOLO MEDIE ANNUALI
-    // Calcoliamo la media giornaliera reale per ogni anno inserito
-    const yearlyTotals: Record<number, { indennita: number; giorni: number }> = {};
+    // Filtriamo solo le colonne che sono indennità (escludendo giorni, ticket, ecc)
     const indennitaCols = getColumnsByProfile(worker.profilo).filter(c =>
       !['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'coeffPercepito', 'coeffTicket', 'note', 'arretrati'].includes(c.id)
     );
 
+    // 1. PRE-CALCOLO MEDIE (Cervello)
+    const yearlyRawStats: Record<number, { totVar: number; ggLav: number }> = {};
+
     monthlyInputs.forEach(row => {
       const y = Number(row.year);
-      if (!yearlyTotals[y]) yearlyTotals[y] = { indennita: 0, giorni: 0 };
+      if (!yearlyRawStats[y]) yearlyRawStats[y] = { totVar: 0, ggLav: 0 };
 
       const ggLav = parseLocalFloat(row.daysWorked);
+
       if (ggLav > 0) {
         let sommaIndennitaRow = 0;
         indennitaCols.forEach(c => {
           sommaIndennitaRow += parseLocalFloat(row[c.id]);
         });
-
-        yearlyTotals[y].indennita += sommaIndennitaRow;
-        yearlyTotals[y].giorni += ggLav;
+        yearlyRawStats[y].totVar += sommaIndennitaRow;
+        yearlyRawStats[y].ggLav += ggLav;
       }
     });
 
-    // Mappa delle medie: { 2023: 50.5, 2024: 52.1 }
     const yearlyAverages: Record<number, number> = {};
-    Object.keys(yearlyTotals).forEach(k => {
+    Object.keys(yearlyRawStats).forEach(k => {
       const y = Number(k);
-      const t = yearlyTotals[y];
-      yearlyAverages[y] = t.giorni > 0 ? t.indennita / t.giorni : 0;
+      const t = yearlyRawStats[y];
+      yearlyAverages[y] = t.ggLav > 0 ? t.totVar / t.ggLav : 0;
     });
 
-    // 2. CALCOLO SPETTANZE (Applicando la logica: Media Prec -> Fallback Corrente)
+    // 2. CALCOLO SPETTANZE FINALI
     let totLordoSpettante = 0;
     let totTicket = 0;
     let totGiaPercepito = 0;
 
-    // Tetto ferie (globale o annuale a seconda della policy, qui progressivo per coerenza)
-    let ferieCumulateCounter = 0;
     const TETTO = includeExFest ? 32 : 28;
+    const availableYears = Array.from(new Set(monthlyInputs.map(d => Number(d.year)))).sort((a, b) => a - b);
 
-    // Ordiniamo cronologicamente i mesi
-    const sortedData = [...monthlyInputs].sort((a, b) => {
-      if (a.year !== b.year) return a.year - b.year;
-      return a.monthIndex - b.monthIndex;
-    });
+    availableYears.forEach(year => {
+      // --- FILTRO: Se l'anno è precedente all'inizio impostato, lo ignoriamo nei totali ---
+      if (year < startClaimYear) return;
 
-    sortedData.forEach(row => {
-      const currentYear = Number(row.year);
-      const prevYear = currentYear - 1;
+      let ferieCumulateAnno = 0;
 
-      // --- IL FIX FONDAMENTALE ---
-      // 1. Proviamo a prendere la media dell'anno precedente (Logica Legale Standard)
-      let mediaDaUsare = yearlyAverages[prevYear];
-
-      // 2. Se non esiste (es. startup o dati mancanti), usiamo quella dell'anno corrente
+      // Logica Media: Anno Precedente (Fallback su corrente se manca)
+      let mediaDaUsare = yearlyAverages[year - 1];
       if (mediaDaUsare === undefined || mediaDaUsare === 0) {
-        mediaDaUsare = yearlyAverages[currentYear] || 0;
+        mediaDaUsare = yearlyAverages[year] || 0;
       }
 
-      // Dati riga
-      const vacDays = parseLocalFloat(row.daysVacation);
-      const coeffTicket = parseLocalFloat(row['coeffTicket']);
-      const coeffPercepito = parseLocalFloat(row['coeffPercepito']);
+      const monthsInYear = monthlyInputs
+        .filter(d => Number(d.year) === year)
+        .sort((a, b) => a.monthIndex - b.monthIndex);
 
-      // Logica Tetto Ferie
-      const spazio = Math.max(0, TETTO - ferieCumulateCounter);
-      const giorniUtili = Math.min(vacDays, spazio);
-      ferieCumulateCounter += vacDays;
+      monthsInYear.forEach(row => {
+        const vacDays = parseLocalFloat(row.daysVacation);
+        const coeffTicket = parseLocalFloat(row.coeffTicket);
+        const coeffPercepito = parseLocalFloat(row.coeffPercepito);
 
-      if (giorniUtili > 0) {
-        // Calcolo Economico
-        totLordoSpettante += (giorniUtili * mediaDaUsare);
+        // Saturazione Tetto
+        const spazio = Math.max(0, TETTO - ferieCumulateAnno);
+        const giorniUtili = Math.min(vacDays, spazio);
+        ferieCumulateAnno += vacDays;
 
-        // Applichiamo il bottone ai Ticket per le statistiche in alto
-        if (includeTickets) {
-          totTicket += (giorniUtili * coeffTicket);
+        if (giorniUtili > 0) {
+          totLordoSpettante += (giorniUtili * mediaDaUsare);
+          totGiaPercepito += (giorniUtili * coeffPercepito);
+
+          if (includeTickets) {
+            totTicket += (giorniUtili * coeffTicket);
+          }
         }
-
-        totGiaPercepito += (giorniUtili * coeffPercepito);
-      }
+      });
     });
 
-    // 3. Totali Finali
     const differenzaRetributiva = totLordoSpettante - totGiaPercepito;
     const nettoRecuperabile = differenzaRetributiva + totTicket;
 
@@ -1446,7 +1297,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
         note: "Indennità sostitutiva"
       },
     ];
-  }, [monthlyInputs, worker.profilo, includeExFest, includeTickets]); // <--- Aggiunto includeTickets qui!
+  }, [monthlyInputs, worker.profilo, includeExFest, includeTickets, startClaimYear]);
   const tickerItems = [...globalStats, ...globalStats, ...globalStats];
   // COMPONENTE TIMELINE (Semaforo Style)
   const TimelineStep = ({ step, label, icon: Icon, activeStatus }: any) => {
@@ -1913,13 +1764,13 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
                   {activeTab === 'calc' && (
                     <div className="h-full overflow-auto custom-scrollbar pr-2">
                       {/* Passiamo l'interruttore alla tabella aggiungendo includeTickets={includeTickets} */}
-                      <AnnualCalculationTable data={monthlyInputs} profilo={worker.profilo} onDataChange={handleDataChange} includeTickets={includeTickets} />
+                      <AnnualCalculationTable data={monthlyInputs} profilo={worker.profilo} onDataChange={handleDataChange} includeTickets={includeTickets} startClaimYear={startClaimYear} />
                     </div>
                   )}
 
                   {activeTab === 'pivot' && (
                     <div className="h-full overflow-auto custom-scrollbar pr-2">
-                      <IndemnityPivotTable data={monthlyInputs} profilo={worker.profilo} />
+                      <IndemnityPivotTable data={monthlyInputs} profilo={worker.profilo} startClaimYear={startClaimYear} />
                     </div>
                   )}
                 </motion.div>

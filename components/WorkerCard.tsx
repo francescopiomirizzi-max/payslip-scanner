@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useRef } from 'react';
-import { Worker, parseFloatSafe, getColumnsByProfile } from '../types';
+import { Worker, getColumnsByProfile } from '../types';
 import { motion } from 'framer-motion';
 import { Tilt } from 'react-tilt';
 import {
@@ -9,33 +9,46 @@ import {
   TrendingUp, Ban, CalendarClock
 } from 'lucide-react';
 
-// --- STILI CSS PER LA SCROLLBAR PERSONALIZZATA ---
+// --- STILI CSS ---
 const scrollbarStyles = `
-  .custom-scrollbar::-webkit-scrollbar {
-    width: 4px;
-  }
-  .custom-scrollbar::-webkit-scrollbar-track {
-    background: rgba(0,0,0,0.05);
-    border-radius: 10px;
-  }
-  .custom-scrollbar::-webkit-scrollbar-thumb {
-    background: rgba(0,0,0,0.2);
-    border-radius: 10px;
-  }
-  .custom-scrollbar:hover::-webkit-scrollbar-thumb {
-    background: rgba(0,0,0,0.3);
-  }
+  .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+  .custom-scrollbar::-webkit-scrollbar-track { background: rgba(0,0,0,0.05); border-radius: 10px; }
+  .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.2); border-radius: 10px; }
+  .custom-scrollbar:hover::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.3); }
 `;
+
+// --- 🔥 PARSER INTELLIGENTE (FONDAMENTALE) ---
+// Usiamo questo invece di parseFloatSafe importato, per garanzia assoluta
+const parseLocalFloat = (val: any) => {
+  if (!val) return 0;
+  if (typeof val === 'number') return val;
+  let str = val.toString();
+  // Logica Ibrida: Se c'è la virgola, è input utente (ITA).
+  if (str.includes(',')) {
+    str = str.replace(/\./g, ''); // Via i punti migliaia
+    str = str.replace(',', '.');  // Virgola diventa punto
+  }
+  const num = parseFloat(str);
+  return isNaN(num) ? 0 : num;
+};
 
 // --- COMPONENTE SPARKLINE (FRONTE) ---
 const Sparkline = ({ worker }: { worker: Worker }) => {
   const dataPoints = useMemo(() => {
     if (!worker.anni || !Array.isArray(worker.anni) || worker.anni.length === 0) return [15, 16, 15, 17, 16];
     const cols = getColumnsByProfile(worker.profilo);
-    const values = worker.anni.slice(-10).map(anno => {
+
+    // Ordiniamo cronologicamente
+    const sortedData = [...worker.anni].sort((a, b) => a.year - b.year || a.monthIndex - b.monthIndex);
+
+    // Prendiamo gli ultimi 12 mesi
+    const values = sortedData.slice(-12).map(anno => {
       let sum = 0;
-      cols.forEach(col => { if (!['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'note', 'arretrati'].includes(col.id)) sum += parseFloatSafe(anno[col.id]); });
-      return sum > 0 ? sum : (Math.random() * 200 + 300);
+      cols.forEach(col => {
+        if (!['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'note', 'arretrati', 'coeffPercepito', 'coeffTicket'].includes(col.id))
+          sum += parseLocalFloat(anno[col.id]);
+      });
+      return sum > 0 ? sum : (Math.random() * 200 + 300); // Fallback estetico se 0
     });
     return values.length < 2 ? [40, 45, 42, 48] : values;
   }, [worker]);
@@ -74,21 +87,36 @@ const Sparkline = ({ worker }: { worker: Worker }) => {
 };
 
 // --- MINI GRAFICO A BARRE DINAMICO (RETRO) ---
-const BackChart = ({ worker, theme }: { worker: Worker, theme: any }) => {
+const BackChart = ({ worker, theme, startYear }: { worker: Worker, theme: any, startYear: number }) => {
   const bars = useMemo(() => {
     if (!worker.anni || !Array.isArray(worker.anni) || worker.anni.length === 0) {
       return [20, 30, 20, 30, 20, 30];
     }
-    const lastData = worker.anni.slice(-6);
+    // Filtriamo dal Start Year in poi
+    const validData = worker.anni
+      .filter(d => Number(d.year) >= startYear)
+      .sort((a, b) => a.year - b.year || a.monthIndex - b.monthIndex);
+
+    const lastData = validData.slice(-10); // Ultimi 10 mesi utili
+
     const values = lastData.map(d => {
-      const val = typeof d.daysWorked === 'string' ? parseFloat(d.daysWorked.replace(',', '.')) : d.daysWorked;
-      return isNaN(val) ? 0 : val;
+      // Visualizziamo il valore economico approssimativo del mese (Indennità lorde)
+      // Questo rende il grafico coerente con "soldi", non "giorni"
+      const cols = getColumnsByProfile(worker.profilo);
+      let sum = 0;
+      cols.forEach(col => {
+        if (!['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'note', 'arretrati'].includes(col.id))
+          sum += parseLocalFloat(d[col.id]);
+      });
+      return sum;
     });
+
     const filledValues = [...values];
-    while (filledValues.length < 6) { filledValues.unshift(5); }
+    while (filledValues.length < 6) { filledValues.unshift(100); } // Dummy filler
     const max = Math.max(...filledValues) || 1;
+    // Normalizza altezza tra 15% e 100%
     return filledValues.map(v => Math.max(15, Math.round((v / max) * 100)));
-  }, [worker.anni]);
+  }, [worker.anni, startYear]);
 
   return (
     <div className="w-full h-16 flex items-end justify-between gap-1 px-1 my-3 opacity-90 pointer-events-none">
@@ -97,7 +125,7 @@ const BackChart = ({ worker, theme }: { worker: Worker, theme: any }) => {
           key={i}
           initial={{ height: 0, opacity: 0 }}
           animate={{ height: `${height}%`, opacity: 1 }}
-          transition={{ duration: 0.6, delay: i * 0.1, type: "spring" }}
+          transition={{ duration: 0.6, delay: i * 0.05, type: "spring" }}
           className="w-full rounded-t-sm opacity-70"
           style={{ backgroundColor: theme.rawColor.start }}
         />
@@ -120,15 +148,21 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [opacity, setOpacity] = useState(0);
 
-  // --- STATO TICKET (LETTURA DALLA MEMORIA) ---
+  // --- STATI SINCRONIZZATI COL DETTAGLIO ---
+  // 1. TICKET
   const [includeTickets] = useState(() => {
     const saved = localStorage.getItem(`tickets_${worker.id}`);
     return saved !== null ? JSON.parse(saved) : true;
   });
-  // --- STATO ANNO INIZIO (LETTURA DALLA MEMORIA) ---
+  // 2. START YEAR
   const [startClaimYear] = useState(() => {
     const saved = localStorage.getItem(`startYear_${worker.id}`);
     return saved ? parseInt(saved) : 2008;
+  });
+  // 3. EX FEST (TETTO FERIE) - Questo mancava nel codice precedente
+  const [includeExFest] = useState(() => {
+    const saved = localStorage.getItem(`exFest_${worker.id}`);
+    return saved !== null ? JSON.parse(saved) : false; // Default 28gg
   });
 
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -159,37 +193,25 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
   const statusConfig = getStatusConfig(worker.status);
   const StatusIcon = statusConfig.icon;
 
-  // ✅ CODICE CORRETTO
+  // --- STATS PROGRESSO DATI ---
   const stats = useMemo(() => {
-    // Se non ci sono dati, ritorna stato iniziale
     if (!worker.anni || worker.anni.length === 0) {
       return { percent: 0, label: 'Nuova', range: 'N.D.', preview: [] };
     }
-
-    // 1. Identifica le righe con dati validi (giorni lavorati > 0)
-    const validRows = worker.anni.filter(row => parseFloatSafe(row.daysWorked) > 0);
-
-    // 2. Trova l'ultimo anno inserito (Fine del periodo attuale)
+    const validRows = worker.anni.filter(row => parseLocalFloat(row.daysWorked) > 0);
     const yearsWithData = validRows.map(m => m.year);
     const maxYear = yearsWithData.length > 0 ? Math.max(...yearsWithData) : new Date().getFullYear();
 
-    // Se l'ultimo anno inserito è precedente all'anno di start
     if (maxYear < startClaimYear) {
       return { percent: 0, label: 'Da Iniziare', range: `${startClaimYear}-...`, preview: [] };
     }
 
-    // 3. Calcolo Totale Mesi Teorici
     const totalYearsSpan = maxYear - startClaimYear + 1;
     const totalMonthsPossible = totalYearsSpan * 12;
-
-    // 4. Conta i mesi effettivamente caricati SOLO nel range
     const validMonthsCount = validRows.filter(row => row.year >= startClaimYear && row.year <= maxYear).length;
 
-    // 5. Calcolo Percentuale
     let percentage = 0;
-    if (totalMonthsPossible > 0) {
-      percentage = Math.round((validMonthsCount / totalMonthsPossible) * 100);
-    }
+    if (totalMonthsPossible > 0) percentage = Math.round((validMonthsCount / totalMonthsPossible) * 100);
 
     const preview = [...validRows].sort((a, b) => b.year - a.year || b.monthIndex - a.monthIndex).slice(0, 3);
 
@@ -201,76 +223,88 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
     };
   }, [worker.anni, startClaimYear]);
 
-  // --- CALCOLO FINANZIARIO CORRETTO (CON LOGICA TICKET E ANNO START) ---
+  // --- 🔥 CALCOLO FINANZIARIO CORRETTO (FIX TYPESCRIPT) 🔥 ---
   const financialStats = useMemo(() => {
-    const TETTO_FERIE = 28;
-    const indennitaCols = getColumnsByProfile(worker.profilo).filter(c => !['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'coeffPercepito', 'coeffTicket', 'note', 'arretrati'].includes(c.id));
+    const TETTO_FERIE = includeExFest ? 32 : 28;
 
-    // 1. Pre-Calcolo Medie Annuali
-    const yearlyRaw: Record<number, { totVar: number; ggLav: number }> = {};
+    // Colonne da sommare
+    const indennitaCols = getColumnsByProfile(worker.profilo).filter(c =>
+      !['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'coeffPercepito', 'coeffTicket', 'note', 'arretrati'].includes(c.id)
+    );
+
+    const yearlyRaw: Record<string, { totVar: number; ggLav: number }> = {};
+
     (worker.anni || []).forEach(row => {
-      const y = Number(row.year);
+      const y = String(row.year);
       if (!yearlyRaw[y]) yearlyRaw[y] = { totVar: 0, ggLav: 0 };
-      const gg = parseFloatSafe(row.daysWorked);
+
+      // Casting a 'any' per evitare errori di indice su row
+      const r = row as any;
+      const gg = parseLocalFloat(r.daysWorked);
+
       if (gg > 0) {
         let sum = 0;
-        indennitaCols.forEach(c => sum += parseFloatSafe(row[c.id]));
+        indennitaCols.forEach(c => sum += parseLocalFloat(r[c.id]));
         yearlyRaw[y].totVar += sum;
         yearlyRaw[y].ggLav += gg;
       }
     });
 
-    const yearlyAverages: Record<number, number> = {};
+    const yearlyAverages: Record<string, number> = {};
     Object.keys(yearlyRaw).forEach(k => {
-      const y = Number(k);
-      const t = yearlyRaw[y];
-      yearlyAverages[y] = t.ggLav > 0 ? t.totVar / t.ggLav : 0;
+      const t = yearlyRaw[k];
+      yearlyAverages[k] = t.ggLav > 0 ? t.totVar / t.ggLav : 0;
     });
 
-    // 2. Calcolo Totali
+    // 3. Calcolo Totali
     let totalLordo = 0;
     let totalTicket = 0;
     let totalPercepito = 0;
     let totalFerieUtili = 0;
-    let ferieCumulateCounter = 0;
 
-    // Ordine cronologico
-    const sortedData = [...(worker.anni || [])].sort((a, b) => a.year - b.year || a.monthIndex - b.monthIndex);
+    // --- FIX TYPESCRIPT QUI SOTTO ---
+    // Usiamo (d: any) per leggere l'anno e 'as number[]' alla fine per forzare il tipo
+    const availableYears: number[] = Array.from(
+      new Set((worker.anni || []).map((d: any) => Number(d.year)))
+    ).sort((a: number, b: number) => a - b) as number[];
 
-    sortedData.forEach(row => {
-      const currentYear = Number(row.year);
+    availableYears.forEach(yearNum => {
+      if (yearNum < startClaimYear) return;
 
-      // --- FILTRO FONDAMENTALE: Se l'anno è precedente all'inizio, saltalo nei totali ---
-      if (currentYear < startClaimYear) return;
+      const yearStr = String(yearNum);
+      const prevYearStr = String(yearNum - 1);
 
-      const prevYear = currentYear - 1;
+      let ferieCumulateAnno = 0;
 
-      // LOGICA FALLBACK: Media Prec -> Corrente
-      let mediaApplied = yearlyAverages[prevYear];
+      let mediaApplied = yearlyAverages[prevYearStr];
       if (mediaApplied === undefined || mediaApplied === 0) {
-        mediaApplied = yearlyAverages[currentYear] || 0;
+        mediaApplied = yearlyAverages[yearStr] || 0;
       }
 
-      const vacDays = parseFloatSafe(row.daysVacation);
-      const cTicket = parseFloatSafe(row.coeffTicket);
-      const cPercepito = parseFloatSafe(row.coeffPercepito);
+      const months = (worker.anni || [])
+        .filter(d => Number(d.year) === yearNum)
+        .sort((a, b) => a.monthIndex - b.monthIndex);
 
-      // Tetto
-      const spazio = Math.max(0, TETTO_FERIE - ferieCumulateCounter);
-      const ggUtili = Math.min(vacDays, spazio);
-      ferieCumulateCounter += vacDays;
+      months.forEach(row => {
+        const r = row as any; // Casting di sicurezza
+        const vacDays = parseLocalFloat(r.daysVacation);
+        const cTicket = parseLocalFloat(r.coeffTicket);
+        const cPercepito = parseLocalFloat(r.coeffPercepito);
 
-      if (ggUtili > 0) {
-        totalLordo += (ggUtili * mediaApplied);
+        const spazio = Math.max(0, TETTO_FERIE - ferieCumulateAnno);
+        const ggUtili = Math.min(vacDays, spazio);
+        ferieCumulateAnno += vacDays;
 
-        // APPLICA IL FILTRO TICKET
-        if (includeTickets) {
-          totalTicket += (ggUtili * cTicket);
+        if (ggUtili > 0) {
+          totalLordo += (ggUtili * mediaApplied);
+          totalPercepito += (ggUtili * cPercepito);
+          totalFerieUtili += ggUtili;
+
+          if (includeTickets) {
+            totalTicket += (ggUtili * cTicket);
+          }
         }
-
-        totalPercepito += (ggUtili * cPercepito);
-        totalFerieUtili += ggUtili;
-      }
+      });
     });
 
     return {
@@ -279,8 +313,7 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
       lordo: totalLordo,
       ferie: totalFerieUtili
     };
-  }, [worker, includeTickets, startClaimYear]); // <--- Aggiunto startClaimYear alle dipendenze
-
+  }, [worker, includeTickets, startClaimYear, includeExFest]);
 
   // --- TEMA E STILI ---
   const theme = useMemo(() => {
@@ -454,7 +487,7 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
                       <p className="text-[8px] font-bold uppercase text-slate-400">Trend Storico</p>
                       <TrendingUp className="w-3 h-3 text-slate-300" />
                     </div>
-                    <BackChart worker={worker} theme={theme} />
+                    <BackChart worker={worker} theme={theme} startYear={startClaimYear} />
                   </div>
 
                   {/* BOX TICKET INTELLIGENTE MIGLIORATO PER LEGGIBILITÀ */}
@@ -463,9 +496,7 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
                     : 'bg-slate-50/90 border-slate-200' // Sfondo più solido e chiaro quando inattivo
                     }`}>
                     <div className="flex items-center gap-2">
-                      {/* Icona grigia se inattivo */}
                       <Ticket className={`w-4 h-4 ${includeTickets ? 'text-amber-500' : 'text-slate-500'}`} />
-                      {/* Testo non più barrato, solo grigio */}
                       <span className={`text-[9px] uppercase tracking-widest font-bold ${includeTickets ? 'text-slate-500' : 'text-slate-600'}`}>
                         Valore Ticket
                       </span>
@@ -476,7 +507,6 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
                         {financialStats.ticket.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' }).replace(',00', '')}
                       </p>
                     ) : (
-                      // Badge ROSSO evidente per indicare l'esclusione
                       <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-100/80 border border-rose-200 shadow-sm">
                         <Ban className="w-3.5 h-3.5 text-rose-600" />
                         <span className="text-[9px] font-black text-rose-700 tracking-wide uppercase">Non Calcolati</span>
