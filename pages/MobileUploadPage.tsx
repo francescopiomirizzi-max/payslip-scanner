@@ -1,12 +1,13 @@
 import React, { useState, useRef } from 'react';
-import { useParams, useSearchParams } from 'react-router-dom';
 import { Camera, Loader2, CheckCircle2, UploadCloud, Plus, X, FileText, Image as ImageIcon, Smartphone } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { motion, AnimatePresence } from 'framer-motion';
 
-const MobileUploadPage = () => {
-    const { sessionId } = useParams();
-    const [searchParams] = useSearchParams();
+// ACCETTIAMO SESSION ID COME PROP (passata da App.tsx)
+const MobileUploadPage = ({ sessionId }: { sessionId: string }) => {
+
+    // USIAMO IL LETTORE NATIVO DEL BROWSER invece di react-router-dom
+    const searchParams = new URLSearchParams(window.location.search);
     const company = searchParams.get('company') || 'Azienda';
     const workerName = searchParams.get('name') || 'Lavoratore';
 
@@ -206,7 +207,7 @@ const MobileUploadPage = () => {
                                                 #{idx + 1}
                                             </div>
 
-                                            {/* Bottone Elimina (Bello e Moderno) */}
+                                            {/* Bottone Elimina */}
                                             <button
                                                 onClick={() => removeFile(idx)}
                                                 className="absolute top-2 right-2 w-8 h-8 bg-black/40 hover:bg-red-500/80 backdrop-blur-md rounded-full flex items-center justify-center text-white border border-white/20 transition-colors"
@@ -296,7 +297,6 @@ const MobileUploadPage = () => {
                     </div>
                 )}
             </div>
-
         </div>
     );
 };

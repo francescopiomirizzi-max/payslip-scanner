@@ -447,11 +447,6 @@ const App: React.FC = () => {
         }
     }, []);
 
-    // SE SIAMO SU MOBILE, RENDERING ONLY MOBILE PAGE
-    if (isMobileMode) {
-        return <MobileUploadPage sessionId={mobileSessionId} />;
-    }
-
     // --- ALTRIMENTI C'È L'APP DESKTOP ---
 
     // --- STATI MANCANTI PER IL MODALE ---
@@ -1082,7 +1077,10 @@ const App: React.FC = () => {
             <div className="h-1 w-full bg-gradient-to-r from-amber-400 to-orange-500 transform scale-x-0 group-hover:scale-x-100 transition-transform duration-500 origin-left"></div>
         </div>
     </div>
-
+    // SE SIAMO SU MOBILE, RENDERING ONLY MOBILE PAGE
+    if (isMobileMode) {
+        return <MobileUploadPage sessionId={mobileSessionId} />;
+    }
     // --- RENDER CONDIZIONALE PER LOGIN ---
     if (!isAuthenticated) {
         return (
