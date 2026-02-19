@@ -2,8 +2,8 @@ import React, { useEffect, useState, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { X, Smartphone, Loader2, CheckCircle2 } from 'lucide-react';
 import QRCode from 'react-qr-code';
-import { v4 as uuidv4 } from 'uuid'; // RIMESSO: Fondamentale per il Database!
-import { supabase, createScanSession } from '../utils/supabaseClient'; // PERCORSO ORIGINALE CORRETTO!
+import { v4 as uuidv4 } from 'uuid';
+import { supabase } from '../supabaseClient';
 
 interface QRScannerModalProps {
     isOpen: boolean;
@@ -24,7 +24,6 @@ const QRScannerModal: React.FC<QRScannerModalProps> = ({
     const [status, setStatus] = useState<'waiting' | 'processing' | 'completed'>('waiting');
     const [scannedCount, setScannedCount] = useState(0);
 
-    // TRUCCO ANTI-DISCONNESSIONE: Salviamo la funzione in una memoria stabile
     const latestOnScanSuccess = useRef(onScanSuccess);
     useEffect(() => {
         latestOnScanSuccess.current = onScanSuccess;
@@ -32,49 +31,60 @@ const QRScannerModal: React.FC<QRScannerModalProps> = ({
 
     useEffect(() => {
         if (isOpen) {
-            // IL SEGRETO: Creiamo un ID Sessione valido per Supabase!
             const newSession = uuidv4();
             setSessionId(newSession);
             setStatus('waiting');
             setScannedCount(0);
 
-            // CREA LA SESSIONE UFFICIALE
-            createScanSession(newSession).catch(() => {
-                supabase.from('scan_sessions').insert([{ id: newSession, status: 'waiting' }]).then();
-            });
+            // 1. CREAZIONE FORZATA DELLA STANZA SUL DB
+            const initDb = async () => {
+                console.log("1️⃣ Creazione stanza in corso...", newSession);
+                const { error } = await supabase.from('scan_sessions').insert([{ id: newSession, status: 'waiting' }]);
+                if (error) console.error("❌ ERRORE CREAZIONE DB:", error);
+                else console.log("2️⃣ Stanza creata con successo sul DB!");
+            };
+            initDb();
 
+            // 2. ASCOLTO GLOBALE SENZA FILTRI (Bypassa i bug di Supabase)
+            console.log("3️⃣ Avvio ascolto in tempo reale...");
             const subscription = supabase
-                .channel(`session-${newSession}`)
-                .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'scan_sessions', filter: `id=eq.${newSession}` },
+                .channel('room_listener')
+                .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'scan_sessions' },
                     (payload) => {
+                        // Ignoriamo gli aggiornamenti di altri utenti
+                        if (payload.new.id !== newSession) return;
+
+                        console.log("🔥 4️⃣ IL PC HA SENTITO IL TELEFONO! Dati ricevuti:", payload.new);
+
                         const newStatus = payload.new.status;
 
                         if (newStatus === 'processing') setStatus('processing');
 
-                        // IL TELEFONO HA MANDATO I DATI!
                         if (newStatus === 'completed' && payload.new.data) {
+                            console.log("✅ 5️⃣ Dati validi, inserimento in tabella in corso...");
                             setStatus('completed');
                             setScannedCount(prev => prev + 1);
 
-                            // COMPILA LA TABELLA IN TEMPO REALE
                             latestOnScanSuccess.current(payload.new.data);
 
                             setTimeout(() => setStatus('waiting'), 2000);
                         }
 
-                        // IL TELEFONO HA FINITO TUTTO IL BLOCCO DI FOTO!
                         if (newStatus === 'all_done') {
-                            onClose(); // CHIUDE LA FINESTRA DA SOLA!
+                            console.log("🚪 6️⃣ Il telefono ha finito. Chiudo la finestra!");
+                            onClose();
                         }
                     }
                 )
-                .subscribe();
+                .subscribe((status) => {
+                    console.log("📡 Stato connessione Realtime:", status);
+                });
 
             return () => {
                 supabase.removeChannel(subscription);
             };
         }
-    }, [isOpen]);
+    }, [isOpen, onClose]); // Aggiunto onClose alle dipendenze per sicurezza
 
     if (!isOpen) return null;
 
@@ -87,7 +97,6 @@ const QRScannerModal: React.FC<QRScannerModalProps> = ({
                 animate={{ scale: 1, opacity: 1 }}
                 className="bg-slate-900 border border-slate-700 w-full max-w-md rounded-3xl shadow-2xl overflow-hidden text-white"
             >
-                {/* Header Modale */}
                 <div className="p-4 bg-slate-800/50 flex justify-between items-center border-b border-slate-700">
                     <span className="font-bold text-sm flex items-center gap-2 text-indigo-400">
                         <Smartphone className="w-5 h-5" /> Connessione Mobile
@@ -97,7 +106,6 @@ const QRScannerModal: React.FC<QRScannerModalProps> = ({
                     </button>
                 </div>
 
-                {/* Corpo Modale */}
                 <div className="p-8 flex flex-col items-center text-center">
 
                     <div className="bg-white p-4 rounded-2xl shadow-xl mb-6 relative overflow-hidden">
