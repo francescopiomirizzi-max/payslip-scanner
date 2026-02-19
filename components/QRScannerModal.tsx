@@ -37,16 +37,14 @@ const QRScannerModal: React.FC<QRScannerModalProps> = ({
         setStatus('waiting');
         setScannedCount(0);
 
-        let isPolling = true; // Motore acceso
+        let isPolling = true;
 
-        // 1. INIZIALIZZA IL DATABASE
         const initDb = async () => {
             await supabase.from('scan_sessions').insert([{ id: newSession, status: 'waiting' }]);
             console.log("✅ Stanza creata. Avvio ricevitore infallibile...");
-            startPolling(); // Avvia il controllo continuo
+            startPolling();
         };
 
-        // 2. RICEVITORE INFALLIBILE (Polling ogni 1 secondo)
         const startPolling = async () => {
             if (!isPolling) return;
 
@@ -58,42 +56,41 @@ const QRScannerModal: React.FC<QRScannerModalProps> = ({
                     .single();
 
                 if (data) {
-                    // Se il telefono sta elaborando
                     if (data.status === 'processing') {
                         setStatus('processing');
                     }
 
-                    // Se il telefono ha inviato un file
-                    if (data.status === 'completed' && data.data) {
+                    // 1. IL TRUCCO È QUI: Leggiamo i dati INDIPENDENTEMENTE dallo stato
+                    if (data.data && Object.keys(data.data).length > 0) {
                         console.log("🔥 FILE RICEVUTO! Inserimento in tabella in corso...");
                         setStatus('completed');
                         setScannedCount(prev => prev + 1);
 
-                        // Inserisce i numeri nella tabella
                         latestOnScanSuccess.current(data.data);
 
-                        // RESET FONDAMENTALE: Il PC "svuota la scatola" sul database 
-                        // per fare spazio alla prossima foto e non leggere due volte la stessa!
-                        await supabase.from('scan_sessions').update({ status: 'waiting', data: null }).eq('id', newSession);
+                        // Salviamo lo stato futuro (se era all_done, lo teniamo all_done)
+                        const nextStatus = data.status === 'all_done' ? 'all_done' : 'waiting';
+
+                        // Svuotiamo il pacco dei dati, così non lo leggiamo due volte
+                        await supabase.from('scan_sessions').update({ status: nextStatus, data: null }).eq('id', newSession);
 
                         setTimeout(() => {
                             if (isPolling) setStatus('waiting');
                         }, 1500);
                     }
 
-                    // Se il telefono ha inviato TUTTE le foto
-                    if (data.status === 'all_done') {
-                        console.log("🚪 Il telefono ha finito. Chiudo la finestra in automatico!");
-                        isPolling = false; // Ferma il motore
-                        onClose(); // Chiude la modale
-                        return; // Ferma il ciclo
+                    // 2. CHIUDIAMO SOLO SE IL TELEFONO HA FINITO *E* NON CI SONO PIÙ DATI DA LEGGERE
+                    if (data.status === 'all_done' && !data.data) {
+                        console.log("🚪 Tutti i dati elaborati. Chiudo la finestra in automatico!");
+                        isPolling = false;
+                        onClose();
+                        return; // Ferma il motore
                     }
                 }
             } catch (error) {
-                // Ignoriamo i micro-errori di rete invisibili
+                // Ignora piccoli cali di rete
             }
 
-            // Ripeti il controllo tra esatti 1000 millisecondi (1 secondo)
             if (isPolling) {
                 setTimeout(startPolling, 1000);
             }
@@ -101,7 +98,6 @@ const QRScannerModal: React.FC<QRScannerModalProps> = ({
 
         initDb();
 
-        // Spegne il motore quando premi la X
         return () => {
             isPolling = false;
         };
