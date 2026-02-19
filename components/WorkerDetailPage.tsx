@@ -4,6 +4,7 @@ import AnnualCalculationTable from './WorkerTables/AnnualCalculationTable';
 import IndemnityPivotTable from './WorkerTables/IndemnityPivotTable';
 import TableComponent from './TableComponent'; // Assicurati che il percorso sia corretto
 // Import necessario per i calcoli della stampa
+import QRScannerModal from '../components/QRScannerModal';
 import { Worker, AnnoDati, parseFloatSafe, getColumnsByProfile, MONTH_NAMES, formatCurrency, YEARS } from '../types';
 import {
   ArrowLeft,
@@ -46,10 +47,14 @@ import {
   ChevronRight,
   ChevronDown,
   FileStack,
+  Smartphone,
   Sparkles,
   XCircle,
   AlertTriangle,
-  Check
+  QrCode,
+  Check,
+  RotateCw, // <--- AGGIUNTA
+  Wand2     // <--- AGGIUNTA
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 // IMPORTANTE: Tesseract per il ritaglio (Canvas)
@@ -129,14 +134,19 @@ const MovingGrid = () => (
     <div className="absolute top-[40%] left-[40%] w-[400px] h-[400px] bg-purple-400/20 rounded-full blur-[120px] mix-blend-multiply animate-blob animation-delay-4000"></div>
   </div>
 );
-// --- COMPONENTE CALCOLATRICE FLUTTUANTE (Spostabile) ---
+// --- COMPONENTE CALCOLATRICE FLUTTUANTE (Spostabile e con Fix Tastiera) ---
 const FloatingCalculator = ({ onClose }: { onClose: () => void }) => {
   const [display, setDisplay] = useState('');
 
   const handleInput = (val: string) => setDisplay(prev => prev + val);
   const handleClear = () => setDisplay('');
+
   const handleCalc = () => {
-    try { setDisplay(String(eval(display.replace(/,/g, '.')))); }
+    if (!display) return; // Se è vuoto, non fa nulla ed evita "undefined"
+    try {
+      const result = eval(display.replace(/,/g, '.'));
+      setDisplay(result !== undefined ? String(result) : '');
+    }
     catch { setDisplay('Errore'); setTimeout(() => setDisplay(''), 1000); }
   };
 
@@ -144,22 +154,36 @@ const FloatingCalculator = ({ onClose }: { onClose: () => void }) => {
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const key = e.key;
-      if (/[0-9+\-*/.]/.test(key)) handleInput(key);
-      if (key === 'Enter' || key === '=') { e.preventDefault(); handleCalc(); }
+
+      // Cattura l'invio e blocca l'evento per non far cliccare bottoni in background
+      if (key === 'Enter' || key === '=') {
+        e.preventDefault();
+        e.stopPropagation();
+        handleCalc();
+        return;
+      }
+
+      if (/[0-9+\-*/.]/.test(key)) {
+        e.preventDefault(); // Evita scroll della pagina se premi + o -
+        handleInput(key);
+        return;
+      }
+
       if (key === 'Backspace') setDisplay(prev => prev.slice(0, -1));
       if (key === 'Escape') onClose();
-      if (key === 'Delete' || key === 'c') handleClear();
+      if (key === 'Delete' || key === 'c' || key === 'C') handleClear();
     };
+
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  }, [display, onClose]); // <--- IL FIX E' QUI: Aggiorna la memoria a ogni tasto premuto
 
   const btnClass = "h-12 rounded-lg font-bold text-lg transition-all active:scale-95 flex items-center justify-center shadow-sm";
 
   return (
     <motion.div
-      drag // <--- ABILITA IL TRASCINAMENTO
-      dragMomentum={false} // <--- FERMA IL MOVIMENTO AL RILASCIO
+      drag
+      dragMomentum={false}
       initial={{ scale: 0.8, opacity: 0 }}
       animate={{ scale: 1, opacity: 1 }}
       exit={{ scale: 0.8, opacity: 0 }}
@@ -235,6 +259,9 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
   const [imgScale, setImgScale] = useState(1);
   const [imgPos, setImgPos] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
+  // --- NUOVI STATI PER STRUMENTI VISORE ---
+  const [imgRotation, setImgRotation] = useState(0);
+  const [imgFilter, setImgFilter] = useState<'none' | 'contrast'>('none');
   // --- FUNZIONE ZOOM MANCANTE ---
   const handleZoom = (delta: number) => {
     setImgScale(prev => Math.max(0.5, Math.min(3, prev + delta)));
@@ -284,7 +311,71 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
   const [batchNotification, setBatchNotification] = useState<{ msg: string, type: 'success' | 'error' | 'warning' } | null>(null);
 
   const batchInputRef = useRef<HTMLInputElement>(null);
+  // --- STATO QR CODE ---
+  const [isQRModalOpen, setIsQRModalOpen] = useState(false);
 
+  // --- FUNZIONE CHE RICEVE I DATI DAL TELEFONO ---
+  const handleQRData = (aiResult: any) => {
+    // 1. Clona i dati attuali
+    let currentAnni = JSON.parse(JSON.stringify(monthlyInputs));
+
+    if (aiResult.month && aiResult.year) {
+      const targetYear = Number(aiResult.year);
+      const targetMonthIndex = Number(aiResult.month) - 1;
+
+      // 2. Cerca o Crea la riga
+      let rowIndex = currentAnni.findIndex((r: any) => Number(r.year) === targetYear && r.monthIndex === targetMonthIndex);
+
+      if (rowIndex === -1) {
+        currentAnni.push({
+          id: Date.now().toString(),
+          year: targetYear,
+          monthIndex: targetMonthIndex,
+          month: MONTH_NAMES[targetMonthIndex],
+          daysWorked: 0, daysVacation: 0, ticket: 0, arretrati: 0, note: '', coeffTicket: 0, coeffPercepito: 0
+        });
+        rowIndex = currentAnni.length - 1;
+      }
+
+      const row = currentAnni[rowIndex];
+
+      // 3. Aggiorna i dati
+      if (typeof aiResult.daysWorked === 'number') row.daysWorked = aiResult.daysWorked;
+      if (typeof aiResult.daysVacation === 'number') row.daysVacation = aiResult.daysVacation;
+
+      const ticketVal = Number(aiResult.ticketRate);
+      if (!isNaN(ticketVal) && ticketVal > 0) row.coeffTicket = ticketVal;
+
+      const arretratiVal = Number(aiResult.arretrati);
+      if (!isNaN(arretratiVal) && arretratiVal !== 0) row.arretrati = arretratiVal;
+
+      if (aiResult.eventNote && !row.note?.includes(aiResult.eventNote)) {
+        row.note = (row.note ? row.note + ' ' : '') + `[${aiResult.eventNote}]`;
+      }
+
+      // 4. Aggiorna Codici Variabili
+      if (aiResult.codes) {
+        Object.entries(aiResult.codes).forEach(([code, value]) => {
+          const numValue = parseFloat(value as string);
+          if (!isNaN(numValue) && numValue !== 0) {
+            // @ts-ignore
+            row[code] = numValue;
+          }
+        });
+      }
+
+      currentAnni[rowIndex] = row;
+
+      // 5. Salva e Notifica
+      currentAnni.sort((a: any, b: any) => (a.year - b.year) || (a.monthIndex - b.monthIndex));
+      setMonthlyInputs(currentAnni);
+      onUpdateData(currentAnni);
+      setCurrentYear(targetYear);
+
+      setBatchNotification({ msg: '✅ Busta caricata da Mobile!', type: 'success' });
+      setTimeout(() => setBatchNotification(null), 4000);
+    }
+  };
   // --- 🔥 2. LOGICA UPLOAD MASSIVO OTTIMIZZATA (Sostituisci handleBatchUpload) ---
   const handleBatchUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -1079,32 +1170,27 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      // Converte tutti i file selezionati in URL temporanei
-      // MODIFICA QUI: Aggiunto ": File" e "as File" per calmare TypeScript
       const newFiles = Array.from(e.target.files).map((file: any) => URL.createObjectURL(file as Blob));
-
       setPayslipFiles(prev => [...prev, ...newFiles]);
       setCurrentFileIndex(prev => prev === 0 && payslipFiles.length === 0 ? 0 : prev);
       setShowSplit(true);
 
-      // Reset zoom/pos
-      setImgScale(1);
-      setImgPos({ x: 0, y: 0 });
+      // Reset totale
+      setImgScale(1); setImgPos({ x: 0, y: 0 }); setImgRotation(0); setImgFilter('none');
     }
   };
 
-  // Funzioni di navigazione
   const nextFile = () => {
     if (currentFileIndex < payslipFiles.length - 1) {
       setCurrentFileIndex(prev => prev + 1);
-      setImgScale(1); setImgPos({ x: 0, y: 0 }); // Reset zoom al cambio file
+      setImgScale(1); setImgPos({ x: 0, y: 0 }); setImgRotation(0); setImgFilter('none');
     }
   };
 
   const prevFile = () => {
     if (currentFileIndex > 0) {
       setCurrentFileIndex(prev => prev - 1);
-      setImgScale(1); setImgPos({ x: 0, y: 0 });
+      setImgScale(1); setImgPos({ x: 0, y: 0 }); setImgRotation(0); setImgFilter('none');
     }
   };
   // --- NUOVE FUNZIONI DRAG & DROP ---
@@ -1335,7 +1421,11 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
     return (
       <TableComponent
         worker={worker}
-        onBack={() => setShowReport(false)}
+        // ECCO LA MAGIA: Ora gli diciamo di spegnere il report E tornare alla vera Dashboard!
+        onBack={() => {
+          setShowReport(false);
+          onBack();
+        }}
         onEdit={() => setShowReport(false)}
         startClaimYear={startClaimYear}
       />
@@ -1414,13 +1504,12 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
 
             </div>
 
-            {/* USER INFO (Separato da riga verticale - Invariato ma aumentata altezza riga) */}
+            {/* USER INFO (Ripristinato) */}
             <div className="flex items-center gap-5 border-l-2 border-slate-200/60 pl-8 h-20">
-              <div className="w-14 h-14 rounded-2xl flex items-center justify-center shadow-xl text-white shadow-indigo-200 ring-4 ring-white"
+              <div className="w-14 h-14 rounded-2xl flex items-center justify-center shadow-xl text-white shadow-indigo-200 ring-4 ring-white shrink-0"
                 style={{ background: `linear-gradient(135deg, ${worker.accentColor === 'indigo' ? '#6366f1' : worker.accentColor === 'emerald' ? '#10b981' : worker.accentColor === 'orange' ? '#f97316' : '#3b82f6'}, ${worker.accentColor === 'indigo' ? '#4f46e5' : worker.accentColor === 'emerald' ? '#059669' : worker.accentColor === 'orange' ? '#ea580c' : '#2563eb'})` }}>
                 <User className="w-7 h-7" strokeWidth={2} />
               </div>
-              {/* ... resto del blocco User Info (puoi lasciare quello di prima) ... */}
               <div className="hidden md:block">
                 <div className="flex items-center gap-2">
                   <h1 className="text-2xl font-black text-slate-800 tracking-tight leading-none">
@@ -1520,11 +1609,46 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
         {/* --- COLONNA PRINCIPALE --- */}
         <div className="flex-1 flex flex-col h-full overflow-hidden">
 
-          {/* TIMELINE STATO VERTENZA */}
+          {/* TIMELINE STATO VERTENZA E PARAMETRI */}
           <div className="lg:col-span-2 bg-white/70 backdrop-blur-md rounded-[2rem] p-6 shadow-sm border border-white/60 relative overflow-hidden">
-            <h3 className="text-sm font-black text-slate-700 mb-4 flex items-center gap-2">
-              <Gavel className="w-4 h-4 text-indigo-500" /> STATO VERTENZA
-            </h3>
+
+            {/* Header con i Toggle integrati a destra */}
+            <div className="flex justify-between items-center mb-5">
+              <h3 className="text-sm font-black text-slate-700 flex items-center gap-2">
+                <Gavel className="w-4 h-4 text-indigo-500" /> STATO VERTENZA
+              </h3>
+
+              {/* TOGGLES PARAMETRI CALCOLO - REDESIGN PREMIUM */}
+              <div className="flex items-center p-1 bg-slate-100/50 backdrop-blur-sm rounded-full border border-slate-200/80 shadow-sm">
+
+                {/* TOGGLE EX-FESTIVITÀ (Amber/Orange Gradient) */}
+                <button
+                  onClick={() => setIncludeExFest(!includeExFest)}
+                  className={`group flex items-center gap-1.5 px-3 py-1.5 rounded-full font-bold text-xs transition-all duration-300 border ${includeExFest
+                    ? 'bg-gradient-to-r from-amber-100 to-orange-100 text-amber-800 border-amber-300/50 shadow-[0_1px_6px_rgba(251,191,36,0.2)]'
+                    : 'bg-transparent text-slate-500 border-transparent hover:bg-white hover:border-amber-200/60 hover:text-amber-600'
+                    }`}
+                  title="Includi/Escludi Ex-Festività"
+                >
+                  <CalendarPlus size={14} className={`transition-transform duration-300 ${includeExFest ? 'rotate-0' : 'group-hover:rotate-12'}`} strokeWidth={2.5} />
+                  <span>{includeExFest ? "32gg" : "28gg"}</span>
+                </button>
+
+                {/* TOGGLE TICKET (Indigo/Blue Gradient) */}
+                <button
+                  onClick={() => setIncludeTickets(!includeTickets)}
+                  className={`group flex items-center gap-1.5 px-3 py-1.5 rounded-full font-bold text-xs transition-all duration-300 border ml-1 ${includeTickets
+                    ? 'bg-gradient-to-r from-indigo-100 to-blue-100 text-indigo-800 border-indigo-300/50 shadow-[0_1px_6px_rgba(99,102,241,0.2)]'
+                    : 'bg-transparent text-slate-400 border-transparent hover:bg-white hover:border-indigo-200/60 hover:text-indigo-600 line-through opacity-70 hover:opacity-100 hover:no-underline'
+                    }`}
+                  title="Includi/Escludi Ticket Restaurant"
+                >
+                  <Ticket size={14} className={`transition-transform duration-300 ${includeTickets ? 'rotate-0' : 'group-hover:-rotate-12'}`} strokeWidth={2.5} />
+                  Ticket
+                </button>
+              </div>
+            </div>
+
             <div className="relative flex justify-between items-center z-10 px-4">
               <div className="absolute top-5 left-0 w-full h-0.5 bg-slate-200 -z-10"></div>
               <TimelineStep step="analisi" label="Analisi" icon={Search} activeStatus={legalStatus} />
@@ -1536,7 +1660,8 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
           </div>
 
           <div className="flex justify-center mb-6 z-20 shrink-0">
-            <div className="flex p-2 bg/60 dark:bg-slate-900/60 backdrop-blur-2xl border border-white/50 dark:border-slate-700/50 rounded-2xl shadow-2xl gap-3 overflow-x-auto w-full justify-start md:justify-center scrollbar-hide">
+            {/* Contenitore corretto con no-scrollbar per togliere la barra antiestetica */}
+            <div className="flex p-2 bg-white/60 dark:bg-slate-900/60 backdrop-blur-2xl border border-white/50 dark:border-slate-700/50 rounded-2xl shadow-2xl gap-3 overflow-x-auto w-full justify-start md:justify-center no-scrollbar">
 
               {/* TASTO CARICA BUSTA (Pink) */}
               <button
@@ -1628,31 +1753,45 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
                 className="hidden"
                 onChange={handleAnalyzePaySlip}
               />
+              {/* TASTO MOBILE SCAN - DESIGN SMARTPHONE 3D (Completamente trasparente a riposo) */}
+              <button
+                onClick={() => setIsQRModalOpen(true)}
+                className="group relative flex items-center gap-3 px-4 py-2 ml-2 bg-white/40 dark:bg-slate-800/40 border-2 border-transparent hover:bg-slate-900 hover:border-indigo-500 rounded-2xl transition-all duration-300 hover:shadow-[0_0_20px_rgba(79,70,229,0.3)] overflow-hidden shrink-0"
+                title="Connetti lo Smartphone"
+              >
+                {/* Effetto Riflesso Vetro (Solo hover) */}
+                <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
 
-              <div className="w-px bg-slate-300 dark:bg-slate-700 mx-1"></div>
+                {/* IL MINI-SMARTPHONE CSS */}
+                <div className="relative w-6 h-10 border-[1.5px] border-slate-400 dark:border-slate-500 group-hover:border-indigo-400 rounded-[6px] flex flex-col items-center p-[2px] transition-colors duration-300 shadow-inner bg-transparent group-hover:bg-slate-950">
+                  {/* Notch / Altoparlante */}
+                  <div className="w-2 h-[2px] bg-slate-400 dark:bg-slate-500 group-hover:bg-indigo-400 rounded-full mb-0.5 transition-colors duration-300"></div>
 
-              {/* --- NUOVI TOGGLE CONFIGURAZIONI (TETTO E TICKET) --- */}
-              <div className="flex bg-slate-100/50 dark:bg-slate-800/50 p-1 rounded-xl border border-slate-200 dark:border-slate-700 shrink-0">
-                <button
-                  onClick={() => setIncludeExFest(!includeExFest)}
-                  className={`px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-all ${includeExFest ? 'bg-amber-100 text-amber-700 shadow-sm' : 'text-slate-500 hover:text-amber-600 hover:bg-white/50'
-                    }`}
-                  title="Includi/Escludi Ex-Festività"
-                >
-                  <CalendarPlus size={18} />
-                  {includeExFest ? "32gg (ExF)" : "28gg (Std)"}
-                </button>
-                <button
-                  onClick={() => setIncludeTickets(!includeTickets)}
-                  className={`px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-all ${includeTickets ? 'bg-indigo-100 text-indigo-700 shadow-sm' : 'text-slate-400 hover:text-indigo-600 hover:bg-white/50 line-through opacity-80'
-                    }`}
-                  title="Includi/Escludi Ticket Restaurant"
-                >
-                  <Ticket size={18} />
-                  Ticket
-                </button>
-              </div>
+                  {/* Schermo che si illumina (Solo hover) */}
+                  <div className="flex-1 w-full bg-slate-300/50 dark:bg-slate-700/50 group-hover:bg-indigo-500/20 rounded-[2px] flex items-center justify-center relative overflow-hidden transition-colors duration-300">
+                    <QrCode className="w-3.5 h-3.5 text-indigo-400 opacity-0 group-hover:opacity-100 transition-opacity duration-300 scale-75 group-hover:scale-100" />
+                  </div>
 
+                  {/* Home Indicator */}
+                  <div className="w-2.5 h-[1.5px] bg-slate-400 dark:bg-slate-500 group-hover:bg-indigo-500 rounded-full mt-0.5 transition-colors duration-300"></div>
+                </div>
+
+                {/* Testo del Bottone */}
+                <div className="flex flex-col items-start text-left relative z-10">
+                  <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 group-hover:text-indigo-300 transition-colors uppercase tracking-widest leading-none mb-1">
+                    Connetti
+                  </span>
+                  <span className="text-sm font-black text-slate-600 dark:text-slate-400 group-hover:text-white transition-colors leading-none">
+                    Mobile Scan
+                  </span>
+                </div>
+
+                {/* Pallino di notifica: Grigio base, Verde e pulsante in hover */}
+                <div className="absolute top-2 right-2 w-2 h-2">
+                  <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-0 group-hover:opacity-75 group-hover:animate-ping transition-opacity duration-300"></span>
+                  <span className="relative inline-flex rounded-full w-2 h-2 bg-slate-400 dark:bg-slate-600 group-hover:bg-emerald-500 transition-colors duration-300"></span>
+                </div>
+              </button>
               <div className="w-px bg-slate-300 dark:bg-slate-700 mx-1"></div>
 
               {/* TASTO INSERIMENTO MENSILE (Blue) */}
@@ -1867,21 +2006,32 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
                         {isSniperMode ? 'STOP' : 'OCR'}
                       </button>
                       <div className="h-6 w-px bg-slate-600 mx-2"></div>
-                      <button onClick={() => handleZoom(-0.1)} className="p-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-white transition-colors"><ZoomOut className="w-4 h-4" /></button>
-                      <button onClick={() => { setImgScale(1); setImgPos({ x: 0, y: 0 }); }} className="p-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-white transition-colors"><Maximize className="w-4 h-4" /></button>
-                      <button onClick={() => handleZoom(0.1)} className="p-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-white transition-colors"><ZoomIn className="w-4 h-4" /></button>
+
+                      {/* NUOVI STRUMENTI: BACCHETTA MAGICA E ROTAZIONE */}
+                      <button onClick={() => setImgFilter(prev => prev === 'none' ? 'contrast' : 'none')} className={`p-2 rounded-lg transition-colors ${imgFilter === 'contrast' ? 'bg-indigo-600 text-white' : 'bg-slate-700 hover:bg-slate-600 text-white'}`} title="Migliora Leggibilità Busta Paga Sbiadita"><Wand2 className="w-4 h-4" /></button>
+                      <button onClick={() => setImgRotation(prev => prev + 90)} className="p-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-white transition-colors" title="Ruota Immagine"><RotateCw className="w-4 h-4" /></button>
+                      <div className="h-6 w-px bg-slate-600 mx-1"></div>
+
+                      <button onClick={() => handleZoom(-0.1)} className="p-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-white transition-colors" title="Riduci Zoom"><ZoomOut className="w-4 h-4" /></button>
+                      <button onClick={() => { setImgScale(1); setImgPos({ x: 0, y: 0 }); setImgRotation(0); }} className="p-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-white transition-colors" title="Centra e Ripristina"><Maximize className="w-4 h-4" /></button>
+                      <button onClick={() => handleZoom(0.1)} className="p-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-white transition-colors" title="Aumenta Zoom"><ZoomIn className="w-4 h-4" /></button>
+
+                      {/* CESTINO FIXATO (Non chiude il visore) */}
                       <button onClick={() => {
                         const newFiles = payslipFiles.filter((_, i) => i !== currentFileIndex);
                         setPayslipFiles(newFiles);
-                        if (newFiles.length === 0) setShowSplit(false);
-                        else if (currentFileIndex >= newFiles.length) setCurrentFileIndex(newFiles.length - 1);
+                        if (newFiles.length > 0 && currentFileIndex >= newFiles.length) {
+                          setCurrentFileIndex(newFiles.length - 1);
+                        } else if (newFiles.length === 0) {
+                          setCurrentFileIndex(0);
+                          setImgScale(1); setImgPos({ x: 0, y: 0 }); setImgRotation(0); setImgFilter('none');
+                        }
                       }} className="p-2 bg-red-900/50 hover:bg-red-900/80 text-red-400 rounded-lg ml-2 transition-colors"><Trash2 className="w-4 h-4" /></button>
                     </>
                   )}
-                  <button onClick={() => setShowSplit(false)} className="p-2 hover:bg-slate-700 rounded-lg text-slate-400 hover:text-white ml-2"><X className="w-5 h-5" /></button>
+                  <button onClick={() => setShowSplit(false)} className="p-2 hover:bg-slate-700 rounded-lg text-slate-400 hover:text-white ml-2" title="Chiudi Visore"><X className="w-5 h-5" /></button>
                 </div>
               </div>
-
               {/* BODY DEL VISORE */}
               <div
                 ref={containerRef}
@@ -1912,9 +2062,12 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
                         alt="Busta Paga"
                         draggable={false}
                         style={{
-                          transform: `scale(${imgScale}) translate(${imgPos.x}px, ${imgPos.y}px)`,
+                          // QUI AGGIUNGIAMO LA ROTAZIONE
+                          transform: `scale(${imgScale}) translate(${imgPos.x}px, ${imgPos.y}px) rotate(${imgRotation}deg)`,
                           transition: isDragging ? 'none' : 'transform 0.2s ease-out',
-                          pointerEvents: 'auto' // Riabilita interazione img
+                          pointerEvents: 'auto', // Riabilita interazione img
+                          // QUI AGGIUNGIAMO IL FILTRO BACCHETTA MAGICA
+                          filter: imgFilter === 'contrast' ? 'contrast(150%) grayscale(100%)' : 'none'
                         }}
                         className={`max-w-full max-h-full object-contain select-none ${isSniperMode ? '' : 'cursor-grab active:cursor-grabbing'}`}
                       />
@@ -2161,9 +2314,17 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
             </div>
           </motion.div>
         )}
+        {/* MODALE QR CODE SCANNER */}
+        <QRScannerModal
+          isOpen={isQRModalOpen}
+          onClose={() => setIsQRModalOpen(false)}
+          onScanSuccess={handleQRData}
+          company={worker.profilo || 'RFI'}
+          workerName={`${worker.cognome} ${worker.nome}`}
+        />
       </AnimatePresence>
     </div>
   );
 };
 
-export default WorkerDetailPage;  
+export default WorkerDetailPage; 

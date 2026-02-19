@@ -25,7 +25,8 @@ import {
     Settings,
     ArrowLeft,
     FileSpreadsheet,
-    RotateCcw
+    RotateCcw,
+    Smartphone
 } from 'lucide-react';
 import { motion, AnimatePresence, useSpring, useMotionValue } from 'framer-motion';
 import WorkerCard from './components/WorkerCard';
@@ -33,7 +34,8 @@ import WorkerModal from './components/WorkerModal';
 import WorkerDetailPage from './components/WorkerDetailPage';
 import TableComponent from './components/TableComponent';
 import StatsDashboard from './components/StatsDashboard';
-
+import QRScannerModal from './components/QRScannerModal';
+import MobileUploadPage from './pages/MobileUploadPage';
 // Importiamo tipi e logica
 import { Worker, AnnoDati, parseFloatSafe, getColumnsByProfile } from './types';
 import { DEFAULT_YEARS_TEMPLATE } from './constants';
@@ -186,37 +188,84 @@ const AnimatedCounter = ({ value, isCurrency = false }: { value: number, isCurre
     return <span ref={ref} />;
 };
 
-// --- COMPONENTE CALCOLATRICE FLUTTUANTE ---
+// --- COMPONENTE CALCOLATRICE FLUTTUANTE (Spostabile e con Fix Tastiera) ---
 const FloatingCalculator = ({ onClose }: { onClose: () => void }) => {
     const [display, setDisplay] = useState('');
 
     const handleBtn = (val: string) => setDisplay(prev => prev + val);
     const handleClear = () => setDisplay('');
+
     const handleEqual = () => {
+        if (!display) return; // Evita l'errore "undefined" se il display è vuoto
         try {
-            // eslint-disable-next-line no-eval
-            setDisplay(String(eval(display)));
-        } catch { setDisplay('Errore'); setTimeout(() => setDisplay(''), 1000); }
+            const result = eval(display.replace(/,/g, '.'));
+            setDisplay(result !== undefined ? String(result) : '');
+        } catch {
+            setDisplay('Errore');
+            setTimeout(() => setDisplay(''), 1000);
+        }
     };
+
+    // Listener Tastiera
+    React.useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            const key = e.key;
+
+            // Cattura l'invio e blocca l'evento per non far cliccare bottoni in background
+            if (key === 'Enter' || key === '=') {
+                e.preventDefault();
+                e.stopPropagation();
+                handleEqual();
+                return;
+            }
+
+            // Accetta numeri e operatori
+            if (/[0-9+\-*/.,]/.test(key)) {
+                e.preventDefault();
+                handleBtn(key);
+                return;
+            }
+
+            if (key === 'Backspace') setDisplay(prev => prev.slice(0, -1));
+            if (key === 'Escape') onClose();
+            if (key === 'Delete' || key.toLowerCase() === 'c') handleClear();
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [display, onClose]); // Aggiorna la memoria a ogni tasto premuto
 
     const btns = [
         { L: '7', v: '7' }, { L: '8', v: '8' }, { L: '9', v: '9' }, { L: '/', v: '/', c: 'text-indigo-500' },
         { L: '4', v: '4' }, { L: '5', v: '5' }, { L: '6', v: '6' }, { L: '*', v: '*', c: 'text-indigo-500' },
         { L: '1', v: '1' }, { L: '2', v: '2' }, { L: '3', v: '3' }, { L: '-', v: '-', c: 'text-indigo-500' },
-        { L: 'C', v: 'C', f: handleClear, c: 'text-red-500' }, { L: '0', v: '0' }, { L: '=', v: '=', f: handleEqual, bg: 'bg-indigo-500 text-white' }, { L: '+', v: '+', c: 'text-indigo-500' },
+        { L: 'C', v: 'C', f: handleClear, c: 'text-red-500' }, { L: '0', v: '0' }, { L: '=', v: '=', f: handleEqual, bg: 'bg-indigo-500 text-white hover:bg-indigo-600' }, { L: '+', v: '+', c: 'text-indigo-500' },
     ];
 
     return (
-        <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.8, opacity: 0 }}
+        <motion.div
+            drag
+            dragMomentum={false}
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.8, opacity: 0 }}
             className="fixed bottom-24 right-8 z-[100] w-72 bg-white/80 backdrop-blur-xl border border-white/40 shadow-2xl rounded-3xl overflow-hidden"
         >
-            <div className="p-4 bg-indigo-50/50 flex justify-between items-center border-b border-indigo-100">
-                <span className="font-bold text-indigo-900 flex items-center gap-2"><Calculator className="w-4 h-4" /> Calc</span>
-                <button onClick={onClose} className="p-1 hover:bg-red-100 rounded-full text-slate-400 hover:text-red-500 transition-colors"><X className="w-4 h-4" /></button>
+            {/* HEADER con cursore move per trascinare */}
+            <div className="p-4 bg-indigo-50/50 flex justify-between items-center border-b border-indigo-100 cursor-move">
+                <span className="font-bold text-indigo-900 flex items-center gap-2 pointer-events-none">
+                    <Calculator className="w-4 h-4" /> Calc
+                </span>
+                {/* Stop propagation sulla X per non innescare il drag */}
+                <button onClick={onClose} onPointerDown={(e) => e.stopPropagation()} className="p-1 hover:bg-red-100 rounded-full text-slate-400 hover:text-red-500 transition-colors">
+                    <X className="w-4 h-4" />
+                </button>
             </div>
+
             <div className="p-6 bg-slate-50 text-right text-3xl font-mono text-slate-700 font-bold tracking-widest overflow-hidden border-b border-slate-100 h-20 flex items-center justify-end">
                 {display || '0'}
             </div>
+
             <div className="grid grid-cols-4 gap-2 p-4 bg-white/50">
                 {btns.map((b, i) => (
                     <button key={i} onClick={() => b.f ? b.f() : handleBtn(b.v)}
@@ -380,9 +429,34 @@ const EmptyState = ({ isSearch = false, onReset }: { isSearch?: boolean, onReset
     </motion.div>
 );
 
+
+
 const App: React.FC = () => {
+    // --- 0. ROUTING MOBILE (Check URL Params) ---
+    const [isMobileMode, setIsMobileMode] = useState(false);
+    const [mobileSessionId, setMobileSessionId] = useState('');
+
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const isMobile = params.get('mobile') === 'true';
+        const session = params.get('session');
+
+        if (isMobile && session) {
+            setIsMobileMode(true);
+            setMobileSessionId(session);
+        }
+    }, []);
+
+    // SE SIAMO SU MOBILE, RENDERING ONLY MOBILE PAGE
+    if (isMobileMode) {
+        return <MobileUploadPage sessionId={mobileSessionId} />;
+    }
+
+    // --- ALTRIMENTI C'È L'APP DESKTOP ---
+
     // --- STATI MANCANTI PER IL MODALE ---
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [isQRModalOpen, setIsQRModalOpen] = useState(false); // <--- NUOVO STATO QR
     const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
     const [editingWorkerId, setEditingWorkerId] = useState<number | null>(null);
     const [currentWorker, setCurrentWorker] = useState<any>(null);
@@ -1111,6 +1185,23 @@ const App: React.FC = () => {
     }
     // -------------------------------------
 
+    // --- GESTIONE DATI DA MOBILE ---
+    // Funzione chiamata quando il QR Scanner riceve dati dal telefono
+    const handleMobileScanSuccess = (data: any) => {
+        console.log("DATI RICEVUTI DA MOBILE:", data);
+
+        // 1. Apri Modale Edit/Create con i dati precompilati
+        // (Qui potresti voler creare logica più complessa, es. aprire un modale di conferma)
+
+        addToast("Busta Paga ricevuta dal telefono!", "success");
+        triggerConfetti();
+
+        // Esempio: Se vuoi salvare direttamente o aprire un worker esistente
+        // Per ora facciamo un toast, l'implementazione dipenderà da come vuoi usare i dati.
+        // Se l'OCR restituisce i dati completi, potremmo fare:
+        // handleSaveWorker(data);
+    };
+
     return (
         <div className="min-h-screen font-sans selection:bg-indigo-100 dark:selection:bg-indigo-900/50 relative overflow-hidden transition-colors duration-500">
             <HiddenClasses />
@@ -1641,6 +1732,14 @@ const App: React.FC = () => {
                 mode={modalMode}
                 initialData={currentWorker}
             />
+
+            {/* MODALE QR CODE SCANNER */}
+            <QRScannerModal
+                isOpen={isQRModalOpen}
+                onClose={() => setIsQRModalOpen(false)}
+                onScanSuccess={handleMobileScanSuccess}
+            />
+
             {/* MODALE CAMBIO PASSWORD */}
             <ChangePasswordModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
         </div>
