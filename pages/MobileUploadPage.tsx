@@ -78,6 +78,8 @@ const MobileUploadPage = ({ sessionId }: { sessionId: string }) => {
                 await new Promise(r => setTimeout(r, 500));
                 setProgress({ current: i + 1, total: files.length });
             }
+            // --- AGGIUNGI QUESTA RIGA ESATTA QUI ---
+            await supabase.from('scan_sessions').update({ status: 'all_done' }).eq('id', sessionId);
             setUploadStatus('success');
         } catch (error) {
             console.error(error);

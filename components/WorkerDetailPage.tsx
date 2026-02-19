@@ -314,67 +314,70 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
   // --- STATO QR CODE ---
   const [isQRModalOpen, setIsQRModalOpen] = useState(false);
 
-  // --- FUNZIONE CHE RICEVE I DATI DAL TELEFONO ---
+  // --- FUNZIONE CHE RICEVE I DATI DAL TELEFONO (ANTI-SOVRASCRITTURA) ---
   const handleQRData = (aiResult: any) => {
-    // 1. Clona i dati attuali
-    let currentAnni = JSON.parse(JSON.stringify(monthlyInputs));
 
-    if (aiResult.month && aiResult.year) {
-      const targetYear = Number(aiResult.year);
-      const targetMonthIndex = Number(aiResult.month) - 1;
+    // Usiamo prevInputs per pescare sempre i dati in tempo reale senza chiusure
+    setMonthlyInputs((prevInputs) => {
+      let currentAnni = JSON.parse(JSON.stringify(prevInputs));
 
-      // 2. Cerca o Crea la riga
-      let rowIndex = currentAnni.findIndex((r: any) => Number(r.year) === targetYear && r.monthIndex === targetMonthIndex);
+      if (aiResult.month && aiResult.year) {
+        const targetYear = Number(aiResult.year);
+        const targetMonthIndex = Number(aiResult.month) - 1;
 
-      if (rowIndex === -1) {
-        currentAnni.push({
-          id: Date.now().toString(),
-          year: targetYear,
-          monthIndex: targetMonthIndex,
-          month: MONTH_NAMES[targetMonthIndex],
-          daysWorked: 0, daysVacation: 0, ticket: 0, arretrati: 0, note: '', coeffTicket: 0, coeffPercepito: 0
-        });
-        rowIndex = currentAnni.length - 1;
+        let rowIndex = currentAnni.findIndex((r: any) => Number(r.year) === targetYear && r.monthIndex === targetMonthIndex);
+
+        if (rowIndex === -1) {
+          currentAnni.push({
+            id: Date.now().toString() + Math.random().toString(),
+            year: targetYear,
+            monthIndex: targetMonthIndex,
+            month: MONTH_NAMES[targetMonthIndex],
+            daysWorked: 0, daysVacation: 0, ticket: 0, arretrati: 0, note: '', coeffTicket: 0, coeffPercepito: 0
+          });
+          rowIndex = currentAnni.length - 1;
+        }
+
+        const row = currentAnni[rowIndex];
+
+        if (typeof aiResult.daysWorked === 'number') row.daysWorked = aiResult.daysWorked;
+        if (typeof aiResult.daysVacation === 'number') row.daysVacation = aiResult.daysVacation;
+
+        const ticketVal = Number(aiResult.ticketRate);
+        if (!isNaN(ticketVal) && ticketVal > 0) row.coeffTicket = ticketVal;
+
+        const arretratiVal = Number(aiResult.arretrati);
+        if (!isNaN(arretratiVal) && arretratiVal !== 0) row.arretrati = arretratiVal;
+
+        if (aiResult.eventNote && !row.note?.includes(aiResult.eventNote)) {
+          row.note = (row.note ? row.note + ' ' : '') + `[${aiResult.eventNote}]`;
+        }
+
+        if (aiResult.codes) {
+          Object.entries(aiResult.codes).forEach(([code, value]) => {
+            const numValue = parseFloat(value as string);
+            if (!isNaN(numValue) && numValue !== 0) {
+              // @ts-ignore
+              row[code] = numValue;
+            }
+          });
+        }
+
+        currentAnni[rowIndex] = row;
+        currentAnni.sort((a: any, b: any) => (a.year - b.year) || (a.monthIndex - b.monthIndex));
+
+        // Aggiorniamo le info esterne senza rompere il ciclo di React
+        setTimeout(() => {
+          onUpdateData(currentAnni);
+          setCurrentYear(targetYear);
+          setBatchNotification({ msg: `✅ Busta ${aiResult.month}/${aiResult.year} caricata!`, type: 'success' });
+          setTimeout(() => setBatchNotification(null), 4000);
+        }, 0);
+
+        return currentAnni;
       }
-
-      const row = currentAnni[rowIndex];
-
-      // 3. Aggiorna i dati
-      if (typeof aiResult.daysWorked === 'number') row.daysWorked = aiResult.daysWorked;
-      if (typeof aiResult.daysVacation === 'number') row.daysVacation = aiResult.daysVacation;
-
-      const ticketVal = Number(aiResult.ticketRate);
-      if (!isNaN(ticketVal) && ticketVal > 0) row.coeffTicket = ticketVal;
-
-      const arretratiVal = Number(aiResult.arretrati);
-      if (!isNaN(arretratiVal) && arretratiVal !== 0) row.arretrati = arretratiVal;
-
-      if (aiResult.eventNote && !row.note?.includes(aiResult.eventNote)) {
-        row.note = (row.note ? row.note + ' ' : '') + `[${aiResult.eventNote}]`;
-      }
-
-      // 4. Aggiorna Codici Variabili
-      if (aiResult.codes) {
-        Object.entries(aiResult.codes).forEach(([code, value]) => {
-          const numValue = parseFloat(value as string);
-          if (!isNaN(numValue) && numValue !== 0) {
-            // @ts-ignore
-            row[code] = numValue;
-          }
-        });
-      }
-
-      currentAnni[rowIndex] = row;
-
-      // 5. Salva e Notifica
-      currentAnni.sort((a: any, b: any) => (a.year - b.year) || (a.monthIndex - b.monthIndex));
-      setMonthlyInputs(currentAnni);
-      onUpdateData(currentAnni);
-      setCurrentYear(targetYear);
-
-      setBatchNotification({ msg: '✅ Busta caricata da Mobile!', type: 'success' });
-      setTimeout(() => setBatchNotification(null), 4000);
-    }
+      return prevInputs;
+    });
   };
   // --- 🔥 2. LOGICA UPLOAD MASSIVO OTTIMIZZATA (Sostituisci handleBatchUpload) ---
   const handleBatchUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {

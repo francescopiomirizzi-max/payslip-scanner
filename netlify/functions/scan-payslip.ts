@@ -35,10 +35,12 @@ const PROMPT_RFI = `
   ### 1. DATI BASE
   - "month" (numero 1-12) e "year" (4 cifre). Cerca nella testata.
   
-  ### 2. PRESENZE E FERIE (RFI)
-  Cerca la riga orizzontale in alto: "Presenze | Riposi | Ferie".
-  - "daysWorked": 1° numero sotto Presenze (es. 21,00).
-  - "daysVacation": 3° numero sotto Ferie. (Se > 26, ignora perché sono residui).
+  ### 2. PRESENZE E FERIE (RFI) - ATTENZIONE ALLE COLONNE
+  Cerca la riga orizzontale in alto che contiene: "Presenze | Riposi | Ferie | 26mi PTV".
+  - "daysWorked": Valore ESATTO sotto la colonna "Presenze" (es. 20.00 o 21.00).
+  - "daysVacation": Valore ESATTO sotto la colonna "Ferie" (la terza colonna).
+    * TASSATIVO: Se lo spazio sotto "Ferie" è VUOTO, BIANCO o assente, scrivi 0.0.
+    * TASSATIVO: NON prendere MAI i valori sotto "Ferie anno prec." o "Ferie anno corrente". Quelli sono i saldi annuali e vanno totalmente ignorati.
   
   ### 3. TICKET RESTAURANT (Unitario)
   - Cerca codice **0E99** o **0299** o **0293**.
@@ -56,8 +58,8 @@ const PROMPT_RFI = `
   - 0470 (Ind. Chiamata)
   - 0482 (Ind. Reperibilità)
   - 0496 (Ind. Disp. Chiamata)
-  - 0687 (Ind. Linea < 10h)
-  - 0686 (Ind. Linea > 10h) -- (Se presente come variante)
+  - 0687 (Ind. Linea <= 10h)
+  - 0686 (Ind. Linea > 10h)
   - 0AA1 (Trasferta - Somma tutte le occorrenze se multiple)
   - 0576 (Ind. Orario Spezz.)
   - 0584 (Rep. Festive/Riposo)
