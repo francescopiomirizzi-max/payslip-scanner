@@ -2,7 +2,8 @@ import React, { useEffect, useState, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { X, Smartphone, Loader2, CheckCircle2 } from 'lucide-react';
 import QRCode from 'react-qr-code';
-import { supabase } from '../supabaseClient';
+import { v4 as uuidv4 } from 'uuid'; // RIMESSO: Fondamentale per il Database!
+import { supabase, createScanSession } from '../utils/supabaseClient'; // PERCORSO ORIGINALE CORRETTO!
 
 interface QRScannerModalProps {
     isOpen: boolean;
@@ -31,33 +32,39 @@ const QRScannerModal: React.FC<QRScannerModalProps> = ({
 
     useEffect(() => {
         if (isOpen) {
-            const newSession = Date.now().toString();
+            // IL SEGRETO: Creiamo un ID Sessione valido per Supabase!
+            const newSession = uuidv4();
             setSessionId(newSession);
             setStatus('waiting');
             setScannedCount(0);
 
-            supabase.from('scan_sessions').insert([{ id: newSession, status: 'waiting' }]).then();
+            // CREA LA SESSIONE UFFICIALE
+            createScanSession(newSession).catch(() => {
+                supabase.from('scan_sessions').insert([{ id: newSession, status: 'waiting' }]).then();
+            });
 
             const subscription = supabase
-                .channel(`session_${newSession}`)
+                .channel(`session-${newSession}`)
                 .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'scan_sessions', filter: `id=eq.${newSession}` },
                     (payload) => {
                         const newStatus = payload.new.status;
 
                         if (newStatus === 'processing') setStatus('processing');
 
+                        // IL TELEFONO HA MANDATO I DATI!
                         if (newStatus === 'completed' && payload.new.data) {
                             setStatus('completed');
                             setScannedCount(prev => prev + 1);
 
-                            // USIAMO LA MEMORIA STABILE (Il PC non si perde un colpo)
+                            // COMPILA LA TABELLA IN TEMPO REALE
                             latestOnScanSuccess.current(payload.new.data);
 
                             setTimeout(() => setStatus('waiting'), 2000);
-                            // --- AGGIUNGI QUESTO BLOCCO NUOVO QUI ---
-                            if (newStatus === 'all_done') {
-                                onClose(); // Chiude la finestra automaticamente!
-                            }
+                        }
+
+                        // IL TELEFONO HA FINITO TUTTO IL BLOCCO DI FOTO!
+                        if (newStatus === 'all_done') {
+                            onClose(); // CHIUDE LA FINESTRA DA SOLA!
                         }
                     }
                 )
@@ -67,7 +74,6 @@ const QRScannerModal: React.FC<QRScannerModalProps> = ({
                 supabase.removeChannel(subscription);
             };
         }
-        // L'array vuoto qui è il segreto: il canale si apre UNA SOLA VOLTA e non si chiude mai finché non clicchi la X.
     }, [isOpen]);
 
     if (!isOpen) return null;
