@@ -1,145 +1,135 @@
-
 import React, { useEffect, useState } from 'react';
+import { motion } from 'framer-motion';
+import { X, Smartphone, Loader2, CheckCircle2, QrCode } from 'lucide-react';
 import QRCode from 'react-qr-code';
-import { v4 as uuidv4 } from 'uuid';
-import { motion, AnimatePresence } from 'framer-motion';
-import { X, Smartphone, CheckCircle, Loader2 } from 'lucide-react';
-import { supabase, createScanSession } from '../utils/supabaseClient';
+import { supabase } from '../supabaseClient';
 
 interface QRScannerModalProps {
     isOpen: boolean;
     onClose: () => void;
     onScanSuccess: (data: any) => void;
+    company?: string;
+    workerName?: string;
 }
 
-const QRScannerModal: React.FC<QRScannerModalProps> = ({ isOpen, onClose, onScanSuccess }) => {
-    const [sessionId, setSessionId] = useState<string>('');
-    const [status, setStatus] = useState<'generating' | 'waiting' | 'scanning' | 'success'>('generating');
+const QRScannerModal: React.FC<QRScannerModalProps> = ({
+    isOpen,
+    onClose,
+    onScanSuccess,
+    company = 'RFI',
+    workerName = 'Lavoratore'
+}) => {
+    const [sessionId, setSessionId] = useState('');
+    const [status, setStatus] = useState<'waiting' | 'processing' | 'completed'>('waiting');
+    const [scannedCount, setScannedCount] = useState(0);
 
-    // 1. INIT SESSION
     useEffect(() => {
         if (isOpen) {
-            const newSession = uuidv4();
+            const newSession = Date.now().toString();
             setSessionId(newSession);
-            setStatus('generating');
+            setStatus('waiting');
+            setScannedCount(0);
 
-            // Crea record su Supabase
-            createScanSession(newSession).then(() => {
-                setStatus('waiting');
-            });
-        }
-    }, [isOpen]);
+            // Crea la sessione nel database
+            supabase.from('scan_sessions').insert([{ id: newSession, status: 'waiting' }]).then();
 
-    // 2. LISTEN FOR UPDATES
-    useEffect(() => {
-        if (!isOpen || !sessionId) return;
+            // Ascolta i cambiamenti in tempo reale dal telefono
+            const subscription = supabase
+                .channel(`session_${newSession}`)
+                .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'scan_sessions', filter: `id=eq.${newSession}` },
+                    (payload) => {
+                        const newStatus = payload.new.status;
 
-        const channel = supabase
-            .channel(`session-${sessionId}`)
-            .on(
-                'postgres_changes',
-                { event: 'UPDATE', schema: 'public', table: 'scan_sessions', filter: `id=eq.${sessionId}` },
-                (payload) => {
-                    const newData = payload.new;
-                    if (newData.status === 'completed' && newData.data) {
-                        setStatus('success');
-                        setTimeout(() => {
-                            onScanSuccess(newData.data);
-                            onClose();
-                        }, 1500);
+                        // Il telefono dice che sta analizzando...
+                        if (newStatus === 'processing') setStatus('processing');
+
+                        // Il telefono ha finito e ci manda i dati!
+                        if (newStatus === 'completed' && payload.new.data) {
+                            setStatus('completed');
+                            setScannedCount(prev => prev + 1);
+
+                            // Inviamo i dati alla tabella principale
+                            onScanSuccess(payload.new.data);
+
+                            // Dopo 2 secondi, torna in attesa per la foto successiva
+                            setTimeout(() => setStatus('waiting'), 2000);
+                        }
                     }
-                }
-            )
-            .subscribe();
+                )
+                .subscribe();
 
-        return () => {
-            supabase.removeChannel(channel);
-        };
-    }, [isOpen, sessionId, onScanSuccess, onClose]);
+            return () => {
+                supabase.removeChannel(subscription);
+            };
+        }
+    }, [isOpen, onScanSuccess]);
 
     if (!isOpen) return null;
 
-    // URL Mobile (punta alla stessa app ma con parametro ?mobile=true)
-    const mobileUrl = `${window.location.origin}/?mobile=true&session=${sessionId}`;
+    // IL FIX E' QUI: Costruiamo l'URL passando in modo sicuro l'azienda e il nome!
+    const qrUrl = `${window.location.origin}/?mobile=true&session=${sessionId}&company=${encodeURIComponent(company)}&name=${encodeURIComponent(workerName)}`;
 
     return (
-        <AnimatePresence>
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm">
             <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="fixed inset-0 z-200 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm"
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                className="bg-slate-900 border border-slate-700 w-full max-w-md rounded-3xl shadow-2xl overflow-hidden text-white"
             >
-                <motion.div
-                    initial={{ scale: 0.9, opacity: 0 }}
-                    animate={{ scale: 1, opacity: 1 }}
-                    exit={{ scale: 0.9, opacity: 0 }}
-                    className="bg-white dark:bg-slate-800 w-full max-w-md rounded-3xl shadow-2xl overflow-hidden"
-                >
-                    {/* HEADER */}
-                    <div className="p-6 bg-slate-50 dark:bg-slate-900/50 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center">
-                        <h3 className="text-xl font-bold text-slate-800 dark:text-white flex items-center gap-2">
-                            <Smartphone className="w-5 h-5 text-indigo-500" /> Scansione Mobile
-                        </h3>
-                        <button onClick={onClose} className="p-2 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full transition-colors">
-                            <X className="w-5 h-5 text-slate-500" />
-                        </button>
-                    </div>
+                {/* Header Modale */}
+                <div className="p-4 bg-slate-800/50 flex justify-between items-center border-b border-slate-700">
+                    <span className="font-bold text-sm flex items-center gap-2 text-indigo-400">
+                        <Smartphone className="w-5 h-5" /> Connessione Mobile
+                    </span>
+                    <button onClick={onClose} className="p-1.5 hover:bg-red-500/20 rounded-full text-slate-400 hover:text-red-400 transition-colors">
+                        <X className="w-5 h-5" />
+                    </button>
+                </div>
 
-                    {/* CONTENT */}
-                    <div className="p-8 flex flex-col items-center text-center">
+                {/* Corpo Modale */}
+                <div className="p-8 flex flex-col items-center text-center">
 
-                        {status === 'generating' && (
-                            <div className="py-12 flex flex-col items-center">
-                                <Loader2 className="w-10 h-10 text-indigo-500 animate-spin mb-4" />
-                                <p className="text-slate-500">Inizializzazione sessione sicura...</p>
+                    {/* Contenitore QR Code animato */}
+                    <div className="bg-white p-4 rounded-2xl shadow-xl mb-6 relative overflow-hidden">
+                        <QRCode value={qrUrl} size={200} level="H" />
+
+                        {/* Overlay quando sta lavorando */}
+                        {status === 'processing' && (
+                            <div className="absolute inset-0 bg-white/85 backdrop-blur-sm flex flex-col items-center justify-center">
+                                <Loader2 className="w-12 h-12 animate-spin text-indigo-600 mb-3 shadow-lg rounded-full" />
+                                <span className="text-indigo-800 font-black text-sm uppercase tracking-widest">Analisi AI...</span>
                             </div>
                         )}
-
-                        {status === 'waiting' && (
-                            <>
-                                <div className="bg-white p-4 rounded-xl shadow-lg border-2 border-indigo-100 mb-6">
-                                    <QRCode
-                                        value={mobileUrl}
-                                        size={220}
-                                        fgColor="#1e293b"
-                                    />
-                                </div>
-                                <p className="text-lg font-medium text-slate-700 dark:text-slate-200 mb-2">
-                                    Inquadra il QR con il tuo telefono
-                                </p>
-                                <p className="text-sm text-slate-500 dark:text-slate-400 max-w-xs">
-                                    Si aprirà una pagina web sicura dove potrai scattare o caricare la foto della busta paga.
-                                </p>
-                                <a href={mobileUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-indigo-400 underlines mt-4 opacity-50 hover:opacity-100">
-                                    Simula da questo PC (Debug)
-                                </a>
-                            </>
-                        )}
-
-                        {status === 'success' && (
-                            <div className="py-12 flex flex-col items-center">
-                                <motion.div
-                                    initial={{ scale: 0 }} animate={{ scale: 1 }}
-                                    className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mb-6"
-                                >
-                                    <CheckCircle className="w-10 h-10 text-emerald-600" />
-                                </motion.div>
-                                <h4 className="text-2xl font-bold text-emerald-600 mb-2">Scansione Ricevuta!</h4>
-                                <p className="text-slate-500">Sto elaborando i dati...</p>
+                        {/* Overlay di successo temporaneo */}
+                        {status === 'completed' && (
+                            <div className="absolute inset-0 bg-emerald-500/90 backdrop-blur-sm flex flex-col items-center justify-center">
+                                <CheckCircle2 className="w-16 h-16 text-white mb-2" />
+                                <span className="text-white font-black text-sm uppercase tracking-widest">Ricevuto!</span>
                             </div>
                         )}
-
                     </div>
 
-                    {/* FOOTER */}
-                    <div className="p-4 bg-slate-50 dark:bg-slate-900/50 text-center text-xs text-slate-400 border-t border-slate-100 dark:border-slate-700">
-                        Session ID: <span className="font-mono">{sessionId.slice(0, 8)}...</span>
+                    <h3 className="text-2xl font-black mb-2 tracking-tight">Inquadra per iniziare</h3>
+                    <p className="text-slate-400 text-sm mb-6 max-w-[280px] leading-relaxed">
+                        Apri la fotocamera dello smartphone per inviare le buste paga in tempo reale.
+                    </p>
+
+                    {/* Avviso Fondamentale */}
+                    <div className="mt-2 p-4 bg-amber-500/10 border-2 border-amber-500/30 rounded-xl relative overflow-hidden">
+                        <div className="absolute top-0 left-0 w-1 h-full bg-amber-500"></div>
+                        <p className="text-amber-400 text-[11px] font-bold leading-relaxed uppercase tracking-wider">
+                            ⚠️ MANTENI QUESTA FINESTRA APERTA SUL PC FINCHÉ NON HAI FINITO DI INVIARE TUTTE LE FOTO.
+                        </p>
                     </div>
 
-                </motion.div>
+                    {scannedCount > 0 && (
+                        <p className="mt-4 text-emerald-400 font-bold text-sm">
+                            Hai inserito {scannedCount} buste paga con successo!
+                        </p>
+                    )}
+                </div>
             </motion.div>
-        </AnimatePresence>
+        </div>
     );
 };
 
