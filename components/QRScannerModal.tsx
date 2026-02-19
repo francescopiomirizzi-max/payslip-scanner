@@ -30,61 +30,82 @@ const QRScannerModal: React.FC<QRScannerModalProps> = ({
     }, [onScanSuccess]);
 
     useEffect(() => {
-        if (isOpen) {
-            const newSession = uuidv4();
-            setSessionId(newSession);
-            setStatus('waiting');
-            setScannedCount(0);
+        if (!isOpen) return;
 
-            // 1. CREAZIONE FORZATA DELLA STANZA SUL DB
-            const initDb = async () => {
-                console.log("1️⃣ Creazione stanza in corso...", newSession);
-                const { error } = await supabase.from('scan_sessions').insert([{ id: newSession, status: 'waiting' }]);
-                if (error) console.error("❌ ERRORE CREAZIONE DB:", error);
-                else console.log("2️⃣ Stanza creata con successo sul DB!");
-            };
-            initDb();
+        const newSession = uuidv4();
+        setSessionId(newSession);
+        setStatus('waiting');
+        setScannedCount(0);
 
-            // 2. ASCOLTO GLOBALE SENZA FILTRI (Bypassa i bug di Supabase)
-            console.log("3️⃣ Avvio ascolto in tempo reale...");
-            const subscription = supabase
-                .channel('room_listener')
-                .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'scan_sessions' },
-                    (payload) => {
-                        // Ignoriamo gli aggiornamenti di altri utenti
-                        if (payload.new.id !== newSession) return;
+        let isPolling = true; // Motore acceso
 
-                        console.log("🔥 4️⃣ IL PC HA SENTITO IL TELEFONO! Dati ricevuti:", payload.new);
+        // 1. INIZIALIZZA IL DATABASE
+        const initDb = async () => {
+            await supabase.from('scan_sessions').insert([{ id: newSession, status: 'waiting' }]);
+            console.log("✅ Stanza creata. Avvio ricevitore infallibile...");
+            startPolling(); // Avvia il controllo continuo
+        };
 
-                        const newStatus = payload.new.status;
+        // 2. RICEVITORE INFALLIBILE (Polling ogni 1 secondo)
+        const startPolling = async () => {
+            if (!isPolling) return;
 
-                        if (newStatus === 'processing') setStatus('processing');
+            try {
+                const { data } = await supabase
+                    .from('scan_sessions')
+                    .select('*')
+                    .eq('id', newSession)
+                    .single();
 
-                        if (newStatus === 'completed' && payload.new.data) {
-                            console.log("✅ 5️⃣ Dati validi, inserimento in tabella in corso...");
-                            setStatus('completed');
-                            setScannedCount(prev => prev + 1);
-
-                            latestOnScanSuccess.current(payload.new.data);
-
-                            setTimeout(() => setStatus('waiting'), 2000);
-                        }
-
-                        if (newStatus === 'all_done') {
-                            console.log("🚪 6️⃣ Il telefono ha finito. Chiudo la finestra!");
-                            onClose();
-                        }
+                if (data) {
+                    // Se il telefono sta elaborando
+                    if (data.status === 'processing') {
+                        setStatus('processing');
                     }
-                )
-                .subscribe((status) => {
-                    console.log("📡 Stato connessione Realtime:", status);
-                });
 
-            return () => {
-                supabase.removeChannel(subscription);
-            };
-        }
-    }, [isOpen, onClose]); // Aggiunto onClose alle dipendenze per sicurezza
+                    // Se il telefono ha inviato un file
+                    if (data.status === 'completed' && data.data) {
+                        console.log("🔥 FILE RICEVUTO! Inserimento in tabella in corso...");
+                        setStatus('completed');
+                        setScannedCount(prev => prev + 1);
+
+                        // Inserisce i numeri nella tabella
+                        latestOnScanSuccess.current(data.data);
+
+                        // RESET FONDAMENTALE: Il PC "svuota la scatola" sul database 
+                        // per fare spazio alla prossima foto e non leggere due volte la stessa!
+                        await supabase.from('scan_sessions').update({ status: 'waiting', data: null }).eq('id', newSession);
+
+                        setTimeout(() => {
+                            if (isPolling) setStatus('waiting');
+                        }, 1500);
+                    }
+
+                    // Se il telefono ha inviato TUTTE le foto
+                    if (data.status === 'all_done') {
+                        console.log("🚪 Il telefono ha finito. Chiudo la finestra in automatico!");
+                        isPolling = false; // Ferma il motore
+                        onClose(); // Chiude la modale
+                        return; // Ferma il ciclo
+                    }
+                }
+            } catch (error) {
+                // Ignoriamo i micro-errori di rete invisibili
+            }
+
+            // Ripeti il controllo tra esatti 1000 millisecondi (1 secondo)
+            if (isPolling) {
+                setTimeout(startPolling, 1000);
+            }
+        };
+
+        initDb();
+
+        // Spegne il motore quando premi la X
+        return () => {
+            isPolling = false;
+        };
+    }, [isOpen, onClose]);
 
     if (!isOpen) return null;
 
@@ -99,7 +120,7 @@ const QRScannerModal: React.FC<QRScannerModalProps> = ({
             >
                 <div className="p-4 bg-slate-800/50 flex justify-between items-center border-b border-slate-700">
                     <span className="font-bold text-sm flex items-center gap-2 text-indigo-400">
-                        <Smartphone className="w-5 h-5" /> Connessione Mobile
+                        <Smartphone className="w-5 h-5" /> Connessione Mobile Infallibile
                     </span>
                     <button onClick={onClose} className="p-1.5 hover:bg-red-500/20 rounded-full text-slate-400 hover:text-red-400 transition-colors">
                         <X className="w-5 h-5" />
@@ -130,10 +151,10 @@ const QRScannerModal: React.FC<QRScannerModalProps> = ({
                         Apri la fotocamera dello smartphone per inviare le buste paga in tempo reale.
                     </p>
 
-                    <div className="mt-2 p-4 bg-amber-500/10 border-2 border-amber-500/30 rounded-xl relative overflow-hidden">
-                        <div className="absolute top-0 left-0 w-1 h-full bg-amber-500"></div>
-                        <p className="text-amber-400 text-[11px] font-bold leading-relaxed uppercase tracking-wider">
-                            ⚠️ MANTENI QUESTA FINESTRA APERTA SUL PC FINCHÉ NON HAI FINITO DI INVIARE TUTTE LE FOTO.
+                    <div className="mt-2 p-4 bg-emerald-500/10 border-2 border-emerald-500/30 rounded-xl relative overflow-hidden">
+                        <div className="absolute top-0 left-0 w-1 h-full bg-emerald-500"></div>
+                        <p className="text-emerald-400 text-[11px] font-bold leading-relaxed uppercase tracking-wider">
+                            📡 RICEVITORE ATTIVO. MANTIENI APERTO FINCHÉ NON HAI INVIATO TUTTE LE FOTO.
                         </p>
                     </div>
 
