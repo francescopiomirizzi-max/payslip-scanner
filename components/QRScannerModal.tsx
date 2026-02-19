@@ -41,7 +41,6 @@ const QRScannerModal: React.FC<QRScannerModalProps> = ({
 
         const initDb = async () => {
             await supabase.from('scan_sessions').insert([{ id: newSession, status: 'waiting' }]);
-            console.log("✅ Stanza creata. Avvio ricevitore infallibile...");
             startPolling();
         };
 
@@ -60,35 +59,41 @@ const QRScannerModal: React.FC<QRScannerModalProps> = ({
                         setStatus('processing');
                     }
 
-                    // 1. IL TRUCCO È QUI: Leggiamo i dati INDIPENDENTEMENTE dallo stato
-                    if (data.data && Object.keys(data.data).length > 0) {
-                        console.log("🔥 FILE RICEVUTO! Inserimento in tabella in corso...");
+                    // SE IL TELEFONO HA FINITO TUTTO
+                    if (data.status === 'all_done') {
+                        // Se c'era un ultimo dato rimasto appeso, salvalo prima di chiudere
+                        if (data.data && Object.keys(data.data).length > 0) {
+                            const parsedData = typeof data.data === 'string' ? JSON.parse(data.data) : data.data;
+                            latestOnScanSuccess.current(parsedData);
+                        }
+
+                        setStatus('completed');
+                        isPolling = false;
+
+                        // Aspetta un secondo per mostrare la spunta verde, poi chiudi
+                        setTimeout(() => {
+                            onClose();
+                        }, 1200);
+                        return; // Ferma il polling
+                    }
+
+                    // SE STA INVIANDO UNA FOTO SINGOLA
+                    else if (data.data && Object.keys(data.data).length > 0) {
+                        const parsedData = typeof data.data === 'string' ? JSON.parse(data.data) : data.data;
+                        latestOnScanSuccess.current(parsedData);
                         setStatus('completed');
                         setScannedCount(prev => prev + 1);
 
-                        latestOnScanSuccess.current(data.data);
-
-                        // Salviamo lo stato futuro (se era all_done, lo teniamo all_done)
-                        const nextStatus = data.status === 'all_done' ? 'all_done' : 'waiting';
-
-                        // Svuotiamo il pacco dei dati, così non lo leggiamo due volte
-                        await supabase.from('scan_sessions').update({ status: nextStatus, data: null }).eq('id', newSession);
+                        // Svuota il database per la prossima foto
+                        await supabase.from('scan_sessions').update({ status: 'waiting', data: null }).eq('id', newSession);
 
                         setTimeout(() => {
                             if (isPolling) setStatus('waiting');
                         }, 1500);
                     }
-
-                    // 2. CHIUDIAMO SOLO SE IL TELEFONO HA FINITO *E* NON CI SONO PIÙ DATI DA LEGGERE
-                    if (data.status === 'all_done' && !data.data) {
-                        console.log("🚪 Tutti i dati elaborati. Chiudo la finestra in automatico!");
-                        isPolling = false;
-                        onClose();
-                        return; // Ferma il motore
-                    }
                 }
             } catch (error) {
-                // Ignora piccoli cali di rete
+                // Ignora errori di rete
             }
 
             if (isPolling) {
@@ -108,15 +113,16 @@ const QRScannerModal: React.FC<QRScannerModalProps> = ({
     const qrUrl = `${window.location.origin}/?mobile=true&session=${sessionId}&company=${encodeURIComponent(company)}&name=${encodeURIComponent(workerName)}`;
 
     return (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm">
+        // z-[9999] per stare sopra a tutto (anche le notifiche) e blocco dello scroll
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-900/90 backdrop-blur-md overflow-hidden h-screen w-screen">
             <motion.div
                 initial={{ scale: 0.9, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
-                className="bg-slate-900 border border-slate-700 w-full max-w-md rounded-3xl shadow-2xl overflow-hidden text-white"
+                className="bg-slate-900 border border-slate-700 w-full max-w-md rounded-3xl shadow-2xl overflow-hidden text-white relative"
             >
                 <div className="p-4 bg-slate-800/50 flex justify-between items-center border-b border-slate-700">
                     <span className="font-bold text-sm flex items-center gap-2 text-indigo-400">
-                        <Smartphone className="w-5 h-5" /> Connessione Mobile Infallibile
+                        <Smartphone className="w-5 h-5" /> Connessione Mobile
                     </span>
                     <button onClick={onClose} className="p-1.5 hover:bg-red-500/20 rounded-full text-slate-400 hover:text-red-400 transition-colors">
                         <X className="w-5 h-5" />
@@ -129,13 +135,13 @@ const QRScannerModal: React.FC<QRScannerModalProps> = ({
                         <QRCode value={qrUrl} size={200} level="H" />
 
                         {status === 'processing' && (
-                            <div className="absolute inset-0 bg-white/85 backdrop-blur-sm flex flex-col items-center justify-center">
-                                <Loader2 className="w-12 h-12 animate-spin text-indigo-600 mb-3 shadow-lg rounded-full" />
+                            <div className="absolute inset-0 bg-white/90 backdrop-blur-sm flex flex-col items-center justify-center">
+                                <Loader2 className="w-12 h-12 animate-spin text-indigo-600 mb-3" />
                                 <span className="text-indigo-800 font-black text-sm uppercase tracking-widest">Analisi AI...</span>
                             </div>
                         )}
                         {status === 'completed' && (
-                            <div className="absolute inset-0 bg-emerald-500/90 backdrop-blur-sm flex flex-col items-center justify-center">
+                            <div className="absolute inset-0 bg-emerald-500/95 backdrop-blur-sm flex flex-col items-center justify-center">
                                 <CheckCircle2 className="w-16 h-16 text-white mb-2" />
                                 <span className="text-white font-black text-sm uppercase tracking-widest">Ricevuto!</span>
                             </div>

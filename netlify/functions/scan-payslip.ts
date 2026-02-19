@@ -94,9 +94,10 @@ const PROMPT_ELIOR = `
   ### 1. DATI BASE
   - Cerca la data (Mese/Anno) in alto a destra (es. "21 DICEMBRE 2023").
   
-  ### 2. PRESENZE E FERIE (Layout Elior)
+  ### 2. PRESENZE E FERIE (Layout Elior) - ATTENZIONE!
   - **daysWorked**: Cerca la casella **"GG INPS"** (in alto a sinistra).
-  - **daysVacation**: Cerca la riga "Ferie" e la colonna **"FRUITE"** o "GODUTE".
+  - **daysVacation**: Cerca nella tabella centrale la voce esatta **"5000 FERIE GODUTE"**. Estrai il numero sotto la colonna **"ORE/GG/MESI"** (es. 4,00 o 5,00). 
+    * TASSATIVO: NON prendere MAI i dati dal riquadretto riassuntivo in alto a sinistra (dove c'è scritto "FRUITE" o "SPETTANTI"). Ignora totalmente quel riquadro.
   
   ### 3. TICKET RESTAURANT (Unitario)
   - Cerca codici **2000** o **2001**.
