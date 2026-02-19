@@ -35,12 +35,13 @@ const PROMPT_RFI = `
   ### 1. DATI BASE
   - "month" (numero 1-12) e "year" (4 cifre). Cerca nella testata.
   
-  ### 2. PRESENZE E FERIE (RFI) - ATTENZIONE ALLE COLONNE
+  ### 2. PRESENZE E FERIE (RFI) - ATTENZIONE MATEMATICA!
   Cerca la riga orizzontale in alto che contiene: "Presenze | Riposi | Ferie | 26mi PTV".
-  - "daysWorked": Valore ESATTO sotto la colonna "Presenze" (es. 20.00 o 21.00).
-  - "daysVacation": Valore ESATTO sotto la colonna "Ferie" (la terza colonna).
+  - **daysVacation**: Valore ESATTO sotto la colonna "Ferie" (la terza colonna).
     * TASSATIVO: Se lo spazio sotto "Ferie" è VUOTO, BIANCO o assente, scrivi 0.0.
     * TASSATIVO: NON prendere MAI i valori sotto "Ferie anno prec." o "Ferie anno corrente". Quelli sono i saldi annuali e vanno totalmente ignorati.
+  - **daysWorked**: Valore sotto la colonna "Presenze" (es. 20.00 o 21.00). 
+    * REGOLA MATEMATICA DI SICUREZZA: Se noti che la somma di "Presenze" + "Ferie" supera i 31 giorni nel mese, significa che le Ferie sono già incluse nelle Presenze. In questo caso ESEGUI LA SOTTRAZIONE: (Presenze) - (Ferie) per ottenere i giorni effettivamente lavorati. Se invece la somma è <= 31, lascia il valore esatto di "Presenze".
   
   ### 3. TICKET RESTAURANT (Unitario)
   - Cerca codice **0E99** o **0299** o **0293**.
@@ -80,7 +81,7 @@ const PROMPT_RFI = `
   FORMATO JSON:
   {
     "month": 1, "year": 2024, "daysWorked": 0.0, "daysVacation": 0.0, "ticketRate": 0.0, "arretrati": 0.0, "eventNote": "",
-    "codes": { "0152": 0.0, "0421": 0.0, "0AA1": 0.0, ... }
+    "codes": { "0152": 0.0, "0421": 0.0, "0AA1": 0.0 }
   }
 `;
 
@@ -92,19 +93,21 @@ const PROMPT_ELIOR = `
   Il documento può essere una scansione cartacea.
   
   ### 1. DATI BASE
-  - Cerca la data (Mese/Anno) in alto a destra (es. "21 DICEMBRE 2023").
+  - Cerca la data (Mese/Anno) in alto a destra.
   
-  ### 2. PRESENZE E FERIE (Layout Elior) - ATTENZIONE!
-  - **daysWorked**: Cerca la casella **"GG INPS"** (in alto a sinistra).
-  - **daysVacation**: Cerca nella tabella centrale la voce esatta **"5000 FERIE GODUTE"**. Estrai il numero sotto la colonna **"ORE/GG/MESI"** (es. 4,00 o 5,00). 
-    * TASSATIVO: NON prendere MAI i dati dal riquadretto riassuntivo in alto a sinistra (dove c'è scritto "FRUITE" o "SPETTANTI"). Ignora totalmente quel riquadro.
+  ### 2. PRESENZE E FERIE (Layout Elior) - ATTENZIONE MATEMATICA!
+  - Cerca la casella **"GG INPS"** in alto a sinistra (di solito è 26).
+  - Cerca nella tabella centrale la voce esatta **"5000 FERIE GODUTE"** ed estrai il numero sotto la colonna **"ORE/GG/MESI"** (es. 7,60). Se non c'è, vale 0.
+  - **daysVacation**: Il valore di "5000 FERIE GODUTE" (es. 7.6).
+  - **daysWorked**: ESEGUI QUESTA SOTTRAZIONE: (Valore di GG INPS) meno (Valore di FERIE GODUTE). Esempio: se GG INPS = 26 e FERIE GODUTE = 7.6, scrivi 18.4.
+  - TASSATIVO: NON prendere MAI i dati dal riquadretto riassuntivo in alto a sinistra (dove c'è scritto "RES. PREC", "FRUITE", "SALDO"). Ignora totalmente quel riquadro.
   
   ### 3. TICKET RESTAURANT (Unitario)
   - Cerca codici **2000** o **2001**.
   - Estrai il valore dalla colonna **"VALORE UNITARIO"** (es. 5,29 o 4,00).
   
   ### 4. MAPPATURA CODICI ELIOR (Master List)
-  Scansiona le righe. Estrai l'importo "COMPETENZE" per questi CODICI specifici (corrispondono alle colonne del software):
+  Scansiona le righe. Estrai l'importo "COMPETENZE" per questi CODICI specifici:
   
   - "1126" (Ind. Cassa)
   - "1130" (Lav. Nott. / Magg. Notturna)
@@ -133,12 +136,8 @@ const PROMPT_ELIOR = `
   
   FORMATO JSON:
   {
-    "month": 1, "year": 2024, "daysWorked": 0.0, "daysVacation": 0.0, "ticketRate": 0.0, "arretrati": 0.0, "eventNote": "",
-    "codes": { 
-       "1130": 0.0, 
-       "4301": 0.0,
-       ... (tutti i codici trovati)
-    }
+    "month": 7, "year": 2024, "daysWorked": 18.4, "daysVacation": 7.6, "ticketRate": 0.0, "arretrati": 0.0, "eventNote": "",
+    "codes": { "1130": 0.0, "4301": 0.0 }
   }
 `;
 

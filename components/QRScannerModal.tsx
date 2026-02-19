@@ -24,10 +24,14 @@ const QRScannerModal: React.FC<QRScannerModalProps> = ({
     const [status, setStatus] = useState<'waiting' | 'processing' | 'completed'>('waiting');
     const [scannedCount, setScannedCount] = useState(0);
 
+    // TRUCCHI ANTI-RELOAD DI REACT (Evita che il QR salti o si blocchi)
     const latestOnScanSuccess = useRef(onScanSuccess);
+    const latestOnClose = useRef(onClose);
+
     useEffect(() => {
         latestOnScanSuccess.current = onScanSuccess;
-    }, [onScanSuccess]);
+        latestOnClose.current = onClose;
+    }, [onScanSuccess, onClose]);
 
     useEffect(() => {
         if (!isOpen) return;
@@ -61,7 +65,7 @@ const QRScannerModal: React.FC<QRScannerModalProps> = ({
 
                     // SE IL TELEFONO HA FINITO TUTTO
                     if (data.status === 'all_done') {
-                        // Se c'era un ultimo dato rimasto appeso, salvalo prima di chiudere
+                        // Se c'era un ultimo dato rimasto appeso, salvalo
                         if (data.data && Object.keys(data.data).length > 0) {
                             const parsedData = typeof data.data === 'string' ? JSON.parse(data.data) : data.data;
                             latestOnScanSuccess.current(parsedData);
@@ -70,21 +74,20 @@ const QRScannerModal: React.FC<QRScannerModalProps> = ({
                         setStatus('completed');
                         isPolling = false;
 
-                        // Aspetta un secondo per mostrare la spunta verde, poi chiudi
+                        // Aspetta un secondo per la grafica, poi chiude!
                         setTimeout(() => {
-                            onClose();
+                            latestOnClose.current();
                         }, 1200);
-                        return; // Ferma il polling
+                        return;
                     }
 
-                    // SE STA INVIANDO UNA FOTO SINGOLA
+                    // SE STA INVIANDO UNA FOTO SINGOLA DEL BLOCCO
                     else if (data.data && Object.keys(data.data).length > 0) {
                         const parsedData = typeof data.data === 'string' ? JSON.parse(data.data) : data.data;
                         latestOnScanSuccess.current(parsedData);
                         setStatus('completed');
                         setScannedCount(prev => prev + 1);
 
-                        // Svuota il database per la prossima foto
                         await supabase.from('scan_sessions').update({ status: 'waiting', data: null }).eq('id', newSession);
 
                         setTimeout(() => {
@@ -106,14 +109,13 @@ const QRScannerModal: React.FC<QRScannerModalProps> = ({
         return () => {
             isPolling = false;
         };
-    }, [isOpen, onClose]);
+    }, [isOpen]); // <-- IL SEGRETO È QUI: Rimosso 'onClose' dalle dipendenze! Niente più salti!
 
     if (!isOpen) return null;
 
     const qrUrl = `${window.location.origin}/?mobile=true&session=${sessionId}&company=${encodeURIComponent(company)}&name=${encodeURIComponent(workerName)}`;
 
     return (
-        // z-[9999] per stare sopra a tutto (anche le notifiche) e blocco dello scroll
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-900/90 backdrop-blur-md overflow-hidden h-screen w-screen">
             <motion.div
                 initial={{ scale: 0.9, opacity: 0 }}
@@ -124,7 +126,7 @@ const QRScannerModal: React.FC<QRScannerModalProps> = ({
                     <span className="font-bold text-sm flex items-center gap-2 text-indigo-400">
                         <Smartphone className="w-5 h-5" /> Connessione Mobile
                     </span>
-                    <button onClick={onClose} className="p-1.5 hover:bg-red-500/20 rounded-full text-slate-400 hover:text-red-400 transition-colors">
+                    <button onClick={() => latestOnClose.current()} className="p-1.5 hover:bg-red-500/20 rounded-full text-slate-400 hover:text-red-400 transition-colors">
                         <X className="w-5 h-5" />
                     </button>
                 </div>
