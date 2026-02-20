@@ -3,21 +3,70 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || "");
 
-// --- HELPER PULIZIA JSON (V17 - Blindato) ---
+// --- HELPER PULIZIA E UNIONE JSON (V20 - Somma Automatica Pagine) ---
 function cleanAndParseJSON(text: string): any {
   try {
-    // Rimuove markdown, spazi e potenziali commenti
     let clean = text.replace(/```json/g, "").replace(/```/g, "").trim();
 
-    // Cerca l'oggetto JSON puro
-    const firstBrace = clean.indexOf('{');
-    const lastBrace = clean.lastIndexOf('}');
+    // Funzione interna per unire più blocchi (es. Pagina 1 + Pagina 2)
+    const mergeBlocks = (blocks: any[]) => {
+      if (blocks.length === 0) throw new Error("Nessun dato trovato");
 
-    if (firstBrace !== -1 && lastBrace !== -1) {
-      clean = clean.substring(firstBrace, lastBrace + 1);
+      // Prende il primo blocco come base
+      let finalData = { ...blocks[0] };
+      finalData.codes = { ...blocks[0].codes };
+
+      // Somma i dati delle pagine successive
+      for (let i = 1; i < blocks.length; i++) {
+        const nextPage = blocks[i];
+
+        // Somma gli arretrati
+        finalData.arretrati = (finalData.arretrati || 0) + (nextPage.arretrati || 0);
+
+        // Unisce la nota eventi se presente
+        if (nextPage.eventNote && !finalData.eventNote.includes(nextPage.eventNote)) {
+          finalData.eventNote = finalData.eventNote ? `${finalData.eventNote} + ${nextPage.eventNote}` : nextPage.eventNote;
+        }
+
+        // Somma TUTTI i codici variabili trovati nelle altre pagine
+        if (nextPage.codes) {
+          for (const [key, val] of Object.entries(nextPage.codes)) {
+            finalData.codes[key] = (finalData.codes[key] || 0) + (val as number);
+          }
+        }
+      }
+      return finalData;
+    };
+
+    // CASO A: L'IA ha restituito una Lista [...]
+    if (clean.startsWith("[") && clean.endsWith("]")) {
+      const arr = JSON.parse(clean);
+      if (Array.isArray(arr)) return mergeBlocks(arr);
     }
 
-    return JSON.parse(clean);
+    // CASO B: L'IA ha restituito più blocchi separati { ... } { ... }
+    const jsonBlocks = [];
+    let depth = 0;
+    let startIndex = -1;
+
+    for (let i = 0; i < clean.length; i++) {
+      if (clean[i] === '{') {
+        if (depth === 0) startIndex = i;
+        depth++;
+      } else if (clean[i] === '}') {
+        depth--;
+        if (depth === 0 && startIndex !== -1) {
+          jsonBlocks.push(JSON.parse(clean.substring(startIndex, i + 1)));
+          startIndex = -1;
+        }
+      }
+    }
+
+    if (jsonBlocks.length > 0) {
+      return mergeBlocks(jsonBlocks); // Somma tutte le parentesi trovate!
+    }
+
+    throw new Error("Formato incomprensibile");
   } catch (error: any) {
     console.error("❌ ERRORE PARSING JSON:", text);
     throw new Error(`Output AI non valido: ${error.message}`);
@@ -32,25 +81,28 @@ const PROMPT_RFI = `
   Estrai i dati con precisione assoluta ignorando le migliaia (es. 1.000 = 1000).
   Usa il PUNTO (.) come separatore decimale.
   
+  ### 0. REGOLA DELLE MULTI-PAGINE
+  - LEGGI TUTTO IL DOCUMENTO, incluse la seconda o terza pagina.
+  - Se trovi codici, competenze o arretrati nelle pagine successive, DEVI assolutamente estrarli.
+  - Puoi restituire un singolo JSON totale, oppure un Array JSON con i dati di ogni pagina separati. Il sistema li sommerà in automatico.
+  
   ### 1. DATI BASE
   - "month" (numero 1-12) e "year" (4 cifre). Cerca nella testata.
   
-  ### 2. PRESENZE E FERIE (RFI) - ATTENZIONE MATEMATICA!
+  ### 2. PRESENZE E FERIE (RFI)
   Cerca la riga orizzontale in alto che contiene: "Presenze | Riposi | Ferie | 26mi PTV".
   - **daysVacation**: Valore ESATTO sotto la colonna "Ferie" (la terza colonna).
-    * TASSATIVO: Se lo spazio sotto "Ferie" è VUOTO, BIANCO o assente, scrivi 0.0.
-    * TASSATIVO: NON prendere MAI i valori sotto "Ferie anno prec." o "Ferie anno corrente". Quelli sono i saldi annuali e vanno totalmente ignorati.
-  - **daysWorked**: Valore sotto la colonna "Presenze" (es. 20.00 o 21.00). 
-    * REGOLA MATEMATICA DI SICUREZZA: Se noti che la somma di "Presenze" + "Ferie" supera i 31 giorni nel mese, significa che le Ferie sono già incluse nelle Presenze. In questo caso ESEGUI LA SOTTRAZIONE: (Presenze) - (Ferie) per ottenere i giorni effettivamente lavorati. Se invece la somma è <= 31, lascia il valore esatto di "Presenze".
+    * TASSATIVO: Se lo spazio sotto "Ferie" è VUOTO o assente, scrivi 0.0.
+    * TASSATIVO: Ignora "Ferie anno prec." o "Ferie anno corrente".
+  - **daysWorked**: Valore sotto "Presenze". 
+    * REGOLA MATEMATICA: Se (Presenze + Ferie) > 31, allora esegui (Presenze - Ferie). Altrimenti lascia il valore esatto di Presenze.
   
   ### 3. TICKET RESTAURANT (Unitario)
   - Cerca codice **0E99** o **0299** o **0293**.
-  - Estrai il valore nella colonna "Dati Base" o "Parametro" (es. 7.00 o 8.00). 
-  - NON prendere il totale nella colonna competenze.
-  - Se trovi Welfare (9WLF) o nulla, ticketRate = 0.00.
-
+  - Estrai il valore nella colonna "Dati Base" o "Parametro". 
+  
   ### 4. CODICI VARIABILI (Master List RFI COMPLETA)
-  Somma la colonna "Competenze" (importi positivi) per TUTTI questi codici esatti:
+  Cerca e somma in TUTTE LE PAGINE la colonna "Competenze" per questi codici:
   
   - 0152 (Straord. Diurno)
   - 0421 (Ind. Notturno)
@@ -61,7 +113,7 @@ const PROMPT_RFI = `
   - 0496 (Ind. Disp. Chiamata)
   - 0687 (Ind. Linea <= 10h)
   - 0686 (Ind. Linea > 10h)
-  - 0AA1 (Trasferta - Somma tutte le occorrenze se multiple)
+  - 0AA1 (Trasferta - Somma tutte le occorrenze)
   - 0576 (Ind. Orario Spezz.)
   - 0584 (Rep. Festive/Riposo)
   - 0919 (Str. Feriale Diurno)
@@ -75,13 +127,13 @@ const PROMPT_RFI = `
   - 3B71 (Prod. Incrementale)
   
   ### 5. ARRETRATI
-  - Somma importi positivi di: 3E.. (Malattia), 74.. (Arretrati), 0K../0C.. (Una Tantum), 6INT.
-  - "eventNote": scrivi una breve nota (es. "Malattia") se trovi questi codici.
+  - Cerca in TUTTE le pagine importi positivi di: 3E.. (Malattia), 74.. (Arretrati), 0K../0C.. (Una Tantum), 6INT.
+  - "eventNote": scrivi una breve nota (es. "Arretrati").
   
-  FORMATO JSON:
+  FORMATO JSON (Esempio):
   {
     "month": 1, "year": 2024, "daysWorked": 0.0, "daysVacation": 0.0, "ticketRate": 0.0, "arretrati": 0.0, "eventNote": "",
-    "codes": { "0152": 0.0, "0421": 0.0, "0AA1": 0.0 }
+    "codes": { "0152": 0.0, "0421": 0.0 }
   }
 `;
 
@@ -91,6 +143,11 @@ const PROMPT_RFI = `
 const PROMPT_ELIOR = `
   Sei un analista contabile specializzato in Buste Paga ELIOR RISTORAZIONE.
   Il documento può essere una scansione cartacea.
+  
+  ### 0. REGOLA DELLE MULTI-PAGINE
+  - LEGGI TUTTO IL DOCUMENTO, incluse la seconda o terza pagina.
+  - Se trovi codici, competenze o arretrati nelle pagine successive, DEVI assolutamente estrarli.
+  - Puoi restituire un singolo JSON totale, oppure un Array JSON con i dati di ogni pagina separati. Il sistema li sommerà in automatico.
   
   ### 1. DATI BASE
   - Cerca la data (Mese/Anno) in alto a destra.
@@ -107,7 +164,7 @@ const PROMPT_ELIOR = `
   - Estrai il valore dalla colonna **"VALORE UNITARIO"** (es. 5,29 o 4,00).
   
   ### 4. MAPPATURA CODICI ELIOR (Master List)
-  Scansiona le righe. Estrai l'importo "COMPETENZE" per questi CODICI specifici:
+  Scansiona le righe in TUTTE LE PAGINE. Estrai l'importo "COMPETENZE" per questi CODICI specifici:
   
   - "1126" (Ind. Cassa)
   - "1130" (Lav. Nott. / Magg. Notturna)
@@ -131,7 +188,7 @@ const PROMPT_ELIOR = `
   - "5655" (26/MI Retrib.)
 
   ### 5. ARRETRATI
-  - Cerca voci testuali come "Arretrati", "Una Tantum", "Malattia", "Carenza".
+  - Cerca in TUTTE le pagine voci testuali come "Arretrati", "Una Tantum", "Malattia", "Carenza".
   - Somma in "arretrati" e scrivi "eventNote".
   
   FORMATO JSON:
@@ -152,13 +209,11 @@ export const handler: Handler = async (event, context) => {
 
   try {
     const body = JSON.parse(event.body || "{}");
-    // Leggiamo 'company' che ora arriva dal Frontend
     const { fileData, mimeType, company } = body;
 
     if (!fileData) throw new Error("File mancante.");
     const cleanData = fileData.includes("base64,") ? fileData.split("base64,")[1] : fileData;
 
-    // --- SELEZIONE INTELLIGENTE DEL PROMPT ---
     const targetPrompt = (company === 'ELIOR') ? PROMPT_ELIOR : PROMPT_RFI;
 
     console.log(`--- 🚀 AVVIO ANALISI PER: ${company || 'RFI'} ---`);
@@ -175,7 +230,6 @@ export const handler: Handler = async (event, context) => {
 
     const finalJson = cleanAndParseJSON(await result.response.text());
 
-    // Aggiungiamo il campo company per debug nel frontend
     finalJson.company = company || 'RFI';
 
     console.log(`✅ EXTR ${company}: ${finalJson.month}/${finalJson.year} - Rate: ${finalJson.ticketRate}`);
