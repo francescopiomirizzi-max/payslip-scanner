@@ -163,6 +163,33 @@ const WorkerModal: React.FC<WorkerModalProps> = ({ isOpen, onClose, onConfirm, i
     useEffect(() => {
         if (!isOpen) cancelQrSession();
     }, [isOpen]);
+
+    // 👇 INIZIO BLOCCO DA AGGIUNGERE 👇
+    useEffect(() => {
+        if (isOpen) {
+            if (mode === 'edit' && initialData) {
+                // Se siamo in modalità modifica, popoliamo i campi
+                setFormData({
+                    nome: initialData.nome || '',
+                    cognome: initialData.cognome || '',
+                    ruolo: initialData.ruolo || '',
+                    profiloProfessionale: initialData.profiloProfessionale || '',
+                    profilo: initialData.profilo || null
+                });
+            } else {
+                // Se stiamo creando, svuotiamo tutto
+                setFormData({
+                    nome: '',
+                    cognome: '',
+                    ruolo: '',
+                    profiloProfessionale: '',
+                    profilo: null
+                });
+            }
+        }
+    }, [isOpen, mode, initialData]);
+    // 👆 FINE BLOCCO DA AGGIUNGERE 👆
+
     const handleSubmit = (e?: React.FormEvent) => {
         if (e) e.preventDefault();
         if (formData.profilo && isFormValid) {

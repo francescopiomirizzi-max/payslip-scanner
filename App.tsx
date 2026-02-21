@@ -583,16 +583,16 @@ const App: React.FC = () => {
         setIsModalOpen(true);
     };
 
-    const openEditModal = (e: React.MouseEvent, id: number) => {
+    const openEditModal = (e: React.MouseEvent, idOrWorker: any) => {
         e.stopPropagation();
-        // 1. TROVA I DATI DEL LAVORATORE
-        const workerToEdit = workers.find(w => w.id === id);
 
-        // 2. SALVALI NELLO STATO (Fondamentale!)
+        // Logica Corazzata: capisce da solo se gli arriva l'ID (numero) o l'oggetto intero
+        const targetId = typeof idOrWorker === 'object' ? idOrWorker.id : idOrWorker;
+        const workerToEdit = workers.find(w => w.id === targetId);
+
         setCurrentWorker(workerToEdit);
-
         setModalMode('edit');
-        setEditingWorkerId(id);
+        setEditingWorkerId(targetId);
         setIsModalOpen(true);
     };
 
@@ -1567,7 +1567,7 @@ const App: React.FC = () => {
                                         worker={w}
                                         onOpenSimple={handleOpenSimple}
                                         onOpenComplex={handleOpenComplex}
-                                        onEdit={(e) => openEditModal(e, w.id)}
+                                        onEdit={(e) => openEditModal(e, w.id)} // <--- Assicurati che sia w.id
                                         onDelete={() => handleDeleteWorker(w.id)}
                                     />
                                 </motion.div>
@@ -1722,11 +1722,10 @@ const App: React.FC = () => {
             </AnimatePresence>
             {/* MODALE CRUD */}
             <WorkerModal
+                key={currentWorker ? `worker-${currentWorker.id}` : 'new-worker'}
                 isOpen={isModalOpen}
                 onClose={() => setIsModalOpen(false)}
                 onConfirm={handleSaveWorker}
-                // Logica per il colore dell'header
-                headerColor={modalMode === 'edit' && editingWorkerId ? workers.find(w => w.id === editingWorkerId)?.accentColor : 'emerald'}
                 mode={modalMode}
                 initialData={currentWorker}
             />

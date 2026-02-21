@@ -145,8 +145,8 @@ const PROMPT_ELIOR = `
   - Cerca **"GG INPS"** in alto a sinistra (di solito è 26).
   - Cerca **"5000 FERIE GODUTE"** ed estrai il numero (es. 47,55 o 4,00). Se non c'è, vale 0.
   
-  - **CONVERSIONE INTELLIGENTE:** * Se il numero delle ferie è MAGGIORE DI 12: consideralo in ORE. Dividilo per 8 e arrotonda. (Esempio: 47,55 / 8 = 5,94 -> scrivi 6.0).
-    * Se il numero è MINORE O UGUALE A 12: consideralo GIÀ IN GIORNI e lascialo così com'è.
+- **CONVERSIONE INTELLIGENTE:** * Se il numero delle ferie è MAGGIORE DI 12: consideralo in ORE. Dividilo per 8 e MANTIENI I DECIMALI ESATTI senza arrotondare. (Esempio: 28,35 / 8 = 3.54).
+    * Se il numero è MINORE O UGUALE A 12: consideralo GIÀ IN GIORNI e lascialo così com'è.
   
   - **daysVacation**: Scrivi il numero finale dei giorni di ferie.
   - **daysWorked**: Esegui SEMPRE la sottrazione (GG INPS - daysVacation).

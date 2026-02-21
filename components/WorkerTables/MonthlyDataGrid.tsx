@@ -205,7 +205,7 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
   const [noteModal, setNoteModal] = useState<{ isOpen: boolean; monthIndex: number; text: string }>({ isOpen: false, monthIndex: -1, text: '' });
   const [legalModalOpen, setLegalModalOpen] = useState(false);
   const [activeRowIndex, setActiveRowIndex] = useState<number | null>(null);
-
+  const [rowToClear, setRowToClear] = useState<number | null>(null);
   // --- 1. REF E LOGICA SCROLL (UNIFICATA) ---
   const tableContainerRef = useRef<HTMLDivElement>(null);
   const topScrollRef = useRef<HTMLDivElement>(null);
@@ -380,12 +380,33 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
     e.target.select();
   };
 
+  // --- FUNZIONE CHE ESEGUE LA CANCELLAZIONE REALE ---
+  const confirmClearRow = () => {
+    if (rowToClear === null) return;
+    const existingRow = currentYearData.find(d => d.monthIndex === rowToClear) || {};
+    const updatedRow = { ...existingRow, year: selectedYear, monthIndex: rowToClear, month: MONTH_NAMES[rowToClear] };
+    editableColumns.forEach(col => {
+      if (col.id !== 'month' && col.id !== 'note') (updatedRow as any)[col.id] = 0;
+    });
+    const otherData = data.filter(d => !(d.year === selectedYear && d.monthIndex === rowToClear));
+    onDataChange([...otherData, updatedRow]);
+    setRowToClear(null); // Chiude il modale
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent, rowIndex: number, colId: string) => {
+    // --- 💡 CHICCA EXTRA: Tasto rapido "Svuota Mese" (Alt + C) ---
+    if (e.altKey && (e.key === 'c' || e.key === 'C')) {
+      e.preventDefault();
+      setRowToClear(rowIndex); // Apre il modale bello al posto dell'alert!
+      return;
+    }
+
     const colIdx = editableColumns.findIndex(c => c.id === colId);
     if (colIdx === -1) return;
 
     let nextRow = rowIndex;
     let nextColIdx = colIdx;
+    let forceScroll: 'left' | 'right' | null = null;
 
     switch (e.key) {
       case 'ArrowUp': nextRow = Math.max(0, rowIndex - 1); break;
@@ -394,8 +415,28 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
       case 'ArrowRight': nextColIdx = Math.min(editableColumns.length - 1, colIdx + 1); break;
       case 'Enter':
         e.preventDefault();
-        if (colIdx >= editableColumns.length - 1) { nextColIdx = 0; nextRow = Math.min(11, rowIndex + 1); }
-        else { nextColIdx = colIdx + 1; }
+        if (colIdx >= editableColumns.length - 1) {
+          nextColIdx = 0;
+          nextRow = Math.min(11, rowIndex + 1);
+          forceScroll = 'left';
+        } else { nextColIdx = colIdx + 1; }
+        break;
+      case 'Tab':
+        if (!e.shiftKey && colIdx >= editableColumns.length - 1) {
+          // Tab in avanti all'ultima colonna
+          e.preventDefault();
+          nextColIdx = 0;
+          nextRow = Math.min(11, rowIndex + 1);
+          forceScroll = 'left';
+        } else if (e.shiftKey && colIdx === 0) {
+          // Shift+Tab indietro dalla prima colonna
+          e.preventDefault();
+          nextColIdx = editableColumns.length - 1;
+          nextRow = Math.max(0, rowIndex - 1);
+          forceScroll = 'right';
+        } else {
+          return; // Per i salti normali tra celle, lascia fare nativamente al browser
+        }
         break;
       default: return;
     }
@@ -408,8 +449,32 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
     requestAnimationFrame(() => {
       const nextEl = document.getElementById(nextId) as HTMLInputElement;
       if (nextEl) {
-        nextEl.focus();
+        // 1. Diamo il focus bloccando lo scroll nativo (se il browser lo supporta)
+        nextEl.focus({ preventScroll: true });
         nextEl.select();
+
+        if (forceScroll && tableContainerRef.current) {
+          const targetScroll = forceScroll === 'left' ? 0 : tableContainerRef.current.scrollWidth;
+
+          // 2. OPZIONE NUCLEARE ANTI-BROWSER: Triplo blocco dello scroll
+          // A. Immediato
+          tableContainerRef.current.scrollLeft = targetScroll;
+
+          // B. Dopo il primo ricalcolo del layout (sconfigge lo scatto)
+          setTimeout(() => {
+            if (tableContainerRef.current) tableContainerRef.current.scrollLeft = targetScroll;
+          }, 10);
+
+          // C. Colpo di grazia definitivo (sconfigge eventuali animazioni native)
+          setTimeout(() => {
+            if (tableContainerRef.current) {
+              // Rimuoviamo temporaneamente lo smooth scrolling se presente via CSS
+              tableContainerRef.current.style.scrollBehavior = 'auto';
+              tableContainerRef.current.scrollLeft = targetScroll;
+              tableContainerRef.current.style.scrollBehavior = ''; // Ripristina
+            }
+          }, 50);
+        }
       }
     });
   };
@@ -676,7 +741,9 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
                   const isDivisorError = hasIndennita && workedDays === 0;
 
                   // Colore Riga Validazione
-                  let rowClass = isActiveRow ? 'bg-indigo-50/60 ring-1 ring-indigo-200 z-10 relative' : 'group hover:bg-slate-50';
+                  let rowClass = isActiveRow
+                    ? 'bg-indigo-100/70 shadow-[inset_4px_0_0_0_#4f46e5] ring-1 ring-indigo-300 z-20 relative transition-all duration-300'
+                    : 'group hover:bg-slate-50 transition-colors duration-150';
                   if (isDayCountError) rowClass = 'bg-orange-50 hover:bg-orange-100 ring-1 ring-orange-200 z-10 relative';
                   if (isDivisorError) rowClass = 'bg-red-50 hover:bg-red-100 ring-1 ring-red-200 z-10 relative';
 
@@ -709,7 +776,11 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
                               `}
                           >
                             {isMonth ? (
-                              <div className="flex items-center justify-between px-3 h-full w-full">
+                              <div
+                                className="flex items-center justify-between px-3 h-full w-full cursor-pointer hover:bg-slate-100 transition-colors"
+                                onClick={() => setActiveRowIndex(isActiveRow ? null : rowIndex)}
+                                title="Clicca per bloccare/sbloccare l'evidenziatore su questo mese"
+                              >
                                 <div className="flex items-center gap-2 overflow-hidden relative group/ai">
                                   {/* Icone Errore Validazione e AUDITOR AI */}
                                   {isDivisorError ? (
@@ -756,7 +827,7 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
                                   value={cellValue ?? ''}
                                   onChange={(e) => handleCellChange(rowIndex, col.id, e.target.value)}
                                   onFocus={(e) => handleInputFocus(e, rowIndex, col.id)}
-                                  onBlur={() => setActiveRowIndex(null)}
+
                                   onKeyDown={(e) => handleKeyDown(e, rowIndex, col.id)}
                                   onPaste={(e) => handlePaste(e, rowIndex, col.id)}
                                 />
@@ -966,7 +1037,44 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
             </div>
           )}
         </AnimatePresence>
+        {/* --- MODALE CONFERMA AZZERAMENTO MESE --- */}
+        <AnimatePresence>
+          {rowToClear !== null && (
+            <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" onClick={() => setRowToClear(null)}>
+              <motion.div
+                initial={{ scale: 0.9, opacity: 0, y: 20 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.95, opacity: 0 }}
+                className="bg-white w-full max-w-sm rounded-3xl shadow-2xl border border-slate-200 overflow-hidden"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="p-8 text-center relative overflow-hidden">
+                  {/* Effetto luce rossa dietro */}
+                  <div className="absolute top-[-50%] left-[50%] -translate-x-1/2 w-48 h-48 bg-red-500/10 rounded-full blur-[40px] pointer-events-none"></div>
 
+                  <div className="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-5 bg-gradient-to-br from-red-100 to-rose-100 text-red-500 shadow-inner ring-4 ring-white relative z-10">
+                    <Eraser className="w-10 h-10" strokeWidth={2} />
+                  </div>
+
+                  <h3 className="text-xl font-black text-slate-800 mb-2 relative z-10">Svuotare il mese?</h3>
+                  <p className="text-slate-500 text-sm mb-8 leading-relaxed relative z-10">
+                    Stai per azzerare tutti i valori inseriti per il mese di <br />
+                    <b className="text-slate-700 text-base">{MONTH_NAMES[rowToClear]} {selectedYear}</b>.
+                  </p>
+
+                  <div className="flex gap-3 justify-center relative z-10">
+                    <button onClick={() => setRowToClear(null)} className="px-6 py-3 rounded-xl font-bold text-slate-500 bg-slate-100 hover:bg-slate-200 hover:text-slate-700 transition-colors">
+                      Annulla
+                    </button>
+                    <button onClick={confirmClearRow} className="px-6 py-3 rounded-xl font-bold text-white bg-gradient-to-r from-red-500 to-rose-600 hover:scale-105 transition-all shadow-[0_10px_25px_-5px_rgba(239,68,68,0.5)]">
+                      Sì, Svuota Dati
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
       </div>
     </>
   );

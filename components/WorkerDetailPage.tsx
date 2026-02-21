@@ -548,8 +548,15 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
   // Reindirizza il file singolo alla logica Batch che è già perfetta e aggiornata
   const handleAnalyzePaySlip = async (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files.length > 0) {
-      // Passiamo l'evento direttamente alla funzione Batch
+      // 1. Accendiamo la rotellina di caricamento del bottone
+      setIsAnalyzing(true);
+
+      // 2. Eseguiamo il caricamento
       await handleBatchUpload(event);
+
+      // 3. Spegniamo la rotellina e resettiamo l'input (così puoi ricaricare lo stesso file se serve)
+      setIsAnalyzing(false);
+      if (scanRef.current) scanRef.current.value = '';
     }
   };
   // --- 🔥 1. PARSER ROBUSTO (Sostituisci quello esistente) ---
