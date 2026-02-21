@@ -10,7 +10,7 @@ const fmt = (val: any) => {
     return num.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
-const generaRelazioneTestuale = (worker: any, totali: any, includeExFest: boolean) => {
+const generaRelazioneTestuale = (worker: any, totali: any, includeExFest: boolean, includeTickets: boolean, startClaimYear: number, showPercepito: boolean) => {
     const oggi = new Date().toLocaleDateString('it-IT');
     const tettoGiorni = includeExFest ? 32 : 28;
 
@@ -19,28 +19,18 @@ const generaRelazioneTestuale = (worker: any, totali: any, includeExFest: boolea
     const lordoVal = gt.incidenzaTotale ?? gt.totalLordo ?? gt.grossClaim ?? 0;
     const percepitoVal = gt.indennitaPercepita ?? gt.totalPercepito ?? 0;
     const ticketVal = gt.indennitaPasto ?? gt.totalTicket ?? 0;
-    const nettoVal = (Number(lordoVal) - Number(percepitoVal)) + Number(ticketVal);
+    const nettoVal = (Number(lordoVal) - (showPercepito ? Number(percepitoVal) : 0)) + (includeTickets ? Number(ticketVal) : 0);
 
-    // --- GESTIONE ANNI INTELLIGENTE ---
-    // Filtriamo gli anni che hanno effettivamente dati (daysWorked > 0)
+    // --- GESTIONE ANNI ALLINEATA AL "CERVELLO" ---
     let anniAttivi = (worker?.anni || [])
-        .filter((a: AnnoDati) => Number(a.daysWorked) > 0)
+        .filter((a: AnnoDati) => Number(a.daysWorked) > 0 && Number(a.year) >= startClaimYear) // Filtro rigoroso!
         .map((a: AnnoDati) => Number(a.year))
         .sort((a: number, b: number) => a - b);
 
-    // Rimuoviamo duplicati
     anniAttivi = [...new Set(anniAttivi)];
+    if (anniAttivi.length === 0) anniAttivi = [startClaimYear, new Date().getFullYear()];
 
-    // Se non ci sono dati, fallback su YEARS o [2008, 2025]
-    if (anniAttivi.length === 0) anniAttivi = (Array.isArray(YEARS) && YEARS.length > 0) ? YEARS : [2008, 2025];
-
-    // Logica esclusione 2007 (se usato solo come base)
-    // Se il primo anno è 2007 e c'è anche il 2008, facciamo partire la relazione dal 2008
-    let inizioPeriodo = anniAttivi[0];
-    if (inizioPeriodo === 2007 && anniAttivi.includes(2008)) {
-        inizioPeriodo = 2008;
-    }
-
+    const inizioPeriodo = startClaimYear; // Ora comanda l'interfaccia, non si tira più a indovinare!
     const finePeriodo = anniAttivi[anniAttivi.length - 1];
 
     // --- ESTRAZIONE NOTE ---
@@ -48,7 +38,6 @@ const generaRelazioneTestuale = (worker: any, totali: any, includeExFest: boolea
     if (worker?.anni && Array.isArray(worker.anni)) {
         const noteTrovate = worker.anni
             .filter((r: AnnoDati) => r.note && r.note.trim() !== "")
-            // Filtriamo anche le note per escludere quelle del 2007 se non è l'anno di partenza
             .filter((r: AnnoDati) => Number(r.year) >= inizioPeriodo)
             .sort((a: AnnoDati, b: AnnoDati) => (a.year || 0) - (b.year || 0));
 
@@ -85,9 +74,9 @@ L'analisi ha isolato le voci a carattere continuativo e ricorrente (Art. 64 CCNL
 3. PREMIALITÀ RICORRENTE (Novità 2024):
    - Salario Produttività Mensile (Cod. 3B70)
    - Produttività Incrementale (Cod. 3B71)
-
+${includeTickets ? `
 4. RISTORO PASTI:
-   - Ticket Restaurant / Buoni Pasto (Quota Esente)
+   - Ticket Restaurant / Buoni Pasto (Quota Esente)` : ''}
 
 NOTA BENE:
 Sono state TASSATIVAMENTE ESCLUSE dal calcolo della media tutte le voci "Una Tantum", i rimborsi spese a piè di lista, i premi annuali non ricorrenti, la malattia, gli arretrati anni precedenti e le voci di Welfare aziendale.`;
@@ -149,12 +138,12 @@ Dall'analisi dei cedolini paga prodotti, risulta il seguente credito a favore de
 
 + DIFFERENZE LORDE MATURATE: .......... € ${fmt(lordoVal)}
   (Calcolate su indennità fisse e variabili ricorrenti)
-
+${showPercepito ? `
 - IMPORTO GIÀ PERCEPITO: .............. € ${fmt(percepitoVal)}
-  (A titolo di indennità feriale base o acconti)
-
+  (A titolo di indennità feriale base o acconti)` : ''}
+${includeTickets ? `
 + CREDITO BUONI PASTO: ................ € ${fmt(ticketVal)}
-  (Ticket maturati durante le ferie e non goduti)
+  (Ticket maturati durante le ferie e non goduti)` : ''}
 
 ==================================================
   TOTALE CREDITO LORDO SPETTANTE: ..... € ${fmt(nettoVal)}
@@ -170,9 +159,7 @@ Firma del Tecnico: __________________________
 // ... Il resto del componente (RelazioneModal) rimane identico ...
 // ... Copia tutto il resto dal tuo codice originale (handleStampa, JSX return, etc.) ...
 
-export const RelazioneModal = ({ isOpen, onClose, worker, totals, includeExFest = false }: any) => {
-    // ... STESSO CODICE DI PRIMA PER IL COMPONENTE ...
-    // (Non serve cambiarlo, la logica è tutta nella funzione sopra)
+export const RelazioneModal = ({ isOpen, onClose, worker, totals, includeExFest = false, includeTickets = true, showPercepito = true, startClaimYear = 2008 }: any) => {
 
     const [copiato, setCopiato] = useState(false);
 
@@ -180,7 +167,7 @@ export const RelazioneModal = ({ isOpen, onClose, worker, totals, includeExFest 
 
     let testoCompleto = "";
     try {
-        testoCompleto = generaRelazioneTestuale(worker, totals, includeExFest);
+        testoCompleto = generaRelazioneTestuale(worker, totals, includeExFest, includeTickets, startClaimYear, showPercepito);
     } catch (err) {
         console.error("Errore generazione testo:", err);
         testoCompleto = "Errore nella generazione dei dati. Controllare la console.";

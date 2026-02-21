@@ -54,7 +54,8 @@ import {
   QrCode,
   Check,
   RotateCw, // <--- AGGIUNTA
-  Wand2     // <--- AGGIUNTA
+  Wand2,
+  Download    // <--- AGGIUNTA
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 // IMPORTANTE: Tesseract per il ritaglio (Canvas)
@@ -277,6 +278,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
   // --- NUOVI STATI PER LEGAL COCKPIT ---
   const [legalStatus, setLegalStatus] = useState<'analisi' | 'pronta' | 'inviata' | 'trattativa' | 'chiusa'>(worker.status || 'analisi'); //
   const [offerAmount, setOfferAmount] = useState<string>('');
+  const [isTimelineOpen, setIsTimelineOpen] = useState(false); // <--- STATO PER LA TENDINA
   // --- NUOVO STATO: Toggle Ex Festività (Default False = 28gg) ---
   // --- SALVATAGGIO IN MEMORIA DELLE IMPOSTAZIONI ---
   const [includeExFest, setIncludeExFest] = useState(() => {
@@ -704,7 +706,11 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
 
   // --- FUNZIONE STAMPA PDF (STRUTTURA ORIGINALE + CALCOLI CORRETTI + FIX TYPESCRIPT) ---
   const handlePrintTables = () => {
-    // 1. SETUP E CONFIGURAZIONE
+    // 0. RECUPERO PREFERENZE: Legge se l'utente ha nascosto la colonna nel Report
+    const savedPercepito = localStorage.getItem(`report_percepito_${worker.id}`);
+    const showPercepito = savedPercepito !== null ? JSON.parse(savedPercepito) : true;
+
+    // 1. SETUP E CONFIGURAZIONE (Orientamento Landscape per farci stare tutto)
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
     const totalPagesExp = '{total_pages_count_string}'; // Variabile necessaria
 
@@ -742,7 +748,6 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
     });
 
     // 3. PREPARAZIONE DATI
-    // FIX TYPESCRIPT: Creiamo un array di numeri garantiti
     const yearsSet = new Set(monthlyInputs.map((d: any) => Number(d.year)));
     const yearsToPrint = Array.from(yearsSet)
       .filter((y: any) => !isNaN(Number(y)))
@@ -759,71 +764,61 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
     let grandTotalNet = 0;
     let grandTotalFerieEffettive = 0;
     let grandTotalFeriePagate = 0;
-    // Totale Variabili (solo statistico)
     let grandTotalIndemnity = 0;
 
-    // Contatore Tetto Progressivo
     let ferieCumulateCounter = 0;
 
     // --- B. COSTRUZIONE DATI TABELLA 1 (RIEPILOGO) ---
     yearsToPrint.forEach((yearVal) => {
       const year = Number(yearVal);
 
-      // Logica Media: Anno Prec -> Fallback Corrente
       let mediaApplicata = yearlyAverages[year - 1];
       if (mediaApplicata === undefined || mediaApplicata === 0) {
         mediaApplicata = yearlyAverages[year] || 0;
       }
 
-      // Filtro mesi
       const months = monthlyInputs.filter(d => Number(d.year) === year).sort((a, b) => a.monthIndex - b.monthIndex);
 
-      // Totali dell'ANNO
-      let yIndemnity = 0; // Somma voci
+      let yIndemnity = 0;
       let yWorkDays = 0;
       let yLordo = 0;
       let yTicket = 0;
-      let yPercepito = 0; // Serve per il netto
+      let yPercepito = 0;
       let yFerieEffettive = 0;
       let yFeriePagate = 0;
 
       months.forEach(row => {
-        // 1. Somma voci grezze (per Tabella 2 e colonna 1)
         let monthVoci = 0;
         indennitaCols.forEach(col => {
           const val = parseLocalFloat(row[col.id]);
           monthVoci += val;
-          // Pivot Data
-          if (!pivotData[col.label]) pivotData[col.label] = {};
-          if (!pivotData[col.label][year]) pivotData[col.label][year] = 0;
-          pivotData[col.label][year] += val;
+
+          // 🔥 MODIFICA CHIRURGICA: Inseriamo il Codice tra parentesi quadre nella chiave della Pivot
+          const pivotKey = `[${col.id}] ${col.label}`;
+          if (!pivotData[pivotKey]) pivotData[pivotKey] = {};
+          if (!pivotData[pivotKey][year]) pivotData[pivotKey][year] = 0;
+          pivotData[pivotKey][year] += val;
         });
         yIndemnity += monthVoci;
         yWorkDays += parseLocalFloat(row.daysWorked);
 
-        // 2. Calcoli Economici
         const vacDays = parseLocalFloat(row.daysVacation);
         const cTicket = parseLocalFloat(row.coeffTicket);
         const cPercepito = parseLocalFloat(row.coeffPercepito);
 
-        // Tetto Progressivo
         const prevTotal = ferieCumulateCounter;
         ferieCumulateCounter += vacDays;
 
-        // Giorni Utili
         const spazio = Math.max(0, TETTO - prevTotal);
         const ggUtili = Math.min(vacDays, spazio);
 
-        // Accumulatori Giorni
         yFerieEffettive += vacDays;
         yFeriePagate += ggUtili;
 
-        // Calcolo Euro (Se ci sono giorni utili)
         if (ggUtili > 0) {
-          yLordo += (ggUtili * mediaApplicata); // Usiamo la media corretta!
+          yLordo += (ggUtili * mediaApplicata);
           yPercepito += (ggUtili * cPercepito);
 
-          // Applichiamo il bottone ai Ticket
           if (includeTickets) {
             yTicket += (ggUtili * cTicket);
           } else {
@@ -832,25 +827,20 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
         }
       });
 
-      const yNetto = (yLordo - yPercepito) + yTicket;
-
-      // --- LOGICA ANNO RIFERIMENTO VS CONTEGGIO ---
+      const yNetto = (yLordo - (showPercepito ? yPercepito : 0)) + yTicket;
       const isReferenceYear = year < startClaimYear;
 
       yearlyRows.push([
-        isReferenceYear ? `${year} (Rif.)` : year, // Segnala visivamente che è solo riferimento
+        isReferenceYear ? `${year} (Rif.)` : year,
         fmt(yIndemnity),
         fmtInt(yWorkDays),
         fmt(mediaApplicata),
         `${fmtInt(yFeriePagate)} / ${fmtInt(yFerieEffettive)}`,
-        // Se è anno di riferimento, non mostriamo gli importi perché non si chiedono
         isReferenceYear ? '(Media)' : fmt(yLordo),
         isReferenceYear ? '-' : fmt(yTicket),
         isReferenceYear ? '-' : fmt(yNetto)
       ]);
 
-      // --- MODIFICA CRUCIALE: SOMMA AI TOTALI SOLO SE ANNO >= ANNO INIZIO ---
-      // Se siamo nel 2007 (isReferenceYear = true), saltiamo la somma.
       if (!isReferenceYear) {
         grandTotalIndemnity += yIndemnity;
         grandTotalLordo += yLordo;
@@ -860,7 +850,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
         grandTotalFeriePagate += yFeriePagate;
       }
     });
-    // Riga Totale Finale
+
     yearlyRows.push([
       'TOTALE',
       fmt(grandTotalIndemnity),
@@ -883,7 +873,6 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
       doc.setFontSize(10); doc.setFont('helvetica', 'normal'); doc.setTextColor(200, 200, 200);
       doc.text(`Pratica: ${worker.cognome} ${worker.nome} (Matr. ${worker.id})`, pageWidth - 14, 12, { align: 'right' });
 
-      // Footer con Nota Legale
       doc.setFontSize(7); doc.setTextColor(100);
       const note = "Calcolo elaborato ai sensi Cass. n. 20216/2022 (Onnicomprensività retribuzione feriale).";
       doc.text(note, 14, pageHeight - 10);
@@ -899,15 +888,15 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
 
     autoTable(doc, {
       startY: currentY + 5,
-      head: [['ANNO', 'TOT. VARIABILI', 'GG LAV.', 'MEDIA UTILIZZATA', 'GG UTILI / TOT', 'DIFF. LORDA', 'TICKET', 'NETTO DOVUTO']],
+      head: [['ANNO', 'TOT. VARIABILI', 'GG LAV.', 'MEDIA UTILIZZATA', 'GG FERIE / TOT', 'DIFF. LORDA', 'TICKET', 'NETTO DOVUTO']],
       body: yearlyRows,
       theme: 'grid',
       styles: { fontSize: 9, cellPadding: 3, textColor: 50, lineColor: [200, 200, 200], lineWidth: 0.1 },
       headStyles: { fillColor: [241, 245, 249], textColor: [23, 37, 84], fontStyle: 'bold', halign: 'center' },
       columnStyles: {
         0: { fontStyle: 'bold', halign: 'center', fillColor: [248, 250, 252] },
-        3: { fontStyle: 'bold', textColor: [180, 83, 9] }, // Colonna Media in Arancio scuro
-        7: { fontStyle: 'bold', halign: 'right', fillColor: [220, 252, 231], textColor: [21, 128, 61] } // Netto Verde
+        3: { fontStyle: 'bold', textColor: [180, 83, 9] },
+        7: { fontStyle: 'bold', halign: 'right', fillColor: [220, 252, 231], textColor: [21, 128, 61] }
       },
       bodyStyles: { halign: 'right' },
       didDrawPage: drawHeaderFooter,
@@ -915,19 +904,27 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
     });
 
     // @ts-ignore
-    currentY = doc.lastAutoTable.finalY + 15;
+    currentY = doc.lastAutoTable.finalY + 3;
 
-    // --- TABELLA 2 ---
+    // NOTA A PIE DI TABELLA 1 (Spiegazione Asterisco e GG Ferie)
+    doc.setFontSize(8); doc.setTextColor(100); doc.setFont('helvetica', 'italic');
+    doc.text(`* La dicitura "GG FERIE / TOT" indica i giorni effettivamente conteggiati ai fini del calcolo rispetto a quelli goduti. In caso di superamento del limite legale (${TETTO}gg annui), l'eccedenza è stata esclusa dal conteggio economico.`, 14, currentY);
+    currentY += 12;
+
+    // --- TABELLA 2 (IL VERO PROBLEMA RISOLTO) ---
     // @ts-ignore
     if (currentY > 150) { doc.addPage(); currentY = 30; }
 
-    doc.setFontSize(12); doc.setTextColor(23, 37, 84);
+    doc.setFontSize(12); doc.setTextColor(23, 37, 84); doc.setFont('helvetica', 'bold');
     doc.text("2. RIEPILOGO VOCI VARIABILI DELLA RETRIBUZIONE", 14, currentY);
 
-    const pivotHead = ['VOCE', ...yearsToPrint.map(String), 'TOTALE'];
+    const pivotHead = ['CODICE E VOCE', ...yearsToPrint.map(String), 'TOTALE'];
     const pivotBody = Object.keys(pivotData).sort().map(key => {
       let rowTotal = 0;
-      const row = [key];
+      // Tagliamo leggermente la label per farci stare il codice (es. "[0152] Straord...")
+      const shortKey = key.length > 25 ? key.substring(0, 23) + '..' : key;
+      const row = [shortKey];
+
       yearsToPrint.forEach(yearVal => {
         const year = Number(yearVal);
         const val = pivotData[key][year] || 0;
@@ -942,13 +939,37 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
       startY: currentY + 5,
       head: [pivotHead],
       body: pivotBody,
-      theme: 'striped',
-      styles: { fontSize: 8, cellPadding: 2, textColor: 50 },
-      headStyles: { fillColor: [234, 88, 12], textColor: 255, halign: 'center', fontStyle: 'bold' },
-      bodyStyles: { halign: 'right' },
-      columnStyles: { 0: { halign: 'left', fontStyle: 'bold', cellWidth: 50 } },
+      theme: 'grid',
+      styles: {
+        fontSize: 6.5,
+        cellPadding: 1.5,
+        textColor: 50
+      },
+      headStyles: {
+        fillColor: [234, 88, 12],
+        textColor: 255,
+        halign: 'center',
+        valign: 'middle',
+        fontStyle: 'bold'
+      },
+      bodyStyles: { halign: 'right', valign: 'middle' },
+      columnStyles: {
+        0: { halign: 'left', fontStyle: 'bold', cellWidth: 40 } // Allargato leggermente per il codice
+      },
+      // MAGIA: Forza le colonne numeriche a non andare a capo + Evidenzia Colonna Totali
+      didParseCell: function (data) {
+        if (data.column.index > 0) {
+          data.cell.styles.cellWidth = 'wrap';
+          data.cell.styles.minCellWidth = 14;
+        }
+        // Evidenzia visivamente l'ultima colonna (Il Totale Finale a destra)
+        if (data.section === 'body' && data.column.index === pivotHead.length - 1) {
+          data.cell.styles.fontStyle = 'bold';
+          data.cell.styles.fillColor = [245, 245, 245];
+        }
+      },
       didDrawPage: drawHeaderFooter,
-      margin: { top: 25, bottom: 15, left: 14, right: 14 }
+      margin: { top: 25, bottom: 15, left: 10, right: 10 }
     });
 
     // --- TABELLA 3 (DETTAGLIO MENSILE) ---
@@ -957,7 +978,6 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
     doc.setFontSize(12); doc.setTextColor(23, 37, 84);
     doc.text("3. DETTAGLIO MENSILE ANALITICO", 14, currentY);
 
-    // Reset contatore per ristampare i mesi correttamente
     let monthlyFerieCounter = 0;
 
     yearsToPrint.forEach(yearVal => {
@@ -965,7 +985,6 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
       // @ts-ignore
       if (currentY > 160) { doc.addPage(); currentY = 30; }
 
-      // Recupero media per mostrarla nel titolo
       let media = yearlyAverages[year - 1];
       if (media === undefined || media === 0) media = yearlyAverages[year] || 0;
 
@@ -974,11 +993,15 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
 
       const yearRows = monthlyInputs.filter(d => Number(d.year) === year).sort((a, b) => a.monthIndex - b.monthIndex);
 
+      // 🔥 MODIFICA CHIRURGICA: Codice al primo rigo, descrizione al secondo. Cambiato GG UTILI in GG FERIE
       const tableHead = [
         'MESE',
-        ...indennitaCols.map(c => c.label.substring(0, 10) + '.'),
-        'GG LAV', 'GG UTILI', 'LORDO', 'GIA\' PERC.', 'TICKET', 'NETTO'
+        ...indennitaCols.map(c => `${c.id}\n${c.label.substring(0, 8)}.`),
+        'GG LAV', 'GG FERIE', 'LORDO'
       ];
+      if (showPercepito) tableHead.push('GIA\' PERC.');
+      if (includeTickets) tableHead.push('TICKET');
+      tableHead.push('NETTO');
 
       const tableBody = yearRows.map(row => {
         const monthName = row.month ? row.month : (MONTH_NAMES[row.monthIndex] || '');
@@ -992,31 +1015,28 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
         const ggLav = parseLocalFloat(row.daysWorked);
         const vac = parseLocalFloat(row.daysVacation);
 
-        // Ricalcolo al volo per la visualizzazione mensile
         const spazio = Math.max(0, TETTO - monthlyFerieCounter);
         const gu = Math.min(vac, spazio);
         monthlyFerieCounter += vac;
 
-        // Calcoli Row
         let rLordo = 0;
         if (gu > 0) rLordo = gu * media;
 
-        // --- MODIFICA QUI ---
-        // Se il bottone includeTickets è attivo calcola il ticket, altrimenti forzalo a 0.
         const rTicket = includeTickets ? (gu * parseLocalFloat(row.coeffTicket)) : 0;
-
         const rPercepito = gu * parseLocalFloat(row.coeffPercepito);
-        const rNetto = (rLordo - rPercepito) + rTicket;
 
-        rowData.push(
-          ggLav > 0 ? String(ggLav) : '',
-          // Se i giorni sono stati tagliati dal tetto, li segniamo con asterisco
-          gu !== vac ? `${fmtInt(gu)}*` : fmtInt(gu),
-          fmt(rLordo),
-          fmt(rPercepito),
-          fmt(rTicket),
-          fmt(rNetto)
-        );
+        const rNetto = (rLordo - (showPercepito ? rPercepito : 0)) + rTicket;
+
+        rowData.push(ggLav > 0 ? String(ggLav) : '');
+        // Mantiene l'asterisco per i mesi in cui interviene il taglio
+        rowData.push(gu !== vac ? `${fmtInt(gu)}*` : fmtInt(gu));
+        rowData.push(fmt(rLordo));
+
+        if (showPercepito) rowData.push(fmt(rPercepito));
+        if (includeTickets) rowData.push(fmt(rTicket));
+
+        rowData.push(fmt(rNetto));
+
         return rowData;
       });
 
@@ -1027,6 +1047,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
         theme: 'grid',
         styles: { fontSize: 7, cellPadding: 1.5, halign: 'right', lineColor: [220, 220, 220], lineWidth: 0.1 },
         headStyles: { fillColor: [23, 37, 84], textColor: 255, fontStyle: 'bold', halign: 'center' },
+        alternateRowStyles: { fillColor: [248, 250, 252] }, // 🔥 ZEBRA STRIPING per leggibilità orizzontale!
         columnStyles: {
           0: { halign: 'left', fontStyle: 'bold', cellWidth: 12, fillColor: [241, 245, 249] },
           [tableHead.length - 1]: { fontStyle: 'bold', fillColor: [240, 253, 250], textColor: [21, 128, 61] }
@@ -1039,7 +1060,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
       currentY = doc.lastAutoTable.finalY + 10;
     });
 
-    // --- PAGINA 4: RIEPILOGO FINALE (AGGIUNTA) ---
+    // --- PAGINA 4: RIEPILOGO FINALE ---
     doc.addPage();
     drawHeaderFooter(null);
     currentY = 40;
@@ -1050,8 +1071,8 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
 
     const printRow = (label: string, value: string, isTotal = false) => {
       doc.setFontSize(isTotal ? 14 : 12);
-      if (isTotal) doc.setTextColor(22, 163, 74); // Verde
-      else doc.setTextColor(50, 50, 50); // Grigio
+      if (isTotal) doc.setTextColor(22, 163, 74);
+      else doc.setTextColor(50, 50, 50);
 
       doc.setFont('helvetica', isTotal ? 'bold' : 'normal');
 
@@ -1062,20 +1083,16 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
       currentY += 12;
     };
 
-    // Per il riepilogo finale usiamo i totali calcolati in "grandTotal..." che sono corretti
-    // MA dobbiamo calcolare il "Già Percepito Totale" per differenza logica o somma
-    // Poiché grandTotalIndemnity è la somma delle voci variabili e non del percepito (che è ferie * coeff),
-    // dobbiamo ricalcolare velocemente il percepito totale corretto.
-
     let recalcPercepitoTotal = 0;
     let tempFerie = 0;
 
-    // Ordine cronologico per coerenza tetto
     const allSorted = [...monthlyInputs].sort((a, b) => {
       return (Number(a.year) - Number(b.year)) || (a.monthIndex - b.monthIndex);
     });
 
     allSorted.forEach(row => {
+      if (Number(row.year) < startClaimYear) return;
+
       const v = parseLocalFloat(row.daysVacation);
       const s = Math.max(0, TETTO - tempFerie);
       const gu = Math.min(v, s);
@@ -1084,13 +1101,19 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
     });
 
     printRow("Totale Lordo Spettante", fmt(grandTotalLordo));
-    printRow("Totale Già Percepito (Voce Busta)", fmt(recalcPercepitoTotal));
-    printRow("Totale Buoni Pasto Maturati", fmt(grandTotalTicket));
+
+    if (showPercepito) {
+      printRow("Totale Già Percepito (Voce Busta)", fmt(recalcPercepitoTotal));
+    }
+
+    if (includeTickets) {
+      printRow("Totale Buoni Pasto Maturati", fmt(grandTotalTicket));
+    }
 
     currentY += 5;
-    printRow("TOTALE NETTO DA LIQUIDARE", fmt(grandTotalNet), true);
+    const veroNettoDaStampare = (grandTotalLordo - (showPercepito ? recalcPercepitoTotal : 0)) + (includeTickets ? grandTotalTicket : 0);
+    printRow("TOTALE NETTO DA LIQUIDARE", fmt(veroNettoDaStampare), true);
 
-    // Disclaimer
     currentY += 20;
     doc.setFontSize(9); doc.setTextColor(100); doc.setFont('helvetica', 'italic');
     doc.text("Il presente conteggio ha valore di perizia tecnica di parte. I calcoli sono basati sui dati inseriti e sulla giurisprudenza corrente.", 105, currentY, { align: 'center', maxWidth: 150 });
@@ -1581,16 +1604,15 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
               <Send className="w-4 h-4 transition-transform duration-500 group-hover:-translate-y-1 group-hover:translate-x-1" strokeWidth={2.5} />
               <span className="hidden lg:inline">PEC</span>
             </button>
-
-            {/* TASTO STAMPA DATI */}
+            {/* TASTO DOWNLOAD TABELLE */}
             <button
               onClick={handlePrintTables}
               className="group relative px-6 py-2.5 rounded-xl font-bold text-white shadow-lg hover:shadow-xl hover:-translate-y-0.5 active:scale-95 transition-all duration-300 border border-white/10 overflow-hidden flex items-center gap-2"
               style={{ background: 'linear-gradient(90deg, #10b981 0%, #14b8a6 100%)' }} // Emerald -> Teal
             >
               <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500 rotate-12"></div>
-              <Printer className="w-4 h-4 transition-transform duration-500 group-hover:rotate-12" strokeWidth={2.5} />
-              <span className="hidden xl:inline">Stampa Dati</span>
+              <Download className="w-4 h-4 transition-transform duration-300 group-hover:translate-y-1" strokeWidth={2.5} />
+              <span className="hidden xl:inline">Download</span>
             </button>
 
             {/* TASTO VAI AL REPORT */}
@@ -1612,19 +1634,27 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
         {/* --- COLONNA PRINCIPALE --- */}
         <div className="flex-1 flex flex-col h-full overflow-hidden">
 
-          {/* TIMELINE STATO VERTENZA E PARAMETRI */}
-          <div className="lg:col-span-2 bg-white/70 backdrop-blur-md rounded-[2rem] p-6 shadow-sm border border-white/60 relative overflow-hidden">
+          {/* TIMELINE STATO VERTENZA E PARAMETRI (A TENDINA) */}
+          <div className="lg:col-span-2 bg-white/70 backdrop-blur-md rounded-[1.5rem] px-6 py-4 shadow-sm border border-white/60 relative overflow-hidden transition-all duration-300">
 
-            {/* Header con i Toggle integrati a destra */}
-            <div className="flex justify-between items-center mb-5">
-              <h3 className="text-sm font-black text-slate-700 flex items-center gap-2">
-                <Gavel className="w-4 h-4 text-indigo-500" /> STATO VERTENZA
-              </h3>
+            {/* Header: Pulsante apri/chiudi a sinistra, Toggle sempre visibili a destra */}
+            <div className="flex justify-between items-center">
 
-              {/* TOGGLES PARAMETRI CALCOLO - REDESIGN PREMIUM */}
-              <div className="flex items-center p-1 bg-slate-100/50 backdrop-blur-sm rounded-full border border-slate-200/80 shadow-sm">
+              <button
+                onClick={() => setIsTimelineOpen(!isTimelineOpen)}
+                className="group flex items-center gap-2 text-sm font-black text-slate-700 hover:text-indigo-600 transition-colors focus:outline-none"
+              >
+                <div className="p-1.5 bg-indigo-100 rounded-lg group-hover:bg-indigo-200 transition-colors">
+                  <Gavel className="w-4 h-4 text-indigo-600" />
+                </div>
+                STATO VERTENZA
+                <motion.div animate={{ rotate: isTimelineOpen ? 180 : 0 }} transition={{ duration: 0.3 }}>
+                  <ChevronDown className="w-4 h-4 text-slate-400 group-hover:text-indigo-500" />
+                </motion.div>
+              </button>
 
-                {/* TOGGLE EX-FESTIVITÀ (Amber/Orange Gradient) */}
+              {/* TOGGLES PARAMETRI CALCOLO (SEMPRE VISIBILI) */}
+              <div className="flex items-center p-1 bg-slate-100/50 backdrop-blur-sm rounded-full border border-slate-200/80 shadow-sm shrink-0">
                 <button
                   onClick={() => setIncludeExFest(!includeExFest)}
                   className={`group flex items-center gap-1.5 px-3 py-1.5 rounded-full font-bold text-xs transition-all duration-300 border ${includeExFest
@@ -1637,7 +1667,6 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
                   <span>{includeExFest ? "32gg" : "28gg"}</span>
                 </button>
 
-                {/* TOGGLE TICKET (Indigo/Blue Gradient) */}
                 <button
                   onClick={() => setIncludeTickets(!includeTickets)}
                   className={`group flex items-center gap-1.5 px-3 py-1.5 rounded-full font-bold text-xs transition-all duration-300 border ml-1 ${includeTickets
@@ -1652,14 +1681,27 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
               </div>
             </div>
 
-            <div className="relative flex justify-between items-center z-10 px-4">
-              <div className="absolute top-5 left-0 w-full h-0.5 bg-slate-200 -z-10"></div>
-              <TimelineStep step="analisi" label="Analisi" icon={Search} activeStatus={legalStatus} />
-              <TimelineStep step="pronta" label="Conteggi" icon={Calculator} activeStatus={legalStatus} />
-              <TimelineStep step="inviata" label="PEC Inviata" icon={Send} activeStatus={legalStatus} />
-              <TimelineStep step="trattativa" label="Trattativa" icon={Handshake} activeStatus={legalStatus} />
-              <TimelineStep step="chiusa" label="Chiusa" icon={CheckCircle2} activeStatus={legalStatus} />
-            </div>
+            {/* TIMELINE A SCOMPARSA */}
+            <AnimatePresence>
+              {isTimelineOpen && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.3, ease: "easeInOut" }}
+                  className="overflow-hidden"
+                >
+                  <div className="mt-6 mb-2 relative flex justify-between items-center z-10 px-4">
+                    <div className="absolute top-5 left-0 w-full h-0.5 bg-slate-200 -z-10"></div>
+                    <TimelineStep step="analisi" label="Analisi" icon={Search} activeStatus={legalStatus} />
+                    <TimelineStep step="pronta" label="Conteggi" icon={Calculator} activeStatus={legalStatus} />
+                    <TimelineStep step="inviata" label="PEC Inviata" icon={Send} activeStatus={legalStatus} />
+                    <TimelineStep step="trattativa" label="Trattativa" icon={Handshake} activeStatus={legalStatus} />
+                    <TimelineStep step="chiusa" label="Chiusa" icon={CheckCircle2} activeStatus={legalStatus} />
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
 
           <div className="flex justify-center mb-6 z-20 shrink-0">

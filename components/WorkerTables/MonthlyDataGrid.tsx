@@ -25,7 +25,8 @@ import {
   MapPin,
   Scale, // Icona per il legale
   TriangleAlert,
-  AlertTriangle // Icona per errori validazione
+  AlertTriangle,
+  CheckCircle2 // Icona per errori validazione
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -174,13 +175,13 @@ const parseLocalFloat = (val: any) => {
 
   // LOGICA INTELLIGENTE:
   // 1. Se la stringa contiene una virgola (es. "345,16" o "1.000,50"),
-  //    allora è formato ITALIANO (Utente).
+  //    allora è formato ITALIANO (Utente).
   if (str.includes(',')) {
     str = str.replace(/\./g, ''); // Rimuovi i punti delle migliaia
-    str = str.replace(',', '.');  // Trasforma la virgola in punto
+    str = str.replace(',', '.');  // Trasforma la virgola in punto
   }
   // 2. Altrimenti, se NON c'è virgola (es. "345.16"), 
-  //    assumiamo sia formato AI/INGLESE. Non tocchiamo nulla.
+  //    assumiamo sia formato AI/INGLESE. Non tocchiamo nulla.
 
   return parseFloat(str) || 0;
 };
@@ -451,15 +452,15 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
           .hide-native-scrollbar::-webkit-scrollbar { display: none; }
           .hide-native-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
-          /* Stile barre fantasma */
-          .custom-scrollbar-x::-webkit-scrollbar { height: 22px; }
+          /* Stile barre fantasma: invisibili di base */
+          .custom-scrollbar-x::-webkit-scrollbar { height: 16px; }
           .custom-scrollbar-x::-webkit-scrollbar-track { background: transparent; border-top: 1px solid transparent; }
-          .custom-scrollbar-x::-webkit-scrollbar-thumb { background-color: transparent; border-radius: 10px; border: 5px solid transparent; background-clip: content-box; }
+          .custom-scrollbar-x::-webkit-scrollbar-thumb { background-color: transparent; border-radius: 8px; border: 4px solid transparent; background-clip: content-box; }
           
-          /* Hover: Appaiono solo quando passi sopra il contenitore specifico */
-          .group-hover-scroll:hover::-webkit-scrollbar-track { background: #f1f5f9; border-top: 1px solid #cbd5e1; }
-          .group-hover-scroll:hover::-webkit-scrollbar-thumb { background-color: #64748b; }
-          .group-hover-scroll:hover::-webkit-scrollbar-thumb:hover { background-color: #475569; }
+          /* Hover: Appaiono SOLO quando passi sopra il contenitore .group/main-container */
+          .group\\/main-container:hover .custom-scrollbar-x::-webkit-scrollbar-track { background: #f8fafc; border-top: 1px solid #e2e8f0; }
+          .group\\/main-container:hover .custom-scrollbar-x::-webkit-scrollbar-thumb { background-color: #cbd5e1; }
+          .group\\/main-container:hover .custom-scrollbar-x::-webkit-scrollbar-thumb:hover { background-color: #94a3b8; }
         `}</style>
 
         {/* --- HEADER --- */}
@@ -554,11 +555,11 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
           </div>
         </div>
         {/* --- GHOST SCROLLBAR SUPERIORE --- */}
-        <div className="bg-white border-b border-slate-200 h-7 shrink-0 flex items-center justify-center">
+        <div className="bg-white border-b border-slate-200 shrink-0 flex items-center justify-center">
           <div
             ref={topScrollRef}
-            className="overflow-x-auto custom-scrollbar-x group-hover-scroll"
-            style={{ height: '24px', width: 'calc(100% - 80px)' }}
+            className="overflow-x-auto custom-scrollbar-x w-full"
+            style={{ paddingLeft: '40px', paddingRight: '40px' }}
           >
             <div style={{ width: `${tableScrollWidth}px`, height: '1px' }}></div>
           </div>
@@ -591,12 +592,12 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
                     return (
                       <th key={col.id}
                         className={`
-                          p-2 font-bold text-center border-r border-slate-300 select-none 
-                          ${col.width ? col.width : 'w-24'} 
-                          ${col.id === 'total' ? 'bg-slate-200 text-slate-800' : ''} 
-                          ${idx === 0 ? 'sticky left-0 bg-slate-100 z-20 border-r-2 border-slate-300 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]' : ''}
-                          relative hover:!z-[1000]
-                        `}
+                          p-2 font-bold text-center border-r border-slate-300 select-none 
+                          ${col.width ? col.width : 'w-24'} 
+                          ${col.id === 'total' ? 'bg-slate-200 text-slate-800' : ''} 
+                          ${idx === 0 ? 'sticky left-0 bg-slate-100 z-20 border-r-2 border-slate-300 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]' : ''}
+                          relative hover:!z-[1000]
+                        `}
                       >
                         <div className="flex flex-col items-center justify-center leading-tight h-10 group/head relative">
                           <span className="truncate w-full block text-[11px] uppercase tracking-tight">{col.label.replace(/\(.*\)/, '')}</span>
@@ -641,6 +642,8 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
                 {currentRows.map((row, rowIndex) => {
                   const rowTotal = calculateRowTotal(row);
                   const note = (row as any).note;
+                  const aiWarning = (row as any).aiWarning;
+                  const hasAiWarning = aiWarning && aiWarning !== "Nessuna anomalia";
                   const isActiveRow = activeRowIndex === rowIndex;
 
                   const vacDays = parseLocalFloat(row.daysVacation);
@@ -692,28 +695,41 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
 
                         return (
                           <td key={col.id} className={`
-                                border-r border-b border-slate-300 p-0 relative
-                                ${colIndex === 0 ? 'sticky left-0 bg-white font-semibold text-slate-700 z-10 border-r-2 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]' : ''}
-                                /* Overrides per errori validazione sulla prima colonna */
-                                ${(isDayCountError || isDivisorError) && colIndex === 0 ? (isDivisorError ? '!bg-red-100 text-red-800' : '!bg-orange-100 text-orange-800') : ''}
-                                ${isActiveRow && colIndex === 0 && !isDayCountError && !isDivisorError ? '!bg-indigo-100 text-indigo-800' : ''}
-                                
-                                ${isTotal ? 'bg-slate-50 font-bold text-slate-800 text-right pr-2' : ''}
-                                ${isVacation ? 'bg-amber-50/20' : ''}
-                                ${isVacationWarning ? 'ring-2 ring-inset ring-red-400/50' : ''}
-                                
-                                hover:!z-[1000]
-                              `}
+                                border-r border-b border-slate-300 p-0 relative
+                                ${colIndex === 0 ? 'sticky left-0 bg-white font-semibold text-slate-700 z-10 border-r-2 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]' : ''}
+                                /* Overrides per errori validazione sulla prima colonna */
+                                ${(isDayCountError || isDivisorError) && colIndex === 0 ? (isDivisorError ? '!bg-red-100 text-red-800' : '!bg-orange-100 text-orange-800') : ''}
+                                ${isActiveRow && colIndex === 0 && !isDayCountError && !isDivisorError ? '!bg-indigo-100 text-indigo-800' : ''}
+                                
+                                ${isTotal ? 'bg-slate-50 font-bold text-slate-800 text-right pr-2' : ''}
+                                ${isVacation ? 'bg-amber-50/20' : ''}
+                                ${isVacationWarning ? 'ring-2 ring-inset ring-red-400/50' : ''}
+                                
+                                hover:!z-[1000]
+                              `}
                           >
                             {isMonth ? (
                               <div className="flex items-center justify-between px-3 h-full w-full">
-                                <div className="flex items-center gap-2 overflow-hidden">
-                                  {/* Icone Errore Validazione */}
+                                <div className="flex items-center gap-2 overflow-hidden relative group/ai">
+                                  {/* Icone Errore Validazione e AUDITOR AI */}
                                   {isDivisorError ? (
                                     <div className="text-red-600 animate-pulse" title="ERRORE: Indennità presenti senza giorni lavorati"><AlertCircle size={14} /></div>
                                   ) : isDayCountError ? (
                                     <div className="text-orange-500" title={`ATTENZIONE: Totale giorni (${totalDaysInput}) supera il limite del mese (${daysInMonth})`}><TriangleAlert size={14} /></div>
+                                  ) : hasAiWarning ? (
+                                    <div className="text-red-500 cursor-help" title="Anomalia Rilevata dall'IA"><AlertCircle size={14} className="animate-bounce" /></div>
+                                  ) : aiWarning === "Nessuna anomalia" ? (
+                                    <div className="text-emerald-500"><CheckCircle2 size={14} /></div>
                                   ) : null}
+
+                                  {/* TOOLTIP AUDITOR AI HOVER (Si apre passando sopra al mese) */}
+                                  {hasAiWarning && (
+                                    <div className="hidden group-hover/ai:block absolute left-6 top-6 w-48 p-2 bg-slate-900 text-white text-[10px] rounded shadow-xl z-[9999] whitespace-normal leading-tight border border-slate-700">
+                                      <span className="font-bold text-red-400 block mb-1">Avviso AI:</span>
+                                      {aiWarning}
+                                    </div>
+                                  )}
+
                                   <div className="text-xs font-bold uppercase tracking-wide truncate max-w-[70px]" title={note}>{MONTH_NAMES[rowIndex]}</div>
                                 </div>
                                 <button onClick={() => openNoteModal(rowIndex, note)} tabIndex={-1} className={`p-1.5 rounded-lg transition-all focus:outline-none ${note ? 'text-amber-600 bg-amber-100 hover:bg-amber-200 ring-1 ring-amber-300' : 'text-slate-300 hover:text-indigo-500 hover:bg-indigo-50'}`}><MessageSquareText className="w-3.5 h-3.5" strokeWidth={note ? 2.5 : 2} /></button>
@@ -728,14 +744,14 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
                                   inputMode="decimal"
                                   autoComplete="off"
                                   className={`
-                                        w-full h-full bg-transparent px-2 text-right outline-none transition-all tabular-nums text-xs placeholder:text-transparent
-                                        focus:bg-white focus:z-20 focus:ring-2 focus:ring-indigo-500 focus:text-indigo-700 font-medium hover:bg-slate-50/80
-                                        ${cellValue ? 'text-slate-900' : 'text-slate-500'}
-                                        ${isVacationWarning
+                                        w-full h-full bg-transparent px-2 text-right outline-none transition-all tabular-nums text-xs placeholder:text-transparent
+                                        focus:bg-white focus:z-20 focus:ring-2 focus:ring-indigo-500 focus:text-indigo-700 font-medium hover:bg-slate-50/80
+                                        ${cellValue ? 'text-slate-900' : 'text-slate-500'}
+                                        ${isVacationWarning
                                       ? 'text-red-600 font-black decoration-4 decoration-red-500 bg-[linear-gradient(45deg,transparent_45%,rgba(255,0,0,0.3)_50%,transparent_55%)]'
                                       : ''}
-                                        ${!isVacation && col.id === 'daysWorked' ? 'text-blue-700 font-bold' : ''}
-                                      `}
+                                        ${!isVacation && col.id === 'daysWorked' ? 'text-blue-700 font-bold' : ''}
+                                      `}
                                   placeholder="0"
                                   value={cellValue ?? ''}
                                   onChange={(e) => handleCellChange(rowIndex, col.id, e.target.value)}
@@ -844,18 +860,17 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
           </div>
 
         </div>
-        {/* --- GHOST SCROLLBAR INFERIORE (Sync - Speculare a quella sopra) --- */}
-        <div className="bg-white border-t border-slate-200 h-7 shrink-0 flex items-center justify-center">
+        {/* --- GHOST SCROLLBAR INFERIORE (Sync) --- */}
+        <div className="bg-white border-t border-slate-200 shrink-0 flex items-center justify-center">
           <div
             ref={bottomScrollRef}
-            className="overflow-x-auto custom-scrollbar-x group-hover-scroll"
-            // Usiamo lo stesso calcolo della superiore per allineamento perfetto
-            style={{ height: '24px', width: 'calc(100% - 80px)' }}
+            className="overflow-x-auto custom-scrollbar-x w-full"
+            style={{ paddingLeft: '40px', paddingRight: '40px' }}
           >
-            {/* Usa la larghezza reale rilevata */}
             <div style={{ width: `${tableScrollWidth}px`, height: '1px' }}></div>
           </div>
         </div>
+
         {/* MODALE NOTE */}
         <AnimatePresence>
           {noteModal.isOpen && (

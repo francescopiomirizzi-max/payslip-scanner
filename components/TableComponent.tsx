@@ -734,6 +734,9 @@ Distinti saluti.
           onClose={() => setIsRelazioneOpen(false)}
           worker={worker}
           includeExFest={includeExFest}
+          includeTickets={includeTickets}
+          showPercepito={showPercepito} // <--- Passiamo il nuovo stato
+          startClaimYear={startClaimYear} // <--- Passiamo l'anno corretto
           totals={{
             grandTotal: {
               incidenzaTotale: totals.incidenzaTotale,

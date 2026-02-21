@@ -21,24 +21,78 @@ const QRScannerModal: React.FC<QRScannerModalProps> = ({
     workerName = 'Lavoratore'
 }) => {
     const [sessionId, setSessionId] = useState('');
+    const sessionIdRef = useRef(''); // Ci serve per accedere all'ID durante la pulizia del database
     const [status, setStatus] = useState<'waiting' | 'processing' | 'completed'>('waiting');
     const [scannedCount, setScannedCount] = useState(0);
+    const [isClosing, setIsClosing] = useState(false);
 
     const latestOnScanSuccess = useRef(onScanSuccess);
     const latestOnClose = useRef(onClose);
+    const inactivityTimer = useRef<NodeJS.Timeout | null>(null);
 
     useEffect(() => {
         latestOnScanSuccess.current = onScanSuccess;
         latestOnClose.current = onClose;
     }, [onScanSuccess, onClose]);
 
+    // ✨ NOVITÀ 1: Feedback Sonoro (Genera un "Bip" da cassa di supermercato)
+    const playSuccessBeep = () => {
+        try {
+            const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+            if (!AudioContext) return;
+            const ctx = new AudioContext();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(880, ctx.currentTime); // Frequenza del Bip
+            gain.gain.setValueAtTime(0.1, ctx.currentTime); // Volume basso e gradevole
+            osc.start();
+            osc.stop(ctx.currentTime + 0.15); // Dura solo 0.15 secondi
+        } catch (error) {
+            console.error("Audio non supportato");
+        }
+    };
+
+    // ✨ NOVITÀ 2 & 3: Chiusura morbida + Pulizia Database + Reset Timer
+    const triggerClose = async () => {
+        setIsClosing(true);
+        if (inactivityTimer.current) clearTimeout(inactivityTimer.current); // Spegne il timer
+
+        // ASPIRAPOLVERE: Elimina fisicamente la riga dal Database!
+        if (sessionIdRef.current) {
+            await supabase.from('scan_sessions').delete().eq('id', sessionIdRef.current);
+        }
+
+        setTimeout(() => {
+            latestOnClose.current();
+            setIsClosing(false);
+            setStatus('waiting');
+            setScannedCount(0);
+        }, 400);
+    };
+
+    // ✨ NOVITÀ 3: Timer di inattività (10 minuti)
+    const resetInactivityTimer = () => {
+        if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
+        inactivityTimer.current = setTimeout(() => {
+            console.log("Nessuna attività per 10 minuti. Chiusura di sicurezza.");
+            triggerClose();
+        }, 600000); // 600.000 ms = 10 minuti
+    };
+
     useEffect(() => {
         if (!isOpen) return;
 
         const newSession = uuidv4();
         setSessionId(newSession);
+        sessionIdRef.current = newSession; // Salvato nel ref per l'aspirapolvere
+
         setStatus('waiting');
         setScannedCount(0);
+        setIsClosing(false);
+        resetInactivityTimer(); // Fa partire il timer appena apri la finestra
 
         let isPolling = true;
 
@@ -56,34 +110,55 @@ const QRScannerModal: React.FC<QRScannerModalProps> = ({
                 if (data) {
                     if (data.status === 'processing') setStatus('processing');
 
+                    // SEGNALE: "HO FINITO TUTTO" DAL TELEFONO
                     if (data.status === 'all_done') {
                         if (data.data && Object.keys(data.data).length > 0) {
                             const parsedData = typeof data.data === 'string' ? JSON.parse(data.data) : data.data;
                             latestOnScanSuccess.current(parsedData);
-                            await supabase.from('scan_sessions').update({ data: null }).eq('id', newSession);
+                            playSuccessBeep(); // Suona il Bip
                         }
+
                         setStatus('completed');
                         isPolling = false;
-                        setTimeout(() => latestOnClose.current(), 1200);
+
+                        setTimeout(() => triggerClose(), 1500);
                         return;
                     }
+                    // SEGNALE: ARRIVA UNA BUSTA PAGA SINGOLA IN RAFFICA
                     else if (data.data && Object.keys(data.data).length > 0) {
                         const parsedData = typeof data.data === 'string' ? JSON.parse(data.data) : data.data;
-                        latestOnScanSuccess.current(parsedData);
+
+                        latestOnScanSuccess.current(parsedData); // Inserisce in tabella
+                        playSuccessBeep(); // Suona il Bip!
+                        resetInactivityTimer(); // Azzera il timer dei 10 minuti (sei attivo!)
+
                         setStatus('completed');
                         setScannedCount(prev => prev + 1);
+
                         await supabase.from('scan_sessions').update({ data: null }).eq('id', newSession);
 
-                        setTimeout(() => { if (isPolling) setStatus('waiting'); }, 1500);
+                        setTimeout(() => {
+                            if (isPolling) setStatus('waiting');
+                        }, 1500);
                     }
                 }
-            } catch (error) { }
+            } catch (error) {
+                // Ignora errori di rete temporanei
+            }
 
             if (isPolling) setTimeout(startPolling, 1000);
         };
 
         initDb();
-        return () => { isPolling = false; };
+
+        // Pulizia di emergenza se la pagina viene chiusa malamente
+        return () => {
+            isPolling = false;
+            if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
+            if (sessionIdRef.current) {
+                supabase.from('scan_sessions').delete().eq('id', sessionIdRef.current);
+            }
+        };
     }, [isOpen]);
 
     if (!isOpen) return null;
@@ -91,11 +166,15 @@ const QRScannerModal: React.FC<QRScannerModalProps> = ({
     const qrUrl = `${window.location.origin}/?mobile=true&session=${sessionId}&company=${encodeURIComponent(company)}&name=${encodeURIComponent(workerName)}`;
 
     return (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xl overflow-hidden h-screen w-screen">
+        <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: isClosing ? 0 : 1 }}
+            transition={{ duration: 0.3 }}
+            className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xl overflow-hidden h-screen w-screen"
+        >
             <motion.div
                 initial={{ scale: 0.95, opacity: 0, y: 20 }}
-                animate={{ scale: 1, opacity: 1, y: 0 }}
-                exit={{ scale: 0.95, opacity: 0, y: 20 }}
+                animate={isClosing ? { scale: 0.9, opacity: 0, y: 20 } : { scale: 1, opacity: 1, y: 0 }}
                 transition={{ type: "spring", duration: 0.5, bounce: 0.3 }}
                 className="bg-slate-900/90 border border-slate-700/50 w-full max-w-md rounded-[2rem] shadow-[0_0_50px_-12px_rgba(0,0,0,0.5)] overflow-hidden text-white relative flex flex-col"
             >
@@ -116,22 +195,19 @@ const QRScannerModal: React.FC<QRScannerModalProps> = ({
                             </div>
                         </div>
                     </div>
-                    <button onClick={() => latestOnClose.current()} className="p-2 hover:bg-slate-700/50 rounded-full text-slate-400 hover:text-white transition-all">
+                    <button onClick={() => triggerClose()} className="p-2 hover:bg-slate-700/50 rounded-full text-slate-400 hover:text-white transition-all">
                         <X className="w-5 h-5" />
                     </button>
                 </div>
 
                 <div className="p-8 flex flex-col items-center text-center">
 
-                    {/* Contenitore QR Animato */}
                     <div className="relative mb-8">
-                        {/* Glow posteriore */}
                         <div className="absolute inset-0 bg-indigo-500/20 blur-2xl rounded-full transform scale-110"></div>
 
                         <div className="bg-white p-5 rounded-3xl shadow-2xl relative overflow-hidden border-4 border-slate-800/50 group">
                             <QRCode value={qrUrl} size={180} level="H" className="relative z-10" />
 
-                            {/* Laser Scanner Effetto (Visibile solo in waiting) */}
                             {status === 'waiting' && (
                                 <motion.div
                                     animate={{ top: ['0%', '100%', '0%'] }}
@@ -140,7 +216,6 @@ const QRScannerModal: React.FC<QRScannerModalProps> = ({
                                 />
                             )}
 
-                            {/* Overlay di Stato con animazioni morbide */}
                             <AnimatePresence>
                                 {status === 'processing' && (
                                     <motion.div
@@ -170,25 +245,14 @@ const QRScannerModal: React.FC<QRScannerModalProps> = ({
                         <ScanLine className="w-6 h-6 text-indigo-400" /> Inquadra e scansiona
                     </h3>
                     <p className="text-slate-400 text-sm mb-6 max-w-[280px] leading-relaxed">
-                        Usa la fotocamera del tuo smartphone per elaborare i cedolini in tempo reale.
+                        Usa la fotocamera del tuo smartphone per elaborare i cedolini. La finestra si chiuderà in automatico a operazione completata.
                     </p>
 
-                    {/* Badge Info */}
-                    <div className="w-full p-4 bg-slate-800/50 border border-slate-700/50 rounded-2xl relative overflow-hidden flex items-center gap-3 text-left">
-                        <div className="absolute left-0 top-0 bottom-0 w-1 bg-indigo-500"></div>
-                        <div className="flex-1">
-                            <p className="text-slate-300 text-xs leading-relaxed">
-                                Finestra protetta. <strong className="text-indigo-300">Non chiuderla</strong> finché non hai terminato l'invio dal telefono.
-                            </p>
-                        </div>
-                    </div>
-
-                    {/* Contatore Successi con animazione pop */}
                     <AnimatePresence>
                         {scannedCount > 0 && (
                             <motion.div
-                                initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-                                className="mt-5 px-4 py-2 bg-emerald-500/10 border border-emerald-500/20 rounded-full"
+                                initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                                className="mt-2 px-4 py-2 bg-emerald-500/10 border border-emerald-500/20 rounded-full"
                             >
                                 <p className="text-emerald-400 font-bold text-xs uppercase tracking-wide">
                                     {scannedCount} {scannedCount === 1 ? 'busta paga inserita' : 'buste paga inserite'}!
@@ -196,9 +260,10 @@ const QRScannerModal: React.FC<QRScannerModalProps> = ({
                             </motion.div>
                         )}
                     </AnimatePresence>
+
                 </div>
             </motion.div>
-        </div>
+        </motion.div>
     );
 };
 

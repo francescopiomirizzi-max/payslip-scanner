@@ -4,9 +4,11 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     X, User, Briefcase, Building2, Sparkles, Save,
     Check, Train, Coffee, Wrench, AlignLeft, ArrowRight,
-    Fingerprint, BadgeCheck // Aggiunta icona per Profilo Professionale
+    Fingerprint, BadgeCheck, Wand2, Loader2, UploadCloud, Smartphone, FileText // <-- AGGIUNTE QUESTE
 } from 'lucide-react';
-
+import QRCode from 'react-qr-code';
+import { v4 as uuidv4 } from 'uuid';
+import { supabase } from '../supabaseClient';
 interface WorkerModalProps {
     isOpen: boolean;
     onClose: () => void;
@@ -70,7 +72,12 @@ const WorkerModal: React.FC<WorkerModalProps> = ({ isOpen, onClose, onConfirm, i
     }>({ nome: '', cognome: '', ruolo: '', profiloProfessionale: '', profilo: null });
 
     const [focusedField, setFocusedField] = useState<string | null>(null);
-
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const [isScanning, setIsScanning] = useState(false);
+    // --- NUOVI STATI PER QR CODE ---
+    const [qrSessionId, setQrSessionId] = useState('');
+    const [isQrActive, setIsQrActive] = useState(false);
+    const pollingRef = useRef<boolean>(false);
     // Refs
     const nomeRef = useRef<HTMLInputElement>(null);
     const cognomeRef = useRef<HTMLInputElement>(null);
@@ -79,23 +86,83 @@ const WorkerModal: React.FC<WorkerModalProps> = ({ isOpen, onClose, onConfirm, i
     const gridRef = useRef<HTMLDivElement>(null);
     const submitBtnRef = useRef<HTMLButtonElement>(null);
 
-    useEffect(() => {
-        if (isOpen) {
-            if (initialData && mode === 'edit') {
-                setFormData({
-                    nome: initialData.nome || '',
-                    cognome: initialData.cognome || '',
-                    ruolo: initialData.ruolo || '',
-                    profiloProfessionale: initialData.profiloProfessionale || '', // Caricamento dati
-                    profilo: initialData.profilo || null
-                });
-            } else {
-                setFormData({ nome: '', cognome: '', ruolo: '', profiloProfessionale: '', profilo: null });
-            }
-            setTimeout(() => { if (nomeRef.current) nomeRef.current.focus(); }, 200);
-        }
-    }, [isOpen, initialData, mode]);
+    const toBase64 = (file: File) => new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = error => reject(error);
+    });
 
+    const compileDataFromAI = (data: any) => {
+        setFormData(prev => ({
+            ...prev,
+            nome: data.nome || prev.nome,
+            cognome: data.cognome || prev.cognome,
+            ruolo: data.ruolo || prev.ruolo,
+            profiloProfessionale: data.profiloProfessionale || prev.profiloProfessionale,
+            profilo: ['RFI', 'ELIOR', 'REKEEP'].includes(data.azienda) ? data.azienda : prev.profilo
+        }));
+    };
+
+    const handleAutoFill = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        setIsScanning(true);
+        try {
+            const base64 = await toBase64(file);
+            const response = await fetch('/.netlify/functions/scan-worker', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ fileData: base64, mimeType: file.type })
+            });
+            if (!response.ok) throw new Error('Errore server');
+
+            const data = await response.json();
+            compileDataFromAI(data);
+        } catch (error) {
+            console.error(error);
+            alert("Errore durante la lettura del documento. Compila manualmente.");
+        } finally {
+            setIsScanning(false);
+            if (e.target) e.target.value = '';
+        }
+    };
+
+    // --- LOGICA SMARTPHONE (QR) ---
+    const startQrSession = async () => {
+        const newSession = uuidv4();
+        setQrSessionId(newSession);
+        setIsQrActive(true);
+        pollingRef.current = true;
+        await supabase.from('scan_sessions').insert([{ id: newSession, status: 'waiting' }]);
+        pollSupabase(newSession);
+    };
+
+    const cancelQrSession = async () => {
+        setIsQrActive(false);
+        pollingRef.current = false;
+        if (qrSessionId) await supabase.from('scan_sessions').delete().eq('id', qrSessionId);
+    };
+
+    const pollSupabase = async (sessionId: string) => {
+        if (!pollingRef.current) return;
+        try {
+            const { data } = await supabase.from('scan_sessions').select('*').eq('id', sessionId).single();
+            if (data && data.data && Object.keys(data.data).length > 0) {
+                const parsedData = typeof data.data === 'string' ? JSON.parse(data.data) : data.data;
+                compileDataFromAI(parsedData);
+                cancelQrSession(); // Chiude il QR e svuota la sessione
+                return;
+            }
+        } catch (e) { }
+
+        if (pollingRef.current) setTimeout(() => pollSupabase(sessionId), 1000);
+    };
+
+    // Se si chiude la finestra, spenge il QR
+    useEffect(() => {
+        if (!isOpen) cancelQrSession();
+    }, [isOpen]);
     const handleSubmit = (e?: React.FormEvent) => {
         if (e) e.preventDefault();
         if (formData.profilo && isFormValid) {
@@ -103,7 +170,6 @@ const WorkerModal: React.FC<WorkerModalProps> = ({ isOpen, onClose, onConfirm, i
             onClose();
         }
     };
-
     // Navigazione Aggiornata
     const handleInputNavigation = (e: React.KeyboardEvent, currentField: string) => {
         if (e.key === 'ArrowDown' || e.key === 'Enter') {
@@ -278,6 +344,73 @@ const WorkerModal: React.FC<WorkerModalProps> = ({ isOpen, onClose, onConfirm, i
                         {/* FORM BODY */}
                         <form className="px-12 py-10 space-y-9 relative z-10 bg-white/30">
 
+                            {/* --- TASTO MAGICO AUTOCOMPILAZIONE AI --- */}
+                            {mode === 'create' && (
+                                <div className="bg-white/50 border border-slate-200/60 p-4 rounded-3xl shadow-inner relative overflow-hidden mb-6">
+                                    <div className="flex items-center gap-2 mb-3 px-2">
+                                        <Wand2 className="w-4 h-4 text-indigo-500" />
+                                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Autocompilazione AI</span>
+                                    </div>
+
+                                    <div className="flex gap-3">
+                                        {/* Bottone 1: PDF Locale */}
+                                        <input type="file" accept="image/*,application/pdf" ref={fileInputRef} onChange={handleAutoFill} className="hidden" />
+                                        <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isScanning || isQrActive}
+                                            className="flex-1 relative group rounded-2xl p-[2px] bg-gradient-to-r from-indigo-500 to-cyan-500 overflow-hidden shadow-sm hover:shadow-[0_8px_20px_-5px_rgba(99,102,241,0.5)] transition-all duration-300 active:scale-95 disabled:opacity-50 disabled:hover:shadow-none"
+                                        >
+                                            {/* Sfondo bianco che scompare all'hover per svelare il gradiente */}
+                                            <div className="absolute inset-[2px] bg-white rounded-[14px] group-hover:opacity-0 transition-opacity duration-300 z-0"></div>
+                                            {/* Contenuto */}
+                                            <div className="relative z-10 px-4 py-3 flex items-center justify-center gap-2 h-full">
+                                                {isScanning ? (
+                                                    <Loader2 className="w-5 h-5 animate-spin text-indigo-600 group-hover:text-white transition-colors duration-300" />
+                                                ) : (
+                                                    <FileText className="w-5 h-5 text-indigo-600 group-hover:text-white group-hover:scale-110 transition-all duration-300" />
+                                                )}
+                                                <span className="font-bold text-[11px] uppercase tracking-wide text-slate-700 group-hover:text-white transition-colors duration-300">Carica PDF</span>
+                                            </div>
+                                        </button>
+
+                                        {/* Bottone 2: Usa Smartphone */}
+                                        <button type="button" onClick={isQrActive ? cancelQrSession : startQrSession} disabled={isScanning}
+                                            className={`flex-1 relative group rounded-2xl p-[2px] overflow-hidden shadow-sm transition-all duration-300 active:scale-95 disabled:opacity-50 disabled:hover:shadow-none
+            ${isQrActive
+                                                    ? 'bg-gradient-to-r from-red-500 to-rose-500 hover:shadow-[0_8px_20px_-5px_rgba(239,68,68,0.5)]'
+                                                    : 'bg-gradient-to-r from-emerald-500 to-teal-500 hover:shadow-[0_8px_20px_-5px_rgba(16,185,129,0.5)]'}`}
+                                        >
+                                            {/* Sfondo bianco/rosso chiaro che scompare all'hover */}
+                                            <div className={`absolute inset-[2px] rounded-[14px] group-hover:opacity-0 transition-opacity duration-300 z-0 ${isQrActive ? 'bg-red-50' : 'bg-white'}`}></div>
+                                            {/* Contenuto */}
+                                            <div className="relative z-10 px-4 py-3 flex items-center justify-center gap-2 h-full">
+                                                {isQrActive ? (
+                                                    <>
+                                                        <X className="w-5 h-5 text-red-600 group-hover:text-white transition-colors duration-300" />
+                                                        <span className="font-bold text-[11px] uppercase tracking-wide text-red-600 group-hover:text-white transition-colors duration-300">Annulla QR</span>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <Smartphone className="w-5 h-5 text-emerald-600 group-hover:text-white group-hover:scale-110 transition-all duration-300" />
+                                                        <span className="font-bold text-[11px] uppercase tracking-wide text-slate-700 group-hover:text-white transition-colors duration-300">Usa Smartphone</span>
+                                                    </>
+                                                )}
+                                            </div>
+                                        </button>
+                                    </div>
+
+                                    <AnimatePresence>
+                                        {isQrActive && (
+                                            <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden mt-4">
+                                                <div className="bg-white border border-slate-200 p-5 rounded-2xl flex flex-col items-center justify-center shadow-md relative">
+                                                    <QRCode value={`${window.location.origin}/?mobile=true&session=${qrSessionId}&type=onboarding`} size={150} level="H" className="relative z-10 p-2 bg-white rounded-xl shadow-sm border border-slate-100" />
+                                                    <p className="text-[11px] text-slate-500 mt-4 text-center max-w-[200px] font-medium leading-tight">Inquadra con la fotocamera per scansionare la busta paga.</p>
+                                                    <motion.div animate={{ top: ['10%', '80%', '10%'] }} transition={{ duration: 2.5, ease: "linear", repeat: Infinity }} className="absolute left-1/2 -translate-x-1/2 w-[160px] h-0.5 bg-emerald-500 shadow-[0_0_8px_2px_rgba(16,185,129,0.5)] z-20 opacity-60 pointer-events-none" />
+                                                </div>
+                                            </motion.div>
+                                        )}
+                                    </AnimatePresence>
+                                </div>
+                            )}
+
                             {/* ANAGRAFICA */}
                             <div className="grid grid-cols-2 gap-7">
                                 {['nome', 'cognome'].map((field) => (
@@ -426,9 +559,9 @@ const WorkerModal: React.FC<WorkerModalProps> = ({ isOpen, onClose, onConfirm, i
                                                 whileHover={!isSelected ? { scale: 1.02, opacity: 1, y: -4 } : {}}
                                                 whileTap={{ scale: 0.96 }}
                                                 className={`
-                          relative cursor-pointer rounded-3xl p-5 flex flex-col items-center justify-center text-center gap-3 h-[140px] overflow-hidden border-[3px] transition-all duration-500 backdrop-blur-md group
-                          ${isSelected ? 'border-transparent bg-white' : 'border-slate-200/60 bg-white/50 hover:bg-white/90 hover:border-slate-300'}
-                        `}
+                          relative cursor-pointer rounded-3xl p-5 flex flex-col items-center justify-center text-center gap-3 h-[140px] overflow-hidden border-[3px] transition-all duration-500 backdrop-blur-md group
+                          ${isSelected ? 'border-transparent bg-white' : 'border-slate-200/60 bg-white/50 hover:bg-white/90 hover:border-slate-300'}
+                        `}
                                                 style={{
                                                     boxShadow: isSelected ? style.glow : 'none',
                                                     ring: (focusedField === 'grid' && isSelected) ? `3px solid ${style.color}` : 'none'
@@ -460,7 +593,7 @@ const WorkerModal: React.FC<WorkerModalProps> = ({ isOpen, onClose, onConfirm, i
                                                         animate={isSelected ? { rotate: [0, -8, 8, 0], scale: 1.15 } : { rotate: 0, scale: 1 }}
                                                         transition={{ duration: 0.5, ease: "easeInOut" }}
                                                         className={`p-3 rounded-2xl transition-all duration-500
-                               ${isSelected ? 'bg-white/25 text-white backdrop-blur-md shadow-inner ring-1 ring-white/50' : 'bg-white shadow-sm text-slate-400 group-hover:text-' + style.color}`}
+                               ${isSelected ? 'bg-white/25 text-white backdrop-blur-md shadow-inner ring-1 ring-white/50' : 'bg-white shadow-sm text-slate-400 group-hover:text-' + style.color}`}
                                                     >
                                                         <style.icon className="w-8 h-8" />
                                                     </motion.div>
@@ -508,7 +641,7 @@ const WorkerModal: React.FC<WorkerModalProps> = ({ isOpen, onClose, onConfirm, i
                                     whileHover={isFormValid ? { scale: 1.03, boxShadow: activeTheme.glow } : {}}
                                     whileTap={isFormValid ? { scale: 0.96 } : {}}
                                     className={`flex-1 py-5 rounded-3xl font-black text-xl text-white flex items-center justify-center gap-4 transition-all relative overflow-hidden shadow-2xl group
-                    ${!isFormValid ? 'bg-slate-200/50 backdrop-blur-md text-slate-400 cursor-not-allowed border-2 border-slate-300/50' : `bg-gradient-to-r ${activeTheme.gradient}`}`}
+                    ${!isFormValid ? 'bg-slate-200/50 backdrop-blur-md text-slate-400 cursor-not-allowed border-2 border-slate-300/50' : `bg-gradient-to-r ${activeTheme.gradient}`}`}
                                 >
                                     {isFormValid ? (
                                         <>
