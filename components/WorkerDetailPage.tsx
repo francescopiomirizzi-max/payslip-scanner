@@ -55,7 +55,9 @@ import {
   Check,
   RotateCw, // <--- AGGIUNTA
   Wand2,
-  Download    // <--- AGGIUNTA
+  Download,
+  Bot,    // <--- AGGIUNTO QUI
+  Cpu   // <--- AGGIUNTA
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 // IMPORTANTE: Tesseract per il ritaglio (Canvas)
@@ -89,6 +91,14 @@ const GLOBAL_STYLES = `
   .animate-shimmer {
     background-size: 200% auto;
     animation: shimmer 4s linear infinite;
+@keyframes aurora {
+    0%, 100% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+  }
+  .animate-aurora {
+    background-size: 200% 200%;
+    animation: aurora 3s ease infinite;
+  }
   }
   /* Glassmorphism 2.0 */
   .glass-panel {
@@ -99,6 +109,14 @@ const GLOBAL_STYLES = `
     border-top: 1px solid rgba(255, 255, 255, 0.9);
     box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.07);
   }
+/* Nasconde la barra di scorrimento mantenendo lo scroll attivo */
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;  /* IE e Edge */
+    scrollbar-width: none;  /* Firefox */
+  }
 `;
 
 // --- CONFIGURAZIONE PROFILI PEC ---
@@ -308,6 +326,13 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   // --- STATO BATCH UPLOAD ---
   const [isBatchProcessing, setIsBatchProcessing] = useState(false);
+  // AGGIUNGI QUESTE DUE RIGHE QUI:
+  const [batchProgress, setBatchProgress] = useState(0);
+  const [batchTotal, setBatchTotal] = useState(0);
+  // --- NUOVI STATI PER UX TOP TIER ---
+  const [isGlobalDragging, setIsGlobalDragging] = useState(false);
+  const [showSupernova, setShowSupernova] = useState(false);
+  const commandBarRef = useRef<HTMLDivElement>(null);
   // Stato per la notifica personalizzata (sostituisce l'alert brutto)
   // Aggiorna questa riga aggiungendo | 'warning'
   const [batchNotification, setBatchNotification] = useState<{ msg: string, type: 'success' | 'error' | 'warning' } | null>(null);
@@ -510,10 +535,19 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
 
     if (lastDetectedYear) setCurrentYear(lastDetectedYear);
 
+    // --- EFFETTO SUPERNOVA (Attende 1 secondo prima di chiudere l'HUD) ---
+    if (successCount > 0) {
+      setShowSupernova(true);
+      await new Promise(resolve => setTimeout(resolve, 800)); // Pausa scenica
+    }
+
     setIsBatchProcessing(false);
+    setShowSupernova(false); // Resetta la supernova
+    setBatchProgress(0);
+    setBatchTotal(0);
     if (batchInputRef.current) batchInputRef.current.value = '';
 
-    // Notifica Intelligente
+    // Notifica Intelligente Toast
     if (successCount > 0) {
       setBatchNotification({
         msg: `✅ Elaborazione Completata!\n${successCount} cedolini inseriti correttamente.\n${errorCount > 0 ? `⚠️ ${errorCount} errori.` : ''}`,
@@ -881,7 +915,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
       doc.text(`Pratica: ${worker.cognome} ${worker.nome} (Matr. ${worker.id})`, pageWidth - 14, 12, { align: 'right' });
 
       doc.setFontSize(7); doc.setTextColor(100);
-      const note = "Calcolo elaborato ai sensi Cass. n. 20216/2022 (Onnicomprensività retribuzione feriale).";
+      const note = "Calcolo elaborato ai sensi Cass. n. 20216/2022 e Art. 64 CCNL Mobilità. La media giornaliera è calcolata sul totale delle voci variabili diviso i giorni di effettiva presenza. Limite giorni indennizzabili: 28.";
       doc.text(note, 14, pageHeight - 10);
       const str = "Pagina " + doc.getNumberOfPages();
       doc.text(str, pageWidth - 14, pageHeight - 10, { align: 'right' });
@@ -1465,7 +1499,38 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
     );
   }
   return (
-    <div className="min-h-screen bg-slate-50 font-sans text-slate-900 relative flex flex-col overflow-hidden">
+    <div
+      className="min-h-screen bg-slate-50 font-sans text-slate-900 relative flex flex-col overflow-hidden"
+      onDragEnter={(e) => { e.preventDefault(); setIsGlobalDragging(true); }}
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={(e) => {
+        e.preventDefault();
+        setIsGlobalDragging(false);
+        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+          // Innesca il caricamento massivo simulando l'evento dell'input
+          handleBatchUpload({ target: { files: e.dataTransfer.files } } as any);
+        }
+      }}
+    >
+      {/* --- 1. GLOBAL MAGNETIC DROPZONE --- */}
+      <AnimatePresence>
+        {isGlobalDragging && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[999] bg-slate-950/80 backdrop-blur-md flex flex-col items-center justify-center border-[8px] border-dashed border-fuchsia-500/50 m-4 rounded-[3rem]"
+            onDragLeave={(e) => {
+              // Evita flickering se il cursore passa sopra figli del div
+              if (e.clientX === 0 || e.clientY === 0) setIsGlobalDragging(false);
+            }}
+          >
+            <motion.div animate={{ scale: [1, 1.1, 1] }} transition={{ repeat: Infinity, duration: 1.5 }}>
+              <Bot className="w-32 h-32 text-fuchsia-400 drop-shadow-[0_0_40px_rgba(217,70,239,0.8)]" />
+            </motion.div>
+            <h2 className="text-4xl font-black text-white mt-8 tracking-widest uppercase">Sgancia i file qui</h2>
+            <p className="text-fuchsia-300 font-bold mt-2">Il Motore Neurale li processerà in automatico.</p>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* STYLE GLOBALE */}
       <style>{GLOBAL_STYLES}</style>
@@ -1712,8 +1777,79 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
           </div>
 
           <div className="flex justify-center mb-6 z-20 shrink-0">
-            {/* Contenitore corretto con no-scrollbar per togliere la barra antiestetica */}
-            <div className="flex p-2 bg-white/60 dark:bg-slate-900/60 backdrop-blur-2xl border border-white/50 dark:border-slate-700/50 rounded-2xl shadow-2xl gap-3 overflow-x-auto w-full justify-start md:justify-center no-scrollbar">
+            {/* Contenitore con CURSOR SPOTLIGHT */}
+            <div
+              ref={commandBarRef}
+              onMouseMove={(e) => {
+                if (!commandBarRef.current) return;
+                const rect = commandBarRef.current.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                commandBarRef.current.style.setProperty('--x', `${x}px`);
+                commandBarRef.current.style.setProperty('--y', `${y}px`);
+              }}
+              className="group/bar relative flex p-2 bg-white/60 dark:bg-slate-900/60 backdrop-blur-2xl border border-white/50 dark:border-slate-700/50 rounded-2xl shadow-2xl gap-3 overflow-x-auto w-full justify-start xl:justify-center no-scrollbar"
+            >
+              {/* Effetto Torcia (Spotlight) visibile solo in hover sulla barra */}
+              <div className="pointer-events-none absolute -inset-px rounded-2xl opacity-0 transition duration-300 group-hover/bar:opacity-100"
+                style={{ background: 'radial-gradient(400px circle at var(--x, 50%) var(--y, 50%), rgba(255,255,255,0.15), transparent 40%)' }}>
+              </div>
+
+
+
+              {/* --- INPUT FILE NASCOSTO --- */}
+              <input
+                type="file"
+                multiple
+                accept="application/pdf,image/*"
+                onChange={handleBatchUpload}
+                className="hidden"
+                id="dashboard-ai-upload"
+                disabled={isBatchProcessing}
+              />
+
+              {/* --- TASTO AI AGENT (Plasma Violet Theme - Immobile) --- */}
+              <button
+                onClick={() => document.getElementById('dashboard-ai-upload')?.click()}
+                disabled={isBatchProcessing}
+                className={`group relative px-6 py-3 rounded-xl font-bold text-sm transition-all duration-500 flex items-center gap-3 overflow-hidden border-2 shrink-0
+                  ${isBatchProcessing
+                    ? 'bg-slate-100 border-slate-200 opacity-50 cursor-not-allowed'
+                    // A riposo: Vetro grigio. Hover: Si oscura e si accende di Fucsia SENZA sollevarsi.
+                    : 'bg-white/40 dark:bg-slate-800/40 text-slate-600 dark:text-slate-400 border-transparent hover:border-transparent hover:shadow-[0_0_40px_rgba(217,70,239,0.3)]'
+                  }`}
+              >
+                {/* 1. SFONDO SCURO CHE APPARE IN HOVER */}
+                <div className="absolute inset-0 bg-slate-900 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+
+                {/* 2. BORDO ROTANTE DI ENERGIA (Fucsia: #d946ef) */}
+                <div className="absolute inset-[-150%] bg-[conic-gradient(from_0deg,transparent_0_300deg,#d946ef_360deg)] opacity-0 group-hover:opacity-100 group-hover:animate-[spin_2s_linear_infinite] transition-opacity duration-300"></div>
+
+                {/* 3. CORE INTERNO SCURO (Lascia solo il bordo fine) */}
+                <div className="absolute inset-[2px] bg-slate-900 rounded-[10px] opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-0"></div>
+
+                {/* 4. GLOW FUCSIA DI FONDO */}
+                <div className="absolute inset-0 bg-fuchsia-500/20 opacity-0 group-hover:opacity-100 transition-opacity duration-500 z-0 blur-xl"></div>
+
+                {/* 5. CONTENUTO FRONTALE */}
+                <div className="relative z-10 flex items-center gap-2.5 transition-colors duration-300">
+                  <div className="relative flex items-center justify-center">
+                    {/* Icona Robot: Diventa Fucsia in hover */}
+                    <Bot className="w-5 h-5 transition-all duration-500 group-hover:text-fuchsia-400" />
+                    {/* Occhi Laser del Robot */}
+                    <div className="absolute inset-0 bg-fuchsia-400 blur-md opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+                  </div>
+
+                  <div className="flex flex-col items-start leading-none text-left">
+                    <span className="text-[8.5px] uppercase tracking-[0.2em] opacity-70 group-hover:opacity-100 group-hover:text-fuchsia-200 transition-all duration-300 mb-0.5 font-black">
+                      Auto-Scan
+                    </span>
+                    <span className="tracking-widest font-black text-[13px] group-hover:text-white group-hover:drop-shadow-[0_0_10px_rgba(217,70,239,0.8)] transition-all duration-300">
+                      AI AGENT
+                    </span>
+                  </div>
+                </div>
+              </button>
 
               {/* TASTO CARICA BUSTA (Pink) */}
               <button
@@ -2318,6 +2454,80 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
         </AnimatePresence>
 
       </div>
+      {/* --- HUD INTELLIGENZA ARTIFICIALE (Plasma & Supernova) --- */}
+      <AnimatePresence>
+        {isBatchProcessing && !showSplit && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-950/80 backdrop-blur-xl"
+          >
+            <motion.div
+              initial={{ scale: 0.8, y: 50 }}
+              animate={{ scale: showSupernova ? 1.05 : 1, y: 0 }}
+              transition={{ type: "spring", stiffness: 300, damping: 20 }}
+              className={`p-8 sm:p-12 rounded-[2.5rem] flex flex-col items-center max-w-sm w-full relative overflow-hidden border transition-all duration-500
+                ${showSupernova ? 'bg-emerald-950 border-emerald-500 shadow-[0_0_150px_rgba(16,185,129,0.8)]' : 'bg-slate-900 border-slate-700 shadow-[0_0_120px_rgba(217,70,239,0.15)]'}`}
+            >
+              {/* FLASH SUPERNOVA (Bianco abbagliante che svanisce) */}
+              <AnimatePresence>
+                {showSupernova && (
+                  <motion.div
+                    initial={{ opacity: 1 }} animate={{ opacity: 0 }} transition={{ duration: 0.8 }}
+                    className="absolute inset-0 bg-white z-50 pointer-events-none"
+                  ></motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Sfondo a griglia cybernetica */}
+              <div className={`absolute inset-0 bg-[linear-gradient(to_right,#ffffff10_1px,transparent_1px),linear-gradient(to_bottom,#ffffff10_1px,transparent_1px)] bg-[size:16px_16px] opacity-30 pointer-events-none`}></div>
+
+              {/* REATTORE NEURALE */}
+              <div className="relative w-36 h-36 mb-10 flex items-center justify-center">
+                <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 3, ease: "linear" }} className={`absolute inset-0 border-t-[3px] border-r-[3px] border-transparent rounded-full ${showSupernova ? 'border-t-emerald-400 border-r-emerald-400/30' : 'border-t-fuchsia-400 border-r-fuchsia-400/30'}`}></motion.div>
+                <motion.div animate={{ rotate: -360 }} transition={{ repeat: Infinity, duration: 5, ease: "linear" }} className={`absolute inset-3 border-b-[2px] border-l-[2px] border-transparent rounded-full ${showSupernova ? 'border-b-emerald-300 border-l-emerald-300/30' : 'border-b-violet-500 border-l-violet-500/30'}`}></motion.div>
+
+                <motion.div animate={showSupernova ? { scale: [1, 2], opacity: [0.8, 0] } : { scale: [0.8, 1.1, 0.8], opacity: [0.2, 0.4, 0.2] }} transition={{ duration: showSupernova ? 0.8 : 1.5, repeat: showSupernova ? 0 : Infinity }} className={`absolute inset-8 rounded-full blur-xl ${showSupernova ? 'bg-emerald-400' : 'bg-fuchsia-500'}`}></motion.div>
+
+                <div className={`relative z-10 p-5 rounded-2xl border transition-colors duration-500 ${showSupernova ? 'bg-emerald-900 border-emerald-400 shadow-[0_0_40px_rgba(16,185,129,0.5)]' : 'bg-slate-900 border-fuchsia-500/30 shadow-[0_0_30px_rgba(217,70,239,0.2)]'}`}>
+                  {showSupernova ? <CheckCircle2 className="w-12 h-12 text-emerald-400" /> : <Bot className="w-12 h-12 text-fuchsia-400" />}
+                </div>
+
+                {!showSupernova && (
+                  <motion.div
+                    animate={{ y: [-65, 65, -65] }} transition={{ repeat: Infinity, duration: 1.8, ease: "easeInOut" }}
+                    className="absolute left-0 right-0 h-[2px] bg-fuchsia-300 shadow-[0_0_15px_#f0abfc,0_0_30px_#f0abfc] z-20"
+                  ></motion.div>
+                )}
+              </div>
+
+              {/* TESTI DINAMICI */}
+              <h3 className={`font-black tracking-[0.3em] text-[10px] uppercase mb-3 relative z-10 flex items-center gap-2 ${showSupernova ? 'text-emerald-400' : 'text-cyan-400'}`}>
+                {showSupernova ? <CheckCircle className="w-3 h-3" /> : <Cpu className="w-3 h-3" />}
+                {showSupernova ? 'Elaborazione Conclusa' : 'Motore Neurale Attivo'}
+              </h3>
+
+              <p className="text-white font-medium text-xl text-center mb-8 relative z-10">
+                Analisi busta paga <span className={`text-4xl font-black mx-1.5 ${showSupernova ? 'text-emerald-400 drop-shadow-[0_0_10px_rgba(16,185,129,0.5)]' : 'text-fuchsia-300 drop-shadow-[0_0_10px_rgba(217,70,239,0.5)]'}`}>{batchProgress}</span> di <span className="text-2xl text-slate-400 mx-1.5">{batchTotal}</span>
+              </p>
+
+              {/* PROGRESS BAR */}
+              <div className="w-full bg-slate-950 rounded-full h-2.5 mb-3 overflow-hidden border border-slate-800 relative shadow-inner z-10 p-0.5">
+                <motion.div
+                  className={`h-full relative rounded-full ${showSupernova ? 'bg-emerald-500' : 'bg-gradient-to-r from-violet-600 via-fuchsia-500 to-fuchsia-300'}`}
+                  initial={{ width: 0 }}
+                  animate={{ width: `${(batchProgress / Math.max(1, batchTotal)) * 100}%` }}
+                  transition={{ ease: "circOut", duration: 0.3 }}
+                >
+                  <div className="absolute right-0 top-0 bottom-0 w-4 bg-white rounded-full blur-[2px]"></div>
+                </motion.div>
+              </div>
+              <p className={`text-[9px] uppercase tracking-[0.3em] font-black relative z-10 ${showSupernova ? 'text-emerald-400' : 'text-fuchsia-500/70 animate-pulse'}`}>
+                {showSupernova ? 'Sincronizzazione dati...' : 'Estrazione Dati in corso...'}
+              </p>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
       {/* RENDER CALCOLATRICE */}
       <AnimatePresence>
         {showCalc && (
@@ -2326,42 +2536,55 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
           </motion.div>
         )}
       </AnimatePresence>
-      {/* NOTIFICA FLUTTUANTE UNIVERSALE (Success / Error / Warning) */}
+      {/* --- TOAST NOTIFICATION (Premium Modern Style) --- */}
       <AnimatePresence>
         {batchNotification && (
           <motion.div
-            initial={{ opacity: 0, y: 50, scale: 0.9 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 20, scale: 0.9 }}
-            className="fixed bottom-10 left-1/2 -translate-x-1/2 z-[150]"
+            initial={{ opacity: 0, x: 100, scale: 0.9 }}
+            animate={{ opacity: 1, x: 0, scale: 1 }}
+            exit={{ opacity: 0, x: 100, scale: 0.9 }}
+            transition={{ type: "spring", stiffness: 400, damping: 30 }}
+            className="fixed bottom-8 right-8 z-[250] flex flex-col gap-2"
           >
-            <div className={`flex items-center gap-4 px-6 py-4 rounded-2xl shadow-2xl backdrop-blur-xl border ${batchNotification.type === 'success' ? 'bg-slate-900/90 border-emerald-500/30 text-white' :
-              batchNotification.type === 'warning' ? 'bg-amber-900/95 border-amber-500/50 text-white' : // Stile Giallo
-                'bg-red-900/90 border-red-500/30 text-white'
-              }`}>
-              <div className={`p-2 rounded-full ${batchNotification.type === 'success' ? 'bg-emerald-500' :
-                batchNotification.type === 'warning' ? 'bg-amber-500 text-slate-900' :
-                  'bg-red-500'
-                }`}>
-                {batchNotification.type === 'success' && <CheckCircle2 className="w-6 h-6" />}
-                {batchNotification.type === 'warning' && <AlertTriangle className="w-6 h-6" />}
-                {batchNotification.type === 'error' && <AlertCircle className="w-6 h-6" />}
+            <div className={`relative flex items-start gap-3 p-4 pr-12 w-80 rounded-2xl shadow-2xl backdrop-blur-2xl border border-white/10 overflow-hidden
+              ${batchNotification.type === 'success' ? 'bg-slate-900/90 shadow-[0_10px_40px_-10px_rgba(16,185,129,0.3)]' :
+                batchNotification.type === 'warning' ? 'bg-slate-900/90 shadow-[0_10px_40px_-10px_rgba(245,158,11,0.3)]' :
+                  'bg-slate-900/90 shadow-[0_10px_40px_-10px_rgba(239,68,68,0.3)]'}`}>
+
+              {/* Linea colorata laterale per indicare lo status */}
+              <div className={`absolute left-0 top-0 bottom-0 w-1.5 
+                ${batchNotification.type === 'success' ? 'bg-emerald-500' :
+                  batchNotification.type === 'warning' ? 'bg-amber-500' : 'bg-red-500'}`}
+              ></div>
+
+              {/* Effetto luce interna */}
+              <div className="absolute inset-0 bg-gradient-to-r from-white/5 to-transparent pointer-events-none"></div>
+
+              {/* Icona di Status */}
+              <div className={`mt-0.5 ml-2 shrink-0 ${batchNotification.type === 'success' ? 'text-emerald-400' :
+                batchNotification.type === 'warning' ? 'text-amber-400' : 'text-red-400'}`}>
+                {batchNotification.type === 'success' && <CheckCircle2 className="w-5 h-5" />}
+                {batchNotification.type === 'warning' && <AlertTriangle className="w-5 h-5" />}
+                {batchNotification.type === 'error' && <AlertCircle className="w-5 h-5" />}
               </div>
-              <div>
-                <h4 className={`font-black text-sm uppercase tracking-wider mb-0.5 ${batchNotification.type === 'warning' ? 'text-amber-400' : 'text-white'
-                  }`}>
-                  {batchNotification.type === 'success' ? 'Operazione Completata' :
-                    batchNotification.type === 'warning' ? 'Attenzione Media' : 'Errore'}
+
+              {/* Testo del Toast */}
+              <div className="flex-1 relative z-10">
+                <h4 className="font-bold text-[13px] text-white tracking-wide mb-1">
+                  {batchNotification.type === 'success' ? 'Completato' :
+                    batchNotification.type === 'warning' ? 'Attenzione' : 'Errore'}
                 </h4>
-                <p className="text-sm font-medium opacity-90 whitespace-pre-line leading-snug">
+                <p className="text-[11px] text-slate-300 font-medium leading-relaxed whitespace-pre-line">
                   {batchNotification.msg}
                 </p>
               </div>
+
+              {/* Tasto Chiudi */}
               <button
                 onClick={() => setBatchNotification(null)}
-                className="ml-4 p-1 hover:bg-white/10 rounded-full transition-colors"
+                className="absolute top-4 right-4 p-1 bg-white/5 hover:bg-white/20 rounded-full transition-colors text-slate-400 hover:text-white"
               >
-                <X className="w-4 h-4 opacity-50" />
+                <X className="w-3.5 h-3.5" />
               </button>
             </div>
           </motion.div>
@@ -2375,7 +2598,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
           workerName={`${worker.cognome} ${worker.nome}`}
         />
       </AnimatePresence>
-    </div>
+    </div >
   );
 };
 

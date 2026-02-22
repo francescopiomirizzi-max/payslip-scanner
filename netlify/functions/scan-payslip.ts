@@ -86,9 +86,13 @@ const PROMPT_RFI = `
   - "month" (numero 1-12) e "year" (4 cifre). Cerca nella testata.
   
   ### 2. PRESENZE E FERIE (RFI)
-  Cerca la riga orizzontale in alto che contiene: "Presenze | Riposi | Ferie | 26mi PTV".
-  - **daysVacation**: Valore ESATTO sotto la colonna "Ferie" (la terza colonna). Se vuoto, scrivi 0.0.
-  - **daysWorked**: Valore sotto "Presenze". Se (Presenze + Ferie) > 31, esegui (Presenze - Ferie). Altrimenti lascia Presenze.
+  Cerca la riga orizzontale in alto: "Presenze | Riposi | Ferie | 26mi PTV".
+  L'estrazione del testo a volte "collassa" le colonne se sono vuote. Segui questa logica sequenziale TASSATIVA:
+  1. Il PRIMO numero (es. 22,00 o 35,00) è "Presenze".
+  2. Il SECONDO numero (es. 8,00 o 20,00) è "Riposi" -> IGNORALO COMPLETAMENTE. Non assegnarlo MAI a daysVacation.
+  3. Il TERZO spazio è "Ferie" -> Assegnalo a **daysVacation**. Se lo spazio sotto Ferie è vuoto, imposta daysVacation a 0.0.
+  REGOLA ANTI-DISTRAZIONE: IGNORA TASSATIVAMENTE i numeri presenti a fine riga sotto le voci "Ferie anno prec." e "Ferie anno corrente" (es. 25,00). Non sommarli e non usarli mai.
+  - **daysWorked**: Prendi il PRIMO numero ("Presenze"). Se (Presenze + daysVacation) > 31, esegui (Presenze - daysVacation). Altrimenti lascia il numero delle Presenze.
   
   ### 3. TICKET RESTAURANT (Unitario)
   - Cerca codice **0E99** o **0299** o **0293**. Estrai il valore nella colonna "Dati Base" o "Parametro". 
