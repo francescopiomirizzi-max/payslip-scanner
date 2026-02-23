@@ -1,7 +1,11 @@
 import { Handler } from "@netlify/functions";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
+// --- INIZIALIZZAZIONE DOPPIO MOTORE AI ---
+// 1. CHIAVE PRINCIPALE (Per i calcoli matematici e l'estrazione dati)
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || "");
+// 2. CHIAVE EXPLAINER (Per le spiegazioni testuali dettagliate - Usa la primaria come backup)
+const genAIExplainer = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY_EXPLAINER || process.env.GOOGLE_API_KEY || "");
 
 // --- HELPER PULIZIA E UNIONE JSON (V20 - Somma Automatica Pagine) ---
 function cleanAndParseJSON(text: string): any {
@@ -13,7 +17,6 @@ function cleanAndParseJSON(text: string): any {
       let finalData = { ...blocks[0] };
       finalData.codes = { ...blocks[0].codes };
 
-      // Assicuriamoci che il campo esista
       if (!finalData.aiWarning) finalData.aiWarning = "Nessuna anomalia";
 
       for (let i = 1; i < blocks.length; i++) {
@@ -24,7 +27,6 @@ function cleanAndParseJSON(text: string): any {
           finalData.eventNote = finalData.eventNote ? `${finalData.eventNote} + ${nextPage.eventNote}` : nextPage.eventNote;
         }
 
-        // Unisce eventuali avvisi di anomalia da più pagine
         if (nextPage.aiWarning && nextPage.aiWarning !== "Nessuna anomalia") {
           finalData.aiWarning = finalData.aiWarning === "Nessuna anomalia" ? nextPage.aiWarning : `${finalData.aiWarning} | Pagina ${i + 1}: ${nextPage.aiWarning}`;
         }
@@ -91,8 +93,8 @@ const PROMPT_RFI = `
   1. Il PRIMO numero (es. 22,00 o 35,00) è "Presenze".
   2. Il SECONDO numero (es. 8,00 o 20,00) è "Riposi" -> IGNORALO COMPLETAMENTE. Non assegnarlo MAI a daysVacation.
   3. Il TERZO spazio è "Ferie" -> Assegnalo a **daysVacation**. Se lo spazio sotto Ferie è vuoto, imposta daysVacation a 0.0.
-  REGOLA ANTI-DISTRAZIONE: IGNORA TASSATIVAMENTE i numeri presenti a fine riga sotto le voci "Ferie anno prec." e "Ferie anno corrente" (es. 25,00). Non sommarli e non usarli mai.
-  - **daysWorked**: Prendi il PRIMO numero ("Presenze"). Se (Presenze + daysVacation) > 31, esegui (Presenze - daysVacation). Altrimenti lascia il numero delle Presenze.
+  REGOLA ANTI-DISTRAZIONE: IGNORA TASSATIVAMENTE i numeri presenti a fine riga sotto le voci "Ferie anno prec." e "Ferie anno corrente".
+  - **daysWorked**: TRASCRIVI ESATTAMENTE il PRIMO numero ("Presenze"). ASSOLUTAMENTE NON SOTTRARRE LE FERIE. Se c'è scritto 35, scrivi 35. 
   
   ### 3. TICKET RESTAURANT (Unitario)
   - Cerca codice **0E99** o **0299** o **0293**. Estrai il valore nella colonna "Dati Base" o "Parametro". 
@@ -100,7 +102,7 @@ const PROMPT_RFI = `
   ### 4. CODICI VARIABILI (Master List RFI COMPLETA)
   Cerca e somma in TUTTE LE PAGINE la colonna "Competenze" per questi codici:
   
-  - 0152 (Straord. Diurno)
+  - 0152 (Str. feriale D. non recup / Straord. Diurno) <- CERCA ATTENTAMENTE AL CENTRO DELLA PAGINA
   - 0421 (Ind. Notturno)
   - 0423 (Comp. Cantiere/Festivo)
   - 0457 (Festivo Notturno)
@@ -126,12 +128,12 @@ const PROMPT_RFI = `
   - Cerca importi positivi di: 3E.., 74.., 0K../0C.., 6INT. "eventNote": scrivi una breve nota.
 
   ### 6. AUDITOR AI (Controllo Anomalie)
-  - "aiWarning": Controlla la logica dei numeri estratti. Segnala in modo conciso se ci sono stranezze (es. "Giorni lavorati alti ma 0 ticket", "Ferie e lavorati superano 31", "Arretrati elevati"). Se tutto sembra logico, scrivi ESATTAMENTE "Nessuna anomalia".
+  - "aiWarning": Controlla la logica dei numeri estratti. Se i giorni lavorati (Presenze) superano i 31 giorni, scrivi "Anomalia Conguaglio: Presenze > 31. Dati estratti letteralmente". Altrimenti scrivi ESATTAMENTE "Nessuna anomalia".
   
   FORMATO JSON (Esempio):
   {
-    "month": 1, "year": 2024, "daysWorked": 0.0, "daysVacation": 0.0, "ticketRate": 0.0, "arretrati": 0.0, "eventNote": "", "aiWarning": "Nessuna anomalia",
-    "codes": { "0152": 0.0, "0421": 0.0 }
+    "month": 1, "year": 2024, "daysWorked": 35.0, "daysVacation": 6.0, "ticketRate": 0.0, "arretrati": 0.0, "eventNote": "", "aiWarning": "Nessuna anomalia",
+    "codes": { "0152": 771.22, "0421": 0.0 }
   }
 `;
 
@@ -150,7 +152,7 @@ const PROMPT_ELIOR = `
   - Cerca **"5000 FERIE GODUTE"** ed estrai il numero (es. 47,55 o 4,00). Se non c'è, vale 0.
   
 - **CONVERSIONE INTELLIGENTE:** * Se il numero delle ferie è MAGGIORE DI 12: consideralo in ORE. Dividilo per 8 e MANTIENI I DECIMALI ESATTI senza arrotondare. (Esempio: 28,35 / 8 = 3.54).
-    * Se il numero è MINORE O UGUALE A 12: consideralo GIÀ IN GIORNI e lascialo così com'è.
+    * Se il numero è MINORE O UGUALE A 12: consideralo GIÀ IN GIORNI e lascialo così com'è.
   
   - **daysVacation**: Scrivi il numero finale dei giorni di ferie.
   - **daysWorked**: Esegui SEMPRE la sottrazione (GG INPS - daysVacation).
@@ -235,15 +237,68 @@ export const handler: Handler = async (event, context) => {
 
   try {
     const body = JSON.parse(event.body || "{}");
-    const { fileData, mimeType, company } = body;
+
+    // 👇 Ora estraiamo anche l'azione per sapere se dobbiamo Spiegare o Calcolare
+    const { fileData, mimeType, company, action } = body;
 
     if (!fileData) throw new Error("File mancante.");
     const cleanData = fileData.includes("base64,") ? fileData.split("base64,")[1] : fileData;
 
+    // =========================================================================
+    // 🧠 NUOVA MODALITÀ: AUDITOR LEGALE (SPIEGAZIONE DISCORSIVA)
+    // =========================================================================
+    if (action === 'explain') {
+      const modelExplainer = genAIExplainer.getGenerativeModel({ model: "gemini-2.5-flash" });
+
+      const explainPrompt = `
+        Sei un Senior HR e Consulente del Lavoro di altissimo livello. 
+        Il tuo compito è tradurre questa complessa busta paga in un report discorsivo, rassicurante e cristallino per un lavoratore che non ha competenze contabili.
+        
+        Regole di stile TASSATIVE:
+        - Usa il "Tu" diretto e un tono empatico e professionale.
+        - Usa esattamente la formattazione Markdown richiesta qui sotto (con le emoji).
+        - NON restituire mai codice JSON.
+        - Non elencare le voci a 0 euro. Concentrati solo su quelle rilevanti.
+        
+        Struttura il tuo report esattamente in questo ordine:
+        
+        ### 🗓️ Sintesi del Mese
+        - Saluta il lavoratore (se trovi il suo nome).
+        - Indica il Mese, l'Anno e l'Azienda.
+        - Indica in grassetto il **Netto in Busta** (la cifra finale che gli è entrata in tasca).
+        
+        ### ⏱️ Presenze e Anomalie Storiche
+        - Indica i giorni lavorati e le ferie godute.
+        - **REGOLA SALVAVITA (CONGUAGLI):** Se noti numeri sballati come "35 giorni lavorati" (tipico in RFI nel 2009 o anni simili), NON dire che c'è un errore! Rassicura subito il lavoratore spiegando che è un noto "conguaglio per il passaggio alla retribuzione mensile", che ha causato il pagamento di due mensilità arretrate in una sola busta.
+        
+        ### 💶 I tuoi Guadagni (Le Competenze)
+        Elenca le 4-5 voci positive più alte (es. Paga Base, Straordinari, Notturni, Codice 0152, Arretrati). 
+        Per ogni voce usa questo formato:
+        - **[Nome Voce] (€ X,XX):** Spiega in mezza riga e in parole semplicissime cosa significa questa voce. Se vedi il Ticket Restaurant, menzionalo.
+        
+        ### 📉 Cosa ti hanno trattenuto (Tasse e Contributi)
+        Spiega in modo riassuntivo le 2-3 trattenute principali (es. "IRPEF: sono le normali tasse sul reddito", "INPS: i tuoi contributi pensionistici", o eventuali trattenute sindacali se presenti).
+        
+        Concludi con una brevissima e calorosa frase di chiusura.
+      `;
+
+      console.log(`--- 🤖 AVVIO SPIEGAZIONE AI (EXPLAINER) ---`);
+
+      const result = await modelExplainer.generateContent([
+        explainPrompt,
+        { inlineData: { data: cleanData, mimeType: mimeType || "application/pdf" } }
+      ]);
+
+      return { statusCode: 200, headers, body: JSON.stringify({ explanation: result.response.text() }) };
+    }
+
+    // =========================================================================
+    // 🧮 MODALITÀ CLASSICA: ESTRAZIONE DATI PER LA GRIGLIA (JSON)
+    // =========================================================================
     const companyKey = (company || 'RFI').toUpperCase();
     const targetPrompt = PROMPT_DIRECTORY[companyKey] || PROMPT_GENERICO;
 
-    console.log(`--- 🚀 AVVIO ANALISI PER: ${companyKey} ---`);
+    console.log(`--- 🚀 AVVIO ANALISI NUMERICA PER: ${companyKey} ---`);
 
     const model = genAI.getGenerativeModel({
       model: "gemini-2.5-flash",

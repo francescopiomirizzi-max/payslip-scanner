@@ -91,6 +91,7 @@ const GLOBAL_STYLES = `
   .animate-shimmer {
     background-size: 200% auto;
     animation: shimmer 4s linear infinite;
+}
 @keyframes aurora {
     0%, 100% { background-position: 0% 50%; }
     50% { background-position: 100% 50%; }
@@ -99,7 +100,7 @@ const GLOBAL_STYLES = `
     background-size: 200% 200%;
     animation: aurora 3s ease infinite;
   }
-  }
+  
   /* Glassmorphism 2.0 */
   .glass-panel {
     background: rgba(255, 255, 255, 0.75);
@@ -292,7 +293,10 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
   const [isProcessing, setIsProcessing] = useState(false);
 
   const [activeCell, setActiveCell] = useState<{ row: number, col: string } | null>(null);
-
+  // --- STATI AUDITOR AI ---
+  const [isExplainerOpen, setIsExplainerOpen] = useState(false);
+  const [isExplaining, setIsExplaining] = useState(false);
+  const [explanationData, setExplanationData] = useState<string | null>(null);
   // --- NUOVI STATI PER LEGAL COCKPIT ---
   const [legalStatus, setLegalStatus] = useState<'analisi' | 'pronta' | 'inviata' | 'trattativa' | 'chiusa'>(worker.status || 'analisi'); //
   const [offerAmount, setOfferAmount] = useState<string>('');
@@ -414,6 +418,10 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
     setIsBatchProcessing(true);
     setBatchNotification(null);
 
+    // 👉 1. IMPOSTA IL TOTALE DEI FILE (Es. 12)
+    setBatchTotal(files.length);
+    setBatchProgress(0);
+
     // Copia profonda per evitare mutazioni dirette
     let currentAnni = JSON.parse(JSON.stringify(monthlyInputs));
     let successCount = 0;
@@ -421,6 +429,9 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
     let lastDetectedYear = null;
 
     for (let i = 0; i < files.length; i++) {
+      // 👉 2. AGGIORNA IL NUMERO AD OGNI BUSTA PROCESSATA
+      setBatchProgress(i + 1);
+
       const file = files[i];
       try {
         const base64String = await toBase64(file);
@@ -493,13 +504,26 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
           // 3. ARRETRATI E NOTE
           const arretratiVal = Number(aiResult.arretrati);
           if (!isNaN(arretratiVal) && arretratiVal !== 0) {
-            // Sovrascriviamo per evitare duplicazioni
             row.arretrati = arretratiVal;
           }
 
-          // Aggiunta Note Eventi (es. "Malattia") senza duplicarle
+          // Definiamo un separatore largo e pulito per non appiccicare i testi
+          const sep = '  •  ';
+
+          // A. Aggiunta Note Eventi (es. "Malattia")
           if (aiResult.eventNote && !row.note?.includes(aiResult.eventNote)) {
-            row.note = (row.note ? row.note + ' ' : '') + `[${aiResult.eventNote}]`;
+            row.note = row.note ? `${row.note}${sep}[${aiResult.eventNote}]` : `[${aiResult.eventNote}]`;
+          }
+
+          // B. Aggiunta AUDITOR AI WARNING 
+          if (aiResult.aiWarning && aiResult.aiWarning !== "Nessuna anomalia" && !row.note?.includes("⚠️")) {
+            row.note = row.note ? `${row.note}${sep}[⚠️ AI: ${aiResult.aiWarning}]` : `[⚠️ AI: ${aiResult.aiWarning}]`;
+          }
+
+          // C. Aggiunta Valore Ticket visivo
+          const ticketValNote = Number(aiResult.ticketRate);
+          if (!isNaN(ticketValNote) && ticketValNote > 0 && !row.note?.includes("Ticket")) {
+            row.note = row.note ? `${row.note}${sep}[🎫 Ticket: €${ticketValNote.toFixed(2)}]` : `[🎫 Ticket: €${ticketValNote.toFixed(2)}]`;
           }
 
           // 4. VOCI VARIABILI (Codici)
@@ -535,19 +559,24 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
 
     if (lastDetectedYear) setCurrentYear(lastDetectedYear);
 
-    // --- EFFETTO SUPERNOVA (Attende 1 secondo prima di chiudere l'HUD) ---
+    // --- EFFETTO SUPERNOVA ---
     if (successCount > 0) {
       setShowSupernova(true);
       await new Promise(resolve => setTimeout(resolve, 800)); // Pausa scenica
     }
 
     setIsBatchProcessing(false);
-    setShowSupernova(false); // Resetta la supernova
-    setBatchProgress(0);
-    setBatchTotal(0);
+    setShowSupernova(false);
+
+    // 👉 3. AZZERA I CONTATORI SOLO QUANDO L'HUD È CHIUSO
+    setTimeout(() => {
+      setBatchProgress(0);
+      setBatchTotal(0);
+    }, 300);
+
     if (batchInputRef.current) batchInputRef.current.value = '';
 
-    // Notifica Intelligente Toast
+    // Notifica Intelligente
     if (successCount > 0) {
       setBatchNotification({
         msg: `✅ Elaborazione Completata!\n${successCount} cedolini inseriti correttamente.\n${errorCount > 0 ? `⚠️ ${errorCount} errori.` : ''}`,
@@ -1336,7 +1365,106 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
     }
     setIsDragging(false);
   };
+  const handleExplainPayslip = async () => {
+    if (payslipFiles.length === 0) return;
+    setIsExplainerOpen(true);
+    setIsExplaining(true);
+    setExplanationData(null);
 
+    try {
+      const response = await fetch(payslipFiles[currentFileIndex]);
+      const blob = await response.blob();
+      const base64String = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(blob);
+        reader.onload = () => resolve(reader.result as string);
+      });
+
+      const res = await fetch('/.netlify/functions/scan-payslip', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fileData: base64String,
+          mimeType: blob.type || "application/pdf",
+          action: 'explain',
+          company: worker.profilo
+        })
+      });
+
+      const aiResult = await res.json();
+      setExplanationData(aiResult.explanation);
+    } catch (error) {
+      setExplanationData("❌ Impossibile stabilire una connessione con il Motore Neurale.");
+    } finally {
+      setIsExplaining(false);
+    }
+  };
+  // --- PARSER CUSTOM PER IL REPORT AI (Typography Premium Definitivo) ---
+  const renderAIReport = (text: string | null) => {
+    if (!text) return null;
+
+    // Dividiamo per doppio a capo per isolare i blocchi logici e rimuoviamo blocchi vuoti
+    return text.split('\n\n').filter(p => p.trim() !== '').map((paragraph, index) => {
+
+      // --- 1. Gestione Titoli (Iniziano con ###) ---
+      if (paragraph.trim().startsWith('###')) {
+        const titleText = paragraph.replace(/###/g, '').trim();
+        return (
+          <h3 key={index} className="text-xl font-black text-white mt-8 mb-4 flex items-center gap-3 border-b border-slate-700/50 pb-3">
+            {titleText}
+          </h3>
+        );
+      }
+
+      // --- Funzione interna per colorare i Grassetti ---
+      const renderTextWithBold = (str: string) => {
+        return str.split(/(\*\*.*?\*\*)/g).map((part, i) => {
+          if (part.startsWith('**') && part.endsWith('**')) {
+            const boldText = part.slice(2, -2);
+            // MAGIA: Se è una cifra in € o la parola Netto, diventa Verde Smeraldo. Altrimenti Fucsia.
+            const isMoney = boldText.includes('€') || boldText.toLowerCase().includes('netto');
+
+            return (
+              <strong key={i} className={`font-bold tracking-wide ${isMoney ? 'text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.3)]' : 'text-fuchsia-300 drop-shadow-[0_0_8px_rgba(217,70,239,0.3)]'}`}>
+                {boldText}
+              </strong>
+            );
+          }
+          // Trasforma eventuali singoli \n in veri a capo
+          return <span key={i}>{part.split('\n').map((line, j, arr) => <React.Fragment key={j}>{line}{j < arr.length - 1 && <br />}</React.Fragment>)}</span>;
+        });
+      };
+
+      // --- 2. Gestione Liste puntate (Gestisce sia i trattini che gli asterischi dell'AI) ---
+      const lines = paragraph.split('\n');
+      const isList = lines.some(line => line.trim().startsWith('-') || line.trim().startsWith('*'));
+
+      if (isList) {
+        return (
+          <ul key={index} className="space-y-3 mb-6 ml-2 border-l-[3px] border-fuchsia-500/30 pl-5">
+            {lines.filter(line => line.trim() !== '').map((line, i) => {
+              // Rimuove il trattino o l'asterisco iniziale
+              const cleanLine = line.replace(/^[-*]\s*/, '').trim();
+              return (
+                <li key={i} className="text-slate-300 text-[15px] leading-relaxed relative flex items-start gap-3">
+                  {/* Pallino Custom Olografico */}
+                  <span className="w-1.5 h-1.5 rounded-full bg-fuchsia-400 mt-2 shrink-0 shadow-[0_0_8px_rgba(217,70,239,0.8)]"></span>
+                  <span>{renderTextWithBold(cleanLine)}</span>
+                </li>
+              );
+            })}
+          </ul>
+        );
+      }
+
+      // --- 3. Paragrafi normali discorsivi ---
+      return (
+        <p key={index} className="text-slate-300 text-[15px] leading-relaxed mb-5">
+          {renderTextWithBold(paragraph)}
+        </p>
+      );
+    });
+  };
   // --- 🔥 MODIFICA 2: CALCOLO STATISTICHE ALLINEATO AL PDF ---
   const globalStats = useMemo(() => {
     if (!monthlyInputs || !Array.isArray(monthlyInputs)) return [];
@@ -1777,26 +1905,34 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
           </div>
 
           <div className="flex justify-center mb-6 z-20 shrink-0">
-            {/* Contenitore con CURSOR SPOTLIGHT */}
+            {/* Contenitore con CURSOR SPOTLIGHT (Infallibile) */}
             <div
               ref={commandBarRef}
               onMouseMove={(e) => {
                 if (!commandBarRef.current) return;
                 const rect = commandBarRef.current.getBoundingClientRect();
-                const x = e.clientX - rect.left;
-                const y = e.clientY - rect.top;
-                commandBarRef.current.style.setProperty('--x', `${x}px`);
-                commandBarRef.current.style.setProperty('--y', `${y}px`);
+                // Calcola le coordinate in tempo reale
+                commandBarRef.current.style.setProperty('--x', `${e.clientX - rect.left}px`);
+                commandBarRef.current.style.setProperty('--y', `${e.clientY - rect.top}px`);
               }}
-              className="group/bar relative flex p-2 bg-white/60 dark:bg-slate-900/60 backdrop-blur-2xl border border-white/50 dark:border-slate-700/50 rounded-2xl shadow-2xl gap-3 overflow-x-auto w-full justify-start xl:justify-center no-scrollbar"
+              onMouseEnter={() => {
+                // Accende la luce quando entri con il mouse
+                if (commandBarRef.current) commandBarRef.current.style.setProperty('--spotlight-opacity', '1');
+              }}
+              onMouseLeave={() => {
+                // Spegne la luce quando esci
+                if (commandBarRef.current) commandBarRef.current.style.setProperty('--spotlight-opacity', '0');
+              }}
+              className="relative flex p-2 bg-white/60 dark:bg-slate-900/60 backdrop-blur-2xl border border-white/50 dark:border-slate-700/50 rounded-2xl shadow-2xl gap-3 overflow-x-auto w-full justify-start md:justify-center no-scrollbar"
             >
-              {/* Effetto Torcia (Spotlight) visibile solo in hover sulla barra */}
-              <div className="pointer-events-none absolute -inset-px rounded-2xl opacity-0 transition duration-300 group-hover/bar:opacity-100"
-                style={{ background: 'radial-gradient(400px circle at var(--x, 50%) var(--y, 50%), rgba(255,255,255,0.15), transparent 40%)' }}>
-              </div>
-
-
-
+              {/* La Luce della Torcia (Ora è Indaco/Azzurrina e usa variabili native) */}
+              <div
+                className="pointer-events-none absolute -inset-px rounded-2xl transition-opacity duration-300 z-0"
+                style={{
+                  opacity: 'var(--spotlight-opacity, 0)',
+                  background: 'radial-gradient(300px circle at var(--x, 50%) var(--y, 50%), rgba(99, 102, 241, 0.25), transparent 50%)'
+                }}
+              ></div>
               {/* --- INPUT FILE NASCOSTO --- */}
               <input
                 type="file"
@@ -2067,40 +2203,88 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
           <div className="flex-1 bg-white/60 backdrop-blur-md rounded-[2.5rem] border border-white/60 shadow-2xl overflow-hidden flex flex-col relative min-h-0">
             <div className="flex-1 p-2 sm:p-6 overflow-hidden relative">
               <AnimatePresence mode="wait">
-                <motion.div
-                  key={activeTab}
-                  initial={{ opacity: 0, x: 20, filter: 'blur(10px)' }}
-                  animate={{ opacity: 1, x: 0, filter: 'blur(0px)' }}
-                  exit={{ opacity: 0, x: -20, filter: 'blur(10px)' }}
-                  transition={{ duration: 0.4, ease: "circOut" }}
-                  className="h-full w-full"
-                >
-                  {activeTab === 'input' && (
-                    <div className="h-full flex flex-col">
-                      <MonthlyDataGrid
-                        data={monthlyInputs}
-                        onDataChange={handleDataChange}
-                        initialYear={currentYear}
-                        onYearChange={setCurrentYear}
-                        profilo={worker.profilo}
-                        onCellFocus={handleCellFocus}
-                      />
+                {isExplainerOpen ? (
+                  /* --- PANNELLO AUDITOR AI --- */
+                  <motion.div
+                    key="explainer"
+                    initial={{ opacity: 0, scale: 0.95, filter: 'blur(10px)' }}
+                    animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }}
+                    exit={{ opacity: 0, scale: 0.95, filter: 'blur(10px)' }}
+                    transition={{ duration: 0.4, ease: "circOut" }}
+                    className="h-full w-full bg-slate-950 rounded-3xl border border-fuchsia-500/30 shadow-[0_0_30px_rgba(192,38,211,0.15)] flex flex-col overflow-hidden relative"
+                  >
+                    <div className="p-4 sm:p-6 border-b border-slate-800 flex justify-between items-center bg-slate-900 shrink-0 z-10">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-fuchsia-500/20 rounded-lg border border-fuchsia-500/30">
+                          <Bot className="w-6 h-6 text-fuchsia-400" />
+                        </div>
+                        <div>
+                          <h2 className="text-xl font-black text-white tracking-wide">Analisi Documentale</h2>
+                          <p className="text-xs text-fuchsia-400 font-bold uppercase tracking-widest">Traduzione Legale</p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => setIsExplainerOpen(false)}
+                        className="px-4 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-600 text-white rounded-lg text-sm font-bold transition-all flex items-center gap-2 active:scale-95"
+                      >
+                        <X className="w-4 h-4" /> Chiudi
+                      </button>
                     </div>
-                  )}
 
-                  {activeTab === 'calc' && (
-                    <div className="h-full overflow-auto custom-scrollbar pr-2">
-                      {/* Passiamo l'interruttore alla tabella aggiungendo includeTickets={includeTickets} */}
-                      <AnnualCalculationTable data={monthlyInputs} profilo={worker.profilo} onDataChange={handleDataChange} includeTickets={includeTickets} startClaimYear={startClaimYear} />
-                    </div>
-                  )}
+                    <div className="flex-1 p-6 sm:p-8 overflow-y-auto custom-scrollbar relative">
+                      <Bot className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 text-white opacity-5 pointer-events-none" />
 
-                  {activeTab === 'pivot' && (
-                    <div className="h-full overflow-auto custom-scrollbar pr-2">
-                      <IndemnityPivotTable data={monthlyInputs} profilo={worker.profilo} startClaimYear={startClaimYear} />
+                      {isExplaining ? (
+                        <div className="flex flex-col items-center justify-center h-full gap-6 text-slate-400">
+                          <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 2, ease: "linear" }}>
+                            <Loader2 className="w-12 h-12 text-fuchsia-500" />
+                          </motion.div>
+                          <p className="text-lg font-bold text-white">Scansione e interpretazione in corso...</p>
+                        </div>
+                      ) : (
+                        <div className="relative z-10 pb-12 pr-4">
+                          {renderAIReport(explanationData)}
+                        </div>
+                      )}
                     </div>
-                  )}
-                </motion.div>
+                  </motion.div>
+                ) : (
+                  /* --- TABELLE NORMALI --- */
+                  <motion.div
+                    key={activeTab}
+                    initial={{ opacity: 0, x: 20, filter: 'blur(10px)' }}
+                    animate={{ opacity: 1, x: 0, filter: 'blur(0px)' }}
+                    exit={{ opacity: 0, x: -20, filter: 'blur(10px)' }}
+                    transition={{ duration: 0.4, ease: "circOut" }}
+                    className="h-full w-full"
+                  >
+                    {activeTab === 'input' && (
+                      <div className="h-full flex flex-col">
+                        <MonthlyDataGrid
+                          data={monthlyInputs}
+                          onDataChange={handleDataChange}
+                          initialYear={currentYear}
+                          onYearChange={setCurrentYear}
+                          profilo={worker.profilo}
+                          onCellFocus={handleCellFocus}
+                        />
+                      </div>
+                    )}
+
+                    {activeTab === 'calc' && (
+                      <div className="h-full overflow-auto custom-scrollbar pr-2">
+                        {/* Passiamo l'interruttore alla tabella aggiungendo includeTickets={includeTickets} */}
+                        <AnnualCalculationTable data={monthlyInputs} profilo={worker.profilo} onDataChange={handleDataChange} includeTickets={includeTickets} startClaimYear={startClaimYear} />
+                      </div>
+                    )}
+
+                    {activeTab === 'pivot' && (
+                      <div className="h-full overflow-auto custom-scrollbar pr-2">
+                        <IndemnityPivotTable data={monthlyInputs} profilo={worker.profilo} startClaimYear={startClaimYear} />
+                      </div>
+                    )}
+                  </motion.div>
+                )}
               </AnimatePresence>
             </div>
           </div>
@@ -2260,7 +2444,20 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
                         className={`max-w-full max-h-full object-contain select-none ${isSniperMode ? '' : 'cursor-grab active:cursor-grabbing'}`}
                       />
                     </object>
+                    {/* IL ROBOTTINO FLUTTUANTE (Visibile solo se l'Auditor è chiuso e c'è un PDF) */}
+                    {payslipFiles.length > 0 && !isExplainerOpen && (
+                      <button
+                        onClick={handleExplainPayslip}
+                        className="absolute bottom-6 right-6 z-50 p-4 bg-slate-900 border border-slate-700 hover:border-fuchsia-500 rounded-full shadow-[0_0_20px_rgba(192,38,211,0.3)] hover:shadow-[0_0_30px_rgba(192,38,211,0.6)] transition-all duration-300 group hover:-translate-y-1"
+                      >
+                        <Bot className="w-6 h-6 text-fuchsia-500 group-hover:text-fuchsia-400 group-hover:animate-pulse" />
 
+                        {/* Tooltip nascosto che compare al passaggio del mouse */}
+                        <span className="absolute right-full top-1/2 -translate-y-1/2 mr-4 px-3 py-1.5 bg-slate-900 border border-slate-700 text-white text-xs font-bold rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none shadow-xl">
+                          Spiega questa Busta Paga
+                        </span>
+                      </button>
+                    )}
                     {/* BOX CECCHINO */}
                     {isSniperMode && selectionBox && (
                       <div
