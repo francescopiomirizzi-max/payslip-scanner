@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import {
   MONTH_NAMES,
   YEARS,
@@ -6,7 +7,8 @@ import {
   formatInteger,
   AnnoDati,
   getColumnsByProfile,
-  ProfiloAzienda
+  ProfiloAzienda,
+  evaluateFormula
 } from '../../types';
 import {
   MessageSquareText,
@@ -23,10 +25,13 @@ import {
   ChevronRight,
   BookOpen,
   MapPin,
-  Scale, // Icona per il legale
+  Scale,
   TriangleAlert,
   AlertTriangle,
-  CheckCircle2 // Icona per errori validazione
+  CheckCircle2,
+  Undo2,
+  Copy,
+  ClipboardPaste
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -206,6 +211,50 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
   const [legalModalOpen, setLegalModalOpen] = useState(false);
   const [activeRowIndex, setActiveRowIndex] = useState<number | null>(null);
   const [rowToClear, setRowToClear] = useState<number | null>(null);
+  const [activeColId, setActiveColId] = useState<string | null>(null);
+  // --- STATO MENU CONTESTUALE (TASTO DESTRO) ---
+  const [contextMenu, setContextMenu] = useState<{
+    visible: boolean; x: number; y: number; rowIndex: number; colId: string;
+  } | null>(null);
+
+  // Chiude il menu contestuale cliccando altrove o premendo Esc
+  useEffect(() => {
+    const handleClickOutside = () => setContextMenu(null);
+    const handleEsc = (e: KeyboardEvent) => { if (e.key === 'Escape') setContextMenu(null); };
+    window.addEventListener('click', handleClickOutside);
+    window.addEventListener('keydown', handleEsc);
+    return () => {
+      window.removeEventListener('click', handleClickOutside);
+      window.removeEventListener('keydown', handleEsc);
+    };
+  }, []);
+  // --- STATI DRAG-TO-FILL OMNIDIREZIONALE ---
+  const [dragSelection, setDragSelection] = useState<{
+    isDragging: boolean; startRow: number; endRow: number; startColIdx: number; endColIdx: number; startValue: string | number;
+  }>({
+    isDragging: false, startRow: -1, endRow: -1, startColIdx: -1, endColIdx: -1, startValue: ''
+  });
+  // --- STATI SELEZIONE CELLE (PER CANCELLAZIONE MASSIVA) ---
+  const [cellSelection, setCellSelection] = useState<{
+    isSelecting: boolean; startRow: number; endRow: number; startColIdx: number; endColIdx: number; active: boolean;
+  }>({ isSelecting: false, startRow: -1, endRow: -1, startColIdx: -1, endColIdx: -1, active: false });
+
+  const handleCellMouseDown = (e: React.MouseEvent, rowIndex: number, colIdx: number) => {
+    if (e.button !== 0) return;
+    // Se clicchiamo sul quadratino magico, NON deve partire la selezione ma il drag-to-fill
+    if ((e.target as HTMLElement).closest('.drag-handle')) return;
+
+    // ✨ FIX: Se clicchiamo sulla colonna dei mesi (0), ignoriamo la selezione multipla
+    if (colIdx === 0) return;
+
+    setCellSelection({ isSelecting: true, startRow: rowIndex, endRow: rowIndex, startColIdx: colIdx, endColIdx: colIdx, active: true });
+  };
+
+  const handleCellMouseEnter = (rowIndex: number, colIdx: number) => {
+    if (cellSelection.isSelecting) {
+      setCellSelection(prev => ({ ...prev, endRow: rowIndex, endColIdx: colIdx }));
+    }
+  };
   // --- 1. REF E LOGICA SCROLL (UNIFICATA) ---
   const tableContainerRef = useRef<HTMLDivElement>(null);
   const topScrollRef = useRef<HTMLDivElement>(null);
@@ -213,7 +262,50 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
 
   // Larghezza dinamica per scorrere fino alla fine
   const [tableScrollWidth, setTableScrollWidth] = useState(0);
+  // STATO SCROLL (Per disabilitare hover pesanti mentre si muove)
+  const [isScrolling, setIsScrolling] = useState(false);
+  const scrollTimeout = useRef<NodeJS.Timeout | null>(null);
+  // --- STATO MACCHINA DEL TEMPO (UNDO) ---
+  const [history, setHistory] = useState<AnnoDati[][]>([]);
+  // ✨ STATO TOAST UNDO RAPIDO (GMAIL STYLE)
+  const [undoToast, setUndoToast] = useState<{ show: boolean, msg: string }>({ show: false, msg: '' });
+  const undoTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  const triggerUndoToast = (msg: string) => {
+    setUndoToast({ show: true, msg });
+    if (undoTimeoutRef.current) clearTimeout(undoTimeoutRef.current);
+    undoTimeoutRef.current = setTimeout(() => setUndoToast({ show: false, msg: '' }), 7000); // Scompare dopo 7 secondi
+  };
+
+  const performQuickUndo = () => {
+    handleUndo();
+    setUndoToast({ show: false, msg: '' });
+    if (undoTimeoutRef.current) clearTimeout(undoTimeoutRef.current);
+  };
+  // Funzione wrapper che "fotografa" i dati prima di modificarli
+  const updateDataWithHistory = useCallback((newData: AnnoDati[]) => {
+    setHistory(prev => [...prev.slice(-99), data]); // Salva gli ultimi 100 passaggi
+    onDataChange(newData);
+  }, [data, onDataChange]);
+
+  const handleUndo = useCallback(() => {
+    if (history.length === 0) return;
+    const previousState = history[history.length - 1];
+    setHistory(prev => prev.slice(0, -1)); // Rimuove l'ultimo step dalla memoria
+    onDataChange(previousState);           // Ripristina la visuale
+  }, [history, onDataChange]);
+
+  // Ascolta la tastiera per Ctrl+Z da qualsiasi punto dello schermo
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z')) {
+        e.preventDefault();
+        handleUndo();
+      }
+    };
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, [handleUndo]);
   // Flags per il sync e intervallo scroll tasti
   const isSyncing = useRef(false);
   const scrollInterval = useRef<NodeJS.Timeout | null>(null);
@@ -231,8 +323,11 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
   // Funzioni Tasti Laterali
   const startScrolling = (direction: 'left' | 'right') => {
     if (scrollInterval.current) return;
-    const step = 120;
-    const speed = 2;
+
+    // Bilanciamento perfetto per uno scroll fluido e continuo (tipo 60fps)
+    const step = 15;  // Quanti pixel si sposta a ogni "scatto"
+    const speed = 15; // Millisecondi tra uno scatto e l'altro
+
     scrollInterval.current = setInterval(() => {
       if (tableContainerRef.current) {
         tableContainerRef.current.scrollBy({ left: direction === 'left' ? -step : step, behavior: 'auto' });
@@ -258,13 +353,24 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
     resizeObserver.observe(tableEl);
 
     const handleScroll = (source: HTMLElement) => {
+      // 1. Spegne gli effetti CSS per la massima fluidità
+      if (!isScrolling) setIsScrolling(true);
+      if (scrollTimeout.current) clearTimeout(scrollTimeout.current);
+      scrollTimeout.current = setTimeout(() => setIsScrolling(false), 150);
+
       if (isSyncing.current) return;
+
+      // 2. Chiude il "lucchetto" per non creare un loop infinito
       isSyncing.current = true;
+
+      // 3. APPLICAZIONE ISTANTANEA (Senza requestAnimationFrame = Latenza Zero)
+      const left = source.scrollLeft;
+      if (source !== tableEl) tableEl.scrollLeft = left;
+      if (source !== topEl) topEl.scrollLeft = left;
+      if (source !== botEl) botEl.scrollLeft = left;
+
+      // 4. Riapre il lucchetto una frazione di secondo dopo per assorbire gli eventi "eco"
       window.requestAnimationFrame(() => {
-        const left = source.scrollLeft;
-        if (source !== tableEl && tableEl.scrollLeft !== left) tableEl.scrollLeft = left;
-        if (source !== topEl && topEl.scrollLeft !== left) topEl.scrollLeft = left;
-        if (source !== botEl && botEl.scrollLeft !== left) botEl.scrollLeft = left;
         isSyncing.current = false;
       });
     };
@@ -273,9 +379,9 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
     const onTopScroll = () => handleScroll(topEl);
     const onBotScroll = () => handleScroll(botEl);
 
-    tableEl.addEventListener('scroll', onTableScroll);
-    topEl.addEventListener('scroll', onTopScroll);
-    botEl.addEventListener('scroll', onBotScroll);
+    tableEl.addEventListener('scroll', onTableScroll, { passive: true });
+    topEl.addEventListener('scroll', onTopScroll, { passive: true });
+    botEl.addEventListener('scroll', onBotScroll, { passive: true });
 
     return () => {
       resizeObserver.disconnect();
@@ -283,11 +389,12 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
       topEl.removeEventListener('scroll', onTopScroll);
       botEl.removeEventListener('scroll', onBotScroll);
     };
-  }, [profilo]); // Si riaggiorna se cambia il profilo/colonne
+  }, [profilo, isScrolling]); // Si riaggiorna se cambia il profilo/colonne
   // --- 1. CONFIGURAZIONE COLONNE ---
   const currentColumns = useMemo(() => {
     const cols = getColumnsByProfile(profilo);
-    return cols.filter(c => c.id !== 'ticket');
+    // ESCLUSIONE DEFINITIVA: Rimuoviamo Ticket e i codici di Produttività
+    return cols.filter(c => !['ticket', '3B70', '3B71'].includes(c.id));
   }, [profilo]);
 
   const editableColumns = useMemo(() => {
@@ -353,29 +460,55 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
 
   const currentRows = useMemo(() => {
     return MONTH_NAMES.map((monthName, index) => {
+      // 1. Prendi i dati inseriti dall'utente per questo mese
       const existingRow = currentYearData.find(d => d.monthIndex === index) || {};
-      return { ...existingRow, month: monthName, monthIndex: index, year: selectedYear };
-    });
-  }, [currentYearData, selectedYear]);
+      let rowData = { ...existingRow, month: monthName, monthIndex: index, year: selectedYear };
 
+      // 2. FORMULA ENGINE: Cerca le colonne "formula" e risolvile in tempo reale!
+      currentColumns.forEach(col => {
+        if (col.type === 'formula' && col.formula) {
+          const result = evaluateFormula(col.formula, rowData);
+          // Inserisce il risultato calcolato nella riga, pronto per essere visualizzato (e sommato)
+          (rowData as any)[col.id] = result;
+        }
+      });
+
+      return rowData;
+    });
+  }, [currentYearData, selectedYear, currentColumns]);
+  // --- HELPER FORMULE ---
+  // Ricalcola tutte le celle "formula" della riga prima di salvarla nel DB
+  const applyFormulas = (row: any) => {
+    const newRow = { ...row };
+    currentColumns.forEach(col => {
+      if (col.type === 'formula' && col.formula) {
+        newRow[col.id] = evaluateFormula(col.formula, newRow);
+      }
+    });
+    return newRow;
+  };
   // --- HANDLERS ---
   const handleCellChange = (monthIndex: number, field: string, value: string) => {
     const existingRow = currentYearData.find(d => d.monthIndex === monthIndex);
-    const updatedRow = {
+    let updatedRow = {
       ...(existingRow || {}),
       year: selectedYear,
       monthIndex: monthIndex,
       month: MONTH_NAMES[monthIndex],
       [field]: value
     };
+
+    // MAGIA: Ricalcola le formule e "fissa" il risultato prima di salvare
+    updatedRow = applyFormulas(updatedRow);
+
     const otherData = data.filter(d => !(d.year === selectedYear && d.monthIndex === monthIndex));
-    onDataChange([...otherData, updatedRow]);
+    updateDataWithHistory([...otherData, updatedRow]);
   };
 
   const handleInputFocus = (e: React.FocusEvent<HTMLInputElement>, rowIndex: number, colId: string) => {
-    if (activeRowIndex !== rowIndex) {
-      setActiveRowIndex(rowIndex);
-    }
+    if (activeRowIndex !== rowIndex) setActiveRowIndex(rowIndex);
+    if (activeColId !== colId) setActiveColId(colId);
+
     if (onCellFocus) onCellFocus(rowIndex, colId);
     e.target.select();
   };
@@ -383,21 +516,70 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
   // --- FUNZIONE CHE ESEGUE LA CANCELLAZIONE REALE ---
   const confirmClearRow = () => {
     if (rowToClear === null) return;
+    const meseNome = MONTH_NAMES[rowToClear]; // Salviamo il nome per il Toast
+
     const existingRow = currentYearData.find(d => d.monthIndex === rowToClear) || {};
-    const updatedRow = { ...existingRow, year: selectedYear, monthIndex: rowToClear, month: MONTH_NAMES[rowToClear] };
+    const updatedRow = { ...existingRow, year: selectedYear, monthIndex: rowToClear, month: meseNome };
     editableColumns.forEach(col => {
       if (col.id !== 'month' && col.id !== 'note') (updatedRow as any)[col.id] = 0;
     });
     const otherData = data.filter(d => !(d.year === selectedYear && d.monthIndex === rowToClear));
-    onDataChange([...otherData, updatedRow]);
+    updateDataWithHistory([...otherData, updatedRow]);
+
     setRowToClear(null); // Chiude il modale
+    triggerUndoToast(`Dati di ${meseNome} azzerati.`); // ✨ ACCENDE IL TOAST!
+  };
+  // --- FUNZIONI MENU CONTESTUALE ---
+  const handleContextMenu = (e: React.MouseEvent, rowIndex: number, colId: string) => {
+    e.preventDefault(); // Blocca il menu standard del browser
+
+    // Calcolo per evitare che il menu esca fuori dallo schermo
+    const menuWidth = 230;
+    const menuHeight = 200;
+
+    let clickX = e.clientX;
+    let clickY = e.clientY;
+
+    if (clickX + menuWidth > window.innerWidth) clickX -= menuWidth;
+    if (clickY + menuHeight > window.innerHeight) clickY -= menuHeight;
+
+    setContextMenu({
+      visible: true,
+      x: clickX,
+      y: clickY,
+      rowIndex,
+      colId
+    });
+    // Seleziona visivamente la cella
+    setActiveRowIndex(rowIndex);
+    setActiveColId(colId);
   };
 
+  const handleCopyCell = () => {
+    if (!contextMenu) return;
+    const { rowIndex, colId } = contextMenu;
+    const row = currentYearData.find(d => d.monthIndex === rowIndex) || {};
+    const val = (row as any)[colId] || '';
+    navigator.clipboard.writeText(val.toString());
+  };
+
+  const handlePasteCell = async () => {
+    if (!contextMenu) return;
+    try {
+      const text = await navigator.clipboard.readText();
+      const num = parseLocalFloat(text);
+      if (!isNaN(num)) {
+        handleCellChange(contextMenu.rowIndex, contextMenu.colId, text);
+      }
+    } catch (err) {
+      console.error("Errore incolla", err);
+    }
+  };
   const handleKeyDown = (e: React.KeyboardEvent, rowIndex: number, colId: string) => {
-    // --- 💡 CHICCA EXTRA: Tasto rapido "Svuota Mese" (Alt + C) ---
+    // --- Tasto rapido "Svuota Mese" (Alt + C) ---
     if (e.altKey && (e.key === 'c' || e.key === 'C')) {
       e.preventDefault();
-      setRowToClear(rowIndex); // Apre il modale bello al posto dell'alert!
+      setRowToClear(rowIndex);
       return;
     }
 
@@ -406,7 +588,6 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
 
     let nextRow = rowIndex;
     let nextColIdx = colIdx;
-    let forceScroll: 'left' | 'right' | null = null;
 
     switch (e.key) {
       case 'ArrowUp': nextRow = Math.max(0, rowIndex - 1); break;
@@ -418,24 +599,21 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
         if (colIdx >= editableColumns.length - 1) {
           nextColIdx = 0;
           nextRow = Math.min(11, rowIndex + 1);
-          forceScroll = 'left';
-        } else { nextColIdx = colIdx + 1; }
+        } else {
+          nextColIdx = colIdx + 1;
+        }
         break;
       case 'Tab':
         if (!e.shiftKey && colIdx >= editableColumns.length - 1) {
-          // Tab in avanti all'ultima colonna
           e.preventDefault();
           nextColIdx = 0;
           nextRow = Math.min(11, rowIndex + 1);
-          forceScroll = 'left';
         } else if (e.shiftKey && colIdx === 0) {
-          // Shift+Tab indietro dalla prima colonna
           e.preventDefault();
           nextColIdx = editableColumns.length - 1;
           nextRow = Math.max(0, rowIndex - 1);
-          forceScroll = 'right';
         } else {
-          return; // Per i salti normali tra celle, lascia fare nativamente al browser
+          return;
         }
         break;
       default: return;
@@ -446,39 +624,67 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
 
     const nextId = `input-${nextRow}-${editableColumns[nextColIdx].id}`;
 
-    requestAnimationFrame(() => {
+    setTimeout(() => {
       const nextEl = document.getElementById(nextId) as HTMLInputElement;
       if (nextEl) {
-        // 1. Diamo il focus bloccando lo scroll nativo (se il browser lo supporta)
+        // Focus istantaneo senza far saltare la pagina
         nextEl.focus({ preventScroll: true });
         nextEl.select();
 
-        if (forceScroll && tableContainerRef.current) {
-          const targetScroll = forceScroll === 'left' ? 0 : tableContainerRef.current.scrollWidth;
+        // --- MOTORE DI SCROLL FLUIDO CUSTOM (Ultra-Premium) ---
+        if (tableContainerRef.current) {
+          const container = tableContainerRef.current as any;
+          const cell = nextEl.closest('td');
 
-          // 2. OPZIONE NUCLEARE ANTI-BROWSER: Triplo blocco dello scroll
-          // A. Immediato
-          tableContainerRef.current.scrollLeft = targetScroll;
+          if (cell) {
+            const containerRect = container.getBoundingClientRect();
+            const cellRect = cell.getBoundingClientRect();
 
-          // B. Dopo il primo ricalcolo del layout (sconfigge lo scatto)
-          setTimeout(() => {
-            if (tableContainerRef.current) tableContainerRef.current.scrollLeft = targetScroll;
-          }, 10);
+            const stickyOffset = 110; // Larghezza colonna Mesi fissa
+            const lookAhead = 100; // Pixel di "respiro" visivo extra
 
-          // C. Colpo di grazia definitivo (sconfigge eventuali animazioni native)
-          setTimeout(() => {
-            if (tableContainerRef.current) {
-              // Rimuoviamo temporaneamente lo smooth scrolling se presente via CSS
-              tableContainerRef.current.style.scrollBehavior = 'auto';
-              tableContainerRef.current.scrollLeft = targetScroll;
-              tableContainerRef.current.style.scrollBehavior = ''; // Ripristina
+            let targetScroll = null;
+
+            // Calcolo direzione e target
+            if (cellRect.left < containerRect.left + stickyOffset) {
+              targetScroll = container.scrollLeft - ((containerRect.left + stickyOffset) - cellRect.left) - lookAhead;
+            } else if (cellRect.right > containerRect.right) {
+              targetScroll = container.scrollLeft + (cellRect.right - containerRect.right) + lookAhead;
             }
-          }, 50);
+
+            // Esecuzione Animazione Fluida a 60fps
+            if (targetScroll !== null) {
+              targetScroll = Math.max(0, targetScroll); // Non andare in negativo
+
+              // Cancella eventuali animazioni precedenti se digiti velocissimo
+              if (container._animId) cancelAnimationFrame(container._animId);
+
+              const startScroll = container.scrollLeft;
+              const distance = targetScroll - startScroll;
+              let startTime: number | null = null;
+              const duration = 120; // 120ms: il tempo perfetto tra velocità e morbidezza
+
+              const animateScroll = (currentTime: number) => {
+                if (!startTime) startTime = currentTime;
+                const elapsed = currentTime - startTime;
+                const progress = Math.min(elapsed / duration, 1);
+
+                // Curva Ease-Out Cubic (Decelerazione elegante)
+                const ease = 1 - Math.pow(1 - progress, 3);
+
+                container.scrollLeft = startScroll + distance * ease;
+
+                if (progress < 1) {
+                  container._animId = requestAnimationFrame(animateScroll);
+                }
+              };
+              container._animId = requestAnimationFrame(animateScroll);
+            }
+          }
         }
       }
-    });
+    }, 0);
   };
-
   const handlePaste = (e: React.ClipboardEvent, startRowIndex: number, startColId: string) => {
     e.preventDefault();
     const clipboardData = e.clipboardData.getData('text');
@@ -496,13 +702,131 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
         if (targetColIdx >= editableColumns.length) return;
         const targetColId = editableColumns[targetColIdx].id;
         const existingRowIndex = newData.findIndex(d => d.year === selectedYear && d.monthIndex === targetRowIdx);
-        if (existingRowIndex >= 0) { newData[existingRowIndex] = { ...newData[existingRowIndex], [targetColId]: value.trim() }; }
-        else { newData.push({ year: selectedYear, monthIndex: targetRowIdx, month: MONTH_NAMES[targetRowIdx], daysWorked: 0, daysVacation: 0, ticket: 0, [targetColId]: value.trim() }); }
+        if (existingRowIndex >= 0) {
+          let updated = { ...newData[existingRowIndex], [targetColId]: value.trim() };
+          newData[existingRowIndex] = applyFormulas(updated); // Applica Formula
+        }
+        else {
+          let newRow = { year: selectedYear, monthIndex: targetRowIdx, month: MONTH_NAMES[targetRowIdx], daysWorked: 0, daysVacation: 0, ticket: 0, [targetColId]: value.trim() };
+          newData.push(applyFormulas(newRow)); // Applica Formula
+        }
       });
     });
-    onDataChange(newData);
+    updateDataWithHistory(newData);
+  };
+  // --- FUNZIONI DRAG TO FILL OMNIDIREZIONALE ---
+  const handleDragStart = (e: React.MouseEvent, rowIndex: number, colIdx: number, cellValue: any) => {
+    if (e.button !== 0) return; // Solo click sinistro
+    e.preventDefault();
+    setDragSelection({ isDragging: true, startRow: rowIndex, endRow: rowIndex, startColIdx: colIdx, endColIdx: colIdx, startValue: cellValue ?? '' });
   };
 
+  const handleDragEnter = (rowIndex: number, colIdx: number) => {
+    if (dragSelection.isDragging) {
+      setDragSelection(prev => ({ ...prev, endRow: rowIndex, endColIdx: colIdx }));
+    }
+  };
+
+  const applyDragFill = useCallback(() => {
+    if (!dragSelection.isDragging) return;
+
+    const minRow = Math.min(dragSelection.startRow, dragSelection.endRow);
+    const maxRow = Math.max(dragSelection.startRow, dragSelection.endRow);
+    const minCol = Math.min(dragSelection.startColIdx, dragSelection.endColIdx);
+    const maxCol = Math.max(dragSelection.startColIdx, dragSelection.endColIdx);
+
+    const resetDragState = { isDragging: false, startRow: -1, endRow: -1, startColIdx: -1, endColIdx: -1, startValue: '' };
+
+    if (minRow === maxRow && minCol === maxCol) {
+      setDragSelection(resetDragState);
+      return;
+    }
+
+    let newData = [...data];
+    const val = dragSelection.startValue;
+
+    for (let r = minRow; r <= maxRow; r++) {
+      for (let c = minCol; c <= maxCol; c++) {
+        const targetCol = currentColumns[c];
+        if (targetCol.id === 'month' || targetCol.id === 'total' || targetCol.id === 'note' || targetCol.type === 'formula') continue;
+
+        const existingRowIndex = newData.findIndex(d => d.year === selectedYear && d.monthIndex === r);
+        if (existingRowIndex >= 0) {
+          let updated = { ...newData[existingRowIndex], [targetCol.id]: val };
+          newData[existingRowIndex] = applyFormulas(updated);
+        } else {
+          let newRow = {
+            id: Date.now().toString() + Math.random(), year: selectedYear, monthIndex: r, month: MONTH_NAMES[r],
+            daysWorked: 0, daysVacation: 0, ticket: 0, arretrati: 0, note: '', coeffTicket: 0, coeffPercepito: 0,
+            [targetCol.id]: val
+          };
+          newData.push(applyFormulas(newRow));
+        }
+      }
+    }
+
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    window.getSelection()?.removeAllRanges();
+    setActiveRowIndex(null);
+    setActiveColId(null);
+    updateDataWithHistory(newData);
+    setDragSelection(resetDragState);
+  }, [dragSelection, data, selectedYear, updateDataWithHistory, currentColumns]);
+
+  // Rilascio del Mouse (Per Drag-to-Fill e Selezione)
+  useEffect(() => {
+    const handleGlobalMouseUp = () => {
+      if (dragSelection.isDragging) applyDragFill();
+      setCellSelection(prev => prev.isSelecting ? { ...prev, isSelecting: false } : prev);
+    };
+    window.addEventListener('mouseup', handleGlobalMouseUp);
+    return () => window.removeEventListener('mouseup', handleGlobalMouseUp);
+  }, [dragSelection.isDragging, applyDragFill]);
+
+  // Ascoltatore Globale per la Cancellazione Massiva
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const isMultiSelection = cellSelection.startRow !== cellSelection.endRow || cellSelection.startColIdx !== cellSelection.endColIdx;
+
+      // Se premo Canc o Backspace ed ho selezionato più celle
+      if ((e.key === 'Delete' || e.key === 'Backspace') && cellSelection.active && isMultiSelection && !cellSelection.isSelecting) {
+        e.preventDefault();
+
+        const minRow = Math.min(cellSelection.startRow, cellSelection.endRow);
+        const maxRow = Math.max(cellSelection.startRow, cellSelection.endRow);
+        const minCol = Math.min(cellSelection.startColIdx, cellSelection.endColIdx);
+        const maxCol = Math.max(cellSelection.startColIdx, cellSelection.endColIdx);
+
+        let newData = [...data];
+        let changed = false;
+
+        for (let r = minRow; r <= maxRow; r++) {
+          for (let c = minCol; c <= maxCol; c++) {
+            const targetCol = currentColumns[c];
+            // Non cancelliamo colonne intoccabili
+            if (targetCol.id === 'month' || targetCol.id === 'total' || targetCol.id === 'note' || targetCol.type === 'formula') continue;
+
+            const existingRowIndex = newData.findIndex(d => d.year === selectedYear && d.monthIndex === r);
+            if (existingRowIndex >= 0) {
+              let updated = { ...newData[existingRowIndex], [targetCol.id]: '' };
+              newData[existingRowIndex] = applyFormulas(updated);
+              changed = true;
+            }
+          }
+        }
+
+        if (changed) {
+          updateDataWithHistory(newData);
+          triggerUndoToast("Valori delle celle cancellati."); // ✨ ACCENDE IL TOAST!
+        }
+        if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+        // Svuota la selezione
+        setCellSelection(prev => ({ ...prev, active: false }));
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [cellSelection, data, selectedYear, currentColumns, updateDataWithHistory]);
   const openNoteModal = (monthIndex: number, currentNote: string | undefined) => setNoteModal({ isOpen: true, monthIndex, text: currentNote || '' });
   const closeNoteModal = () => setNoteModal(prev => ({ ...prev, isOpen: false }));
   const saveNote = () => { if (noteModal.monthIndex !== -1) handleCellChange(noteModal.monthIndex, 'note', noteModal.text); closeNoteModal(); };
@@ -511,7 +835,7 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
 
   return (
     <>
-      <div className="flex flex-col h-full bg-white shadow-xl rounded-lg overflow-hidden border border-slate-200 select-none group/main-container">
+      <div className="flex flex-col h-full bg-white dark:bg-slate-900 shadow-xl rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 select-none group/main-container transition-colors duration-300">
         <style>{`
           /* Nasconde la scrollbar nativa dalla tabella principale */
           .hide-native-scrollbar::-webkit-scrollbar { display: none; }
@@ -522,10 +846,44 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
           .custom-scrollbar-x::-webkit-scrollbar-track { background: transparent; border-top: 1px solid transparent; }
           .custom-scrollbar-x::-webkit-scrollbar-thumb { background-color: transparent; border-radius: 8px; border: 4px solid transparent; background-clip: content-box; }
           
-          /* Hover: Appaiono SOLO quando passi sopra il contenitore .group/main-container */
+          /* --- TEMA CHIARO (Comportamento Standard) --- */
           .group\\/main-container:hover .custom-scrollbar-x::-webkit-scrollbar-track { background: #f8fafc; border-top: 1px solid #e2e8f0; }
           .group\\/main-container:hover .custom-scrollbar-x::-webkit-scrollbar-thumb { background-color: #cbd5e1; }
           .group\\/main-container:hover .custom-scrollbar-x::-webkit-scrollbar-thumb:hover { background-color: #94a3b8; }
+          
+          /* --- TEMA SCURO (Blindato) --- */
+          /* Usiamo html.dark e !important per distruggere ogni interferenza del tema chiaro */
+          html.dark .custom-scrollbar-x::-webkit-scrollbar-track,
+          html.dark .group\\/main-container:hover .custom-scrollbar-x::-webkit-scrollbar-track { 
+              background: #0f172a !important; 
+              border-top: 1px solid #1e293b !important; 
+          }
+          html.dark .group\\/main-container:hover .custom-scrollbar-x::-webkit-scrollbar-thumb { 
+              background-color: #22d3ee !important; /* Azzurro Elettrico Base */
+          }
+          html.dark .group\\/main-container:hover .custom-scrollbar-x::-webkit-scrollbar-thumb:hover { 
+              background-color: #06b6d4 !important; /* Azzurro Elettrico Hover (Più intenso) */
+          }
+             /* --- ANIMAZIONI DRAG TO FILL --- */
+          @keyframes border-march {
+            0% { background-position: 0 0, 10px 0, 100% 0, 0 100%; }
+            100% { background-position: 10px 0, 0 0, 100% 10px, 0 0; }
+          }
+          .drag-target-cell {
+            background-color: rgba(99, 102, 241, 0.15) !important;
+            box-shadow: inset 0 0 0 1px rgba(99, 102, 241, 0.8) !important;
+            transition: none !important; /* LA MAGIA: Spegne l'animazione per renderlo ISTANTANEO */
+          } 
+            /* --- GPU HARDWARE ACCELERATION (God Tier Fluidity) --- */
+          .gpu-scroll {
+            will-change: scroll-position, transform;
+            -webkit-transform: translate3d(0, 0, 0);
+            transform: translate3d(0, 0, 0);
+            backface-visibility: hidden;
+          }
+          .gpu-render {
+            contain: layout style; /* Isola la tabella: se cambia una cella, il browser non ricalcola l'intera pagina */
+          }
         `}</style>
 
         {/* --- HEADER --- */}
@@ -545,16 +903,40 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
               </button>
             ))}
 
-            {/* --- NUOVO TASTO MANUALE LEGALE (POSIZIONATO QUI) --- */}
-            <button
-              onClick={() => setLegalModalOpen(true)}
-              className="ml-auto flex items-center gap-2 px-4 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-200 hover:text-white rounded-full text-xs font-bold transition-all border border-slate-600 hover:border-slate-500 shadow-sm group"
-            >
-              <Scale size={14} className="text-amber-400 group-hover:scale-110 transition-transform" />
-              <span>Manuale Legale</span>
-            </button>
+            {/* --- GRUPPO TASTI DESTRA (UNDO + MANUALE LEGALE) --- */}
+            <div className="ml-auto flex items-center gap-2">
+              {/* TASTO UNDO (FRECCIA INDIETRO) - VERSIONE DEFINITIVA */}
+              <button
+                onClick={handleUndo}
+                disabled={history.length === 0}
+                className={`group relative flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all duration-300 overflow-hidden border ${history.length > 0
+                  ? 'text-indigo-700 bg-indigo-50 border-indigo-200 shadow-sm hover:shadow hover:bg-indigo-100 dark:bg-cyan-900/40 dark:text-cyan-300 dark:border-cyan-700/60 dark:hover:bg-cyan-800/60 active:scale-95'
+                  : 'text-slate-400 bg-transparent border-transparent cursor-default opacity-50 dark:text-slate-500'
+                  }`}
+                title="Annulla ultima modifica (Ctrl+Z)"
+              >
+                <Undo2 size={16} className={history.length > 0 ? 'group-active:-rotate-45 transition-transform duration-300' : ''} />
+                <span className="hidden sm:inline relative z-10">Annulla</span>
 
+                {/* Contatore Badge Incassato */}
+                {history.length > 0 && (
+                  <span className="flex h-4 min-w-[16px] items-center justify-center rounded-full bg-indigo-200/70 dark:bg-cyan-950/80 text-[10px] text-indigo-800 dark:text-cyan-200 font-black ml-1 px-1.5 shadow-inner transition-all">
+                    {history.length}
+                  </span>
+                )}
+              </button>
+
+              {/* TASTO MANUALE LEGALE */}
+              <button
+                onClick={() => setLegalModalOpen(true)}
+                className="flex items-center gap-2 px-4 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-200 hover:text-white rounded-full text-xs font-bold transition-all duration-300 border border-slate-600 hover:border-slate-500 shadow-sm group dark:bg-slate-800 dark:border-slate-700 dark:hover:bg-slate-700"
+              >
+                <Scale size={14} className="text-amber-400 group-hover:scale-110 transition-transform" />
+                <span>Manuale Legale</span>
+              </button>
+            </div>
           </div>
+
 
           <div className="flex items-center gap-4 pr-2 pl-4 border-l border-slate-600 shrink-0">
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} whileHover={{ y: -3 }} className="group flex flex-col items-end bg-white/10 backdrop-blur-md border border-white/10 px-4 py-2 rounded-xl shadow-lg cursor-default transition-all hover:shadow-blue-500/20 hover:border-blue-400/30">
@@ -575,10 +957,10 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
           </div>
         </div>
         {/* --- TICKER LEGALE (CORRETTO: NESSUNA SOVRAPPOSIZIONE) --- */}
-        <div className="bg-amber-50/80 border-b border-amber-100 py-1.5 px-4 flex items-center h-8 shrink-0 gap-4">
+        <div className="bg-amber-50/80 dark:bg-amber-900/20 border-b border-amber-100 dark:border-amber-900/50 py-1.5 px-4 flex items-center h-8 shrink-0 gap-4 transition-colors">
 
           {/* 1. ETICHETTA FISSA (Non si muove, ha priorità di spazio) */}
-          <div className="flex items-center gap-2 text-[10px] font-bold text-amber-700 uppercase tracking-widest shrink-0 z-20">
+          <div className="flex items-center gap-2 text-[10px] font-bold text-amber-700 dark:text-amber-400 uppercase tracking-widest shrink-0 z-20">
             <AlertTriangle size={12} className="animate-pulse" />
             <span className="whitespace-nowrap">Nota Metodologica:</span>
           </div>
@@ -586,14 +968,14 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
           {/* 2. AREA DI SCORRIMENTO (Occupa solo lo spazio rimanente a destra) */}
           <div className="flex-1 overflow-hidden relative h-full flex items-center">
 
-            {/* Sfumatura sinistra (per non tagliare il testo di netto vicino all'etichetta) */}
-            <div className="absolute left-0 top-0 bottom-0 w-6 bg-gradient-to-r from-amber-50 to-transparent z-10"></div>
+            {/* Sfumatura sinistra (perfetta per la dark mode) */}
+            <div className="absolute left-0 top-0 bottom-0 w-6 bg-gradient-to-r from-amber-50 dark:from-slate-900 to-transparent z-10"></div>
 
             {/* Sfumatura destra */}
-            <div className="absolute right-0 top-0 bottom-0 w-6 bg-gradient-to-l from-amber-50 to-transparent z-10"></div>
+            <div className="absolute right-0 top-0 bottom-0 w-6 bg-gradient-to-l from-amber-50 dark:from-slate-900 to-transparent z-10"></div>
 
             <motion.div
-              className="whitespace-nowrap text-[11px] font-medium text-amber-800 flex gap-12 pl-4" // pl-4 per dare respiro iniziale
+              className="whitespace-nowrap text-[11px] font-medium text-amber-800 dark:text-amber-200 flex gap-12 pl-4" // pl-4 per dare respiro iniziale
               animate={{ x: ["0%", "-50%"] }}
               transition={{ repeat: Infinity, duration: 40, ease: "linear" }}
             >
@@ -620,10 +1002,10 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
           </div>
         </div>
         {/* --- GHOST SCROLLBAR SUPERIORE --- */}
-        <div className="bg-white border-b border-slate-200 shrink-0 flex items-center justify-center">
+        <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 shrink-0 flex items-center justify-center transition-colors">
           <div
             ref={topScrollRef}
-            className="overflow-x-auto custom-scrollbar-x w-full"
+            className="overflow-x-auto custom-scrollbar-x w-full gpu-scroll"
             style={{ paddingLeft: '40px', paddingRight: '40px' }}
           >
             <div style={{ width: `${tableScrollWidth}px`, height: '1px' }}></div>
@@ -636,17 +1018,17 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
             onMouseDown={() => startScrolling('left')}
             onMouseUp={stopScrolling}
             onMouseLeave={stopScrolling}
-            className="w-10 bg-white border-r border-slate-200 z-30 flex items-center justify-center hover:bg-slate-100 transition-colors cursor-pointer group/arrow shadow-sm shrink-0"
+            className="w-10 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-700 z-30 flex items-center justify-center hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer group/arrow shadow-sm shrink-0"
           >
             <div className="opacity-0 group-hover/main-container:opacity-100 transition-opacity duration-300 transform group-hover/arrow:scale-110 group-active/arrow:scale-95">
               <ChevronLeft size={28} className="text-slate-400 group-hover/arrow:text-blue-600" />
             </div>
           </div>
 
-          <div ref={tableContainerRef} className="flex-1 overflow-auto hide-native-scrollbar scroll-smooth">
-            <table className="text-sm border-collapse table-fixed" style={{ minWidth: `${currentColumns.length * 100}px` }}>
-              <thead className="sticky top-0 z-20 shadow-sm">
-                <tr className="bg-slate-100 text-slate-600 border-b border-slate-300">
+          <div ref={tableContainerRef} className="flex-1 overflow-auto hide-native-scrollbar relative gpu-scroll">
+            <table className="text-sm border-collapse table-fixed relative gpu-render" style={{ minWidth: `${currentColumns.length * 100}px` }}>
+              <thead className="sticky top-0 z-[150] shadow-sm relative">
+                <tr className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-b border-slate-300 dark:border-slate-700 transition-colors">
                   {currentColumns.map((col, idx) => {
                     const detail = INDENNITA_DETAILS[col.id];
                     const isLastColumn = idx >= currentColumns.length - 2;
@@ -657,12 +1039,12 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
                     return (
                       <th key={col.id}
                         className={`
-                          p-2 font-bold text-center border-r border-slate-300 select-none 
-                          ${col.width ? col.width : 'w-24'} 
-                          ${col.id === 'total' ? 'bg-slate-200 text-slate-800' : ''} 
-                          ${idx === 0 ? 'sticky left-0 bg-slate-100 z-20 border-r-2 border-slate-300 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]' : ''}
-                          relative hover:!z-[1000]
-                        `}
+                         p-2 font-bold text-center border-r border-slate-300 dark:border-slate-700 select-none transition-colors
+                          ${col.width ? col.width : 'w-24'} 
+                          ${col.id === 'total' ? 'bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200' : ''} 
+                          ${idx === 0 ? 'sticky left-0 bg-slate-100 dark:bg-slate-800 border-r-2 border-slate-300 dark:border-slate-600 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] dark:shadow-[2px_0_5px_-2px_rgba(0,0,0,0.5)] z-[200]' : 'z-[150]'}
+                          relative hover:!z-[9999]
+                        `}
                       >
                         <div className="flex flex-col items-center justify-center leading-tight h-10 group/head relative">
                           <span className="truncate w-full block text-[11px] uppercase tracking-tight">{col.label.replace(/\(.*\)/, '')}</span>
@@ -670,13 +1052,17 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
                           {col.id !== 'month' && col.id !== 'total' && col.id !== 'arretrati' && (
                             <div className="flex items-center gap-1 mt-0.5">
                               {col.id !== 'daysWorked' && col.id !== 'daysVacation' && (
-                                <span className="text-xs font-mono font-bold text-slate-500 bg-slate-200/50 px-2 py-0.5 rounded border border-slate-300/50">{col.id}</span>
+                                <span className="text-xs font-mono font-bold text-slate-500 dark:text-cyan-400 bg-slate-200/50 dark:bg-slate-900/80 px-2 py-0.5 rounded border border-slate-300/50 dark:border-cyan-900/50 transition-colors">{col.id}</span>
                               )}
 
                               {detail && (
                                 <div className="relative">
                                   <Info size={11} className="text-slate-400 hover:text-blue-600 cursor-help transition-colors" />
-                                  <div className={`hidden group-hover/head:block absolute top-8 ${tooltipClass} w-64 p-0 bg-slate-800 text-white rounded-lg shadow-xl z-[1000] pointer-events-none text-left border border-slate-600 overflow-hidden`}>
+                                  {/* TOOLTIP CORRETTO: Appare dopo 0.3s ed è forzato sopra a TUTTO */}
+                                  <div className={`
+                                    opacity-0 invisible group-hover/head:opacity-100 group-hover/head:visible transition-all duration-300 delay-300 
+                                    absolute top-8 ${tooltipClass} w-64 p-0 bg-slate-800 text-white rounded-lg shadow-xl z-[99999] pointer-events-none text-left border border-slate-600 overflow-hidden
+                                  `}>
                                     <div className="bg-slate-900 px-3 py-2 border-b border-slate-600">
                                       <p className="text-[11px] font-bold text-white leading-tight">{detail.title}</p>
                                     </div>
@@ -703,7 +1089,7 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
                 </tr>
               </thead>
 
-              <tbody className="bg-white">
+              <tbody className={`bg-white dark:bg-slate-900 transition-colors duration-300 ${isScrolling ? 'pointer-events-none' : ''} ${dragSelection.isDragging ? 'select-none cursor-crosshair' : ''}`}>
                 {currentRows.map((row, rowIndex) => {
                   const rowTotal = calculateRowTotal(row);
                   const note = (row as any).note;
@@ -742,8 +1128,8 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
 
                   // Colore Riga Validazione
                   let rowClass = isActiveRow
-                    ? 'bg-indigo-100/70 shadow-[inset_4px_0_0_0_#4f46e5] ring-1 ring-indigo-300 z-20 relative transition-all duration-300'
-                    : 'group hover:bg-slate-50 transition-colors duration-150';
+                    ? 'bg-indigo-100/70 dark:bg-indigo-900/50 shadow-[inset_4px_0_0_0_#4f46e5] dark:shadow-[inset_4px_0_0_0_#818cf8] ring-1 ring-indigo-300 dark:ring-indigo-700 z-20 relative transition-all duration-300'
+                    : 'group hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors duration-150';
                   if (isDayCountError) rowClass = 'bg-orange-50 hover:bg-orange-100 ring-1 ring-orange-200 z-10 relative';
                   if (isDivisorError) rowClass = 'bg-red-50 hover:bg-red-100 ring-1 ring-red-200 z-10 relative';
 
@@ -760,29 +1146,56 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
 
                         const tooltipClass = isLastColumn ? "right-full mr-1" : "left-full ml-1";
 
+                        // Calcoli per la SELEZIONE MULTIPLA (Cancellazione)
+                        const selMinRow = Math.min(cellSelection.startRow, cellSelection.endRow);
+                        const selMaxRow = Math.max(cellSelection.startRow, cellSelection.endRow);
+                        const selMinCol = Math.min(cellSelection.startColIdx, cellSelection.endColIdx);
+                        const selMaxCol = Math.max(cellSelection.startColIdx, cellSelection.endColIdx);
+                        const isSelectedCell = cellSelection.active && rowIndex >= selMinRow && rowIndex <= selMaxRow && colIndex >= selMinCol && colIndex <= selMaxCol;
+
+                        // Calcoli per il Drag 2D (Fill)
+                        const minRow = Math.min(dragSelection.startRow, dragSelection.endRow);
+                        const maxRow = Math.max(dragSelection.startRow, dragSelection.endRow);
+                        const minCol = Math.min(dragSelection.startColIdx, dragSelection.endColIdx);
+                        const maxCol = Math.max(dragSelection.startColIdx, dragSelection.endColIdx);
+
+                        const isInDragRange = dragSelection.isDragging && rowIndex >= minRow && rowIndex <= maxRow && colIndex >= minCol && colIndex <= maxCol;
+                        const isDragStartCell = dragSelection.isDragging && rowIndex === dragSelection.startRow && colIndex === dragSelection.startColIdx;
+                        const isCellActive = activeRowIndex === rowIndex && activeColId === col.id;
+
                         return (
-                          <td key={col.id} className={`
-                                border-r border-b border-slate-300 p-0 relative
-                                ${colIndex === 0 ? 'sticky left-0 bg-white font-semibold text-slate-700 z-10 border-r-2 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]' : ''}
-                                /* Overrides per errori validazione sulla prima colonna */
-                                ${(isDayCountError || isDivisorError) && colIndex === 0 ? (isDivisorError ? '!bg-red-100 text-red-800' : '!bg-orange-100 text-orange-800') : ''}
-                                ${isActiveRow && colIndex === 0 && !isDayCountError && !isDivisorError ? '!bg-indigo-100 text-indigo-800' : ''}
-                                
-                                ${isTotal ? 'bg-slate-50 font-bold text-slate-800 text-right pr-2' : ''}
-                                ${isVacation ? 'bg-amber-50/20' : ''}
-                                ${isVacationWarning ? 'ring-2 ring-inset ring-red-400/50' : ''}
-                                
-                                hover:!z-[1000]
-                              `}
+                          <td
+                            key={col.id}
+                            onMouseDown={(e) => handleCellMouseDown(e, rowIndex, colIndex)}
+                            onMouseEnter={() => {
+                              handleDragEnter(rowIndex, colIndex);
+                              handleCellMouseEnter(rowIndex, colIndex);
+                            }}
+                            onContextMenu={(e) => handleContextMenu(e, rowIndex, col.id)}
+                            className={`
+                                border-r border-b border-slate-300 dark:border-slate-700 p-0 relative transition-colors
+                                ${colIndex === 0 ? 'sticky left-0 bg-white dark:bg-slate-900 font-semibold text-slate-700 dark:text-slate-300 z-20 border-r-2 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] dark:shadow-[2px_0_5px_-2px_rgba(0,0,0,0.5)]' : ''}
+                                ${(isDayCountError || isDivisorError) && colIndex === 0 ? (isDivisorError ? '!bg-red-100 dark:!bg-red-900/60 text-red-800 dark:text-red-300' : '!bg-orange-100 dark:!bg-orange-900/60 text-orange-800 dark:text-orange-300') : ''}
+                                ${isActiveRow && colIndex === 0 && !isDayCountError && !isDivisorError ? '!bg-indigo-100 dark:!bg-indigo-900/60 text-indigo-800 dark:text-cyan-300' : ''}
+                                ${isTotal ? 'bg-slate-50 dark:bg-slate-800/80 font-bold text-slate-800 dark:text-cyan-100 text-right pr-2' : ''}
+                                ${isVacation ? 'bg-amber-50/20' : ''}
+                                ${isVacationWarning ? 'ring-2 ring-inset ring-red-400/50' : ''}
+                                ${isInDragRange && !isDragStartCell ? 'drag-target-cell' : ''}
+                                ${isSelectedCell && !dragSelection.isDragging ? 'bg-indigo-100/60 dark:bg-indigo-900/50 ring-1 ring-inset ring-indigo-400' : ''}
+                                hover:!z-[1000]
+                              `}
                           >
                             {isMonth ? (
                               <div
-                                className="flex items-center justify-between px-3 h-full w-full cursor-pointer hover:bg-slate-100 transition-colors"
-                                onClick={() => setActiveRowIndex(isActiveRow ? null : rowIndex)}
+                                className="flex items-center justify-between px-3 h-full w-full cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                                onClick={() => {
+                                  // ✨ FIX: Ora si accende/spegne in modo infallibile e pulisce le selezioni azzurre!
+                                  setActiveRowIndex(isActiveRow ? null : rowIndex);
+                                  setCellSelection(prev => ({ ...prev, active: false }));
+                                }}
                                 title="Clicca per bloccare/sbloccare l'evidenziatore su questo mese"
                               >
                                 <div className="flex items-center gap-2 overflow-hidden relative group/ai">
-                                  {/* Icone Errore Validazione e AUDITOR AI */}
                                   {isDivisorError ? (
                                     <div className="text-red-600 animate-pulse" title="ERRORE: Indennità presenti senza giorni lavorati"><AlertCircle size={14} /></div>
                                   ) : isDayCountError ? (
@@ -793,9 +1206,12 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
                                     <div className="text-emerald-500"><CheckCircle2 size={14} /></div>
                                   ) : null}
 
-                                  {/* TOOLTIP AUDITOR AI HOVER (Si apre passando sopra al mese) */}
                                   {hasAiWarning && (
-                                    <div className="hidden group-hover/ai:block absolute left-6 top-6 w-48 p-2 bg-slate-900 text-white text-[10px] rounded shadow-xl z-[9999] whitespace-normal leading-tight border border-slate-700">
+                                    <div className={`
+                                      opacity-0 invisible group-hover/ai:opacity-100 group-hover/ai:visible transition-all duration-300 delay-500 
+                                      absolute left-full ml-2 ${rowIndex > 7 ? 'bottom-0' : 'top-0'} 
+                                      w-48 p-2 bg-slate-900 text-white text-[10px] rounded shadow-xl z-[9999] whitespace-normal leading-tight border border-slate-700 pointer-events-none
+                                    `}>
                                       <span className="font-bold text-red-400 block mb-1">Avviso AI:</span>
                                       {aiWarning}
                                     </div>
@@ -803,7 +1219,7 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
 
                                   <div className="text-xs font-bold uppercase tracking-wide truncate max-w-[70px]" title={note}>{MONTH_NAMES[rowIndex]}</div>
                                 </div>
-                                <button onClick={() => openNoteModal(rowIndex, note)} tabIndex={-1} className={`p-1.5 rounded-lg transition-all focus:outline-none ${note ? 'text-amber-600 bg-amber-100 hover:bg-amber-200 ring-1 ring-amber-300' : 'text-slate-300 hover:text-indigo-500 hover:bg-indigo-50'}`}><MessageSquareText className="w-3.5 h-3.5" strokeWidth={note ? 2.5 : 2} /></button>
+                                <button onClick={() => openNoteModal(rowIndex, note)} tabIndex={-1} className={`p-1.5 rounded-lg transition-all focus:outline-none ${note ? 'text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/40 hover:bg-amber-200 dark:hover:bg-amber-900/60 ring-1 ring-amber-300 dark:ring-amber-700/50' : 'text-slate-300 dark:text-slate-600 hover:text-indigo-500 dark:hover:text-cyan-400 hover:bg-indigo-50 dark:hover:bg-slate-700'}`}><MessageSquareText className="w-3.5 h-3.5" strokeWidth={note ? 2.5 : 2} /></button>
                               </div>
                             ) : isTotal ? (
                               <div className="w-full h-full flex items-center justify-end px-2 tabular-nums text-xs">{rowTotal !== 0 ? formatCurrency(rowTotal) : '-'}</div>
@@ -814,57 +1230,49 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
                                   type="text"
                                   inputMode="decimal"
                                   autoComplete="off"
+                                  disabled={col.type === 'formula'}
                                   className={`
-                                        w-full h-full bg-transparent px-2 text-right outline-none transition-all tabular-nums text-xs placeholder:text-transparent
-                                        focus:bg-white focus:z-20 focus:ring-2 focus:ring-indigo-500 focus:text-indigo-700 font-medium hover:bg-slate-50/80
-                                        ${cellValue ? 'text-slate-900' : 'text-slate-500'}
-                                        ${isVacationWarning
-                                      ? 'text-red-600 font-black decoration-4 decoration-red-500 bg-[linear-gradient(45deg,transparent_45%,rgba(255,0,0,0.3)_50%,transparent_55%)]'
-                                      : ''}
-                                        ${!isVacation && col.id === 'daysWorked' ? 'text-blue-700 font-bold' : ''}
-                                      `}
+                                        w-full h-full bg-transparent px-2 text-right outline-none transition-colors duration-75 tabular-nums text-xs placeholder:text-transparent
+                                        ${col.type === 'formula'
+                                      ? 'cursor-not-allowed bg-indigo-50/50 dark:bg-indigo-900/10 text-indigo-700 font-black italic'
+                                      : `focus:bg-white dark:focus:bg-slate-950 focus:z-20 focus:ring-2 focus:ring-indigo-500 dark:focus:ring-cyan-500 focus:text-indigo-700 dark:focus:text-cyan-300 font-medium hover:bg-slate-50/80 dark:hover:bg-slate-800/80
+                                               ${cellValue ? 'text-slate-900 dark:text-cyan-400' : 'text-slate-500 dark:text-slate-600'}`
+                                    }
+                                        ${isVacationWarning ? 'text-red-600 dark:text-red-400 font-black decoration-4 decoration-red-500 bg-[linear-gradient(45deg,transparent_45%,rgba(255,0,0,0.3)_50%,transparent_55%)]' : ''}
+                                        ${!isVacation && col.id === 'daysWorked' ? 'text-blue-700 dark:text-blue-400 font-bold' : ''}
+                                        ${dragSelection.isDragging || cellSelection.isSelecting ? 'pointer-events-none' : ''}
+                                      `}
                                   placeholder="0"
-                                  value={cellValue ?? ''}
+                                  value={col.type === 'formula' && cellValue !== 0 ? formatCurrency(cellValue) : (cellValue ?? '')}
                                   onChange={(e) => handleCellChange(rowIndex, col.id, e.target.value)}
                                   onFocus={(e) => handleInputFocus(e, rowIndex, col.id)}
-
                                   onKeyDown={(e) => handleKeyDown(e, rowIndex, col.id)}
                                   onPaste={(e) => handlePaste(e, rowIndex, col.id)}
                                 />
 
-                                {/* --- TOOLTIP GENERALE --- */}
-                                {!isVacationWarning && detail && (
-                                  <div className={`hidden group-hover/cell:block absolute top-0 ${tooltipClass} w-60 bg-white/95 backdrop-blur border border-slate-200 shadow-[0_4px_20px_-5px_rgba(0,0,0,0.15)] rounded-lg z-[1000] pointer-events-none overflow-hidden`}>
-                                    <div className="px-3 py-2 bg-indigo-50 border-b border-indigo-100 flex items-center gap-2">
-                                      <div className="bg-white p-1 rounded-md shadow-sm text-indigo-600 border border-indigo-100">
-                                        <BookOpen size={10} />
-                                      </div>
-                                      <span className="text-[10px] font-bold text-indigo-800 uppercase tracking-wide">Dettaglio Voce</span>
-                                    </div>
-                                    <div className="p-3">
-                                      <p className="text-[11px] font-bold text-slate-800 mb-1 leading-tight">{detail.title}</p>
-                                      <p className="text-[10px] text-slate-500 mb-3 leading-snug border-b border-slate-100 pb-2">
-                                        {detail.explanation}
-                                      </p>
-                                      <div className="flex gap-2 items-start bg-slate-50 p-2 rounded border border-slate-100">
-                                        <span className="text-xs">📍</span>
-                                        <div>
-                                          <span className="text-[9px] font-bold text-slate-400 uppercase block mb-0.5">Posizione Busta Paga</span>
-                                          <span className="text-[10px] text-slate-600 leading-tight block">{detail.location}</span>
-                                        </div>
-                                      </div>
-                                    </div>
-                                  </div>
+                                {/* QUADRATINO MAGICO PER IL DRAG-TO-FILL */}
+                                {isCellActive && !dragSelection.isDragging && !cellSelection.isSelecting && col.type !== 'formula' && (
+                                  <div
+                                    onMouseDown={(e) => { e.stopPropagation(); handleDragStart(e, rowIndex, colIndex, cellValue); }}
+                                    className="drag-handle absolute -bottom-[3px] -right-[3px] w-2.5 h-2.5 bg-indigo-500 dark:bg-cyan-500 border border-white dark:border-slate-900 cursor-crosshair z-[50] shadow-sm hover:scale-125 transition-transform"
+                                    title="Trascina per copiare i valori in ogni direzione"
+                                  ></div>
                                 )}
 
+
                                 {/* --- TOOLTIP INTELLIGENTE FERIE --- */}
-                                {isVacationWarning && (
+                                {isVacationWarning && !dragSelection.isDragging && (
                                   <>
                                     <div className="absolute top-0.5 left-0.5 z-10 pointer-events-none">
                                       <AlertCircle className="w-3.5 h-3.5 text-red-500 fill-red-100" />
                                     </div>
 
-                                    <div className={`hidden group-hover/cell:block absolute top-6 ${tooltipClass === 'left-full ml-1' ? 'left-0' : 'right-0'} w-72 p-3 bg-slate-900/95 text-white text-[11px] rounded-lg shadow-2xl z-[1000] border border-slate-700 backdrop-blur-sm pointer-events-none`}>
+                                    {/* NUOVO COMPORTAMENTO: Ritardo 0.5s, Sfumatura, Direzione Dinamica */}
+                                    <div className={`
+                                      opacity-0 invisible group-hover/cell:opacity-100 group-hover/cell:visible transition-all duration-300 delay-500 
+                                      absolute ${rowIndex > 7 ? 'bottom-full mb-2' : 'top-full mt-2'} ${tooltipClass === 'left-full ml-1' ? 'left-0' : 'right-0'} 
+                                      w-72 p-3 bg-slate-900/95 text-white text-[11px] rounded-lg shadow-2xl z-[9999] border border-slate-700 backdrop-blur-sm pointer-events-none
+                                    `}>
                                       <div className="flex items-center gap-1.5 font-bold text-amber-400 mb-2 border-b border-slate-700 pb-1.5 uppercase tracking-wider text-[10px]">
                                         <AlertCircle size={12} /> Soglia Legale Superata
                                       </div>
@@ -896,23 +1304,48 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
                 })}
               </tbody>
 
-              <tfoot className="sticky bottom-0 z-20 bg-slate-50 border-t-2 border-slate-300 shadow-[0_-2px_4px_rgba(0,0,0,0.05)]">
-                <tr className="font-bold text-slate-800">
+              <tfoot className="sticky bottom-0 z-20 bg-slate-50 dark:bg-slate-800 border-t-2 border-slate-300 dark:border-slate-600 shadow-[0_-2px_4px_rgba(0,0,0,0.05)] dark:shadow-[0_-2px_8px_rgba(0,0,0,0.6)]">
+                <tr className="font-bold text-slate-800 dark:text-slate-200">
                   {currentColumns.map((col, index) => {
-                    if (col.id === 'month') return <td key="total-label" className="sticky left-0 bg-amber-200 border-r-2 border-slate-300 px-3 py-3 text-left text-xs uppercase tracking-wider z-20 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">TOTALE {selectedYear}</td>;
-                    const totalVal = columnTotals[col.id];
+                    if (col.id === 'month') return <td key="total-label" className="sticky left-0 bg-amber-200 dark:bg-amber-600 border-r-2 border-slate-300 dark:border-slate-700 px-3 py-3 text-left text-xs uppercase tracking-wider z-20 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] dark:shadow-[2px_0_5px_-2px_rgba(0,0,0,0.5)]">TOTALE {selectedYear}</td>;
+
+                    const totalVal = columnTotals[col.id] || 0;
+
+                    // FIX 1: Ferie (Massimo 2 decimali)
                     if (col.id === 'daysVacation') {
-                      const totReale = columnTotals['daysVacation'];
-                      const totUtile = Math.min(totReale, TETTO_FERIE);
-                      return (<td key={col.id} className="border-r border-slate-300 px-2 py-3 text-right bg-amber-100/50"><div className="flex flex-col items-end leading-tight"><span className="text-[10px] text-slate-500 font-normal">Tot: {formatInteger(totReale)}</span><span className="text-xs font-black text-slate-800">Utili: {formatInteger(totUtile)}</span></div></td>)
+                      const totUtile = Math.min(totalVal, TETTO_FERIE);
+                      const formattedReale = totalVal !== 0 ? Number(totalVal).toLocaleString('it-IT', { maximumFractionDigits: 2 }) : '-';
+                      const formattedUtile = Number(totUtile).toLocaleString('it-IT', { maximumFractionDigits: 2 });
+                      return (
+                        <td key={col.id} className="border-r border-slate-300 dark:border-slate-700 px-2 py-3 text-right bg-amber-100/50 dark:bg-amber-900/30">
+                          <div className="flex flex-col items-end leading-tight">
+                            <span className="text-[10px] text-slate-500 dark:text-slate-400 font-normal">Tot: {formattedReale}</span>
+                            <span className="text-xs font-black text-slate-800 dark:text-amber-400">Utili: {formattedUtile}</span>
+                          </div>
+                        </td>
+                      );
                     }
-                    const cellBg = col.id === 'total' ? 'bg-slate-200 text-slate-900' : 'bg-amber-100/50';
-                    return <td key={`total-${col.id}`} className={`border-r border-slate-300 px-2 py-3 text-right tabular-nums text-xs ${cellBg}`}>{col.type === 'integer' ? (totalVal !== 0 ? formatInteger(totalVal) : '-') : (totalVal && totalVal !== 0 ? formatCurrency(totalVal) : '-')}</td>;
+
+                    // FIX 2: Giorni Lavorati (Massimo 2 decimali, COLORE STANDARD RIPRISTINATO)
+                    if (col.id === 'daysWorked') {
+                      const formattedReale = totalVal !== 0 ? Number(totalVal).toLocaleString('it-IT', { maximumFractionDigits: 2 }) : '-';
+                      return (
+                        <td key={col.id} className="border-r border-slate-300 dark:border-slate-700 px-2 py-3 text-right tabular-nums text-xs bg-amber-100/50 dark:bg-amber-900/20 text-slate-800 dark:text-slate-200">
+                          {formattedReale}
+                        </td>
+                      );
+                    }
+
+                    // Tutte le altre colonne
+                    const cellBg = col.id === 'total' ? 'bg-slate-200 dark:bg-slate-700 text-slate-900 dark:text-slate-100' : 'bg-amber-100/50 dark:bg-amber-900/20';
+                    return <td key={`total-${col.id}`} className={`border-r border-slate-300 dark:border-slate-700 px-2 py-3 text-right tabular-nums text-xs transition-colors ${cellBg}`}>
+                      {col.type === 'integer' ? (totalVal !== 0 ? formatInteger(totalVal) : '-') : (totalVal && totalVal !== 0 ? formatCurrency(totalVal) : '-')}
+                    </td>;
                   })}
                 </tr>
                 <tr>
-                  <td colSpan={100} className="p-2 bg-slate-50 border-t border-slate-200 text-[10px] text-slate-500 italic">
-                    <div className="flex items-center gap-2"><Info className="w-3 h-3" /><span>Nota: I giorni di ferie eccedenti la soglia legale di {TETTO_FERIE} (rif. Cass. 20216/2022) sono evidenziati in rosso ed esclusi dal calcolo.</span></div>
+                  <td colSpan={100} className="p-2 bg-slate-50 dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 text-[10px] text-slate-500 dark:text-slate-400 italic transition-colors">
+                    <div className="flex items-center gap-2"><Info className="w-3 h-3 text-slate-400 dark:text-slate-500" /><span>Nota: I giorni di ferie eccedenti la soglia legale di {TETTO_FERIE} (rif. Cass. 20216/2022) sono evidenziati in rosso ed esclusi dal calcolo.</span></div>
                   </td>
                 </tr>
               </tfoot>
@@ -923,7 +1356,7 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
             onMouseDown={() => startScrolling('right')}
             onMouseUp={stopScrolling}
             onMouseLeave={stopScrolling}
-            className="w-10 bg-white border-l border-slate-200 z-30 flex items-center justify-center hover:bg-slate-100 transition-colors cursor-pointer group/arrow shadow-sm shrink-0"
+            className="w-10 bg-white dark:bg-slate-900 border-l border-slate-200 dark:border-slate-700 z-30 flex items-center justify-center hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer group/arrow shadow-sm shrink-0"
           >
             <div className="opacity-0 group-hover/main-container:opacity-100 transition-opacity duration-300 transform group-hover/arrow:scale-110 group-active/arrow:scale-95">
               <ChevronRight size={28} className="text-slate-400 group-hover/arrow:text-blue-600" />
@@ -932,10 +1365,10 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
 
         </div>
         {/* --- GHOST SCROLLBAR INFERIORE (Sync) --- */}
-        <div className="bg-white border-t border-slate-200 shrink-0 flex items-center justify-center">
+        <div className="bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-700 shrink-0 flex items-center justify-center transition-colors">
           <div
             ref={bottomScrollRef}
-            className="overflow-x-auto custom-scrollbar-x w-full"
+            className="overflow-x-auto custom-scrollbar-x w-full gpu-scroll"
             style={{ paddingLeft: '40px', paddingRight: '40px' }}
           >
             <div style={{ width: `${tableScrollWidth}px`, height: '1px' }}></div>
@@ -946,19 +1379,19 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
         <AnimatePresence>
           {noteModal.isOpen && (
             <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" onClick={closeNoteModal}>
-              <motion.div initial={{ scale: 0.9, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0 }} className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden border border-slate-200" onClick={(e) => e.stopPropagation()}>
-                <div className="px-6 py-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
-                  <div className="flex items-center gap-3"><div className="p-2 bg-amber-100 rounded-lg text-amber-600"><MessageSquareText className="w-5 h-5" /></div><div><h3 className="font-bold text-slate-800">Nota Mensile</h3><p className="text-xs text-slate-500 uppercase tracking-wider">{noteModal.monthIndex >= 0 ? MONTH_NAMES[noteModal.monthIndex] : ''} {selectedYear}</p></div></div>
-                  <button onClick={closeNoteModal} className="p-2 hover:bg-slate-200 rounded-full text-slate-400 hover:text-slate-600 transition-colors"><X className="w-5 h-5" /></button>
+              <motion.div initial={{ scale: 0.9, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0 }} className="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-700" onClick={(e) => e.stopPropagation()}>
+                <div className="px-6 py-4 bg-slate-50 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center">
+                  <div className="flex items-center gap-3"><div className="p-2 bg-amber-100 dark:bg-amber-900/40 rounded-lg text-amber-600 dark:text-amber-400"><MessageSquareText className="w-5 h-5" /></div><div><h3 className="font-bold text-slate-800 dark:text-white">Nota Mensile</h3><p className="text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wider">{noteModal.monthIndex >= 0 ? MONTH_NAMES[noteModal.monthIndex] : ''} {selectedYear}</p></div></div>
+                  <button onClick={closeNoteModal} className="p-2 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-white transition-colors"><X className="w-5 h-5" /></button>
                 </div>
                 <div className="p-6">
-                  <label className="block text-sm font-semibold text-slate-600 mb-2">Descrizione Evento</label>
-                  <textarea value={noteModal.text} onChange={(e) => setNoteModal(prev => ({ ...prev, text: e.target.value }))} className="w-full h-32 px-4 py-3 rounded-xl border border-slate-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none resize-none text-slate-700 text-sm transition-all" placeholder="Scrivi qui il motivo..." autoFocus />
-                  <div className="mt-4"><p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Inserimento Rapido</p><div className="flex flex-wrap gap-2">{QUICK_TAGS.map(tag => (<button key={tag} onClick={() => addTag(tag)} className="flex items-center gap-1 px-3 py-1.5 bg-slate-100 hover:bg-indigo-50 text-slate-600 hover:text-indigo-600 rounded-lg text-xs font-medium transition-colors border border-slate-200 hover:border-indigo-200"><Tag className="w-3 h-3" />{tag}</button>))}</div></div>
+                  <label className="block text-sm font-semibold text-slate-600 dark:text-slate-300 mb-2">Descrizione Evento</label>
+                  <textarea value={noteModal.text} onChange={(e) => setNoteModal(prev => ({ ...prev, text: e.target.value }))} className="w-full h-32 px-4 py-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 focus:border-indigo-500 dark:focus:border-cyan-500 focus:ring-2 focus:ring-indigo-200 dark:focus:ring-cyan-900 outline-none resize-none text-slate-700 dark:text-slate-200 text-sm transition-all placeholder-slate-400 dark:placeholder-slate-600" placeholder="Scrivi qui il motivo..." autoFocus />
+                  <div className="mt-4"><p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Inserimento Rapido</p><div className="flex flex-wrap gap-2">{QUICK_TAGS.map(tag => (<button key={tag} onClick={() => addTag(tag)} className="flex items-center gap-1 px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-cyan-900/30 text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-cyan-400 rounded-lg text-xs font-medium transition-colors border border-slate-200 dark:border-slate-700 hover:border-indigo-200 dark:hover:border-cyan-800"><Tag className="w-3 h-3" />{tag}</button>))}</div></div>
                 </div>
-                <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex justify-between items-center">
-                  <button onClick={clearNote} className="flex items-center gap-2 px-4 py-2 text-red-500 hover:bg-red-50 rounded-xl text-sm font-bold transition-colors"><Eraser className="w-4 h-4" /> Pulisci</button>
-                  <div className="flex gap-3"><button onClick={closeNoteModal} className="px-4 py-2 text-slate-500 hover:text-slate-700 font-bold text-sm">Annulla</button><button onClick={saveNote} className="flex items-center gap-2 px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold shadow-lg shadow-indigo-500/30 transition-all active:scale-95"><Save className="w-4 h-4" /> Salva Nota</button></div>
+                <div className="px-6 py-4 bg-slate-50 dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 flex justify-between items-center">
+                  <button onClick={clearNote} className="flex items-center gap-2 px-4 py-2 text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-xl text-sm font-bold transition-colors"><Eraser className="w-4 h-4" /> Pulisci</button>
+                  <div className="flex gap-3"><button onClick={closeNoteModal} className="px-4 py-2 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-white font-bold text-sm transition-colors">Annulla</button><button onClick={saveNote} className="flex items-center gap-2 px-6 py-2 bg-indigo-600 dark:bg-cyan-600 hover:bg-indigo-700 dark:hover:bg-cyan-500 text-white rounded-xl font-bold shadow-lg shadow-indigo-500/30 dark:shadow-cyan-900/40 transition-all active:scale-95"><Save className="w-4 h-4" /> Salva Nota</button></div>
                 </div>
               </motion.div>
             </div>
@@ -969,58 +1402,58 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
         <AnimatePresence>
           {legalModalOpen && (
             <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" onClick={() => setLegalModalOpen(false)}>
-              <motion.div initial={{ scale: 0.9, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0 }} className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden border border-slate-200 flex flex-col max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
+              <motion.div initial={{ scale: 0.9, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0 }} className="bg-white dark:bg-slate-900 w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-700 flex flex-col max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
 
                 {/* Header Modale */}
-                <div className="px-6 py-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center shrink-0">
+                <div className="px-6 py-4 bg-slate-50 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center shrink-0 transition-colors">
                   <div className="flex items-center gap-3">
-                    <div className="p-2 bg-indigo-100 rounded-lg text-indigo-600"><Scale className="w-6 h-6" /></div>
+                    <div className="p-2 bg-indigo-100 dark:bg-indigo-900/50 rounded-lg text-indigo-600 dark:text-indigo-400"><Scale className="w-6 h-6" /></div>
                     <div>
-                      <h3 className="font-bold text-slate-800 text-lg">Manuale Legale & Riferimenti</h3>
-                      <p className="text-xs text-slate-500 uppercase tracking-wider">Perizia Tecnica Ferie non Godute</p>
+                      <h3 className="font-bold text-slate-800 dark:text-white text-lg">Manuale Legale & Riferimenti</h3>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wider">Perizia Tecnica Ferie non Godute</p>
                     </div>
                   </div>
-                  <button onClick={() => setLegalModalOpen(false)} className="p-2 hover:bg-slate-200 rounded-full text-slate-400 hover:text-slate-600 transition-colors"><X className="w-6 h-6" /></button>
+                  <button onClick={() => setLegalModalOpen(false)} className="p-2 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-white transition-colors"><X className="w-6 h-6" /></button>
                 </div>
 
                 {/* Contenuto Scrollabile */}
                 <div className="p-8 overflow-y-auto space-y-8">
 
                   {/* Sezione 1: Art. 64 */}
-                  <div className="bg-slate-50 p-6 rounded-xl border border-slate-200">
-                    <div className="flex items-center gap-2 mb-3 text-indigo-700">
+                  <div className="bg-slate-50 dark:bg-slate-800/50 p-6 rounded-xl border border-slate-200 dark:border-slate-700 transition-colors">
+                    <div className="flex items-center gap-2 mb-3 text-indigo-700 dark:text-indigo-400">
                       <BookOpen size={20} />
                       <h4 className="font-bold text-sm uppercase tracking-wider">Articolo 64 CCNL Mobilità</h4>
                     </div>
-                    <p className="text-sm text-slate-700 leading-relaxed text-justify mb-4">
+                    <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed text-justify mb-4">
                       "Durante le ferie il lavoratore ha diritto alla retribuzione che avrebbe percepito se avesse lavorato,
                       comprensiva delle indennità fisse e variabili legate alla modalità di esecuzione della prestazione."
                     </p>
-                    <div className="text-xs text-slate-500 border-t border-slate-200 pt-3 italic">
+                    <div className="text-xs text-slate-500 dark:text-slate-400 border-t border-slate-200 dark:border-slate-700 pt-3 italic">
                       Nota: Questo principio è stato rafforzato dalla giurisprudenza europea e dalla Corte di Cassazione,
                       impedendo che il lavoratore subisca svantaggi economici durante il riposo.
                     </div>
                   </div>
 
                   {/* Sezione 2: Il Divisore */}
-                  <div className="bg-amber-50 p-6 rounded-xl border border-amber-200">
-                    <div className="flex items-center gap-2 mb-3 text-amber-700">
+                  <div className="bg-amber-50 dark:bg-amber-900/10 p-6 rounded-xl border border-amber-200 dark:border-amber-900/30 transition-colors">
+                    <div className="flex items-center gap-2 mb-3 text-amber-700 dark:text-amber-500">
                       <TrendingUp size={20} />
                       <h4 className="font-bold text-sm uppercase tracking-wider">Il Calcolo del Divisore</h4>
                     </div>
                     <div className="space-y-4">
-                      <p className="text-sm text-slate-700 leading-relaxed text-justify">
+                      <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed text-justify">
                         Il <strong>divisore</strong> è il numero utilizzato per trasformare il totale delle indennità mensili in una quota giornaliera media.
                       </p>
-                      <ul className="list-disc pl-5 space-y-2 text-sm text-slate-700">
+                      <ul className="list-disc pl-5 space-y-2 text-sm text-slate-700 dark:text-slate-300">
                         <li>
-                          <strong>Divisore Convenzionale (26):</strong> Spesso usato dalle aziende per semplicità, ma penalizzante se si lavorano meno giorni.
+                          <strong className="dark:text-white">Divisore Convenzionale (26):</strong> Spesso usato dalle aziende per semplicità, ma penalizzante se si lavorano meno giorni.
                         </li>
                         <li>
-                          <strong>Divisore Effettivo (Consigliato):</strong> Si utilizza il numero reale di giorni lavorati nel mese (es. 20, 21, 22). Questo metodo alza il valore medio giornaliero ed è quello preferito nei ricorsi (Cass. 20216/2022).
+                          <strong className="dark:text-white">Divisore Effettivo (Consigliato):</strong> Si utilizza il numero reale di giorni lavorati nel mese (es. 20, 21, 22). Questo metodo alza il valore medio giornaliero ed è quello preferito nei ricorsi (Cass. 20216/2022).
                         </li>
                       </ul>
-                      <div className="bg-white p-3 rounded border border-amber-100 text-xs font-mono text-slate-600">
+                      <div className="bg-white dark:bg-slate-950 p-3 rounded border border-amber-100 dark:border-amber-900/50 text-xs font-mono text-slate-600 dark:text-slate-400 transition-colors">
                         Formula: Totale Indennità / Giorni Lavorati = Media Giornaliera
                       </div>
                     </div>
@@ -1029,8 +1462,8 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
                 </div>
 
                 {/* Footer */}
-                <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 text-right shrink-0">
-                  <button onClick={() => setLegalModalOpen(false)} className="px-6 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-bold transition-all shadow-lg">Chiudi Manuale</button>
+                <div className="px-6 py-4 bg-slate-50 dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 text-right shrink-0 transition-colors">
+                  <button onClick={() => setLegalModalOpen(false)} className="px-6 py-2 bg-slate-800 dark:bg-slate-700 hover:bg-slate-700 dark:hover:bg-slate-600 text-white rounded-xl font-bold transition-all shadow-lg">Chiudi Manuale</button>
                 </div>
 
               </motion.div>
@@ -1073,6 +1506,102 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
                 </div>
               </motion.div>
             </div>
+          )}
+        </AnimatePresence>
+        {/* --- MENU CONTESTUALE (TASTO DESTRO) TRAMITE PORTAL - VERSIONE GOD TIER --- */}
+        {typeof document !== 'undefined' && createPortal(
+          <AnimatePresence>
+            {contextMenu && contextMenu.visible && (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.9, filter: 'blur(5px)' }}
+                animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }}
+                exit={{ opacity: 0, scale: 0.9, filter: 'blur(5px)' }}
+                transition={{ duration: 0.15, ease: "easeOut" }}
+                style={{ top: contextMenu.y, left: contextMenu.x }}
+                className="fixed z-[99999] w-64 bg-white/90 dark:bg-slate-900/80 backdrop-blur-2xl border border-slate-200/50 dark:border-slate-700/60 rounded-2xl shadow-[0_20px_40px_-10px_rgba(0,0,0,0.2)] dark:shadow-[0_20px_40px_-10px_rgba(0,0,0,0.8)] p-1.5 overflow-hidden text-sm font-medium flex flex-col gap-0.5"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {/* Header Menu */}
+                <div className="px-3 py-2.5 text-[10px] uppercase tracking-widest font-black text-slate-400 dark:text-slate-500 mb-1 flex justify-between items-center select-none">
+                  <span>Azioni Cella</span>
+                  <span className="text-indigo-600 dark:text-cyan-400 bg-indigo-100/50 dark:bg-cyan-900/30 px-2 py-0.5 rounded-md border border-indigo-200/50 dark:border-cyan-800/50">
+                    {MONTH_NAMES[contextMenu.rowIndex]}
+                  </span>
+                </div>
+
+                {/* Bottone Copia */}
+                <button onClick={() => { handleCopyCell(); setContextMenu(null); }} className="group relative w-full text-left px-3 py-2.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800/80 text-slate-700 dark:text-slate-200 flex items-center gap-3 transition-all duration-200">
+                  <div className="p-1.5 rounded-lg bg-slate-200/50 dark:bg-slate-800/50 group-hover:bg-white dark:group-hover:bg-slate-700 shadow-sm border border-transparent group-hover:border-slate-200 dark:group-hover:border-slate-600 transition-colors">
+                    <Copy size={14} className="text-slate-500 dark:text-slate-400 group-hover:text-indigo-600 dark:group-hover:text-cyan-400 transition-colors" />
+                  </div>
+                  <span className="group-hover:translate-x-0.5 transition-transform duration-200">Copia Valore</span>
+                </button>
+
+                {/* Bottone Incolla */}
+                <button onClick={() => { handlePasteCell(); setContextMenu(null); }} className="group relative w-full text-left px-3 py-2.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800/80 text-slate-700 dark:text-slate-200 flex items-center gap-3 transition-all duration-200">
+                  <div className="p-1.5 rounded-lg bg-slate-200/50 dark:bg-slate-800/50 group-hover:bg-white dark:group-hover:bg-slate-700 shadow-sm border border-transparent group-hover:border-slate-200 dark:group-hover:border-slate-600 transition-colors">
+                    <ClipboardPaste size={14} className="text-slate-500 dark:text-slate-400 group-hover:text-indigo-600 dark:group-hover:text-cyan-400 transition-colors" />
+                  </div>
+                  <span className="group-hover:translate-x-0.5 transition-transform duration-200">Incolla Numero</span>
+                </button>
+
+                <div className="h-px bg-slate-200 dark:bg-slate-700/50 my-1 mx-3 rounded-full"></div>
+
+                {/* Bottone Svuota */}
+                <button
+                  onClick={() => { setRowToClear(contextMenu.rowIndex); setContextMenu(null); }}
+                  className="group relative w-full text-left px-3 py-2.5 rounded-xl hover:bg-red-50 dark:hover:bg-red-900/20 text-slate-700 dark:text-slate-200 hover:text-red-600 dark:hover:text-red-400 flex items-center gap-3 transition-all duration-200"
+                >
+                  <div className="p-1.5 rounded-lg bg-slate-200/50 dark:bg-slate-800/50 group-hover:bg-red-100 dark:group-hover:bg-red-900/50 shadow-sm border border-transparent group-hover:border-red-200 dark:group-hover:border-red-800/50 transition-colors">
+                    <Eraser size={14} className="text-slate-500 dark:text-slate-400 group-hover:text-red-600 dark:group-hover:text-red-400 transition-colors" />
+                  </div>
+                  <span className="group-hover:translate-x-0.5 transition-transform duration-200 font-semibold">Svuota Intero Mese</span>
+                </button>
+
+                {/* Bottone Note */}
+                <button
+                  onClick={() => {
+                    const row = currentYearData.find(d => d.monthIndex === contextMenu.rowIndex);
+                    openNoteModal(contextMenu.rowIndex, (row as any)?.note);
+                    setContextMenu(null);
+                  }}
+                  className="group relative w-full text-left px-3 py-2.5 rounded-xl hover:bg-amber-50 dark:hover:bg-amber-900/20 text-slate-700 dark:text-slate-200 hover:text-amber-600 dark:hover:text-amber-400 flex items-center gap-3 transition-all duration-200"
+                >
+                  <div className="p-1.5 rounded-lg bg-slate-200/50 dark:bg-slate-800/50 group-hover:bg-amber-100 dark:group-hover:bg-amber-900/50 shadow-sm border border-transparent group-hover:border-amber-200 dark:group-hover:border-amber-800/50 transition-colors">
+                    <MessageSquareText size={14} className="text-slate-500 dark:text-slate-400 group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors" />
+                  </div>
+                  <span className="group-hover:translate-x-0.5 transition-transform duration-200">Gestisci Note / Eventi</span>
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>,
+          document.body
+        )}
+        {/* ✨ TOAST UNDO RAPIDO (GMAIL STYLE) */}
+        <AnimatePresence>
+          {undoToast.show && (
+            <motion.div
+              initial={{ y: 50, opacity: 0, scale: 0.9 }}
+              animate={{ y: 0, opacity: 1, scale: 1 }}
+              exit={{ y: 20, opacity: 0, scale: 0.9 }}
+              transition={{ type: "spring", damping: 25, stiffness: 300 }}
+              className="absolute bottom-8 left-1/2 -translate-x-1/2 z-[300] flex items-center gap-3 px-5 py-3 bg-slate-900 dark:bg-slate-800 text-white rounded-2xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.5)] border border-slate-700/50"
+            >
+              <span className="text-sm font-medium text-slate-200">{undoToast.msg}</span>
+              <div className="w-px h-4 bg-slate-700 mx-1"></div>
+              <button
+                onClick={performQuickUndo}
+                className="flex items-center gap-1.5 text-indigo-400 hover:text-indigo-300 font-black text-sm transition-colors tracking-wide active:scale-95"
+              >
+                <Undo2 size={16} strokeWidth={2.5} /> Ripristina
+              </button>
+              <button
+                onClick={() => setUndoToast({ show: false, msg: '' })}
+                className="ml-1 p-1 text-slate-500 hover:text-slate-300 transition-colors bg-white/5 hover:bg-white/10 rounded-full"
+              >
+                <X size={14} />
+              </button>
+            </motion.div>
           )}
         </AnimatePresence>
       </div>

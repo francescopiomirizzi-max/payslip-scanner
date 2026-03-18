@@ -1,5 +1,6 @@
 @import "tailwindcss";
-
+/* Dice a Tailwind v4 di attivarsi quando il nostro bottone mette la classe 'dark' */
+@custom-variant dark (&:where(.dark, .dark *));
 /* --- SCROLLBAR PERSONALIZZATA (Utile per le tabelle) --- */
 .custom-scrollbar::-webkit-scrollbar {
   width: 6px;

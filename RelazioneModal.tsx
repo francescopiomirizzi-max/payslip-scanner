@@ -73,11 +73,8 @@ L'analisi ha isolato le voci a carattere continuativo e ricorrente (Art. 64 CCNL
    - Indennità Orario Spezzato (Cod. 0576)
    - Trasferta Esente (Cod. 0AA1)
 
-3. PREMIALITÀ RICORRENTE (Novità 2024):
-   - Salario Produttività Mensile (Cod. 3B70)
-   - Produttività Incrementale (Cod. 3B71)
 ${includeTickets ? `
-4. RISTORO PASTI:
+3. RISTORO PASTI:
    - Ticket Restaurant / Buoni Pasto (Quota Esente)` : ''}
 
 NOTA BENE:
@@ -89,8 +86,14 @@ VOCI INCLUSE (Appalto Multiservizi/FS):
 - Indennità Sussidiaria (Cod. I1182C)
 - Lavoro Domenicale e Notturno (Cod. I1037C, I1040C)
 - Maggiorazioni e Straordinari (Cod. S1800C, M3500C)`;
+    } else if (worker?.profilo === 'ELIOR') {
+        elencoVoci = "VOCI INCLUSE:\nIndennità specifiche della Ristorazione a Bordo (Diaria Scorta, Ind. Cassa, Lavoro Domenicale/Notturno).";
     } else {
-        elencoVoci = "Voci incluse: Indennità specifiche della Ristorazione a Bordo (Diaria Scorta, Ind. Cassa, Lavoro Domenicale/Notturno).";
+        // AZIENDA CUSTOM DAL COMPANY BUILDER
+        elencoVoci = `
+VOCI RETRIBUTIVE VARIABILI INCLUSE NEL CALCOLO:
+L'analisi ha isolato le voci a carattere continuativo previste dal modello personalizzato "${worker?.profilo}".
+Sono state escluse le voci una tantum, rimborsi spese e indennità non legate allo svolgimento ordinario della prestazione.`;
     }
 
     const dettagliMetodologia = `
@@ -121,7 +124,6 @@ PERIODO DI ANALISI: ${inizioPeriodo} - ${finePeriodo}
 
 DATI DEL RICORRENTE
 Nominativo: ....... ${worker?.cognome || ''} ${worker?.nome || ''}
-Matricola/ID: ..... ${worker?.id || 'ND'}
 Profilo: .......... ${worker?.profilo || 'ND'} - ${worker?.ruolo || 'Personale Operativo'}
 
 --------------------------------------------------
@@ -294,7 +296,6 @@ export const RelazioneModal = ({ isOpen, onClose, worker, totals, includeExFest 
                 <ul style="margin-top: 5pt; margin-bottom: 15pt; padding-left: 30pt;">
                     <li style="margin-bottom: 5pt; text-align: justify;"><b>LAVORO NOTTURNO E FESTIVO:</b> Indennità Lavoro Notturno (Cod. 0421, 1130), Festivo Notturno (Cod. 0457) [Alta Incidenza], Compenso Cantiere Notte (Cod. 0423), Straordinari Vari (Cod. 0919, 0920, 0932, 0933, 0995, 0996).</li>
                     <li style="margin-bottom: 5pt; text-align: justify;"><b>INDENNITÀ DI FUNZIONE E DISAGIO:</b> Indennità di Chiamata/Disponibilità (Cod. 0470, 0496), Compenso per Reperibilità (Cod. 0482, 0584), Indennità di Linea e Manutenzione (Cod. 0687, 0686), Indennità Orario Spezzato (Cod. 0576), Trasferta Esente (Cod. 0AA1).</li>
-                    <li style="margin-bottom: 5pt; text-align: justify;"><b>PREMIALITÀ RICORRENTE (Novità 2024):</b> Salario Produttività Mensile (Cod. 3B70), Produttività Incrementale (Cod. 3B71).</li>
                     ${includeTickets ? `<li style="margin-bottom: 5pt; text-align: justify;"><b>RISTORO PASTI:</b> Ticket Restaurant / Buoni Pasto (Quota Esente).</li>` : ''}
                 </ul>
                 
@@ -310,8 +311,15 @@ export const RelazioneModal = ({ isOpen, onClose, worker, totals, includeExFest 
                     <li>Maggiorazioni e Straordinari (Cod. S1800C, M3500C)</li>
                 </ul>
             `;
-        } else {
+        } else if (worker?.profilo === 'ELIOR') {
             vociHTML = `<p><b>VOCI INCLUSE:</b> Indennità specifiche della Ristorazione a Bordo (Diaria Scorta, Ind. Cassa, Lavoro Domenicale/Notturno).</p>`;
+        } else {
+            // AZIENDA CUSTOM DAL COMPANY BUILDER
+            vociHTML = `
+                <p><b>VOCI RETRIBUTIVE VARIABILI INCLUSE NEL CALCOLO:</b><br>
+                L'analisi ha isolato le voci a carattere continuativo previste dal modello personalizzato <b>${worker?.profilo}</b>.</p>
+                <p>Sono state escluse le voci una tantum, rimborsi spese e indennità non legate allo svolgimento ordinario della prestazione.</p>
+            `;
         }
 
         // --- 4. STRUTTURA XML WORD IMPAGINATA IN STILE ATTO ---
@@ -398,10 +406,9 @@ export const RelazioneModal = ({ isOpen, onClose, worker, totals, includeExFest 
                 
                 <p class="section-title">DATI DEL RICORRENTE</p>
                 <table class="info-table">
-                    <tr><td class="info-label">Nominativo:</td><td>${worker?.cognome || ''} ${worker?.nome || ''}</td></tr>
-                    <tr><td class="info-label">Matricola/ID:</td><td>${worker?.id || 'ND'}</td></tr>
-                    <tr><td class="info-label">Profilo:</td><td>${worker?.profilo || 'ND'} - ${worker?.ruolo || 'Personale Operativo'}</td></tr>
-                </table>
+    <tr><td class="info-label">Nominativo:</td><td>${worker?.cognome || ''} ${worker?.nome || ''}</td></tr>
+    <tr><td class="info-label">Profilo:</td><td>${worker?.profilo || 'ND'} - ${worker?.ruolo || 'Personale Operativo'}</td></tr>
+</table>
 
                 <div class="hr-line"></div>
 
@@ -510,7 +517,12 @@ export const RelazioneModal = ({ isOpen, onClose, worker, totals, includeExFest 
         const mesi = worker?.anni || [];
         mesi.forEach((m: AnnoDati) => {
             if (m.codes && typeof m.codes === 'object') {
-                Object.keys(m.codes).forEach(c => codiciTrovati.add(c));
+                Object.keys(m.codes).forEach(c => {
+                    // Ignora esplicitamente i codici della premialità per non creare le colonne in Excel
+                    if (c !== '3B70' && c !== '3B71') {
+                        codiciTrovati.add(c);
+                    }
+                });
             }
         });
         const codiciArray = Array.from(codiciTrovati).sort();

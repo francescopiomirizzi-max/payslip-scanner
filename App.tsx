@@ -26,9 +26,13 @@ import {
     ArrowLeft,
     FileSpreadsheet,
     RotateCcw,
-    Smartphone
+    Smartphone,
+    Sun,
+    Moon,
+    Database
 } from 'lucide-react';
 import { motion, AnimatePresence, useSpring, useMotionValue } from 'framer-motion';
+import DynamicIsland from './components/DynamicIsland';
 import WorkerCard from './components/WorkerCard';
 import WorkerModal from './components/WorkerModal';
 import WorkerDetailPage from './components/WorkerDetailPage';
@@ -36,6 +40,8 @@ import TableComponent from './components/TableComponent';
 import StatsDashboard from './components/StatsDashboard';
 import QRScannerModal from './components/QRScannerModal';
 import MobileUploadPage from './pages/MobileUploadPage';
+import CompanyBuilder from './components/CompanyBuilder';
+import { useIsland } from './IslandContext';
 // Importiamo tipi e logica
 import { Worker, AnnoDati, parseFloatSafe, getColumnsByProfile } from './types';
 import { DEFAULT_YEARS_TEMPLATE } from './constants';
@@ -306,7 +312,6 @@ const Toast = ({ message, type, onClose }: { message: string; type: 'success' | 
         </motion.div>
     );
 };
-
 // --- COMPONENTE MODALE DI CONFERMA (DINAMICO) ---
 const ConfirmModal = ({ isOpen, onClose, onConfirm, color = 'red' }: { isOpen: boolean; onClose: () => void; onConfirm: () => void; color?: string }) => {
     if (!isOpen) return null;
@@ -336,10 +341,10 @@ const ConfirmModal = ({ isOpen, onClose, onConfirm, color = 'red' }: { isOpen: b
                         L'operazione è definitiva. Tutti i dati associati verranno rimossi dal sistema.
                     </p>
                     <div className="flex gap-3 justify-center">
-                        <button onClick={onClose} className="px-5 py-2.5 rounded-xl font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
+                        <button onClick={onClose} className="px-5 py-2.5 rounded-xl font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 hover:text-slate-800 dark:hover:text-white transition-colors">
                             Annulla
                         </button>
-                        <button onClick={onConfirm} className={`px-5 py-2.5 rounded-xl font-bold text-white bg-gradient-to-r hover:scale-105 transition-all shadow-lg ${currentStyle.btn}`}>
+                        <button onClick={onConfirm} className={`px-5 py-2.5 rounded-xl font-bold text-white bg-gradient-to-r hover:scale-105 transition-all shadow-lg dark:shadow-[0_0_15px_rgba(239,68,68,0.4)] ${currentStyle.btn}`}>
                             Conferma Eliminazione
                         </button>
                     </div>
@@ -348,7 +353,40 @@ const ConfirmModal = ({ isOpen, onClose, onConfirm, color = 'red' }: { isOpen: b
         </motion.div>
     );
 };
+// --- COMPONENTE MODALE CONFERMA IMPORTAZIONE (STILE PREMIUM) ---
+const ConfirmImportModal = ({ isOpen, onClose, onConfirm, count }: { isOpen: boolean; onClose: () => void; onConfirm: () => void; count: number }) => {
+    if (!isOpen) return null;
 
+    return (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+            <motion.div
+                initial={{ scale: 0.9, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }}
+                className="bg-white dark:bg-slate-800 w-full max-w-md rounded-[2rem] shadow-2xl border border-slate-200 dark:border-slate-700 overflow-hidden relative"
+            >
+                {/* Sfondo decorativo */}
+                <div className="absolute top-0 right-0 w-40 h-40 bg-blue-500/10 rounded-full blur-3xl pointer-events-none"></div>
+
+                <div className="p-8 text-center relative z-10">
+                    <div className="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6 bg-blue-100 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 shadow-inner">
+                        <Upload className="w-10 h-10 text-blue-600 dark:text-blue-400" />
+                    </div>
+                    <h3 className="text-2xl font-black text-slate-800 dark:text-white mb-3">Ripristino Backup</h3>
+                    <p className="text-slate-500 dark:text-slate-400 text-sm mb-8 leading-relaxed">
+                        Stai per sovrascrivere il database attuale caricando <span className="font-black text-blue-600 dark:text-blue-400 text-base">{count}</span> lavoratori dal file di backup.<br />Questa operazione non è reversibile.
+                    </p>
+                    <div className="flex gap-3 justify-center">
+                        <button onClick={onClose} className="flex-1 py-3.5 rounded-xl font-bold text-slate-600 dark:text-slate-300 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 transition-colors">
+                            Annulla
+                        </button>
+                        <button onClick={onConfirm} className="flex-1 py-3.5 rounded-xl font-bold text-white bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 hover:scale-105 transition-all shadow-lg shadow-blue-500/30">
+                            Conferma Ripristino
+                        </button>
+                    </div>
+                </div>
+            </motion.div>
+        </motion.div>
+    );
+};
 // --- NUOVO COMPONENTE: MODALE CAMBIO PASSWORD ---
 const ChangePasswordModal = ({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) => {
     const [newPass, setNewPass] = useState('');
@@ -380,16 +418,16 @@ const ChangePasswordModal = ({ isOpen, onClose }: { isOpen: boolean; onClose: ()
 
                 <div className="space-y-4">
                     <div>
-                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wide">Nuova Password</label>
-                        <input type="password" value={newPass} onChange={e => setNewPass(e.target.value)} className="w-full mt-1 p-3 rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-white focus:outline-none focus:border-indigo-500 transition-all" />
+                        <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Nuova Password</label>
+                        <input type="password" value={newPass} onChange={e => setNewPass(e.target.value)} className="w-full mt-1 p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-white focus:outline-none focus:border-indigo-500 dark:focus:border-indigo-400 transition-all" />
                     </div>
                     <div>
-                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wide">Conferma Password</label>
-                        <input type="password" value={confirmPass} onChange={e => setConfirmPass(e.target.value)} className="w-full mt-1 p-3 rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-white focus:outline-none focus:border-indigo-500 transition-all" />
+                        <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Conferma Password</label>
+                        <input type="password" value={confirmPass} onChange={e => setConfirmPass(e.target.value)} className="w-full mt-1 p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-white focus:outline-none focus:border-indigo-500 dark:focus:border-indigo-400 transition-all" />
                     </div>
                 </div>
 
-                {error && <p className="text-red-500 text-xs font-bold mt-3 bg-red-50 p-2 rounded-lg border border-red-100">{error}</p>}
+                {error && <p className="text-red-500 dark:text-red-400 text-xs font-bold mt-3 bg-red-50 dark:bg-red-900/30 p-2 rounded-lg border border-red-100 dark:border-red-800/50">{error}</p>}
 
                 <div className="flex gap-3 justify-end mt-6">
                     <button onClick={onClose} className="px-4 py-2 rounded-xl text-sm font-bold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">Annulla</button>
@@ -432,6 +470,23 @@ const EmptyState = ({ isSearch = false, onReset }: { isSearch?: boolean, onReset
 
 
 const App: React.FC = () => {
+    // 👇 INCOLLA QUI IL TEMA SCURO (Subito sotto la dichiarazione di App) 👇
+    const [isDarkMode, setIsDarkMode] = useState(() => {
+        return document.documentElement.classList.contains('dark');
+    });
+
+    const toggleTheme = () => {
+        if (isDarkMode) {
+            document.documentElement.classList.remove('dark');
+            localStorage.setItem('theme', 'light');
+            setIsDarkMode(false);
+        } else {
+            document.documentElement.classList.add('dark');
+            localStorage.setItem('theme', 'dark');
+            setIsDarkMode(true);
+        }
+    };
+    // 👆 FINE TEMA SCURO 👆
     // --- 0. ROUTING MOBILE (Check URL Params) ---
     const [isMobileMode, setIsMobileMode] = useState(false);
     const [mobileSessionId, setMobileSessionId] = useState('');
@@ -475,9 +530,32 @@ const App: React.FC = () => {
         return localStorage.getItem('is_logged_in') === 'true';
     });
 
+    // ✨ INIEZIONE CERVELLO NELL'APP PRINCIPALE
+    const { showNotification, setQuickActions } = useIsland();
+
+    // ✨ EFFETTO SALUTO INIZIALE (Parte solo una volta quando sei loggato)
+    useEffect(() => {
+        if (isAuthenticated) {
+            const now = new Date();
+            const giorni = ['Domenica', 'Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì', 'Sabato'];
+            const mesi = ['Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno', 'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'];
+            const dataFormattata = `${giorni[now.getDay()]} ${now.getDate()} ${mesi[now.getMonth()]}`;
+            const oraFormattata = now.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+
+            setTimeout(() => {
+                showNotification(
+                    `Bentornato, Francesco Pio!`,
+                    `Oggi è ${dataFormattata} • Ore ${oraFormattata}`,
+                    'info',
+                    5000 // Rimane per 5 secondi
+                );
+            }, 1000); // Ritardo di 1 secondo per farti godere l'entrata
+        }
+    }, [isAuthenticated, showNotification]);
     const [loginPassword, setLoginPassword] = useState('');
     const [loginError, setLoginError] = useState(false);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+    const [isCompanyBuilderOpen, setIsCompanyBuilderOpen] = useState(false);
     // 2. Modifica: Funzione di Logout
     const handleLogout = () => {
         setIsAuthenticated(false);
@@ -495,7 +573,12 @@ const App: React.FC = () => {
     const [showCalc, setShowCalc] = useState(false);
     const [selectedWorker, setSelectedWorker] = useState<Worker | null>(null);
     const [viewMode, setViewMode] = useState<'home' | 'simple' | 'complex' | 'stats'>('home');
-
+    // ✨ INCOLLALO QUI (Dopo che viewMode è stato dichiarato)
+    useEffect(() => {
+        if (viewMode === 'home' || viewMode === 'stats') {
+            setQuickActions(false);
+        }
+    }, [viewMode, setQuickActions]);
 
     // Modale Dettaglio Totali
     const [activeStatsModal, setActiveStatsModal] = useState<'net' | 'ticket' | null>(null);
@@ -505,12 +588,30 @@ const App: React.FC = () => {
 
     const [searchQuery, setSearchQuery] = useState('');
     // AGGIUNGI QUESTO STATO
-    const [activeFilter, setActiveFilter] = useState<'ALL' | 'RFI' | 'ELIOR' | 'REKEEP'>('ALL');
+    const [activeFilter, setActiveFilter] = useState<string>('ALL');
+    const [customFilters, setCustomFilters] = useState<string[]>([]);
+
+    useEffect(() => {
+        const loadCustomFilters = () => {
+            const saved = localStorage.getItem('customCompanies');
+            if (saved) {
+                try {
+                    setCustomFilters(Object.keys(JSON.parse(saved)));
+                } catch (e) { }
+            }
+        };
+        loadCustomFilters();
+        window.addEventListener('storage', loadCustomFilters);
+        return () => window.removeEventListener('storage', loadCustomFilters);
+    }, []);
     const [showScrollTop, setShowScrollTop] = useState(false);
     // Trigger per forzare il ricalcolo quando si torna dalla scheda dettaglio
     const [refreshStats, setRefreshStats] = useState(0);
     const fileInputRef = useRef<HTMLInputElement>(null);
-
+    // 👇 INCOLLA QUI I DUE NUOVI STATI 👇
+    const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+    const [importPendingData, setImportPendingData] = useState<any>(null);
+    // 👆 FINE INCOLLA 👆
     // --- STATO TOAST ---
     const [toasts, setToasts] = useState<{ id: number; message: string; type: 'success' | 'error' | 'info' }[]>([]);
 
@@ -533,15 +634,48 @@ const App: React.FC = () => {
         window.addEventListener('scroll', handleScroll);
         return () => window.removeEventListener('scroll', handleScroll);
     }, []);
+    // --- RICEVITORI COMANDI DYNAMIC ISLAND ---
+    useEffect(() => {
+        const handleTheme = () => toggleTheme();
+        const handleCompany = () => setIsCompanyBuilderOpen(true);
+        const handleSettings = () => setIsSettingsOpen(true);
+        const handleLogoutEvent = () => handleLogout();
 
+        // 👇 IL NUOVO COMANDO DI ESPORTAZIONE 👇
+        const handleExportIsland = () => handleExportData();
+
+        // ✨ NUOVO: Ascolta l'ordine di aprire una pratica direttamente!
+        const handleOpenFromIsland = (e: any) => {
+            const workerId = e.detail;
+            handleOpenComplex(workerId);
+        };
+
+        window.addEventListener('island-theme', handleTheme);
+        window.addEventListener('island-company', handleCompany);
+        window.addEventListener('island-settings', handleSettings);
+        window.addEventListener('island-logout', handleLogoutEvent);
+        window.addEventListener('island-open-worker', handleOpenFromIsland);
+        window.addEventListener('island-export', handleExportIsland); // <--- AGGIUNTO QUI
+
+        return () => {
+            window.removeEventListener('island-theme', handleTheme);
+            window.removeEventListener('island-company', handleCompany);
+            window.removeEventListener('island-settings', handleSettings);
+            window.removeEventListener('island-logout', handleLogoutEvent);
+            window.removeEventListener('island-open-worker', handleOpenFromIsland);
+            window.removeEventListener('island-export', handleExportIsland); // <--- AGGIUNTO QUI PER PULIZIA
+        };
+    }, [isDarkMode]);
     // --- GESTIONE LOGIN DINAMICA ---
     const handleLogin = (e: React.FormEvent) => {
         e.preventDefault();
         const storedPassword = localStorage.getItem('app_password') || 'admin123';
         if (loginPassword === storedPassword) {
             setIsAuthenticated(true);
-            localStorage.setItem('is_logged_in', 'true'); // <--- AGGIUNGI QUESTA RIGA
+            localStorage.setItem('is_logged_in', 'true');
             setLoginError(false);
+            // Non serve chiamare la notifica qui, perché l'useEffect che abbiamo appena creato 
+            // scatterà in automatico appena isAuthenticated diventa true! 🪄
         } else {
             setLoginError(true);
             setTimeout(() => setLoginError(false), 2000);
@@ -655,6 +789,46 @@ const App: React.FC = () => {
         }
         const num = parseFloat(str);
         return isNaN(num) ? 0 : num;
+    };
+    // --- MOTORE STILI BOTTONI DINAMICI ---
+    const getFilterStyle = (filterId: string, isActive: boolean) => {
+        const inactiveClasses = "bg-white/40 dark:bg-slate-800/60 text-slate-500 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-700 hover:text-indigo-600 dark:hover:text-indigo-400 hover:border-indigo-200 dark:hover:border-indigo-500/50 border border-white/40 dark:border-slate-700 hover:shadow-lg hover:shadow-indigo-500/10 hover:-translate-y-0.5";
+        if (!isActive) return inactiveClasses;
+
+        if (filterId === 'ALL') return 'bg-slate-800 text-white shadow-lg shadow-slate-500/30 ring-2 ring-slate-400 scale-105 border-transparent';
+        if (filterId === 'RFI') return 'bg-blue-600 text-white shadow-lg shadow-blue-500/40 ring-2 ring-blue-400 scale-105 border-transparent';
+        if (filterId === 'ELIOR') return 'bg-orange-500 text-white shadow-lg shadow-orange-500/40 ring-2 ring-orange-300 scale-105 border-transparent';
+        if (filterId === 'REKEEP') return 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/40 ring-2 ring-emerald-300 scale-105 border-transparent';
+
+        const customPalette = [
+            'bg-fuchsia-500 text-white shadow-lg shadow-fuchsia-500/40 ring-2 ring-fuchsia-300 scale-105 border-transparent',
+            'bg-violet-500 text-white shadow-lg shadow-violet-500/40 ring-2 ring-violet-300 scale-105 border-transparent',
+            'bg-cyan-500 text-white shadow-lg shadow-cyan-500/40 ring-2 ring-cyan-300 scale-105 border-transparent',
+            'bg-rose-500 text-white shadow-lg shadow-rose-500/40 ring-2 ring-rose-300 scale-105 border-transparent',
+            'bg-indigo-500 text-white shadow-lg shadow-indigo-500/40 ring-2 ring-indigo-300 scale-105 border-transparent',
+            'bg-teal-500 text-white shadow-lg shadow-teal-500/40 ring-2 ring-teal-300 scale-105 border-transparent'
+        ];
+        let hash = 0;
+        for (let i = 0; i < filterId.length; i++) hash = filterId.charCodeAt(i) + ((hash << 5) - hash);
+        return customPalette[Math.abs(hash) % customPalette.length];
+    };
+
+    const getBigFilterStyle = (filterId: string) => {
+        if (filterId === 'RFI') return 'hover:bg-blue-600 hover:border-blue-500 hover:shadow-blue-500/40';
+        if (filterId === 'ELIOR') return 'hover:bg-orange-500 hover:border-orange-400 hover:shadow-orange-500/40';
+        if (filterId === 'REKEEP') return 'hover:bg-emerald-500 hover:border-emerald-400 hover:shadow-emerald-500/40';
+
+        const customPalette = [
+            'hover:bg-fuchsia-500 hover:border-fuchsia-400 hover:shadow-fuchsia-500/40',
+            'hover:bg-violet-500 hover:border-violet-400 hover:shadow-violet-500/40',
+            'hover:bg-cyan-500 hover:border-cyan-400 hover:shadow-cyan-500/40',
+            'hover:bg-rose-500 hover:border-rose-400 hover:shadow-rose-500/40',
+            'hover:bg-indigo-500 hover:border-indigo-400 hover:shadow-indigo-500/40',
+            'hover:bg-teal-500 hover:border-teal-400 hover:shadow-teal-500/40'
+        ];
+        let hash = 0;
+        for (let i = 0; i < filterId.length; i++) hash = filterId.charCodeAt(i) + ((hash << 5) - hash);
+        return customPalette[Math.abs(hash) % customPalette.length];
     };
     // --- 1. CALCOLO STATISTICHE DASHBOARD (FIX: TICKET SOLO SE ATTIVI NEL TOTALE) ---
     const dashboardStats = useMemo(() => {
@@ -788,7 +962,7 @@ const App: React.FC = () => {
 
             // C. CALCOLO IMPORTI (CICLO ANNUALE)
             let wNetto = 0;
-            let wTicketLiq = 0;      // Quello che prende davvero (0 se spento)
+            let wTicketLiq = 0;      // Quello che prende davvero (0 se spento)
             let wTicketPotenziale = 0; // Quello che avrebbe preso (240€ anche se spento)
 
             const uniqueYears = Array.from(new Set(safeAnni.map((r: any) => Number(r.year)))).sort((a, b) => a - b);
@@ -834,8 +1008,8 @@ const App: React.FC = () => {
             });
 
             // Logica di visualizzazione
-            let amount = 0;     // Cifra in grassetto
-            let potential = 0;  // Cifra barrata (se diversa)
+            let amount = 0;     // Cifra in grassetto
+            let potential = 0;  // Cifra barrata (se diversa)
 
             if (activeStatsModal === 'net') {
                 amount = wNetto;
@@ -893,19 +1067,68 @@ const App: React.FC = () => {
         exit: { opacity: 0, scale: 0.95, transition: { duration: 0.2 } }
     };
     // --- BACKUP ---
-    const handleExportData = () => {
-        const dataStr = JSON.stringify(workers, null, 2);
-        const blob = new Blob([dataStr], { type: "application/json" });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `backup_ferrovieri_${new Date().toISOString().slice(0, 10)}.json`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        addToast("Backup scaricato con successo!", "success");
-    };
+    // --- BACKUP GLOBALE E RIPRISTINO CON MODALE CUSTOM ---
+    const handleExportData = async () => { // ✨ NOTA: ora è async
+        // 1 e 2. Raccogliamo i dati (questo blocco rimane uguale)
+        const payload: any = {
+            version: "2.0",
+            workers: workers,
+            settings: {}
+        };
 
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && (key.startsWith('tickets_') || key.startsWith('exFest_') || key.startsWith('startYear_'))) {
+                payload.settings[key] = localStorage.getItem(key);
+            }
+        }
+
+        const dataStr = JSON.stringify(payload, null, 2);
+        const nomeFile = `Backup_Completo_Ferrovieri_${new Date().toISOString().slice(0, 10)}.json`;
+
+        try {
+            // ✨ LA VERA MAGIA: Usiamo l'API nativa di Chrome per aprire il "Salva con nome"
+            if ('showSaveFilePicker' in window) {
+                // @ts-ignore (Ignoriamo l'errore TypeScript se non riconosce l'API moderna)
+                const handle = await window.showSaveFilePicker({
+                    suggestedName: nomeFile,
+                    types: [{
+                        description: 'File JSON di Backup',
+                        accept: { 'application/json': ['.json'] },
+                    }],
+                });
+                // Scriviamo fisicamente il file sul tuo computer
+                const writable = await handle.createWritable();
+                await writable.write(dataStr);
+                await writable.close();
+
+                addToast("Backup Globale salvato con successo!", "success");
+                return; // Fine dell'esecuzione!
+            }
+
+            // --- PIANO B (Per Safari o browser vecchi) ---
+            const blob = new Blob([dataStr], { type: "application/json" });
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = nomeFile;
+            document.body.appendChild(link);
+            link.click();
+            setTimeout(() => {
+                document.body.removeChild(link);
+                window.URL.revokeObjectURL(url);
+                addToast("Backup scaricato (Modalità base)", "success");
+            }, 100);
+
+        } catch (error: any) {
+            // Se l'utente clicca "Annulla" sulla finestra di salvataggio, non mostriamo errori
+            if (error.name !== 'AbortError') {
+                console.error('Errore salvataggio:', error);
+                addToast("Errore durante il salvataggio", "error");
+            }
+        }
+    };
+    // --- GESTIONE IMPORTAZIONE FILE ---
     const handleImportData = (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         if (!file) return;
@@ -914,24 +1137,47 @@ const App: React.FC = () => {
             try {
                 const content = e.target?.result as string;
                 const parsedData = JSON.parse(content);
+                let targetWorkers = [];
+                let targetSettings = {};
+
                 if (Array.isArray(parsedData) && parsedData.length > 0 && parsedData[0].hasOwnProperty('id')) {
-                    if (window.confirm(`Stai per caricare ${parsedData.length} lavoratori. Continuare?`)) {
-                        setWorkers(parsedData);
-                        addToast("Backup ripristinato correttamente!", "success");
-                        triggerConfetti();
-                    }
+                    targetWorkers = parsedData;
+                } else if (parsedData.version === "2.0" && Array.isArray(parsedData.workers)) {
+                    targetWorkers = parsedData.workers;
+                    targetSettings = parsedData.settings;
                 } else {
-                    addToast("Il file selezionato non è valido.", "error");
+                    addToast("Il file non è valido.", "error");
+                    return;
                 }
+                setImportPendingData({ workers: targetWorkers, settings: targetSettings } as any);
+                setIsImportModalOpen(true);
             } catch (error) {
-                console.error(error);
-                addToast("Errore durante la lettura del file.", "error");
+                addToast("Errore lettura file.", "error");
             }
         };
         reader.readAsText(file);
         event.target.value = '';
     };
 
+    // --- FUNZIONE CHE ESEGUE IL RIPRISTINO ---
+    const executeImport = () => {
+        if (!importPendingData) return;
+        try {
+            const workersToImport = importPendingData.workers ? importPendingData.workers : importPendingData;
+            setWorkers(workersToImport);
+            if (importPendingData.settings) {
+                Object.keys(importPendingData.settings).forEach(key => {
+                    localStorage.setItem(key, importPendingData.settings[key]);
+                });
+            }
+            setIsImportModalOpen(false);
+            setImportPendingData(null);
+            addToast("Dati ripristinati con successo!", "success");
+            setTimeout(() => window.location.reload(), 1500);
+        } catch (error) {
+            addToast("Errore durante il ripristino.", "error");
+        }
+    };
     {/* STATISTICHE HOME (VERSIONE SUPER-INTERATTIVA "INVITO AL CLICK") */ }
     <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-16 relative z-10">
 
@@ -947,12 +1193,12 @@ const App: React.FC = () => {
                         <User className="w-7 h-7" strokeWidth={2} />
                     </div>
                     {/* Indicatore Live */}
-                    <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 border border-blue-100">
+                    <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 dark:bg-blue-900/30 border border-blue-100 dark:border-blue-800/50 transition-colors">
                         <span className="relative flex h-2 w-2">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-                            <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 dark:bg-cyan-400 opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500 dark:bg-cyan-500"></span>
                         </span>
-                        <span className="text-[10px] font-bold text-blue-600 uppercase">Live</span>
+                        <span className="text-[10px] font-bold text-blue-600 dark:text-cyan-400 uppercase">Live</span>
                     </div>
                 </div>
                 <div>
@@ -966,36 +1212,19 @@ const App: React.FC = () => {
             {/* BADGE ESPLOSIVI (Colore Pieno al Hover) */}
             <div className="px-8 pb-8 relative z-30 w-full pointer-events-auto">
                 <div className="flex flex-wrap gap-2">
-
-                    {/* RFI */}
-                    <div
-                        onClick={(e) => { e.stopPropagation(); setActiveFilter('RFI'); }}
-                        className="flex-1 flex flex-col items-center justify-center p-2 rounded-xl border border-slate-200 bg-white/50 text-slate-400 transition-all duration-300 hover:bg-blue-600 hover:border-blue-500 hover:text-white hover:scale-110 hover:shadow-lg hover:shadow-blue-500/40 cursor-pointer"
-                    >
-                        <span className="text-[9px] font-black uppercase tracking-widest mb-1">RFI</span>
-                        <span className="text-lg font-black leading-none">{workers.filter(w => w.profilo === 'RFI').length}</span>
-                    </div>
-
-                    {/* ELIOR */}
-                    <div
-                        onClick={(e) => { e.stopPropagation(); setActiveFilter('ELIOR'); }}
-                        className="flex-1 flex flex-col items-center justify-center p-2 rounded-xl border border-slate-200 bg-white/50 text-slate-400 transition-all duration-300 hover:bg-orange-500 hover:border-orange-400 hover:text-white hover:scale-110 hover:shadow-lg hover:shadow-orange-500/40 cursor-pointer"
-                    >
-                        <span className="text-[9px] font-black uppercase tracking-widest mb-1">ELIOR</span>
-                        <span className="text-lg font-black leading-none">{workers.filter(w => w.profilo === 'ELIOR').length}</span>
-                    </div>
-
-                    {/* REKEEP */}
-                    <div
-                        onClick={(e) => { e.stopPropagation(); setActiveFilter('REKEEP'); }}
-                        className="flex-1 flex flex-col items-center justify-center p-2 rounded-xl border border-slate-200 bg-white/50 text-slate-400 transition-all duration-300 hover:bg-emerald-500 hover:border-emerald-400 hover:text-white hover:scale-110 hover:shadow-lg hover:shadow-emerald-500/40 cursor-pointer"
-                    >
-                        <span className="text-[9px] font-black uppercase tracking-widest mb-1">REKEEP</span>
-                        <span className="text-lg font-black leading-none">{workers.filter(w => w.profilo === 'REKEEP').length}</span>
-                    </div>
-
+                    {['RFI', 'ELIOR', 'REKEEP', ...customFilters].map((azienda) => (
+                        <div
+                            key={azienda}
+                            onClick={(e) => { e.stopPropagation(); setActiveFilter(azienda); }}
+                            className={`flex-1 flex flex-col items-center justify-center p-2 rounded-xl border border-slate-200 bg-white/50 text-slate-400 transition-all duration-300 hover:text-white hover:scale-110 hover:shadow-lg cursor-pointer ${getBigFilterStyle(azienda)}`}
+                        >
+                            <span className="text-[9px] font-black uppercase tracking-widest mb-1 truncate px-1 max-w-full">{azienda}</span>
+                            <span className="text-lg font-black leading-none">{workers.filter(w => w.profilo === azienda).length}</span>
+                        </div>
+                    ))}
                 </div>
             </div>
+
         </div>
 
         {/* 2. CARD NETTO REALE (EMERALD - BOTTONE PULSANTE) */}
@@ -1012,7 +1241,7 @@ const App: React.FC = () => {
                     </div>
 
                     {/* BOTTONE CHE INVITA AL CLICK (SEMPRE VISIBILE MA PULSANTE) */}
-                    <div className="flex items-center gap-2 px-4 py-1.5 bg-emerald-50 text-emerald-600 border border-emerald-100 rounded-full text-[10px] font-black uppercase tracking-wider transition-all duration-300 group-hover:bg-emerald-500 group-hover:text-white group-hover:border-emerald-400 group-hover:shadow-lg animate-pulse group-hover:animate-none">
+                    <div className="flex items-center gap-2 px-4 py-1.5 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-800/50 rounded-full text-[10px] font-black uppercase tracking-wider transition-all duration-300 group-hover:bg-emerald-500 dark:group-hover:bg-emerald-500 group-hover:text-white group-hover:border-emerald-400 group-hover:shadow-[0_0_15px_rgba(16,185,129,0.5)] animate-pulse group-hover:animate-none">
                         <span className="group-hover:hidden">Vedi Dettagli</span>
                         <span className="hidden group-hover:inline">Clicca Qui</span>
                         <ChevronRight className="w-3 h-3" />
@@ -1053,7 +1282,7 @@ const App: React.FC = () => {
                     </div>
 
                     {/* BOTTONE CHE INVITA AL CLICK */}
-                    <div className="flex items-center gap-2 px-4 py-1.5 bg-amber-50 text-amber-600 border border-amber-100 rounded-full text-[10px] font-black uppercase tracking-wider transition-all duration-300 group-hover:bg-amber-500 group-hover:text-white group-hover:border-amber-400 group-hover:shadow-lg animate-pulse group-hover:animate-none">
+                    <div className="flex items-center gap-2 px-4 py-1.5 bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 border border-amber-100 dark:border-amber-800/50 rounded-full text-[10px] font-black uppercase tracking-wider transition-all duration-300 group-hover:bg-amber-500 dark:group-hover:bg-amber-500 group-hover:text-white group-hover:border-amber-400 group-hover:shadow-[0_0_15px_rgba(245,158,11,0.5)] animate-pulse group-hover:animate-none">
                         <span className="group-hover:hidden">Vedi Dettagli</span>
                         <span className="hidden group-hover:inline">Clicca Qui</span>
                         <ChevronRight className="w-3 h-3" />
@@ -1148,40 +1377,7 @@ const App: React.FC = () => {
         );
     }
 
-    // --- RENDER APP NORMALE (SOLO SE AUTENTICATO) ---
-    if (viewMode === 'stats') {
-        return <StatsDashboard workers={workers} onBack={handleBack} />;
-    }
-    if (viewMode === 'complex' && selectedWorker) {
-        return (
-            <WorkerDetailPage
-                worker={selectedWorker}
-                onUpdateData={handleUpdateWorkerData}
-                onUpdateStatus={handleUpdateStatus}
-                onBack={handleBack}
-                onOpenReport={() => handleOpenSimple(selectedWorker.id)}
-            />
-        );
-    }
 
-    // --- BLOCCO VISTA REPORT (CORRETTO CON START YEAR) ---
-    if (viewMode === 'simple' && selectedWorker) {
-        // Recuperiamo al volo l'anno di partenza salvato per questo lavoratore
-        const savedStart = localStorage.getItem(`startYear_${selectedWorker.id}`);
-        const startYearToPass = savedStart ? parseInt(savedStart) : 2008;
-
-        return (
-            <div className="min-h-screen bg-white">
-                <TableComponent
-                    worker={selectedWorker}
-                    onBack={() => setViewMode('home')}
-                    onEdit={() => setViewMode('complex')}
-                    startClaimYear={startYearToPass} // <--- Passaggio fondamentale aggiunto
-                />
-            </div>
-        );
-    }
-    // -------------------------------------
 
     // --- GESTIONE DATI DA MOBILE ---
     // Funzione chiamata quando il QR Scanner riceve dati dal telefono
@@ -1203,6 +1399,8 @@ const App: React.FC = () => {
     return (
         <div className="min-h-screen font-sans selection:bg-indigo-100 dark:selection:bg-indigo-900/50 relative overflow-hidden transition-colors duration-500">
             <HiddenClasses />
+            {/* LA NOSTRA DYNAMIC ISLAND GLOBALE */}
+            <DynamicIsland />
             {/* --- SFONDO "LIVING OCEAN" (Movimento Visibile & Colori Top) --- */}
             <div className="fixed inset-0 -z-10 overflow-hidden bg-slate-50 dark:bg-[#020617] transition-colors duration-500">
 
@@ -1247,7 +1445,21 @@ const App: React.FC = () => {
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,rgba(0,0,0,0.03)_100%)]"></div>
             </div>
 
-            <div className="relative max-w-7xl mx-auto px-6 py-10">
+            {/* ✨ BISTURI 2: LE PAGINE INIETTATE QUI (Non bloccano più l'Isola e lo Sfondo!) */}
+            {viewMode === 'stats' && <StatsDashboard workers={workers} onBack={handleBack} />}
+
+            {viewMode === 'complex' && selectedWorker && (
+                <WorkerDetailPage key={selectedWorker.id} worker={selectedWorker} onUpdateData={handleUpdateWorkerData} onUpdateStatus={handleUpdateStatus} onBack={handleBack} onOpenReport={() => handleOpenSimple(selectedWorker.id)} />
+            )}
+
+            {viewMode === 'simple' && selectedWorker && (
+                <div className="min-h-screen bg-white">
+                    <TableComponent key={`report-${selectedWorker.id}`} worker={selectedWorker} onBack={() => setViewMode('home')} onEdit={() => setViewMode('complex')} startClaimYear={Number(localStorage.getItem(`startYear_${selectedWorker.id}`)) || 2008} />
+                </div>
+            )}
+
+            {/* ✨ MAGIA: NASCONDIAMO LA HOME SE NON SIAMO IN HOME, INVECE DI DISTRUGGERLA */}
+            <div className="relative max-w-7xl mx-auto px-6 py-10" style={{ display: viewMode === 'home' ? 'block' : 'none' }}>
                 {/* HEADER */}
                 <div className="flex flex-col xl:flex-row justify-between items-center gap-8 mb-12">
 
@@ -1284,24 +1496,12 @@ const App: React.FC = () => {
                     {/* DESTRA: PULSANTI AZIONE */}
                     <div className="flex flex-wrap justify-center xl:justify-end gap-3 w-full xl:w-auto ml-auto">
 
-                        {/* GRUPPO STRUMENTI */}
+                        {/* GRUPPO STRUMENTI (Ora gestiti dalla Dynamic Island, resta solo Statistiche) */}
                         <div className="flex gap-3">
-                            <button onClick={() => setShowCalc(!showCalc)} className={`group relative w-12 h-12 rounded-xl shadow-md border flex items-center justify-center hover:scale-105 transition-all ${showCalc ? 'bg-indigo-600 border-indigo-500' : 'bg-white border-slate-100'}`}>
-                                <Calculator className={`w-6 h-6 ${showCalc ? 'text-white' : 'text-slate-600'}`} />
-                            </button>
-
-                            {/* TASTO IMPOSTAZIONI (COERENTE) */}
-                            <button onClick={() => setIsSettingsOpen(true)} className="group relative w-12 h-12 rounded-xl shadow-md border bg-white border-slate-100 flex items-center justify-center hover:scale-105 transition-all hover:border-indigo-200">
-                                <Settings className="w-6 h-6 text-slate-600 group-hover:text-indigo-600 transition-all duration-500 group-hover:rotate-180" />
-                            </button>
-                            {/* TASTO LOGOUT */}
-                            <button onClick={handleLogout} className="group relative w-12 h-12 rounded-xl shadow-md border bg-white border-red-100 flex items-center justify-center hover:scale-105 transition-all hover:border-red-300 hover:bg-red-50">
-                                <LogOut className="w-6 h-6 text-slate-600 group-hover:text-red-600" />
-                            </button>
                             <button
                                 onClick={() => setViewMode('stats')}
                                 className="group relative px-6 py-3 rounded-xl font-bold text-white shadow-[0_10px_30px_-10px_rgba(79,70,229,0.5)] hover:shadow-[0_20px_40px_-10px_rgba(79,70,229,0.7)] hover:-translate-y-1 active:scale-95 transition-all duration-300 border border-white/20 overflow-hidden flex gap-2 items-center"
-                                style={{ backgroundImage: 'linear-gradient(to right, #4f46e5, #7c3aed)' }} // Indigo -> Violet
+                                style={{ backgroundImage: 'linear-gradient(to right, #4f46e5, #7c3aed)' }}
                             >
                                 <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500 rotate-12"></div>
                                 <BarChart3 className="w-5 h-5 transition-transform duration-500 group-hover:rotate-12" strokeWidth={2.5} />
@@ -1314,7 +1514,7 @@ const App: React.FC = () => {
                             <button
                                 onClick={handleExportData}
                                 className="group relative px-6 py-3 rounded-xl font-bold text-white shadow-[0_10px_30px_-10px_rgba(168,85,247,0.5)] hover:shadow-[0_20px_40px_-10px_rgba(168,85,247,0.7)] hover:-translate-y-1 active:scale-95 transition-all duration-300 border border-white/20 overflow-hidden flex gap-2 items-center"
-                                style={{ backgroundImage: 'linear-gradient(to right, #8b5cf6, #d946ef)' }} // Violet -> Fuchsia
+                                style={{ backgroundImage: 'linear-gradient(to right, #8b5cf6, #d946ef)' }}
                             >
                                 <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500 rotate-12"></div>
                                 <Download className="w-5 h-5 transition-transform duration-500 group-hover:rotate-180" strokeWidth={2.5} />
@@ -1324,7 +1524,7 @@ const App: React.FC = () => {
                             <button
                                 onClick={() => fileInputRef.current?.click()}
                                 className="group relative px-6 py-3 rounded-xl font-bold text-white shadow-[0_10px_30px_-10px_rgba(59,130,246,0.5)] hover:shadow-[0_20px_40px_-10px_rgba(59,130,246,0.7)] hover:-translate-y-1 active:scale-95 transition-all duration-300 border border-white/20 overflow-hidden flex gap-2 items-center"
-                                style={{ backgroundImage: 'linear-gradient(to right, #3b82f6, #06b6d4)' }} // Blue -> Cyan
+                                style={{ backgroundImage: 'linear-gradient(to right, #3b82f6, #06b6d4)' }}
                             >
                                 <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500 rotate-12"></div>
                                 <Upload className="w-5 h-5 transition-transform duration-500 group-hover:rotate-180" strokeWidth={2.5} />
@@ -1337,7 +1537,7 @@ const App: React.FC = () => {
                         <button
                             onClick={openCreateModal}
                             className="group relative px-8 py-3 rounded-xl font-bold text-white shadow-[0_10px_30px_-10px_rgba(16,185,129,0.5)] hover:shadow-[0_20px_40px_-10px_rgba(16,185,129,0.7)] hover:-translate-y-1 active:scale-95 transition-all duration-300 border border-white/20 overflow-hidden flex gap-2 items-center"
-                            style={{ backgroundImage: 'linear-gradient(to right, #34d399, #06b6d4)' }} // Emerald -> Cyan
+                            style={{ backgroundImage: 'linear-gradient(to right, #34d399, #06b6d4)' }}
                         >
                             <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500 rotate-12"></div>
                             <Plus className="w-5 h-5 transition-transform duration-500 group-hover:rotate-180" strokeWidth={3} />
@@ -1378,9 +1578,21 @@ const App: React.FC = () => {
                         {/* Footer Badge Stats */}
                         <div className="px-8 pb-8 relative z-10">
                             <div className="flex flex-wrap gap-3 opacity-90 group-hover:opacity-100 transition-opacity duration-500 translate-y-2 group-hover:translate-y-0">
-                                <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border backdrop-blur-md bg-blue-50 border-blue-200"><div className="w-2 h-2 rounded-full bg-blue-500"></div><span className="text-[11px] font-black text-blue-800">RFI</span><span className="text-[11px] font-bold text-blue-600">{workers.filter(w => w.profilo === 'RFI').length}</span></div>
-                                <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border backdrop-blur-md bg-orange-50 border-orange-200"><div className="w-2 h-2 rounded-full bg-orange-500"></div><span className="text-[11px] font-black text-orange-800">ELIOR</span><span className="text-[11px] font-bold text-orange-600">{workers.filter(w => w.profilo === 'ELIOR').length}</span></div>
-                                <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border backdrop-blur-md bg-emerald-50 border-emerald-200"><div className="w-2 h-2 rounded-full bg-emerald-500"></div><span className="text-[11px] font-black text-emerald-800">REKEEP</span><span className="text-[11px] font-bold text-emerald-600">{workers.filter(w => w.profilo === 'REKEEP').length}</span></div>
+                                <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border backdrop-blur-md bg-blue-50 dark:bg-blue-900/30 border-blue-200 dark:border-blue-700/50 transition-colors">
+                                    <div className="w-2 h-2 rounded-full bg-blue-500 dark:bg-cyan-400 dark:shadow-[0_0_8px_currentColor]"></div>
+                                    <span className="text-[11px] font-black text-blue-800 dark:text-cyan-300 transition-colors">RFI</span>
+                                    <span className="text-[11px] font-bold text-blue-600 dark:text-cyan-500 transition-colors">{workers.filter(w => w.profilo === 'RFI').length}</span>
+                                </div>
+                                <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border backdrop-blur-md bg-orange-50 dark:bg-orange-900/30 border-orange-200 dark:border-orange-700/50 transition-colors">
+                                    <div className="w-2 h-2 rounded-full bg-orange-500 dark:bg-orange-400 dark:shadow-[0_0_8px_currentColor]"></div>
+                                    <span className="text-[11px] font-black text-orange-800 dark:text-orange-300 transition-colors">ELIOR</span>
+                                    <span className="text-[11px] font-bold text-orange-600 dark:text-orange-500 transition-colors">{workers.filter(w => w.profilo === 'ELIOR').length}</span>
+                                </div>
+                                <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border backdrop-blur-md bg-emerald-50 dark:bg-emerald-900/30 border-emerald-200 dark:border-emerald-700/50 transition-colors">
+                                    <div className="w-2 h-2 rounded-full bg-emerald-500 dark:bg-emerald-400 dark:shadow-[0_0_8px_currentColor]"></div>
+                                    <span className="text-[11px] font-black text-emerald-800 dark:text-emerald-300 transition-colors">REKEEP</span>
+                                    <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-500 transition-colors">{workers.filter(w => w.profilo === 'REKEEP').length}</span>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -1459,14 +1671,14 @@ const App: React.FC = () => {
 
                         {/* LA BARRA REALE */}
                         <div className="relative flex items-center bg-white/70 dark:bg-slate-900/60 backdrop-blur-2xl border-2 border-white/50 dark:border-slate-700/50 rounded-[2.5rem] shadow-xl transition-all duration-300 
-                     group-hover:scale-[1.01] group-hover:bg-white/90 group-hover:border-indigo-300/50 group-hover:shadow-[0_10px_40px_-10px_rgba(99,102,241,0.2)]
-                     group-focus-within:scale-[1.02] group-focus-within:border-indigo-500 group-focus-within:shadow-[0_20px_50px_-10px_rgba(99,102,241,0.4)]">
+                     group-hover:scale-[1.01] group-hover:bg-white/90 dark:group-hover:bg-slate-800/90 group-hover:border-indigo-300/50 dark:group-hover:border-indigo-500/50 group-hover:shadow-[0_10px_40px_-10px_rgba(99,102,241,0.2)] dark:group-hover:shadow-[0_10px_40px_-10px_rgba(99,102,241,0.4)]
+                     group-focus-within:scale-[1.02] group-focus-within:bg-white/95 dark:group-focus-within:bg-slate-900/95 group-focus-within:border-indigo-500 dark:group-focus-within:border-indigo-400 group-focus-within:shadow-[0_20px_50px_-10px_rgba(99,102,241,0.4)] dark:group-focus-within:shadow-[0_20px_50px_-10px_rgba(99,102,241,0.6)]">
 
                             {/* Icona Lente (Animazione FIXATA: Hover inclina, Focus raddrizza) */}
                             <div className="pl-6 md:pl-8">
-                                <Search className="h-7 w-7 text-slate-400 transition-all duration-500 ease-out
-                           group-hover:text-indigo-500 group-hover:scale-110 group-hover:-rotate-12
-                           group-focus-within:text-indigo-600 group-focus-within:scale-125 group-focus-within:rotate-0"
+                                <Search className="h-7 w-7 text-slate-400 dark:text-slate-500 transition-all duration-500 ease-out
+                           group-hover:text-indigo-500 dark:group-hover:text-indigo-400 group-hover:scale-110 group-hover:-rotate-12
+                           group-focus-within:text-indigo-600 dark:group-focus-within:text-indigo-300 group-focus-within:scale-125 group-focus-within:rotate-0"
                                     strokeWidth={2.5} />
                             </div>
 
@@ -1476,7 +1688,7 @@ const App: React.FC = () => {
                                 placeholder="Cerca dipendente per nome e/o cognome.."
                                 value={searchQuery}
                                 onChange={e => setSearchQuery(e.target.value)}
-                                className="w-full bg-transparent border-none px-6 py-6 text-xl font-bold text-slate-700 dark:text-white placeholder:text-slate-400 placeholder:font-medium focus:ring-0 focus:outline-none"
+                                className="w-full bg-transparent border-none px-6 py-6 text-xl font-bold text-slate-700 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 placeholder:font-medium focus:ring-0 focus:outline-none"
                             />
 
                             {/* Tasto Reset */}
@@ -1487,7 +1699,7 @@ const App: React.FC = () => {
                                         animate={{ opacity: 1, scale: 1 }}
                                         exit={{ opacity: 0, scale: 0.5 }}
                                         onClick={() => setSearchQuery('')}
-                                        className="mr-4 p-2 bg-slate-200 dark:bg-slate-700 rounded-full hover:bg-red-100 hover:text-red-500 transition-colors"
+                                        className="mr-4 p-2 bg-slate-200 dark:bg-slate-700 rounded-full hover:bg-red-100 dark:hover:bg-red-900/40 hover:text-red-500 dark:hover:text-red-400 transition-colors"
                                     >
                                         <X className="w-5 h-5" />
                                     </motion.button>
@@ -1495,35 +1707,28 @@ const App: React.FC = () => {
                             </AnimatePresence>
 
                             {/* Scanner Line (Appare solo quando scrivi) */}
-                            <div className="absolute bottom-0 left-10 right-10 h-[2px] bg-gradient-to-r from-transparent via-indigo-500 to-transparent opacity-0 group-focus-within:opacity-100 transition-opacity duration-700"></div>
+                            <div className="absolute bottom-0 left-10 right-10 h-[2px] bg-gradient-to-r from-transparent via-indigo-500 dark:via-indigo-400 to-transparent opacity-0 group-focus-within:opacity-100 transition-opacity duration-700"></div>
                         </div>
                     </div>
 
-                    {/* 2. SMART FILTERS (PILLOLE NEON) */}
+                    {/* 2. SMART FILTERS (PILLOLE NEON DINAMICHE) */}
                     <div className="flex justify-center mt-6 gap-3 flex-wrap">
-                        {[
-                            { id: 'ALL', label: 'Tutti', color: 'slate' },
-                            { id: 'RFI', label: 'RFI', color: 'blue' },
-                            { id: 'ELIOR', label: 'ELIOR', color: 'orange' },
-                            { id: 'REKEEP', label: 'REKEEP', color: 'emerald' }
-                        ].map((filter) => {
-                            const isActive = activeFilter === filter.id;
-                            const activeClasses = {
-                                slate: 'bg-slate-800 text-white shadow-lg shadow-slate-500/30 ring-2 ring-slate-400 scale-105',
-                                blue: 'bg-blue-600 text-white shadow-lg shadow-blue-500/40 ring-2 ring-blue-400 scale-105',
-                                orange: 'bg-orange-500 text-white shadow-lg shadow-orange-500/40 ring-2 ring-orange-300 scale-105',
-                                emerald: 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/40 ring-2 ring-emerald-300 scale-105'
-                            };
-                            // Aggiunto effetto hover anche sui filtri inattivi
-                            const inactiveClasses = "bg-white/40 dark:bg-slate-800/40 text-slate-500 hover:bg-white hover:text-indigo-600 hover:border-indigo-200 border border-white/40 hover:shadow-lg hover:-translate-y-0.5";
+                        {['ALL', 'RFI', 'ELIOR', 'REKEEP', ...customFilters].map((filterId) => {
+                            const isActive = activeFilter === filterId;
+                            const label = filterId === 'ALL' ? 'Tutti' : filterId;
 
                             return (
                                 <button
-                                    key={filter.id}
-                                    onClick={() => setActiveFilter(filter.id as any)}
-                                    className={`px-6 py-2 rounded-2xl font-black text-xs uppercase tracking-widest transition-all duration-300 backdrop-blur-md ${isActive ? (activeClasses as any)[filter.color] : inactiveClasses}`}
+                                    key={filterId}
+                                    onClick={() => setActiveFilter(filterId)}
+                                    className={`px-6 py-2 rounded-2xl font-black text-xs uppercase tracking-widest transition-all duration-300 backdrop-blur-md flex items-center gap-2 ${getFilterStyle(filterId, isActive)}`}
                                 >
-                                    {filter.label}
+                                    {label}
+                                    {filterId !== 'ALL' && (
+                                        <span className="opacity-70 font-mono text-[10px]">
+                                            ({workers.filter(w => w.profilo === filterId).length})
+                                        </span>
+                                    )}
                                 </button>
                             );
                         })}
@@ -1693,10 +1898,7 @@ const App: React.FC = () => {
                 </AnimatePresence>
             </div>
 
-            {/* CALCOLATRICE FLUTTUANTE */}
-            <AnimatePresence>
-                {showCalc && <FloatingCalculator onClose={() => setShowCalc(false)} />}
-            </AnimatePresence>
+
 
             {/* CONTAINER NOTIFICHE TOAST */}
             <div className="fixed bottom-4 right-4 z-[110] flex flex-col items-end pointer-events-none">
@@ -1736,11 +1938,29 @@ const App: React.FC = () => {
                 onClose={() => setIsQRModalOpen(false)}
                 onScanSuccess={handleMobileScanSuccess}
             />
+            {/* MODALE CONFERMA IMPORTAZIONE BACKUP */}
+            <AnimatePresence>
+                {isImportModalOpen && importPendingData !== null && (
+                    <ConfirmImportModal
+                        isOpen={true}
+                        // 👇 MODIFICA QUI: Conta l'array "workers" dentro l'oggetto, 
+                        // con un fallback nel caso fosse un vecchio backup
+                        count={importPendingData.workers ? importPendingData.workers.length : importPendingData.length}
+                        onClose={() => {
+                            setIsImportModalOpen(false);
+                            setImportPendingData(null);
+                        }}
+                        onConfirm={executeImport}
+                    />
+                )}
+            </AnimatePresence>
 
-            {/* MODALE CAMBIO PASSWORD */}
+            {/* MODALE CAMBIO PASSWORD (Già esistente) */}
             <ChangePasswordModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
+            {/* COMPANY BUILDER MODAL */}
+            <CompanyBuilder isOpen={isCompanyBuilderOpen} onClose={() => setIsCompanyBuilderOpen(false)} />
         </div>
     );
 };
 
-export default App; 
+export default App;

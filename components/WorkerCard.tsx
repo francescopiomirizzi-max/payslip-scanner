@@ -11,10 +11,10 @@ import {
 
 // --- STILI CSS ---
 const scrollbarStyles = `
-  .custom-scrollbar::-webkit-scrollbar { width: 4px; }
-  .custom-scrollbar::-webkit-scrollbar-track { background: rgba(0,0,0,0.05); border-radius: 10px; }
-  .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.2); border-radius: 10px; }
-  .custom-scrollbar:hover::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.3); }
+  .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+  .custom-scrollbar::-webkit-scrollbar-track { background: rgba(0,0,0,0.05); border-radius: 10px; }
+  .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.2); border-radius: 10px; }
+  .custom-scrollbar:hover::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.3); }
 `;
 
 // --- 🔥 PARSER INTELLIGENTE (FONDAMENTALE) ---
@@ -26,7 +26,7 @@ const parseLocalFloat = (val: any) => {
   // Logica Ibrida: Se c'è la virgola, è input utente (ITA).
   if (str.includes(',')) {
     str = str.replace(/\./g, ''); // Via i punti migliaia
-    str = str.replace(',', '.');  // Virgola diventa punto
+    str = str.replace(',', '.');  // Virgola diventa punto
   }
   const num = parseFloat(str);
   return isNaN(num) ? 0 : num;
@@ -319,18 +319,19 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
   const theme = useMemo(() => {
     const color = worker.accentColor || 'indigo';
     const hexMap: any = {
-      indigo: { start: '#6366f1', end: '#8b5cf6', text: '#4f46e5', bg: '#eef2ff', border: '#c7d2fe', glow: 'rgba(99, 102, 241, 0.5)' },
-      emerald: { start: '#10b981', end: '#14b8a6', text: '#059669', bg: '#ecfdf5', border: '#a7f3d0', glow: 'rgba(16, 185, 129, 0.5)' },
-      orange: { start: '#f97316', end: '#ef4444', text: '#ea580c', bg: '#fff7ed', border: '#fed7aa', glow: 'rgba(249, 115, 22, 0.5)' },
-      blue: { start: '#3b82f6', end: '#06b6d4', text: '#2563eb', bg: '#eff6ff', border: '#bfdbfe', glow: 'rgba(59, 130, 246, 0.5)' }
+      indigo: { start: '#6366f1', end: '#8b5cf6', text: '#4f46e5', bg: '#eef2ff', border: '#c7d2fe', glow: 'rgba(99, 102, 241, 0.5)', classes: 'bg-indigo-50 dark:bg-indigo-900/30 border-indigo-200 dark:border-indigo-700/50 text-indigo-600 dark:text-indigo-400' },
+      emerald: { start: '#10b981', end: '#14b8a6', text: '#059669', bg: '#ecfdf5', border: '#a7f3d0', glow: 'rgba(16, 185, 129, 0.5)', classes: 'bg-emerald-50 dark:bg-emerald-900/30 border-emerald-200 dark:border-emerald-700/50 text-emerald-600 dark:text-emerald-400' },
+      orange: { start: '#f97316', end: '#ef4444', text: '#ea580c', bg: '#fff7ed', border: '#fed7aa', glow: 'rgba(249, 115, 22, 0.5)', classes: 'bg-orange-50 dark:bg-orange-900/30 border-orange-200 dark:border-orange-700/50 text-orange-600 dark:text-orange-400' },
+      blue: { start: '#3b82f6', end: '#06b6d4', text: '#2563eb', bg: '#eff6ff', border: '#bfdbfe', glow: 'rgba(59, 130, 246, 0.5)', classes: 'bg-blue-50 dark:bg-blue-900/30 border-blue-200 dark:border-blue-700/50 text-blue-600 dark:text-cyan-400' }
     };
     const c = hexMap[color] || hexMap.blue;
 
     return {
       rawColor: c,
       spotlight: c.glow.replace('0.5', '0.25'),
-      iconStyle: { color: c.text },
-      iconBgStyle: { backgroundColor: c.bg, borderColor: c.border },
+      iconClasses: c.classes, // <--- LA NOSTRA NUOVA MAGIA TAILWIND
+      iconStyle: { color: c.text }, // (Mantenuto per vecchi elementi)
+      iconBgStyle: { backgroundColor: c.bg, borderColor: c.border }, // (Mantenuto per sicurezza)
       btnTextStyle: { color: c.text },
       gradientStyle: { background: `linear-gradient(90deg, ${c.start} 0%, ${c.end} 100%)` },
       backGradientStyle: { background: `linear-gradient(135deg, ${c.bg}E6 0%, rgba(255,255,255,0.9) 50%, ${c.bg}E6 100%)` },
@@ -340,11 +341,30 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
   }, [worker.accentColor]);
 
   const badgeStyles = useMemo(() => {
-    switch (worker.profilo) {
-      case 'ELIOR': return 'bg-orange-100/50 text-orange-700 border-orange-200';
-      case 'REKEEP': return 'bg-emerald-100/50 text-emerald-700 border-emerald-200';
-      default: return 'bg-blue-100/50 text-blue-700 border-blue-200';
+    if (!worker.profilo) return 'bg-slate-200/50 dark:bg-slate-700/50 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-600';
+    if (worker.profilo === 'ELIOR') return 'bg-orange-100/50 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 border-orange-200 dark:border-orange-700/50';
+    if (worker.profilo === 'REKEEP') return 'bg-emerald-100/50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-700/50';
+    if (worker.profilo === 'RFI') return 'bg-blue-100/50 dark:bg-blue-900/30 text-blue-700 dark:text-cyan-400 border-blue-200 dark:border-blue-700/50';
+
+    // AZIENDE CUSTOM: Palette premium esclusiva (niente blu/arancio/verde base)
+    const customPalette = [
+      'bg-fuchsia-100/50 dark:bg-fuchsia-900/30 text-fuchsia-700 dark:text-fuchsia-400 border-fuchsia-200 dark:border-fuchsia-700/50',
+      'bg-violet-100/50 dark:bg-violet-900/30 text-violet-700 dark:text-violet-400 border-violet-200 dark:border-violet-700/50',
+      'bg-cyan-100/50 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-400 border-cyan-200 dark:border-cyan-700/50',
+      'bg-rose-100/50 dark:bg-rose-900/30 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-700/50',
+      'bg-indigo-100/50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 border-indigo-200 dark:border-indigo-700/50',
+      'bg-teal-100/50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-400 border-teal-200 dark:border-teal-700/50'
+    ];
+
+    // Genera un numero fisso e immutabile basato sulle lettere del nome dell'azienda
+    let hash = 0;
+    for (let i = 0; i < worker.profilo.length; i++) {
+      hash = worker.profilo.charCodeAt(i) + ((hash << 5) - hash);
     }
+
+    // Usa l'hash per pescare sempre lo stesso colore dalla customPalette
+    const index = Math.abs(hash) % customPalette.length;
+    return customPalette[index];
   }, [worker.profilo]);
 
   const noiseBg = `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.05'/%3E%3C/svg%3E")`;
@@ -366,47 +386,47 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
                 <div className="pointer-events-none absolute -inset-px opacity-0 transition duration-300 z-10" style={{ opacity, background: `radial-gradient(600px circle at ${position.x}px ${position.y}px, ${theme.spotlight}, transparent 40%)` }} />
 
                 <div className="relative p-7 flex flex-col h-full z-20">
-                  <div className="flex justify-between items-start mb-5">
-                    <div className="flex items-center gap-5">
-                      <div className="w-16 h-16 rounded-2xl flex items-center justify-center border shadow-sm transition-transform duration-500 group-hover:rotate-3 group-hover:scale-110" style={theme.iconBgStyle}>
-                        <RoleIcon className="w-8 h-8" style={theme.iconStyle} strokeWidth={1.5} />
+                  <div className="flex justify-between items-start mb-5 gap-2">
+                    <div className="flex items-center gap-4 min-w-0">
+                      <div className={`w-16 h-16 rounded-2xl flex items-center justify-center border shadow-sm transition-all duration-500 group-hover:rotate-3 group-hover:scale-110 shrink-0 ${theme.iconClasses}`}>
+                        <RoleIcon className="w-8 h-8" strokeWidth={1.5} />
                       </div>
-                      <div className="flex flex-col justify-center">
+                      <div className="flex flex-col justify-center min-w-0">
                         <div className="flex items-center gap-2 mb-1">
-                          <h3 className="text-xl font-black text-slate-800 dark:text-white leading-none tracking-tight uppercase">{worker.cognome}</h3>
-                          <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wide border shadow-sm backdrop-blur-md ${badgeStyles}`}>{worker.profilo}</span>
+                          <h3 className="text-lg font-bold text-slate-500 dark:text-slate-400 leading-none capitalize truncate">{worker.nome}</h3>
+                          <span className={`shrink-0 px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wide border shadow-sm backdrop-blur-md ${badgeStyles}`}>{worker.profilo}</span>
                         </div>
-                        <h3 className="text-lg font-bold text-slate-500 leading-none capitalize">{worker.nome}</h3>
+                        <h3 className="text-xl font-black text-slate-800 dark:text-white leading-none tracking-tight uppercase truncate">{worker.cognome}</h3>
                       </div>
                     </div>
-                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all duration-500 translate-x-4 group-hover:translate-x-0">
-                      <button onClick={() => setIsFlipped(true)} className="p-2 text-slate-400 hover:text-indigo-500 transition-all hover:scale-125 hover:rotate-[360deg] duration-700"><RotateCw className="w-5 h-5" /></button>
-                      <button onClick={(e) => { e.stopPropagation(); onEdit(e); }} className="p-2 text-slate-400 hover:text-blue-500 transition-all hover:scale-125 hover:rotate-12"><Edit className="w-5 h-5" /></button>
-                      <button onClick={(e) => { e.stopPropagation(); onDelete(); }} className="p-2 text-slate-400 hover:text-red-500 transition-all hover:scale-125 hover:-rotate-12"><Trash2 className="w-5 h-5" /></button>
+                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all duration-500 translate-x-4 group-hover:translate-x-0 shrink-0">
+                      <button onClick={() => setIsFlipped(true)} className="p-2 text-slate-400 dark:text-slate-500 hover:text-indigo-500 dark:hover:text-indigo-400 transition-all hover:scale-125 hover:rotate-[360deg] duration-700"><RotateCw className="w-5 h-5" /></button>
+                      <button onClick={(e) => { e.stopPropagation(); onEdit(e); }} className="p-2 text-slate-400 dark:text-slate-500 hover:text-blue-500 dark:hover:text-cyan-400 transition-all hover:scale-125 hover:rotate-12"><Edit className="w-5 h-5" /></button>
+                      <button onClick={(e) => { e.stopPropagation(); onDelete(); }} className="p-2 text-slate-400 dark:text-slate-500 hover:text-red-500 dark:hover:text-red-400 transition-all hover:scale-125 hover:-rotate-12"><Trash2 className="w-5 h-5" /></button>
                     </div>
                   </div>
 
                   <div className="flex-1 space-y-4">
-                    <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full border shadow-sm w-fit backdrop-blur-md ${statusConfig.color}`}>
+                    <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full border shadow-sm w-fit backdrop-blur-md transition-colors ${statusConfig.color} dark:bg-opacity-20 dark:border-opacity-30`}>
                       <span className="w-2 h-2 rounded-full shadow-[0_0_8px_currentColor]" style={{ backgroundColor: statusConfig.dot }}></span>
                       <StatusIcon className="w-3.5 h-3.5" />
                       <span className="text-[10px] font-bold uppercase tracking-wide">{statusConfig.label}</span>
                     </div>
                     <div className="flex flex-wrap items-center gap-2 mt-3">
-                      <span className="px-3 py-1.5 rounded-xl bg-white/50 border border-slate-200/60 text-[10px] font-bold text-slate-500 capitalize shadow-sm backdrop-blur-sm">{worker.ruolo || 'N.D.'}</span>
-                      <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/50 border border-slate-200/60 shadow-sm backdrop-blur-sm">
+                      <span className="px-3 py-1.5 rounded-xl bg-white/50 dark:bg-slate-900/60 border border-slate-200/60 dark:border-slate-700/50 text-[10px] font-bold text-slate-500 dark:text-slate-400 capitalize shadow-sm backdrop-blur-sm transition-colors">{worker.ruolo || 'N.D.'}</span>
+                      <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/50 dark:bg-slate-900/60 border border-slate-200/60 dark:border-slate-700/50 shadow-sm backdrop-blur-sm transition-colors">
                         <CalendarRange className="w-3.5 h-3.5" style={theme.iconStyle} />
-                        <span className="text-[10px] font-black text-slate-700 tracking-tight">{stats.range}</span>
+                        <span className="text-[10px] font-black text-slate-700 dark:text-slate-300 tracking-tight transition-colors">{stats.range}</span>
                       </div>
                     </div>
                     <div className="space-y-2 mt-2">
                       <div className="flex justify-between items-end px-1">
-                        <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{stats.label}</span>
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500 transition-colors">{stats.label}</span>
                         <span className="text-xs font-black" style={theme.iconStyle}>{stats.percent}%</span>
                       </div>
-                      <div className="h-3 w-full bg-slate-200/50 rounded-full overflow-hidden border border-slate-100/50 p-[2px] shadow-inner backdrop-blur-sm">
+                      <div className="h-3 w-full bg-slate-200/50 dark:bg-slate-900/80 rounded-full overflow-hidden border border-slate-100/50 dark:border-slate-800/80 p-[2px] shadow-inner backdrop-blur-sm transition-colors">
                         <div className="h-full rounded-full shadow-[0_0_10px_currentColor] transition-all duration-1000 ease-out relative" style={{ ...theme.gradientStyle, width: `${stats.percent}%` }}>
-                          <div className="absolute inset-0 bg-white/40 w-full animate-[shimmer_2s_infinite] skew-x-12"></div>
+                          <div className="absolute inset-0 bg-white/40 dark:bg-white/20 w-full animate-[shimmer_2s_infinite] skew-x-12"></div>
                         </div>
                       </div>
                     </div>
@@ -419,7 +439,7 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
                       whileTap="tap"
                       variants={{ idle: { scale: 1 }, hover: { scale: 1.05 }, tap: { scale: 0.95 } }}
                       onClick={() => onOpenComplex(worker.id)}
-                      className="flex items-center justify-center gap-2 px-3 py-3.5 rounded-2xl bg-white/40 border border-white/60 text-slate-500 text-[9px] font-black tracking-tighter shadow-sm hover:shadow-lg hover:border-white hover:bg-white/80 backdrop-blur-md transition-all group"
+                      className="flex items-center justify-center gap-2 px-3 py-3.5 rounded-2xl bg-white/40 dark:bg-slate-900/40 border border-white/60 dark:border-slate-700/50 text-slate-500 dark:text-slate-400 text-[9px] font-black tracking-tighter shadow-sm hover:shadow-lg hover:border-white dark:hover:border-slate-500 hover:bg-white/80 dark:hover:bg-slate-800/80 backdrop-blur-md transition-all group"
                     >
                       <motion.div variants={{ idle: { rotate: 0, scale: 1 }, hover: { rotate: 90, scale: 1.2 } }} transition={{ type: "spring", stiffness: 200, damping: 10 }}>
                         <LayoutGrid className="w-4 h-4" />
@@ -451,16 +471,17 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
           {/* LATO POSTERIORE */}
           <div className="absolute inset-0 w-full h-full [backface-visibility:hidden] [transform:rotateY(180deg)]">
             <Tilt options={{ max: 10, scale: 1.02, speed: 1000, glare: true, "max-glare": 0.3 }} className="w-full h-full">
-              <div className="w-full h-full backdrop-blur-3xl border border-white/60 rounded-[2.5rem] flex flex-col shadow-2xl relative overflow-hidden" style={theme.backGradientStyle}>
+              {/* LATO POSTERIORE */}
+              <div className="w-full h-full backdrop-blur-3xl border border-white/60 dark:border-slate-700 rounded-[2.5rem] flex flex-col shadow-2xl relative overflow-hidden dark:!bg-slate-900 dark:!bg-none transition-colors duration-500" style={{ ...(document.documentElement.classList.contains('dark') ? {} : theme.backGradientStyle) }}>
 
                 {/* Header Fisso */}
                 <div className="flex-none p-7 pb-4 relative z-20">
                   <div className="flex justify-between items-center">
                     <div className="flex items-center gap-2">
                       <div className="w-2 h-2 rounded-full shadow-[0_0_8px_currentColor]" style={{ backgroundColor: theme.rawColor.start }}></div>
-                      <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Financial Overview</span>
+                      <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Financial Overview</span>
                     </div>
-                    <button onClick={() => setIsFlipped(false)} className="group p-2 bg-white/60 border border-white/50 rounded-full shadow-sm hover:scale-110 transition-all hover:bg-white text-slate-400 hover:text-indigo-600">
+                    <button onClick={() => setIsFlipped(false)} className="group p-2 bg-white/60 dark:bg-slate-800/60 border border-white/50 dark:border-slate-700 rounded-full shadow-sm hover:scale-110 transition-all hover:bg-white dark:hover:bg-slate-700 text-slate-400 dark:text-slate-500 hover:text-indigo-600 dark:hover:text-cyan-400">
                       <ArrowLeft className="w-5 h-5 transition-transform group-hover:-translate-x-0.5" />
                     </button>
                   </div>
@@ -470,7 +491,7 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
                 <div className="flex-1 overflow-y-auto custom-scrollbar px-7 pb-4 relative z-10">
 
                   {/* DISPLAY NETTO */}
-                  <div className="relative overflow-hidden p-5 rounded-[2rem] bg-white/50 border border-white/60 shadow-lg backdrop-blur-md mb-4 group transition-transform hover:scale-[1.02]">
+                  <div className="relative overflow-hidden p-5 rounded-[2rem] bg-white/50 dark:bg-slate-950/50 border border-white/60 dark:border-slate-700 shadow-lg backdrop-blur-md mb-4 group transition-all hover:scale-[1.02]">
                     <div className="absolute top-0 left-0 w-1 h-full" style={{ backgroundColor: theme.rawColor.start }}></div>
                     <div className="flex justify-between items-start mb-1">
                       <p className="text-[9px] uppercase tracking-widest text-slate-400 font-black">RECUPERO TOTALE</p>
@@ -485,46 +506,46 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
                   <div className="mb-4">
                     <div className="flex justify-between items-center mb-1 px-1">
                       <p className="text-[8px] font-bold uppercase text-slate-400">Trend Storico</p>
-                      <TrendingUp className="w-3 h-3 text-slate-300" />
+                      <TrendingUp className="w-3 h-3 text-slate-300 dark:text-slate-600" />
                     </div>
                     <BackChart worker={worker} theme={theme} startYear={startClaimYear} />
                   </div>
 
-                  {/* BOX TICKET INTELLIGENTE MIGLIORATO PER LEGGIBILITÀ */}
+                  {/* BOX TICKET INTELLIGENTE */}
                   <div className={`p-4 rounded-[1.5rem] border shadow-sm backdrop-blur-sm flex items-center justify-between mb-3 transition-colors ${includeTickets
-                    ? 'bg-white/40 border-white/50 hover:bg-white/60'
-                    : 'bg-slate-50/90 border-slate-200' // Sfondo più solido e chiaro quando inattivo
+                    ? 'bg-white/40 dark:bg-slate-900/40 border-white/50 dark:border-slate-700/50 hover:bg-white/60 dark:hover:bg-slate-800/60'
+                    : 'bg-slate-50/90 dark:bg-slate-950/80 border-slate-200 dark:border-slate-800'
                     }`}>
                     <div className="flex items-center gap-2">
-                      <Ticket className={`w-4 h-4 ${includeTickets ? 'text-amber-500' : 'text-slate-500'}`} />
-                      <span className={`text-[9px] uppercase tracking-widest font-bold ${includeTickets ? 'text-slate-500' : 'text-slate-600'}`}>
+                      <Ticket className={`w-4 h-4 ${includeTickets ? 'text-amber-500 dark:text-amber-400' : 'text-slate-500 dark:text-slate-600'}`} />
+                      <span className={`text-[9px] uppercase tracking-widest font-bold ${includeTickets ? 'text-slate-500 dark:text-slate-400' : 'text-slate-600 dark:text-slate-500'}`}>
                         Valore Ticket
                       </span>
                     </div>
 
                     {includeTickets ? (
-                      <p className="text-lg font-black text-slate-600">
+                      <p className="text-lg font-black text-slate-600 dark:text-slate-200 transition-colors">
                         {financialStats.ticket.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' }).replace(',00', '')}
                       </p>
                     ) : (
-                      <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-100/80 border border-rose-200 shadow-sm">
-                        <Ban className="w-3.5 h-3.5 text-rose-600" />
-                        <span className="text-[9px] font-black text-rose-700 tracking-wide uppercase">Non Calcolati</span>
+                      <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-100/80 dark:bg-rose-900/30 border border-rose-200 dark:border-rose-800/50 shadow-sm transition-colors">
+                        <Ban className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />
+                        <span className="text-[9px] font-black text-rose-700 dark:text-rose-400 tracking-wide uppercase">Non Calcolati</span>
                       </div>
                     )}
                   </div>
 
                   {/* GRIGLIA FINALE */}
                   <div className="grid grid-cols-2 gap-3 mb-2">
-                    <div className="p-3 rounded-[1.5rem] bg-white/40 border border-white/50 shadow-sm backdrop-blur-sm flex flex-col items-center justify-center text-center hover:bg-white/60 transition-colors">
-                      <Layers className="w-3.5 h-3.5 text-blue-400 mb-1" />
+                    <div className="p-3 rounded-[1.5rem] bg-white/40 dark:bg-slate-900/40 border border-white/50 dark:border-slate-700/50 shadow-sm backdrop-blur-sm flex flex-col items-center justify-center text-center hover:bg-white/60 dark:hover:bg-slate-800/60 transition-colors">
+                      <Layers className="w-3.5 h-3.5 text-blue-400 dark:text-cyan-400 mb-1" />
                       <p className="text-[7px] uppercase tracking-widest text-slate-400 font-bold mb-0.5">Lordo</p>
-                      <p className="text-sm font-black text-slate-600">
+                      <p className="text-sm font-black text-slate-600 dark:text-slate-200 transition-colors">
                         {financialStats.lordo.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' }).replace(',00', '')}
                       </p>
                     </div>
 
-                    <div className="p-3 rounded-[1.5rem] bg-white/40 border border-white/50 shadow-sm backdrop-blur-sm flex flex-col items-center justify-center text-center hover:bg-white/60 transition-colors">
+                    <div className="p-3 rounded-[1.5rem] bg-white/40 dark:bg-slate-900/40 border border-white/50 dark:border-slate-700/50 shadow-sm backdrop-blur-sm flex flex-col items-center justify-center text-center hover:bg-white/60 dark:hover:bg-slate-800/60 transition-colors">
                       <CalendarClock className="w-3.5 h-3.5 mb-1" style={theme.iconStyle} />
                       <p className="text-[7px] uppercase tracking-widest text-slate-400 font-bold mb-0.5">G. Utili</p>
                       <p className="text-sm font-black" style={theme.iconStyle}>
@@ -535,21 +556,21 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
                 </div>
 
                 {/* Footer Fisso */}
-                <div className="flex-none p-4 pt-3 border-t border-slate-200/30 flex justify-between items-center opacity-70 relative z-20 bg-white/20 backdrop-blur-sm">
+                <div className="flex-none p-4 pt-3 border-t border-slate-200/30 dark:border-slate-700/50 flex justify-between items-center opacity-70 relative z-20 bg-white/20 dark:bg-slate-950/40 backdrop-blur-sm transition-colors">
                   <div className="flex items-center gap-2">
-                    <CreditCard className="w-3 h-3 text-slate-400" />
-                    <span className="text-[8px] font-bold text-slate-500 uppercase tracking-widest">ID: {worker.id}</span>
+                    <CreditCard className="w-3 h-3 text-slate-400 dark:text-slate-500" />
+                    <span className="text-[8px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">ID: {worker.id}</span>
                   </div>
-                  <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-white/50 border border-white/50">
+                  <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-white/50 dark:bg-slate-800/80 border border-white/50 dark:border-slate-700 transition-colors">
                     <Activity className="w-2.5 h-2.5" style={theme.iconStyle} />
-                    <span className="text-[7px] font-bold text-slate-500">ACTIVE</span>
+                    <span className="text-[7px] font-bold text-slate-500 dark:text-slate-400">ACTIVE</span>
                   </div>
                 </div>
 
                 {/* Sfondo Decorativo */}
                 <div className="absolute inset-0 pointer-events-none opacity-[0.05] z-0" style={{ backgroundImage: noiseBg }}></div>
-                <div className="absolute top-[-20%] right-[-20%] w-64 h-64 rounded-full blur-[60px] opacity-20 animate-pulse pointer-events-none" style={{ backgroundColor: theme.rawColor.start }}></div>
-                <div className="absolute bottom-[-20%] left-[-20%] w-40 h-40 rounded-full blur-[60px] opacity-20 pointer-events-none" style={{ backgroundColor: theme.rawColor.start }}></div>
+                <div className="absolute top-[-20%] right-[-20%] w-64 h-64 rounded-full blur-[60px] opacity-20 dark:opacity-10 animate-pulse pointer-events-none transition-opacity" style={{ backgroundColor: theme.rawColor.start }}></div>
+                <div className="absolute bottom-[-20%] left-[-20%] w-40 h-40 rounded-full blur-[60px] opacity-20 dark:opacity-10 pointer-events-none transition-opacity" style={{ backgroundColor: theme.rawColor.start }}></div>
 
               </div>
             </Tilt>

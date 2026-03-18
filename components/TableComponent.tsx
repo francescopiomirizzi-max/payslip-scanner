@@ -1,4 +1,5 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
+import { useIsland } from '../IslandContext'; // 👈 ECCOLA QUI!
 import { Worker, AnnoDati, YEARS, getColumnsByProfile } from '../types';
 import {
   Printer,
@@ -45,7 +46,7 @@ const parseLocalFloat = (val: any) => {
   // Se c'è una virgola, è formato UTENTE ITALIANO (es. 1.200,50)
   if (str.includes(',')) {
     str = str.replace(/\./g, ''); // Via i punti migliaia
-    str = str.replace(',', '.');  // Virgola diventa punto
+    str = str.replace(',', '.');  // Virgola diventa punto
   }
 
   const num = parseFloat(str);
@@ -77,10 +78,10 @@ const handleDownloadPDF = (
   doc.setFontSize(10);
   doc.setFont("helvetica", "normal");
   doc.setTextColor(200, 200, 200);
-  doc.text(`Dipendente: ${worker.cognome} ${worker.nome} (Matr. ${worker.id})`, 14, 18);
+  doc.text(`Dipendente: ${worker.cognome} ${worker.nome} - Profilo: ${worker.ruolo}`, 14, 18);
   doc.text(`Periodo: ${startYear} - ${endYear}`, 14, 22);
 
-  const headRow = ['ANNO', 'TOT. VOCI\nRETRIBUTIVE', 'DIVISORE\nANNUO', 'INCIDENZA\nGIORNALIERA', 'GIORNI FERIE\n(PAGABILI)', 'LORDO\nFERIE'];
+  const headRow = ['ANNO', 'TOT. VOCI\nRETRIBUTIVE', 'DIVISORE\nANNUO', 'INCIDENZA\nGIORNALIERA', 'GIORNI DI FERIE', 'LORDO\nFERIE'];
 
   if (showPercepito) {
     headRow.push('INDENNITÀ\nPERCEPITA');
@@ -195,9 +196,57 @@ const handleDownloadPDF = (
 // --- COMPONENTE PRINCIPALE ---
 const TableComponent: React.FC<TableComponentProps> = ({ worker, onBack, onEdit, startClaimYear }) => {
 
+  // ✨ BISTURI 1: QUICK ACTIONS CONTESTUALI (Radar Intelligente)
+  const { setQuickActions } = useIsland();
+  const isQuickActionsActiveRef = useRef(false);
+
+  // 1. Spegnimento sicuro E comunicazione cambio contesto
+  useEffect(() => {
+    // Diciamo all'isola che siamo nel REPORT
+    window.dispatchEvent(new CustomEvent('set-island-context', { detail: 'report' }));
+
+    return () => {
+      setQuickActions(false);
+      isQuickActionsActiveRef.current = false;
+    };
+  }, [setQuickActions]);
+
+  // 2. Il Radar e i Comandi "Locali"
+  useEffect(() => {
+    // Mappiamo i bottoni dell'Isola alle azioni di QUESTA pagina
+    const handleDashboardAction = () => onBack();
+    const handleEditAction = () => onEdit(); // Tasto centrale
+    const handlePrintAction = () => handlePrint(); // Tasto destro (Stampa nativa)
+
+    window.addEventListener('trigger-dashboard', handleDashboardAction);
+    window.addEventListener('trigger-edit', handleEditAction);
+    window.addEventListener('trigger-print', handlePrintAction);
+
+    const handleGlobalScroll = () => {
+      let scrollTop = window.scrollY || document.documentElement.scrollTop;
+
+      if (scrollTop > 80 && !isQuickActionsActiveRef.current) {
+        isQuickActionsActiveRef.current = true;
+        setQuickActions(true);
+      }
+      else if (scrollTop <= 20 && isQuickActionsActiveRef.current) {
+        isQuickActionsActiveRef.current = false;
+        setQuickActions(false);
+      }
+    };
+
+    window.addEventListener('scroll', handleGlobalScroll, true);
+
+    return () => {
+      window.removeEventListener('trigger-dashboard', handleDashboardAction);
+      window.removeEventListener('trigger-edit', handleEditAction);
+      window.removeEventListener('trigger-print', handlePrintAction);
+      window.removeEventListener('scroll', handleGlobalScroll, true);
+    };
+  }, [onBack, onEdit, setQuickActions]); // 👈 QUESTE ERANO QUELLE MANCANTI!// Si aggiorna sempre per avere i dati PDF più freschi
+
   const [isRelazioneOpen, setIsRelazioneOpen] = useState(false);
   const [showInfoTetto, setShowInfoTetto] = useState(false);
-
   // --- STATI CON MEMORIA ---
   const [includeExFest, setIncludeExFest] = useState(() => {
     const saved = localStorage.getItem(`report_exfest_${worker.id}`);
@@ -239,7 +288,8 @@ const TableComponent: React.FC<TableComponentProps> = ({ worker, onBack, onEdit,
       if (ggLav > 0) {
         let monthlyVoci = 0;
         profileColumns.forEach(col => {
-          if (!['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'coeffPercepito', 'coeffTicket', 'note', 'arretrati'].includes(col.id)) {
+          // Aggiunti '3B70', '3B71' per escluderli dal report e dal PDF
+          if (!['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'coeffPercepito', 'coeffTicket', 'note', 'arretrati', '3B70', '3B71'].includes(col.id)) {
             // USIAMO parseLocalFloat QUI
             monthlyVoci += parseLocalFloat(row[col.id]);
           }
@@ -383,7 +433,7 @@ const TableComponent: React.FC<TableComponentProps> = ({ worker, onBack, onEdit,
 
     doc.setFont("times", "bold");
     doc.text(`OGGETTO: Diffida ad adempiere e costituzione in mora - Ricalcolo Retribuzione Feriale.`, 20, 90);
-    doc.text(`Lavoratore: ${worker.cognome} ${worker.nome} (Matr. ${worker.id})`, 20, 95);
+    doc.text(`Lavoratore: ${worker.cognome} ${worker.nome} - Profilo: ${worker.ruolo}`, 20, 95);
 
     doc.setFont("times", "normal");
 
@@ -392,6 +442,11 @@ const TableComponent: React.FC<TableComponentProps> = ({ worker, onBack, onEdit,
       testoCodici = "L'analisi ha evidenziato la mancata inclusione delle voci variabili ricorrenti, tra cui a titolo esemplificativo: Straordinario Diurno (0152), Notturno (0421), Chiamata (0470, 0496), Reperibilità (0482), Ind. Linea (0687), Trasferta (0AA1) e altre indennità accessorie contrattualmente previste.";
     } else if (worker.profilo === 'REKEEP') {
       testoCodici = "L'analisi ha evidenziato la mancata inclusione delle indennità specifiche di appalto (Turni non cadenzati, Ind. Sussidiaria, Maggiorazioni) previste dal CCNL Multiservizi/Ferroviario.";
+    } else if (worker.profilo === 'ELIOR') {
+      testoCodici = "L'analisi ha evidenziato la mancata inclusione delle indennità specifiche della Ristorazione a Bordo (Diaria Scorta, Ind. Cassa, Lavoro Domenicale/Notturno) previste dal CCNL di riferimento.";
+    } else {
+      // TESTO JOLLY PER LE AZIENDE CUSTOM (Es. ATM Milano)
+      testoCodici = `L'analisi ha evidenziato la mancata inclusione delle voci variabili ricorrenti e continuative previste dal modello aziendale applicato (${worker.profilo}), con l'esclusione delle sole voci una tantum e dei rimborsi spese.`;
     }
 
     const bodyText = `
@@ -416,7 +471,7 @@ Tale somma è comprensiva delle differenze retributive maturate e del valore dei
 In difetto di riscontro entro il termine assegnato, sarò costretto ad adire l'Autorità Giudiziaria competente per il recupero coattivo del credito e delle spese legali, senza ulteriore avviso.
 
 Distinti saluti.
-    `;
+    `;
 
     const splitText = doc.splitTextToSize(bodyText.trim(), 170);
     let currentY = 110;
@@ -452,15 +507,68 @@ Distinti saluti.
   };
 
   return (
-    <div className="min-h-screen bg-[#f0f4ff] flex flex-col items-center font-sans text-gray-900 pb-20">
+    <div className="min-h-screen bg-[#f0f4ff] dark:bg-[#020617] flex flex-col items-center font-sans text-gray-900 dark:text-slate-100 pb-20 print:bg-white print:pb-0 print:block transition-colors duration-500">
 
       <style>{`
         @media print {
-          @page { size: landscape; margin: 0mm; }
-          body { -webkit-print-color-adjust: exact; print-color-adjust: exact; background-color: white; zoom: 75%; padding: 10mm; }
-          .no-print { display: none !important; }
-          .print-container { overflow: visible !important; width: 100% !important; display: block !important; }
-          table { width: 100% !important; font-size: 12px !important; }
+          /* 1. Margini ridotti al minimo per sfruttare tutto il foglio */
+          @page { size: A4 landscape; margin: 5mm; }
+          /* ✨ BISTURI: Nascondiamo l'Isola Dinamica forzatamente */
+          .group\\/island { display: none !important; }
+          body, html { 
+            background-color: white !important; 
+            -webkit-print-color-adjust: exact !important; 
+            print-color-adjust: exact !important; 
+            margin: 0; padding: 0;
+            width: 100%;
+            height: 100%;
+          }
+          
+          .print\\:hidden { display: none !important; }
+          
+          /* 2. CENTRATURA E SCALA ANTI-TAGLIO */
+          #report-content {
+            display: flex !important;
+            justify-content: center !important;
+            width: 100% !important;
+            zoom: 0.82; /* Scala perfetta per non sbordare in basso */
+            page-break-inside: avoid; /* Ordina al browser di NON spezzare la pagina */
+          }
+
+          .print-container {
+            width: 98% !important; /* Allargato al massimo */
+            max-width: 100% !important;
+            margin: 0 auto !important; 
+            box-shadow: none !important;
+            border: none !important;
+            page-break-inside: avoid;
+          }
+
+          /* 3. TABELLA ADATTIVA */
+          table { 
+            width: 100% !important; 
+            table-layout: auto !important; 
+            margin: 0 auto !important;
+          }
+          
+          th { 
+            font-size: 13px !important; 
+            padding: 6px 4px !important; /* Padding verticale ridotto per recuperare altezza */
+            line-height: 1.1 !important;
+          }
+          
+          td { 
+            font-size: 14px !important; 
+            padding: 5px 4px !important; /* Padding verticale ridotto */
+          }
+
+          /* Testi Intestazione proporzionati */
+          .text-2xl { font-size: 18px !important; }
+          .text-xl { font-size: 16px !important; }
+          .text-lg { font-size: 14px !important; }
+          .text-base { font-size: 13px !important; }
+
+          /* Colori inalterati */
           tr.bg-blue-header { background-color: #7EB6D3 !important; color: black !important; }
           td.bg-green-total { background-color: #92D050 !important; }
           td.bg-red-total { background-color: #FF5050 !important; color: white !important; }
@@ -469,7 +577,8 @@ Distinti saluti.
       `}</style>
 
       {/* HEADER NAV */}
-      <div className="no-print w-full p-5 bg-slate-900 text-white flex justify-between items-center shadow-2xl sticky top-0 z-50 border-b border-slate-700">
+      {/* ✨ BISTURI 2: Spazio ottimizzato e bilanciato */}
+      <div className="print:hidden w-full pt-16 pb-4 px-6 bg-slate-900 dark:bg-[#0f172a] text-white flex justify-between items-center shadow-2xl sticky top-0 z-50 border-b border-slate-700 dark:border-cyan-900/50 transition-colors">
         <div className="flex items-center gap-8">
           <button
             onClick={onBack}
@@ -507,8 +616,8 @@ Distinti saluti.
             <button
               onClick={() => setIncludeExFest(!includeExFest)}
               className={`group relative px-4 py-2 rounded-xl font-bold text-xs shadow-lg transition-all duration-300 flex items-center gap-2 ${includeExFest
-                ? 'bg-amber-600 text-white border border-amber-400'
-                : 'bg-slate-700 text-slate-300 border border-slate-600 hover:text-white'
+                ? 'bg-amber-600 dark:bg-amber-500/20 text-white dark:text-amber-400 border border-amber-400 dark:border-amber-500/50 dark:shadow-[0_0_10px_rgba(245,158,11,0.2)]'
+                : 'bg-slate-700 dark:bg-slate-800 text-slate-300 dark:text-slate-400 border border-slate-600 dark:border-slate-700 hover:text-white'
                 }`}
             >
               <CalendarPlus className="w-4 h-4 shrink-0" />
@@ -521,8 +630,8 @@ Distinti saluti.
             <button
               onClick={() => setIncludeTickets(!includeTickets)}
               className={`group relative px-4 py-2 rounded-xl font-bold text-xs shadow-lg transition-all duration-300 flex items-center gap-2 ${includeTickets
-                ? 'bg-indigo-600 text-white border border-indigo-400'
-                : 'bg-slate-700 text-slate-400 border border-slate-600 hover:text-white line-through opacity-70'
+                ? 'bg-indigo-600 dark:bg-indigo-500/20 text-white dark:text-indigo-300 border border-indigo-400 dark:border-indigo-500/50 dark:shadow-[0_0_10px_rgba(99,102,241,0.2)]'
+                : 'bg-slate-700 dark:bg-slate-800 text-slate-400 dark:text-slate-500 border border-slate-600 dark:border-slate-700 hover:text-white line-through opacity-70'
                 }`}
             >
               <Ticket className="w-4 h-4 shrink-0" />
@@ -533,8 +642,8 @@ Distinti saluti.
             <button
               onClick={() => setShowPercepito(!showPercepito)}
               className={`group relative px-4 py-2 rounded-xl font-bold text-xs shadow-lg transition-all duration-300 flex items-center gap-2 ${showPercepito
-                ? 'bg-orange-600 text-white border border-orange-400'
-                : 'bg-slate-700 text-slate-400 border border-slate-600 hover:text-white opacity-70'
+                ? 'bg-orange-600 dark:bg-orange-500/20 text-white dark:text-orange-400 border border-orange-400 dark:border-orange-500/50 dark:shadow-[0_0_10px_rgba(249,115,22,0.2)]'
+                : 'bg-slate-700 dark:bg-slate-800 text-slate-400 dark:text-slate-500 border border-slate-600 dark:border-slate-700 hover:text-white opacity-70'
                 }`}
               title="Mostra/Nascondi colonna Indennità Già Percepita"
             >
@@ -545,7 +654,7 @@ Distinti saluti.
             {/* Tasto Info */}
             <button
               onClick={() => setShowInfoTetto(!showInfoTetto)}
-              className={`p-2 rounded-xl transition-all ${showInfoTetto ? 'bg-blue-600 text-white' : 'hover:bg-slate-700 text-slate-400'}`}
+              className={`p-2 rounded-xl transition-all ${showInfoTetto ? 'bg-blue-600 dark:bg-cyan-600 text-white dark:shadow-[0_0_10px_rgba(6,182,212,0.4)]' : 'hover:bg-slate-700 dark:hover:bg-slate-800 text-slate-400 dark:text-slate-500'}`}
             >
               <Info className="w-5 h-5" />
             </button>
@@ -609,7 +718,6 @@ Distinti saluti.
             className="group relative px-6 py-3 rounded-xl font-bold text-lg text-white shadow-lg hover:-translate-y-0.5 active:scale-95 transition-all duration-300 border border-white/10 overflow-hidden flex items-center gap-3"
             style={{ background: 'linear-gradient(90deg, #059669 0%, #14b8a6 100%)' }}
           >
-            {/* Corretto rotate-90 in rotate-12 e rimosso strokeWidth inutile */}
             <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500 rotate-12"></div>
             <LayoutGrid className="w-5 h-5 transition-transform duration-500 group-hover:rotate-90" strokeWidth={2.5} />
             <span>Gestione Dati</span>
@@ -637,64 +745,62 @@ Distinti saluti.
         </div>
       </div>
 
-      {/* TABELLA HTML */}
-      <div id="report-content" className="w-full flex flex-col items-center">
-        <div className="print-container overflow-x-auto print:overflow-visible w-full flex justify-center print:block print:w-full mt-12">
-          <div className="inline-block min-w-[1200px] w-full max-w-[1400px] border-2 border-black bg-white shadow-2xl print:shadow-none print:w-full print:border-none rounded-2xl overflow-hidden print:rounded-none">
+      {/* TABELLA HTML - WRAPPER PULITO PER LA STAMPA */}
+      <div id="report-content" className="w-full flex justify-center print:block">
+        <div className="print-container mt-12 print:mt-0 w-full max-w-[1400px]">
+          {/* Rimossa la larghezza forzata e i bordi ingombranti in stampa */}
+          <div className="bg-white text-black dark:text-black border-2 border-black dark:border-slate-800 rounded-2xl overflow-hidden shadow-2xl">
 
-            <div className="bg-gray-200 border-b border-black text-center py-6 print:bg-gray-200 print:border-black print:py-4 relative">
-              <div className="font-black text-2xl uppercase mb-2 print:text-xl">
+            <div className="bg-gray-200 border-b border-black text-center py-6">
+              <div className="font-black text-2xl uppercase mb-2">
                 Incidenza degli elementi accessori ai fini del calcolo annuale della retribuzione feriale lavoratore:
               </div>
               <div className="text-lg font-normal normal-case print:text-base">
-                <span className="font-bold mr-2">{worker.cognome} {worker.nome}</span> (Matr. {worker.id})
+                <span className="font-bold mr-2">{worker.cognome} {worker.nome}</span> - Profilo: {worker.ruolo}
               </div>
-              <div className="text-lg font-normal normal-case print:text-base">
+              <div className="text-lg font-normal normal-case">
                 Periodo interessato: dal 01-01-{startYear} al 31-12-{endYear}
               </div>
             </div>
 
-            <table className="w-full border-collapse text-sm text-center">
+            <table className="w-full border-collapse text-center">
               <thead>
-                <tr className="bg-[#7EB6D3] bg-blue-header text-black print:bg-[#7EB6D3] print:text-black h-12" style={{ backgroundColor: '#7EB6D3' }}>
-                  <th className="border border-black p-2 font-bold text-base w-20 align-middle">Anno</th>
-                  <th className="border border-black p-2 font-bold text-base w-40 align-middle">Totale Voci<br />Retributive<br />Accessorie</th>
-                  <th className="border border-black p-2 font-bold text-base w-28 align-middle">Divisore Annuo<br /><span className="text-sm font-normal">(media gg lav.)</span></th>
-                  <th className="border border-black p-2 font-bold text-base w-28 align-middle">Incidenza per<br />Giornate di<br />Ferie</th>
-                  <th className="border border-black p-2 font-bold text-base w-28 align-middle bg-yellow-50 print:bg-yellow-50">
-                    Giornate Ferie<br />
-                    <span className="text-xs font-normal">(Pagabili {includeExFest ? "32" : "28"})</span>
+                <tr className="bg-[#7EB6D3] bg-blue-header text-black h-12" style={{ backgroundColor: '#7EB6D3' }}>
+                  <th className="border border-black p-2 font-bold text-base align-middle">Anno</th>
+                  <th className="border border-black p-2 font-bold text-base align-middle">Totale Voci<br />Retributive<br />Accessorie</th>
+                  <th className="border border-black p-2 font-bold text-base align-middle">Divisore Annuo<br /><span className="text-sm font-normal">(media gg lav.)</span></th>
+                  <th className="border border-black p-2 font-bold text-base align-middle">Incidenza per<br />Giornate di<br />Ferie</th>
+                  <th className="border border-black p-2 font-bold text-base align-middle bg-yellow-50">
+                    Giornate di Ferie<br />
                   </th>
-                  <th className="border border-black p-2 font-bold text-base w-28 align-middle">Incidenza<br />(Lordo)</th>
+                  <th className="border border-black p-2 font-bold text-base align-middle">Incidenza<br />(Lordo)</th>
 
-                  {/* Visualizzazione Condizionale Intestazioni */}
                   {showPercepito && (
-                    <th className="border border-black p-2 font-bold text-base w-40 align-middle">INDENNITA'<br />PERCEPITA X<br />gg DI FERIE</th>
+                    <th className="border border-black p-2 font-bold text-base align-middle">INDENNITA'<br />PERCEPITA X<br />gg DI FERIE</th>
                   )}
 
-                  <th className="border border-black p-2 font-black text-base w-40 align-middle">TOTALE<br />INDENNITA' DA<br />PERCEPIRE</th>
+                  <th className="border border-black p-2 font-black text-base align-middle">TOTALE<br />INDENNITA' DA<br />PERCEPIRE</th>
 
                   {includeTickets && (
-                    <th className="border border-black p-2 font-bold text-base w-40 align-middle">CREDITO<br />TICKET<br />RESTAURANT</th>
+                    <th className="border border-black p-2 font-bold text-base align-middle">CREDITO<br />TICKET<br />RESTAURANT</th>
                   )}
                 </tr>
               </thead>
               <tbody>
                 {tableData.map((row) => (
                   <tr key={row.anno} className="h-10 text-base">
-                    <td className="border border-black px-2 py-1 text-center bg-gray-100 bg-gray-row font-bold print:bg-gray-100">{row.anno}</td>
+                    <td className="border border-black px-2 py-1 text-center bg-gray-100 font-bold">{row.anno}</td>
                     <td className="border border-black px-2 py-1 text-right">{formatCurrency(row.totaleVoci)}</td>
                     <td className="border border-black px-2 py-1 text-center">{formatNumber(row.divisore)}</td>
                     <td className="border border-black px-2 py-1 text-right text-blue-800 font-medium">{formatCurrency(row.incidenzaGiornata)}</td>
-                    <td className="border border-black px-2 py-1 text-center font-bold bg-yellow-50 print:bg-yellow-50">{formatNumber(row.giornateFerie)}</td>
+                    <td className="border border-black px-2 py-1 text-center font-bold bg-yellow-50">{formatNumber(row.giornateFerie)}</td>
                     <td className="border border-black px-2 py-1 text-right font-medium">{formatCurrency(row.incidenzaTotale)}</td>
 
-                    {/* Visualizzazione Condizionale Celle */}
                     {showPercepito && (
                       <td className="border border-black px-2 py-1 text-right text-orange-600 font-medium">{formatCurrency(row.indennitaPercepita)}</td>
                     )}
 
-                    <td className="border border-black px-2 py-1 text-right font-black bg-yellow-100 bg-yellow-cell print:bg-yellow-50 text-lg">{formatCurrency(row.totaleDaPercepire)}</td>
+                    <td className="border border-black px-2 py-1 text-right font-black bg-yellow-100 bg-yellow-cell text-lg">{formatCurrency(row.totaleDaPercepire)}</td>
 
                     {includeTickets && (
                       <td className="border border-black px-2 py-1 text-right text-green-700 font-medium">{formatCurrency(row.indennitaPasto)}</td>
@@ -704,27 +810,22 @@ Distinti saluti.
               </tbody>
               <tfoot>
                 <tr className="h-14 font-black text-lg">
-                  <td colSpan={5} className="border border-black bg-[#92D050] bg-green-total text-left px-6 relative align-middle uppercase print:bg-[#92D050]" style={{ backgroundColor: '#92D050' }}>TOTALE DOVUTO</td>
-                  <td className="border border-black bg-[#92D050] bg-green-total text-right px-2 align-middle print:bg-[#92D050]" style={{ backgroundColor: '#92D050' }}>{formatCurrency(totals.incidenzaTotale)}</td>
+                  <td colSpan={5} className="border border-black bg-[#92D050] bg-green-total text-left px-6 align-middle uppercase" style={{ backgroundColor: '#92D050' }}>TOTALE DOVUTO</td>
+                  <td className="border border-black bg-[#92D050] bg-green-total text-right px-2 align-middle" style={{ backgroundColor: '#92D050' }}>{formatCurrency(totals.incidenzaTotale)}</td>
 
                   {showPercepito && (
-                    <td className="border border-black bg-[#92D050] bg-green-total text-right px-2 align-middle text-orange-800 print:bg-[#92D050]" style={{ backgroundColor: '#92D050' }}>{formatCurrency(totals.indennitaPercepita)}</td>
+                    <td className="border border-black bg-[#92D050] bg-green-total text-right px-2 align-middle text-orange-800" style={{ backgroundColor: '#92D050' }}>{formatCurrency(totals.indennitaPercepita)}</td>
                   )}
 
-                  <td className="border border-black bg-[#FF5050] bg-red-total text-right px-2 align-middle text-white text-xl print:bg-[#FF5050] print:text-white" style={{ backgroundColor: '#FF5050', color: 'white' }}>{formatCurrency(totals.totaleDaPercepire)}</td>
+                  <td className="border border-black bg-[#FF5050] bg-red-total text-right px-2 align-middle text-white text-xl" style={{ backgroundColor: '#FF5050', color: 'white' }}>{formatCurrency(totals.totaleDaPercepire)}</td>
 
                   {includeTickets && (
-                    <td className="border border-black bg-[#92D050] bg-green-total text-right px-2 align-middle text-green-900 print:bg-[#92D050]" style={{ backgroundColor: '#92D050' }}>{formatCurrency(totals.indennitaPasto)}</td>
+                    <td className="border border-black bg-[#92D050] bg-green-total text-right px-2 align-middle text-green-900" style={{ backgroundColor: '#92D050' }}>{formatCurrency(totals.indennitaPasto)}</td>
                   )}
                 </tr>
               </tfoot>
             </table>
           </div>
-        </div>
-
-        <div className="hidden print:flex mt-16 w-full max-w-[1200px] px-8 justify-between text-base font-medium">
-          <div className="text-center"><p className="mb-16">Firma del Dipendente</p><div className="border-t-2 border-black w-72"></div></div>
-          <div className="text-center"><p className="mb-16">Timbro e Firma Responsabile</p><div className="border-t-2 border-black w-72"></div></div>
         </div>
       </div>
 
@@ -735,8 +836,8 @@ Distinti saluti.
           worker={worker}
           includeExFest={includeExFest}
           includeTickets={includeTickets}
-          showPercepito={showPercepito} // <--- Passiamo il nuovo stato
-          startClaimYear={startClaimYear} // <--- Passiamo l'anno corretto
+          showPercepito={showPercepito}
+          startClaimYear={startClaimYear}
           totals={{
             grandTotal: {
               incidenzaTotale: totals.incidenzaTotale,

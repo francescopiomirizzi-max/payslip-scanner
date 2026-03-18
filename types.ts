@@ -13,7 +13,10 @@ export const MONTHS = MONTH_NAMES;
 // Dal 2007 al 2025 sono 19 anni (2025 - 2007 + 1)
 export const YEARS = Array.from({ length: 19 }, (_, i) => 2007 + i);
 
-export type ProfiloAzienda = 'RFI' | 'ELIOR' | 'REKEEP';
+// --- MODIFICA CHIRURGICA 1: TIPO APERTO ---
+// Invece di limitare alle sole 3 aziende, lo apriamo a qualsiasi stringa, 
+// mantenendo i suggerimenti per le 3 principali.
+export type ProfiloAzienda = 'RFI' | 'ELIOR' | 'REKEEP' | string;
 
 export interface AnnoDati {
   id?: string;
@@ -29,6 +32,10 @@ export interface AnnoDati {
   // Note per eventi (es. Malattia, Infortunio)
   note?: string;
 
+  // ✨ DATI TFR (Estrattti invisibilmente dall'IA)
+  imponibile_tfr_mensile?: number;
+  fondo_pregresso_31_12?: number;
+
   // Campi dinamici (codici indennità)
   [key: string]: any;
 }
@@ -43,6 +50,10 @@ export interface Worker {
   anni: AnnoDati[];
   avatarUrl?: string;
   accentColor?: string;
+
+  // ✨ IL PUNTO ZERO DEL TFR (Inserito manualmente dall'utente nel Modale)
+  tfr_pregresso?: number;
+  tfr_pregresso_anno?: number;
 }
 
 export interface ColumnDef {
@@ -52,19 +63,20 @@ export interface ColumnDef {
   width: string;
   sticky?: boolean;
   isTotal?: boolean;
-  type?: 'integer' | 'currency' | 'text';
+  type?: 'integer' | 'currency' | 'text' | 'formula'; // <--- AGGIUNTO 'formula'
+  formula?: string;                                   // <--- NUOVO CAMPO
   isCalculated?: boolean;
   isInput?: boolean;
 }
 
-// --- CONFIGURAZIONE COLONNE PER PROFILO ---
+// --- CONFIGURAZIONE COLONNE PER PROFILO (BLINDATE) ---
 
 // Colonne RFI (Allineate al Prompt V14)
 export const INDENNITA_RFI: ColumnDef[] = [
   { id: '0152', label: 'Straord. Diurno', subLabel: '(0152)', width: 'min-w-[120px]', type: 'currency' },
   { id: '0421', label: 'Ind. Notturno', subLabel: '(0421)', width: 'min-w-[120px]', type: 'currency' },
   { id: '0423', label: 'Comp. Cantiere Notte', subLabel: '(0423)', width: 'min-w-[130px]', type: 'currency' },
-  { id: '0457', label: 'Festivo Notturno', subLabel: '(0457)', width: 'min-w-[130px]', type: 'currency' }, // AGGIUNTO
+  { id: '0457', label: 'Festivo Notturno', subLabel: '(0457)', width: 'min-w-[130px]', type: 'currency' },
   { id: '0470', label: 'Ind. Chiamata', subLabel: '(0470)', width: 'min-w-[120px]', type: 'currency' },
   { id: '0482', label: 'Ind. Reperibilità', subLabel: '(0482)', width: 'min-w-[120px]', type: 'currency' },
   { id: '0496', label: 'Ind. Disp. Chiamata', subLabel: '(0496)', width: 'min-w-[120px]', type: 'currency' },
@@ -78,8 +90,8 @@ export const INDENNITA_RFI: ColumnDef[] = [
   { id: '0933', label: 'Str. Fest/Not Rep.', subLabel: '(0933)', width: 'min-w-[120px]', type: 'currency' },
   { id: '0995', label: 'Str. Diurno Disp.', subLabel: '(0995)', width: 'min-w-[120px]', type: 'currency' },
   { id: '0996', label: 'Str. Fest/Not Disp.', subLabel: '(0996)', width: 'min-w-[120px]', type: 'currency' },
-  { id: '3B70', label: 'Sal. Produttività', subLabel: '(3B70)', width: 'min-w-[120px]', type: 'currency' }, // AGGIUNTO
-  { id: '3B71', label: 'Prod. Incrementale', subLabel: '(3B71)', width: 'min-w-[120px]', type: 'currency' }, // AGGIUNTO
+  { id: '3B70', label: 'Sal. Produttività', subLabel: '(3B70)', width: 'min-w-[120px]', type: 'currency' },
+  { id: '3B71', label: 'Prod. Incrementale', subLabel: '(3B71)', width: 'min-w-[120px]', type: 'currency' },
 ];
 
 // Colonne ELIOR (Invariato)
@@ -119,7 +131,6 @@ export const INDENNITA_REKEEP: ColumnDef[] = [
 ];
 
 // --- COLONNA ARRETRATI (Universale) ---
-// Questa è la colonna "Cuscinetto" per i dati informativi (non sommati)
 export const COLONNA_ARRETRATI: ColumnDef = {
   id: 'arretrati',
   label: 'Arretrati / Altro',
@@ -128,21 +139,45 @@ export const COLONNA_ARRETRATI: ColumnDef = {
   type: 'currency'
 };
 
-// --- COMPOSIZIONE COLONNE ---
+// --- MODIFICA CHIRURGICA 2: IL MOTORE DI FUSIONE ---
+// Questa funzione adesso cerca prima nei salvataggi locali. Se non trova l'azienda custom, 
+// usa i profili di sistema standard (RFI, ELIOR, REKEEP).
 export const getColumnsByProfile = (profilo: ProfiloAzienda): ColumnDef[] => {
   let specificColumns: ColumnDef[] = [];
 
-  switch (profilo) {
-    case 'ELIOR':
-      specificColumns = INDENNITA_ELIOR;
-      break;
-    case 'REKEEP':
-      specificColumns = INDENNITA_REKEEP;
-      break;
-    default:
-      specificColumns = INDENNITA_RFI;
+  // 1. Prova a pescare le colonne personalizzate dal LocalStorage (Company Builder)
+  if (typeof window !== 'undefined') {
+    const savedCustomCompanies = localStorage.getItem('customCompanies');
+    if (savedCustomCompanies) {
+      try {
+        const companiesData = JSON.parse(savedCustomCompanies);
+        if (companiesData[profilo] && Array.isArray(companiesData[profilo].columns)) {
+          specificColumns = companiesData[profilo].columns;
+        }
+      } catch (e) {
+        console.error("Errore lettura aziende custom", e);
+      }
+    }
   }
 
+  // 2. Se non ha trovato nulla nel database locale, usa i modelli di base "Hardcoded"
+  if (specificColumns.length === 0) {
+    switch (profilo) {
+      case 'ELIOR':
+        specificColumns = INDENNITA_ELIOR;
+        break;
+      case 'REKEEP':
+        specificColumns = INDENNITA_REKEEP;
+        break;
+      case 'RFI':
+        specificColumns = INDENNITA_RFI;
+        break;
+      default:
+        specificColumns = INDENNITA_RFI; // Fallback di sicurezza
+    }
+  }
+
+  // 3. Compone la tabella finale aggiungendo la colonna mesi, gli arretrati e le somme
   return [
     { id: 'month', label: 'MESE', width: 'min-w-[120px]', sticky: true },
     ...specificColumns,
@@ -181,3 +216,38 @@ export const parseFloatSafe = (value: any): number => {
   const num = parseFloat(cleanStr);
   return isNaN(num) ? 0 : num;
 };
+// --- FORMULA ENGINE: IL CERVELLO MATEMATICO ---
+export const evaluateFormula = (formulaStr: string | undefined, rowData: any): number => {
+  if (!formulaStr || typeof formulaStr !== 'string') return 0;
+
+  try {
+    // 1. Sostituisce i codici tra parentesi quadre con i valori reali della riga.
+    // Es: "[1050] * 0.15" -> se rowData['1050'] è 100, diventa "100 * 0.15"
+    let parsedFormula = formulaStr.replace(/\[([^\]]+)\]/g, (match, code) => {
+      const rawValue = rowData[code];
+      const val = parseFloatSafe(rawValue);
+      return val.toString();
+    });
+
+    // 2. SANIFICAZIONE: Rimuoviamo tutto ciò che non è matematica sicura.
+    // Permettiamo solo: Numeri, operatori (+ - * /), punti decimali e parentesi tonde.
+    // Questo previene vulnerabilità di sicurezza (XSS/Code Injection).
+    parsedFormula = parsedFormula.replace(/[^0-9+\-*/.()]/g, '');
+
+    if (!parsedFormula) return 0;
+
+    // 3. VALUTAZIONE MATEMATICA
+    // Usiamo Function invece di eval() perché è leggermente più sicuro e isolato
+    const result = new Function('return ' + parsedFormula)();
+
+    // 4. Se il risultato è un numero valido (non Infinity o NaN), lo restituiamo, altrimenti 0
+    return (typeof result === 'number' && !isNaN(result) && isFinite(result)) ? result : 0;
+
+  } catch (error) {
+    // Se la formula ha errori di sintassi (es. "100 * + 2"), non fa crashare l'app, restituisce solo 0
+    console.warn(`Formula Engine Error: Impossibile valutare "${formulaStr}"`);
+    return 0;
+  }
+};
+// Alias per retrocompatibilità con i nuovi moduli
+export const parseLocalFloat = parseFloatSafe;

@@ -2,9 +2,17 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import MonthlyDataGrid from './WorkerTables/MonthlyDataGrid';
 import AnnualCalculationTable from './WorkerTables/AnnualCalculationTable';
 import IndemnityPivotTable from './WorkerTables/IndemnityPivotTable';
+import TfrCalculationTable from './WorkerTables/TfrCalculationTable';
+// (Aggiusta il percorso se hai salvato il file in una cartella diversa)
 import TableComponent from './TableComponent'; // Assicurati che il percorso sia corretto
+import { useIsland } from '../IslandContext';
+import { LineChart } from 'lucide-react';
+import IstatDashboardModal from './WorkerTables/IstatDashboardModal';
+import { calculateTFR } from '../utils/tfrCalculator'; // <--- AGGIUNGI QUESTO IMPORT
+import { calculateLegalInterestsAndRevaluation } from '../istatService'; // <--- AGGIUNGI QUESTA!
 // Import necessario per i calcoli della stampa
 import QRScannerModal from '../components/QRScannerModal';
+import DynamicIsland from '../components/DynamicIsland'; // <--- AGGIUNGI QUESTA RIGA
 import { Worker, AnnoDati, parseFloatSafe, getColumnsByProfile, MONTH_NAMES, formatCurrency, YEARS } from '../types';
 import {
   ArrowLeft,
@@ -56,8 +64,11 @@ import {
   RotateCw, // <--- AGGIUNTA
   Wand2,
   Download,
-  Bot,    // <--- AGGIUNTO QUI
-  Cpu   // <--- AGGIUNTA
+  Bot,    // <--- AGGIUNTO QUI
+  Cpu,
+  FileText,
+  Save,
+  Calendar
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 // IMPORTANTE: Tesseract per il ritaglio (Canvas)
@@ -93,15 +104,15 @@ const GLOBAL_STYLES = `
     animation: shimmer 4s linear infinite;
 }
 @keyframes aurora {
-    0%, 100% { background-position: 0% 50%; }
-    50% { background-position: 100% 50%; }
-  }
-  .animate-aurora {
-    background-size: 200% 200%;
-    animation: aurora 3s ease infinite;
-  }
-  
-  /* Glassmorphism 2.0 */
+    0%, 100% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+  }
+  .animate-aurora {
+    background-size: 200% 200%;
+    animation: aurora 3s ease infinite;
+  }
+  
+  /* Glassmorphism 2.0 (Dinamico) */
   .glass-panel {
     background: rgba(255, 255, 255, 0.75);
     backdrop-filter: blur(16px);
@@ -109,15 +120,35 @@ const GLOBAL_STYLES = `
     border: 1px solid rgba(255, 255, 255, 0.5);
     border-top: 1px solid rgba(255, 255, 255, 0.9);
     box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.07);
+    transition: all 0.5s ease;
   }
+  
+  html.dark .glass-panel {
+    background: rgba(15, 23, 42, 0.65); /* slate-900 trasparente */
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
+  }
+  
 /* Nasconde la barra di scorrimento mantenendo lo scroll attivo */
-  .no-scrollbar::-webkit-scrollbar {
-    display: none;
-  }
-  .no-scrollbar {
-    -ms-overflow-style: none;  /* IE e Edge */
-    scrollbar-width: none;  /* Firefox */
-  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;  /* IE e Edge */
+    scrollbar-width: none;  /* Firefox */
+  }
+/* --- FISICA DELLO SCANNER SINGOLO (Ciano/Stealth) --- */
+  @keyframes single-scan-laser {
+    0% { top: -10%; opacity: 0; filter: drop-shadow(0 0 10px #22d3ee); }
+    10% { opacity: 1; filter: drop-shadow(0 0 20px #22d3ee); }
+    90% { opacity: 1; filter: drop-shadow(0 0 20px #22d3ee); }
+    100% { top: 110%; opacity: 0; filter: drop-shadow(0 0 10px #22d3ee); }
+  }
+  @keyframes bracket-pulse {
+    0%, 100% { opacity: 0.3; transform: scale(0.95); border-color: #334155; }
+    50% { opacity: 1; transform: scale(1); border-color: #22d3ee; }
+  }
 `;
 
 // --- CONFIGURAZIONE PROFILI PEC ---
@@ -147,104 +178,140 @@ const STYLES = {
 };
 
 const MovingGrid = () => (
-  <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
-    <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:40px_40px] [mask-image:radial-gradient(ellipse_80%_50%_at_50%_0%,#000_70%,transparent_100%)]"></div>
-    <div className="absolute top-[-20%] left-[20%] w-[500px] h-[500px] bg-indigo-400/20 rounded-full blur-[120px] mix-blend-multiply animate-blob"></div>
-    <div className="absolute bottom-[-20%] right-[20%] w-[500px] h-[500px] bg-emerald-400/20 rounded-full blur-[120px] mix-blend-multiply animate-blob animation-delay-2000"></div>
-    <div className="absolute top-[40%] left-[40%] w-[400px] h-[400px] bg-purple-400/20 rounded-full blur-[120px] mix-blend-multiply animate-blob animation-delay-4000"></div>
+  <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none transition-colors duration-500">
+    <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] dark:bg-[linear-gradient(to_right,rgba(34,211,238,0.1)_1px,transparent_1px),linear-gradient(to_bottom,rgba(34,211,238,0.1)_1px,transparent_1px)] bg-[size:40px_40px] [mask-image:radial-gradient(ellipse_80%_50%_at_50%_0%,#000_70%,transparent_100%)] transition-colors duration-500"></div>
+    <div className="absolute top-[-20%] left-[20%] w-[500px] h-[500px] bg-indigo-400/20 dark:bg-indigo-600/20 rounded-full blur-[120px] mix-blend-multiply dark:mix-blend-screen animate-blob transition-colors duration-500"></div>
+    <div className="absolute bottom-[-20%] right-[20%] w-[500px] h-[500px] bg-emerald-400/20 dark:bg-emerald-600/20 rounded-full blur-[120px] mix-blend-multiply dark:mix-blend-screen animate-blob animation-delay-2000 transition-colors duration-500"></div>
+    <div className="absolute top-[40%] left-[40%] w-[400px] h-[400px] bg-purple-400/20 dark:bg-purple-600/20 rounded-full blur-[120px] mix-blend-multiply dark:mix-blend-screen animate-blob animation-delay-4000 transition-colors duration-500"></div>
   </div>
 );
-// --- COMPONENTE CALCOLATRICE FLUTTUANTE (Spostabile e con Fix Tastiera) ---
-const FloatingCalculator = ({ onClose }: { onClose: () => void }) => {
-  const [display, setDisplay] = useState('');
 
-  const handleInput = (val: string) => setDisplay(prev => prev + val);
-  const handleClear = () => setDisplay('');
-
-  const handleCalc = () => {
-    if (!display) return; // Se è vuoto, non fa nulla ed evita "undefined"
-    try {
-      const result = eval(display.replace(/,/g, '.'));
-      setDisplay(result !== undefined ? String(result) : '');
-    }
-    catch { setDisplay('Errore'); setTimeout(() => setDisplay(''), 1000); }
-  };
-
-  // Listener Tastiera
-  React.useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      const key = e.key;
-
-      // Cattura l'invio e blocca l'evento per non far cliccare bottoni in background
-      if (key === 'Enter' || key === '=') {
-        e.preventDefault();
-        e.stopPropagation();
-        handleCalc();
-        return;
-      }
-
-      if (/[0-9+\-*/.]/.test(key)) {
-        e.preventDefault(); // Evita scroll della pagina se premi + o -
-        handleInput(key);
-        return;
-      }
-
-      if (key === 'Backspace') setDisplay(prev => prev.slice(0, -1));
-      if (key === 'Escape') onClose();
-      if (key === 'Delete' || key === 'c' || key === 'C') handleClear();
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [display, onClose]); // <--- IL FIX E' QUI: Aggiorna la memoria a ogni tasto premuto
-
-  const btnClass = "h-12 rounded-lg font-bold text-lg transition-all active:scale-95 flex items-center justify-center shadow-sm";
-
-  return (
-    <motion.div
-      drag
-      dragMomentum={false}
-      initial={{ scale: 0.8, opacity: 0 }}
-      animate={{ scale: 1, opacity: 1 }}
-      exit={{ scale: 0.8, opacity: 0 }}
-      className="fixed bottom-24 right-8 z-[100] w-64 bg-slate-900/90 backdrop-blur-xl border border-white/20 shadow-2xl rounded-2xl overflow-hidden text-white"
-    >
-      {/* HEADER con cursore di spostamento */}
-      <div className="p-3 bg-slate-800/50 flex justify-between items-center border-b border-white/10 cursor-move">
-        <span className="font-bold text-xs uppercase tracking-widest flex items-center gap-2"><Calculator className="w-3 h-3" /> Calc</span>
-        {/* Stop Propagation per evitare di trascinare quando si clicca X */}
-        <button onClick={onClose} onPointerDown={(e) => e.stopPropagation()}><X className="w-4 h-4 text-slate-400 hover:text-white" /></button>
-      </div>
-
-      <div className="p-4 bg-transparent text-right text-2xl font-mono font-bold tracking-wider overflow-hidden h-16 flex items-center justify-end break-all">
-        {display || '0'}
-      </div>
-      <div className="grid grid-cols-4 gap-1 p-2 bg-white/5">
-        {['7', '8', '9', '/', '4', '5', '6', '*', '1', '2', '3', '-', 'C', '0', '=', '+'].map((btn) => (
-          <button key={btn} onClick={() => {
-            if (btn === '=') handleCalc();
-            else if (btn === 'C') handleClear();
-            else handleInput(btn);
-          }} className={`${btnClass} ${btn === '=' ? 'bg-emerald-500 hover:bg-emerald-400' : btn === 'C' ? 'text-red-400 hover:bg-white/10' : ['/', '*', '-', '+'].includes(btn) ? 'text-indigo-400 hover:bg-white/10' : 'hover:bg-white/10'}`}>
-            {btn}
-          </button>
-        ))}
-      </div>
-    </motion.div>
-  );
-};
 const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateData, onUpdateStatus, onBack, onOpenReport }) => {
   const [monthlyInputs, setMonthlyInputs] = useState<AnnoDati[]>(Array.isArray(worker?.anni) ? worker.anni : []);
-  const [activeTab, setActiveTab] = useState<'input' | 'calc' | 'pivot'>('input');
-  const [currentYear, setCurrentYear] = useState(2024);
-  // --- STATO CONFIGURAZIONE CAUSA ---
-  // Legge o imposta l'anno di inizio calcoli (Default al primo anno trovato + 1, o 2008)
-  const [startClaimYear, setStartClaimYear] = useState<number>(() => {
-    const saved = localStorage.getItem(`startYear_${worker.id}`);
-    return saved ? parseInt(saved) : 2008; // Default 2008 come da fogli
-  });
+  // ✨ INIEZIONE CERVELLO NELLA PAGINA LAVORATORE
+  const { showNotification, setQuickActions, startUpload, updateUploadProgress, finishUpload } = useIsland();
+
+  const [activeTab, setActiveTab] = useState<'input' | 'calc' | 'pivot' | 'tfr'>('input');
   // Stato per mostrare/nascondere il report ufficiale
   const [showReport, setShowReport] = useState(false);
+  // ✨ Stati per il Radar TFR Globale dell'Intelligenza Artificiale
+  const [isAiTfrModalOpen, setIsAiTfrModalOpen] = useState(false);
+  const [isIstatModalOpen, setIsIstatModalOpen] = useState(false);
+  const [aiTfrAmount, setAiTfrAmount] = useState<string>('');
+  const [aiTfrYear, setAiTfrYear] = useState<string>('');
+  // --- STATO CONFIGURAZIONE CAUSA E ANNO INIZIALE ---
+  // Legge o imposta l'anno di inizio calcoli (Default 2008)
+  const [startClaimYear, setStartClaimYear] = useState<number>(() => {
+    const saved = localStorage.getItem(`startYear_${worker.id}`);
+    return saved ? parseInt(saved) : 2008;
+  });
+  // Stato per il Modale Informativo del Ticker
+  const [activeTickerModal, setActiveTickerModal] = useState<{ title: string, content: React.ReactNode } | null>(null);
+  // ✨ LOGICA ANNO CORRENTE INTELLIGENTE (Fixata per evitare anni fantasma)
+  const [currentYear, setCurrentYear] = useState<number>(() => {
+    // 1. Se ci sono dati, troviamo l'ultimo anno EFFETTIVAMENTE compilato
+    if (worker?.anni && worker.anni.length > 0) {
+      // Filtriamo gli anni considerandoli validi solo se c'è un imponibile o dei giorni lavorati
+      const activeInputs = worker.anni.filter((d: AnnoDati) =>
+        (d.imponibile_tfr_mensile && d.imponibile_tfr_mensile > 0) ||
+        (d.daysWorked && Number(d.daysWorked) > 0)
+      );
+
+      const anniCompilati = activeInputs.map((d: AnnoDati) => Number(d.year)).filter((y: number) => !isNaN(y));
+
+      // Se trova almeno un anno compilato, prende il più recente
+      if (anniCompilati.length > 0) {
+        return Math.max(...anniCompilati);
+      }
+    }
+
+    // 2. Se non ci sono dati validi, ti posiziona automaticamente sull'anno di inizio vertenza
+    // Leggiamo il valore salvato o partiamo dal default
+    const savedStartYear = localStorage.getItem(`startYear_${worker.id}`);
+    const initialYear = savedStartYear ? parseInt(savedStartYear) : 2008;
+
+    // Partiamo dall'anno prima per preparare il calcolo della media
+    return initialYear - 1;
+  });
+
+
+
+  // --- INIZIO NUOVO BLOCCO ISOLA (Radar Definitivo Fixato) ---
+  const isQuickActionsActiveRef = useRef(false);
+
+  useEffect(() => {
+    // ✨ BISTURI: Diciamo all'Isola che siamo nella pagina "detail" (Tabelle)
+    window.dispatchEvent(new CustomEvent('set-island-context', { detail: 'detail' }));
+
+    const handleGlobalScroll = () => {
+      // Usiamo una gestione unificata che va bene per window e per i container che "bubblano" con capture
+      let scrollTop = 0;
+      if (typeof window !== 'undefined') {
+        scrollTop = window.scrollY || document.documentElement.scrollTop;
+      }
+
+      if (scrollTop > 300 && !isQuickActionsActiveRef.current) {
+        isQuickActionsActiveRef.current = true;
+        setQuickActions(true);
+      } else if (scrollTop <= 200 && isQuickActionsActiveRef.current) {
+        isQuickActionsActiveRef.current = false;
+        setQuickActions(false);
+      }
+    };
+
+    window.addEventListener('scroll', handleGlobalScroll, true);
+
+    return () => {
+      window.removeEventListener('scroll', handleGlobalScroll, true);
+      setQuickActions(false);
+      isQuickActionsActiveRef.current = false;
+    };
+  }, [setQuickActions]);
+
+  const handleContainerScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const scrollTop = e.currentTarget.scrollTop;
+    if (scrollTop > 300 && !isQuickActionsActiveRef.current) {
+      isQuickActionsActiveRef.current = true;
+      setQuickActions(true);
+    } else if (scrollTop <= 200 && isQuickActionsActiveRef.current) {
+      isQuickActionsActiveRef.current = false;
+      setQuickActions(false);
+    }
+  };
+
+  // 2. Eventi Custom della Dynamic Island
+  useEffect(() => {
+    const onDashboard = () => onBack();
+    // @ts-ignore
+    const onDownload = () => typeof handlePrintTables === 'function' && handlePrintTables();
+    const onReport = () => setShowReport(true);
+
+    window.addEventListener('trigger-dashboard', onDashboard);
+    window.addEventListener('trigger-download', onDownload);
+    window.addEventListener('trigger-report', onReport);
+
+    return () => {
+      window.removeEventListener('trigger-dashboard', onDashboard);
+      window.removeEventListener('trigger-download', onDownload);
+      window.removeEventListener('trigger-report', onReport);
+    };
+  }, [onBack]);
+  // --- FINE NUOVO BLOCCO ISOLA ---
+  // 👇 INCOLLA QUI IL NUOVO BOCCO 👇
+  // --- FIX ISOLA: Ri-afferma il contesto quando si chiude il Report ---
+  useEffect(() => {
+    if (!showReport) {
+      window.dispatchEvent(new CustomEvent('set-island-context', { detail: 'detail' }));
+
+      // Sicurezza: forziamo la chiusura delle azioni rapide se siamo in cima alla pagina
+      const scrollTop = window.scrollY || document.documentElement.scrollTop;
+      if (scrollTop <= 200) {
+        setQuickActions(false);
+      }
+    }
+  }, [showReport, setQuickActions]);
+  // 👆 FINE INCOLLA 👆
+
   // Salva preferenza
   useEffect(() => {
     localStorage.setItem(`startYear_${worker.id}`, startClaimYear.toString());
@@ -255,6 +322,8 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
   useEffect(() => {
     // Controlla se abbiamo dati dell'anno precedente
     const prevYear = startClaimYear - 1;
+    // ✨ Se la tabella è vuota e cambi l'anno di inizio, sposta automaticamente la vista sull'anno da compilare
+    if (monthlyInputs.length === 0) setCurrentYear(prevYear);
     const hasPrevData = monthlyInputs.some(r => Number(r.year) === prevYear);
 
     // Se mancano i dati, mostra notifica GIALLA per 5 secondi
@@ -271,8 +340,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
   }, [startClaimYear, monthlyInputs]); // Aggiunto monthlyInputs alle dipendenze per sicurezza
   // --- STATO SPLIT SCREEN / VISORE ---
   const [showSplit, setShowSplit] = useState(false);
-  const [showDealMaker, setShowDealMaker] = useState(false);
-  const [showCalc, setShowCalc] = useState(false); // Stato Calcolatrice
+
   // --- STATO MULTI-FILE ---
   const [payslipFiles, setPayslipFiles] = useState<string[]>([]); // Array di URL
   const [currentFileIndex, setCurrentFileIndex] = useState(0); // Indice file corrente
@@ -322,14 +390,32 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  // --- STATI DEAL MAKER 2.0 (STRATEGIA LEGALE) ---
-  const [isNetMode, setIsNetMode] = useState(false); // Toggle Lordo/Netto
-  const [winProb, setWinProb] = useState(90); // Probabilità vittoria (Default 90% per Cassazione 20216)
-  const [legalCosts, setLegalCosts] = useState(1500); // Costi stimati (CTU + Spese)
-  const [yearsDuration, setYearsDuration] = useState(3); // Durata causa (anni)
+
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   // --- STATO BATCH UPLOAD ---
   const [isBatchProcessing, setIsBatchProcessing] = useState(false);
+  const badgeStyles = useMemo(() => {
+    if (!worker.profilo) return 'bg-slate-200/50 dark:bg-slate-700/50 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-600';
+    if (worker.profilo === 'ELIOR') return 'bg-orange-50 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 border-orange-200 dark:border-orange-700/50';
+    if (worker.profilo === 'REKEEP') return 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-700/50';
+    if (worker.profilo === 'RFI') return 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-cyan-400 border-blue-200 dark:border-blue-700/50';
+
+    // AZIENDE CUSTOM
+    const customPalette = [
+      'bg-fuchsia-50 dark:bg-fuchsia-900/30 text-fuchsia-600 dark:text-fuchsia-400 border-fuchsia-200 dark:border-fuchsia-700/50',
+      'bg-violet-50 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400 border-violet-200 dark:border-violet-700/50',
+      'bg-cyan-50 dark:bg-cyan-900/30 text-cyan-600 dark:text-cyan-400 border-cyan-200 dark:border-cyan-700/50',
+      'bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-700/50',
+      'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 border-indigo-200 dark:border-indigo-700/50',
+      'bg-teal-50 dark:bg-teal-900/30 text-teal-600 dark:text-teal-400 border-teal-200 dark:border-teal-700/50'
+    ];
+
+    let hash = 0;
+    for (let i = 0; i < worker.profilo.length; i++) {
+      hash = worker.profilo.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    return customPalette[Math.abs(hash) % customPalette.length];
+  }, [worker.profilo]);
   // AGGIUNGI QUESTE DUE RIGHE QUI:
   const [batchProgress, setBatchProgress] = useState(0);
   const [batchTotal, setBatchTotal] = useState(0);
@@ -344,20 +430,35 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
   const batchInputRef = useRef<HTMLInputElement>(null);
   // --- STATO QR CODE ---
   const [isQRModalOpen, setIsQRModalOpen] = useState(false);
+  // ✨ MOTORE NOTIFICHE AUTO-PULENTE (Previene i blocchi su schermo)
+  useEffect(() => {
+    if (batchNotification) {
+      const timer = setTimeout(() => {
+        setBatchNotification(null);
+      }, 4000);
+      return () => clearTimeout(timer); // Se arriva una nuova notifica, cancella il timer vecchio!
+    }
+  }, [batchNotification]);
 
-  // --- FUNZIONE CHE RICEVE I DATI DAL TELEFONO (ANTI-SOVRASCRITTURA) ---
+
+  // --- FUNZIONE CHE RICEVE I DATI DAL TELEFONO (ANTI-SOVRASCRITTURA DEFINITIVA) ---
   const handleQRData = (aiResult: any) => {
-
-    // Usiamo prevInputs per pescare sempre i dati in tempo reale senza chiusure
+    // 1. Usiamo prevInputs per l'aggiornamento sicuro dello stato
     setMonthlyInputs((prevInputs) => {
+      // Clona l'array precedente in modo sicuro
       let currentAnni = JSON.parse(JSON.stringify(prevInputs));
 
-      if (aiResult.month && aiResult.year) {
+      // ✨ MODIFICA: Controlla solo l'anno (il mese lo forziamo se è CUD)
+      if (aiResult.year) {
         const targetYear = Number(aiResult.year);
-        const targetMonthIndex = Number(aiResult.month) - 1;
+
+        // 🚨 MODALITÀ CUD: Forza il mese a Dicembre (indice 11)
+        const isCUD = aiResult.isCUD === true;
+        const targetMonthIndex = isCUD ? 11 : (Number(aiResult.month) - 1 || 0);
 
         let rowIndex = currentAnni.findIndex((r: any) => Number(r.year) === targetYear && r.monthIndex === targetMonthIndex);
 
+        // Se il mese non esiste, lo creiamo
         if (rowIndex === -1) {
           currentAnni.push({
             id: Date.now().toString() + Math.random().toString(),
@@ -371,8 +472,11 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
 
         const row = currentAnni[rowIndex];
 
-        if (typeof aiResult.daysWorked === 'number') row.daysWorked = aiResult.daysWorked;
-        if (typeof aiResult.daysVacation === 'number') row.daysVacation = aiResult.daysVacation;
+        // DATI FISSI E PROTEZIONE CUD (Non sovrascriviamo i giorni se è un CUD)
+        if (!isCUD) {
+          if (typeof aiResult.daysWorked === 'number') row.daysWorked = aiResult.daysWorked;
+          if (typeof aiResult.daysVacation === 'number') row.daysVacation = aiResult.daysVacation;
+        }
 
         const ticketVal = Number(aiResult.ticketRate);
         if (!isNaN(ticketVal) && ticketVal > 0) row.coeffTicket = ticketVal;
@@ -380,15 +484,42 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
         const arretratiVal = Number(aiResult.arretrati);
         if (!isNaN(arretratiVal) && arretratiVal !== 0) row.arretrati = arretratiVal;
 
-        if (aiResult.eventNote && !row.note?.includes(aiResult.eventNote)) {
-          row.note = (row.note ? row.note + ' ' : '') + `[${aiResult.eventNote}]`;
+        // Aggiorniamo le note combinandole (Aggiungendo il badge CUD)
+        const sep = '  •  ';
+        if (isCUD && !row.note?.includes("CUD")) row.note = row.note ? `[📄 Dati da CUD]${sep}${row.note}` : `[📄 Dati da CUD]`;
+        if (aiResult.eventNote && !row.note?.includes(aiResult.eventNote)) row.note = row.note ? `${row.note}${sep}[${aiResult.eventNote}]` : `[${aiResult.eventNote}]`;
+        if (aiResult.aiWarning && aiResult.aiWarning !== "Nessuna anomalia" && !row.note?.includes("⚠️")) row.note = row.note ? `${row.note}${sep}[⚠️ AI: ${aiResult.aiWarning}]` : `[⚠️ AI: ${aiResult.aiWarning}]`;
+
+        // ✨ SALVATAGGIO INVISIBILE DATI TFR E RADAR INTELLIGENTE
+        if (aiResult.imponibile_tfr_mensile !== undefined) {
+          const newVal = Number(aiResult.imponibile_tfr_mensile);
+          if (!isNaN(newVal)) {
+            // Se è CUD forza l'importo annuo, se è busta paga lo somma
+            row.imponibile_tfr_mensile = isCUD ? newVal : (row.imponibile_tfr_mensile || 0) + newVal;
+          }
+        }
+
+        if (aiResult.fondo_pregresso_31_12 !== undefined) {
+          const fondoTrovato = Number(aiResult.fondo_pregresso_31_12);
+          if (!isNaN(fondoTrovato)) {
+            row.fondo_pregresso_31_12 = fondoTrovato;
+
+            // Se trova un fondo > 0, Lancia il segnale radio a tutta l'app!
+            if (fondoTrovato > 0) {
+              window.dispatchEvent(new CustomEvent('ai-found-tfr-base', {
+                detail: {
+                  amount: fondoTrovato,
+                  year: targetYear - 1
+                }
+              }));
+            }
+          }
         }
 
         if (aiResult.codes) {
           Object.entries(aiResult.codes).forEach(([code, value]) => {
             const numValue = parseFloat(value as string);
             if (!isNaN(numValue) && numValue !== 0) {
-              // @ts-ignore
               row[code] = numValue;
             }
           });
@@ -397,158 +528,275 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
         currentAnni[rowIndex] = row;
         currentAnni.sort((a: any, b: any) => (a.year - b.year) || (a.monthIndex - b.monthIndex));
 
-        // Aggiorniamo le info esterne senza rompere il ciclo di React
-        setTimeout(() => {
-          onUpdateData(currentAnni);
-          setCurrentYear(targetYear);
-          setBatchNotification({ msg: `✅ Busta ${aiResult.month}/${aiResult.year} caricata!`, type: 'success' });
-          setTimeout(() => setBatchNotification(null), 4000);
-        }, 0);
+        // 2. ✨ FIX CHIRURGICO: Aggiorniamo immediatamente e SINCORNAMENTE il genitore!
+        // Togliendo il setTimeout, garantiamo che ogni pacchetto salvi il suo pezzo prima che arrivi il successivo
+        onUpdateData(currentAnni);
+        setCurrentYear(targetYear);
+
+        // ✨ Invia il nome del mese alla Dynamic Island per il terminale
+        window.dispatchEvent(new CustomEvent('island-scan-label', { detail: `${MONTH_NAMES[targetMonthIndex]} ${targetYear}` }));
 
         return currentAnni;
       }
       return prevInputs;
     });
   };
-  // --- 🔥 2. LOGICA UPLOAD MASSIVO OTTIMIZZATA (Sostituisci handleBatchUpload) ---
-  const handleBatchUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Helper per far "respirare" l'IA tra un file e l'altro
+  const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
+  // --- HELPER: RECUPERA LE COLONNE CUSTOM DA INVIARE ALL'AI ---
+  const getCustomColumnsForAI = () => {
+    if (['RFI', 'ELIOR', 'REKEEP'].includes(worker.profilo)) return null;
+
+    try {
+      const saved = localStorage.getItem('customCompanies');
+      if (saved) {
+        const companies = JSON.parse(saved);
+        if (companies[worker.profilo] && companies[worker.profilo].columns) {
+          // Filtriamo solo i codici numerici/valuta da cercare, non roba tipo "note"
+          return companies[worker.profilo].columns.filter((c: any) => c.id !== 'month' && c.id !== 'total' && c.id !== 'note' && c.id !== 'arretrati');
+        }
+      }
+    } catch (e) {
+      console.error("Errore lettura custom companies per AI", e);
+    }
+    return null;
+  };
+  // ✨ FUNZIONE DI SUPPORTO 1: Converte i file in Base64
+  const toBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => {
+        let result = reader.result as string;
+        if (result.includes(',')) {
+          result = result.split(',')[1];
+        }
+        resolve(result);
+      };
+      reader.onerror = error => reject(error);
+    });
+  };
+
+  // ✨ FUNZIONE DI SUPPORTO 2: Converte in modo sicuro i numeri con la virgola europea
+  const parseLocalFloat = (val: any): number => {
+    if (val === undefined || val === null || val === '') return 0;
+    if (typeof val === 'number') return val;
+    let str = String(val).trim();
+    if (str.includes('.') && str.includes(',')) {
+      str = str.replace(/\./g, '');
+    }
+    str = str.replace(',', '.');
+    const parsed = parseFloat(str);
+    return isNaN(parsed) ? 0 : parsed;
+  };
+  // --- 🔥 2. LOGICA UPLOAD COLLEGATA ALLA DYNAMIC ISLAND (CON PARSER TITANIUM V2) ---
+  const handleBatchUpload = async (e: React.ChangeEvent<HTMLInputElement>, isSingle = false) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
-    setIsBatchProcessing(true);
-    setBatchNotification(null);
+    // 🔴 ACCENDIAMO L'ISOLA GLOBALE
+    startUpload(isSingle ? 'single' : 'batch', files.length);
 
-    // 👉 1. IMPOSTA IL TOTALE DEI FILE (Es. 12)
-    setBatchTotal(files.length);
-    setBatchProgress(0);
-
-    // Copia profonda per evitare mutazioni dirette
     let currentAnni = JSON.parse(JSON.stringify(monthlyInputs));
     let successCount = 0;
     let errorCount = 0;
     let lastDetectedYear = null;
 
-    for (let i = 0; i < files.length; i++) {
-      // 👉 2. AGGIORNA IL NUMERO AD OGNI BUSTA PROCESSATA
-      setBatchProgress(i + 1);
+    // Recupera le colonne della tabella per mappare esattamente i codici
+    const expectedColumns = getColumnsByProfile(worker.profilo) || [];
 
+    for (let i = 0; i < files.length; i++) {
       const file = files[i];
+
+      // ✨ TRASMETTE IL NOME FILE ALLA DYNAMIC ISLAND E CALCOLA SUBITO IL MESE
+      const monthNames = ['Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno', 'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'];
+      let label = file.name;
+      const foundMonthUiIndex = monthNames.findIndex(m => file.name.toLowerCase().includes(m.toLowerCase()));
+      const yearMatchUI = file.name.match(/(20\d{2})/);
+
+      if (foundMonthUiIndex !== -1) {
+        label = yearMatchUI ? `${monthNames[foundMonthUiIndex]} ${yearMatchUI[1]}` : monthNames[foundMonthUiIndex];
+      } else {
+        label = file.name.length > 18 ? file.name.substring(0, 18) + '...' : file.name;
+      }
+      window.dispatchEvent(new CustomEvent('island-scan-label', { detail: label }));
+
+      // 🔵 AGGIORNA BARRA
+      if (!isSingle) updateUploadProgress(i + 1);
+
       try {
         const base64String = await toBase64(file);
 
-        // Chiamata al NUOVO Backend V15/V16
         const response = await fetch('/.netlify/functions/scan-payslip', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             fileData: base64String,
-            mimeType: file.type || "application/pdf"
+            mimeType: file.type || "application/pdf",
+            company: worker.profilo,
+            customColumns: getCustomColumnsForAI()
           })
         });
 
-        const aiResult = await response.json();
+        const responseText = await response.text();
+        let aiResult;
 
-        if (!response.ok || aiResult.error) {
-          console.error(`Errore file ${file.name}`, aiResult.error);
+        try {
+          let parsed = JSON.parse(responseText);
+
+          // 🛡️ SCUDO ANTI-ALLUCINAZIONI STRUTTURALI DELL'IA
+          // Se l'IA ha "impacchettato" male i dati, li estraiamo a forza
+          if (Array.isArray(parsed)) parsed = parsed[0];
+          if (parsed && parsed.data) parsed = parsed.data;
+          if (parsed && parsed.payslip) parsed = parsed.payslip;
+          if (parsed && parsed.risultato) parsed = parsed.risultato;
+
+          aiResult = parsed;
+
+          // 📡 SPIA DIAGNOSTICA: Stampa nella console cosa ha capito l'IA
+          console.log(`🤖 DATI ESTRATTI DA ${file.name}:`, aiResult);
+
+        } catch (e) {
+          console.error(`❌ Il server ha fallito sul file ${file.name}. Risposta:`, responseText);
           errorCount++;
           continue;
         }
 
-        // Validazione Dati Minimi
-        if (aiResult.month && aiResult.year) {
-          const targetYear = Number(aiResult.year);
-          const targetMonthIndex = Number(aiResult.month) - 1;
+        if (!response.ok || !aiResult || aiResult.error) {
+          console.error(`Errore file ${file.name}`, aiResult?.error || "Nessun dato valido");
+          errorCount++;
+          continue;
+        }
 
-          lastDetectedYear = targetYear;
-
-          // A. CERCA RIGA ESISTENTE
-          let rowIndex = currentAnni.findIndex((r: AnnoDati) =>
-            Number(r.year) === targetYear && r.monthIndex === targetMonthIndex
-          );
-
-          // B. CREA SE NON ESISTE
-          if (rowIndex === -1) {
-            const newRow: AnnoDati = {
-              id: Date.now().toString() + Math.random(), // ID unico
-              year: targetYear,
-              monthIndex: targetMonthIndex,
-              month: MONTH_NAMES[targetMonthIndex],
-              daysWorked: 0,
-              daysVacation: 0,
-              ticket: 0,
-              arretrati: 0,
-              note: '',
-              coeffTicket: 0,    // Importante inizializzare
-              coeffPercepito: 0  // Importante inizializzare
-            };
-            currentAnni.push(newRow);
-            // Aggiorniamo l'indice per puntare alla nuova riga
-            rowIndex = currentAnni.length - 1;
+        // ✨ IL TRADUTTORE TITANIUM
+        let targetYear = parseInt(String(aiResult.year || "").replace(/[^\d]/g, ''));
+        if (isNaN(targetYear) || targetYear < 2000) {
+          if (yearMatchUI) targetYear = parseInt(yearMatchUI[1]);
+          else {
+            const yMatchMonth = String(aiResult.month || "").match(/(20\d{2})/);
+            if (yMatchMonth) targetYear = parseInt(yMatchMonth[1]);
           }
+        }
 
-          const row = currentAnni[rowIndex];
+        let targetMonthIndex = foundMonthUiIndex;
 
-          // --- C. MAPPING DATI "CHIRURGICO" (NUOVA LOGICA) ---
+        // 🚨 MODALITÀ CUD: Forza l'inserimento nel mese di Dicembre
+        const isCUD = aiResult.isCUD === true;
 
-          // 1. PRESENZE & FERIE (Sovrascrivi sempre con il dato OCR più recente)
-          if (typeof aiResult.daysWorked === 'number') row.daysWorked = aiResult.daysWorked;
-          if (typeof aiResult.daysVacation === 'number') row.daysVacation = aiResult.daysVacation;
+        if (isCUD) {
+          targetMonthIndex = 11; // 11 = Dicembre
+        } else if (targetMonthIndex === -1 && aiResult.month) {
+          const mesiStr = ['gen', 'feb', 'mar', 'apr', 'mag', 'giu', 'lug', 'ago', 'set', 'ott', 'nov', 'dic'];
+          let monthRaw = String(aiResult.month).toLowerCase().trim();
+          targetMonthIndex = mesiStr.findIndex(m => monthRaw.includes(m));
 
-          // 2. TICKET UNITARIO (La tua richiesta specifica)
-          // Se il backend trova "ticketRate" (es. 7.00), lo mettiamo nel coefficiente
-          const ticketVal = Number(aiResult.ticketRate);
-          if (!isNaN(ticketVal) && ticketVal > 0) {
-            row.coeffTicket = ticketVal; // <--- Assegnazione diretta al coefficiente
+          if (targetMonthIndex === -1) {
+            const numMatch = monthRaw.match(/\b(0?[1-9]|1[0-2])\b/);
+            if (numMatch) {
+              targetMonthIndex = parseInt(numMatch[1]) - 1;
+            } else if (monthRaw.length >= 5) {
+              const firstTwo = parseInt(monthRaw.substring(0, 2));
+              if (firstTwo >= 1 && firstTwo <= 12) targetMonthIndex = firstTwo - 1;
+            }
           }
+        }
 
-          // 3. ARRETRATI E NOTE
-          const arretratiVal = Number(aiResult.arretrati);
-          if (!isNaN(arretratiVal) && arretratiVal !== 0) {
-            row.arretrati = arretratiVal;
+        if (targetMonthIndex < 0 || targetMonthIndex > 11 || isNaN(targetYear) || targetYear < 2000) {
+          console.error("❌ Impossibile determinare data per il file:", file.name);
+          errorCount++;
+          continue;
+        }
+
+        lastDetectedYear = targetYear;
+
+        let rowIndex = currentAnni.findIndex((r: AnnoDati) =>
+          Number(r.year) === targetYear && r.monthIndex === targetMonthIndex
+        );
+
+        if (rowIndex === -1) {
+          const newRow: AnnoDati = {
+            id: Date.now().toString() + Math.random(),
+            year: targetYear,
+            monthIndex: targetMonthIndex,
+            month: MONTH_NAMES[targetMonthIndex],
+            daysWorked: 0, daysVacation: 0, ticket: 0, arretrati: 0, note: '', coeffTicket: 0, coeffPercepito: 0
+          };
+          currentAnni.push(newRow);
+          rowIndex = currentAnni.length - 1;
+        }
+
+        const row = currentAnni[rowIndex];
+
+        // DATI FISSI E PROTEZIONE CUD (Non sovrascriviamo le medie dei giorni)
+        if (!isCUD) {
+          if (aiResult.daysWorked !== undefined && aiResult.daysWorked !== null) row.daysWorked = parseLocalFloat(aiResult.daysWorked);
+          if (aiResult.daysVacation !== undefined && aiResult.daysVacation !== null) row.daysVacation = parseLocalFloat(aiResult.daysVacation);
+        }
+
+        const ticketVal = parseLocalFloat(aiResult.ticketRate);
+        if (!isNaN(ticketVal) && ticketVal > 0) row.coeffTicket = ticketVal;
+
+        const arretratiVal = parseLocalFloat(aiResult.arretrati);
+        if (!isNaN(arretratiVal) && arretratiVal !== 0) row.arretrati = arretratiVal;
+
+        const sep = '  •  ';
+        if (isCUD && !row.note?.includes("CUD")) row.note = row.note ? `[📄 Dati da CUD]${sep}${row.note}` : `[📄 Dati da CUD]`;
+        if (aiResult.eventNote && !row.note?.includes(aiResult.eventNote)) row.note = row.note ? `${row.note}${sep}[${aiResult.eventNote}]` : `[${aiResult.eventNote}]`;
+        if (aiResult.aiWarning && aiResult.aiWarning !== "Nessuna anomalia" && !row.note?.includes("⚠️")) row.note = row.note ? `${row.note}${sep}[⚠️ AI: ${aiResult.aiWarning}]` : `[⚠️ AI: ${aiResult.aiWarning}]`;
+        if (!isNaN(ticketVal) && ticketVal > 0 && !row.note?.includes("Ticket")) row.note = row.note ? `${row.note}${sep}[🎫 Ticket: €${ticketVal.toFixed(2)}]` : `[🎫 Ticket: €${ticketVal.toFixed(2)}]`;
+
+        // ✨ SALVATAGGIO INVISIBILE DATI TFR E RADAR INTELLIGENTE
+        if (aiResult.imponibile_tfr_mensile !== undefined) {
+          const newVal = parseLocalFloat(aiResult.imponibile_tfr_mensile);
+          // Se è CUD forza l'importo annuo, se è busta paga lo accoda
+          row.imponibile_tfr_mensile = isCUD ? newVal : (row.imponibile_tfr_mensile || 0) + newVal;
+        }
+
+        if (aiResult.fondo_pregresso_31_12 !== undefined) {
+          const fondoTrovato = parseLocalFloat(aiResult.fondo_pregresso_31_12);
+          row.fondo_pregresso_31_12 = fondoTrovato;
+
+          // Se trova un fondo > 0, Lancia un segnale radio a tutta l'app!
+          if (fondoTrovato > 0) {
+            window.dispatchEvent(new CustomEvent('ai-found-tfr-base', {
+              detail: {
+                amount: fondoTrovato,
+                year: targetYear - 1 // Se il CUD è del 2018 (redditi 2018), il fondo è al 31/12/2017
+              }
+            }));
           }
+        }
 
-          // Definiamo un separatore largo e pulito per non appiccicare i testi
-          const sep = '  •  ';
-
-          // A. Aggiunta Note Eventi (es. "Malattia")
-          if (aiResult.eventNote && !row.note?.includes(aiResult.eventNote)) {
-            row.note = row.note ? `${row.note}${sep}[${aiResult.eventNote}]` : `[${aiResult.eventNote}]`;
-          }
-
-          // B. Aggiunta AUDITOR AI WARNING 
-          if (aiResult.aiWarning && aiResult.aiWarning !== "Nessuna anomalia" && !row.note?.includes("⚠️")) {
-            row.note = row.note ? `${row.note}${sep}[⚠️ AI: ${aiResult.aiWarning}]` : `[⚠️ AI: ${aiResult.aiWarning}]`;
-          }
-
-          // C. Aggiunta Valore Ticket visivo
-          const ticketValNote = Number(aiResult.ticketRate);
-          if (!isNaN(ticketValNote) && ticketValNote > 0 && !row.note?.includes("Ticket")) {
-            row.note = row.note ? `${row.note}${sep}[🎫 Ticket: €${ticketValNote.toFixed(2)}]` : `[🎫 Ticket: €${ticketValNote.toFixed(2)}]`;
-          }
-
-          // 4. VOCI VARIABILI (Codici)
-          // Mappiamo l'oggetto "codes" restituito dal backend alle colonne della griglia
-          if (aiResult.codes && typeof aiResult.codes === 'object') {
-            Object.entries(aiResult.codes).forEach(([code, value]) => {
-              const numValue = parseFloat(value as string);
-              if (!isNaN(numValue) && numValue !== 0) {
-                // Sovrascrittura: Se l'OCR dice 150€, scriviamo 150€.
+        // INDENNITÀ (Codici in tabella)
+        if (aiResult.codes && typeof aiResult.codes === 'object') {
+          Object.entries(aiResult.codes).forEach(([code, value]) => {
+            const numValue = parseLocalFloat(value);
+            if (!isNaN(numValue) && numValue !== 0) {
+              const matchedCol = expectedColumns.find(c => code.toUpperCase().includes(c.id.toUpperCase()));
+              if (matchedCol) {
+                // @ts-ignore
+                row[matchedCol.id] = numValue;
+              } else {
                 // @ts-ignore
                 row[code] = numValue;
               }
-            });
-          }
-
-          currentAnni[rowIndex] = row;
-          successCount++;
+            }
+          });
         }
+
+        currentAnni[rowIndex] = row;
+        successCount++;
+
       } catch (error) {
         console.error("Errore generico batch", error);
         errorCount++;
       }
+
+      if (!isSingle && i < files.length - 1) {
+        await delay(1500);
+      }
     }
 
-    // 3. ORDINAMENTO E SALVATAGGIO
     currentAnni.sort((a: AnnoDati, b: AnnoDati) => {
       if (a.year !== b.year) return a.year - b.year;
       return a.monthIndex - b.monthIndex;
@@ -556,41 +804,58 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
 
     setMonthlyInputs(currentAnni);
     onUpdateData(currentAnni);
-
     if (lastDetectedYear) setCurrentYear(lastDetectedYear);
-
-    // --- EFFETTO SUPERNOVA ---
-    if (successCount > 0) {
-      setShowSupernova(true);
-      await new Promise(resolve => setTimeout(resolve, 800)); // Pausa scenica
-    }
-
-    setIsBatchProcessing(false);
-    setShowSupernova(false);
-
-    // 👉 3. AZZERA I CONTATORI SOLO QUANDO L'HUD È CHIUSO
-    setTimeout(() => {
-      setBatchProgress(0);
-      setBatchTotal(0);
-    }, 300);
 
     if (batchInputRef.current) batchInputRef.current.value = '';
 
-    // Notifica Intelligente
-    if (successCount > 0) {
-      setBatchNotification({
-        msg: `✅ Elaborazione Completata!\n${successCount} cedolini inseriti correttamente.\n${errorCount > 0 ? `⚠️ ${errorCount} errori.` : ''}`,
-        type: 'success'
-      });
-    } else if (errorCount > 0) {
-      setBatchNotification({
-        msg: `❌ Operazione fallita.\nNessun cedolino valido trovato su ${files.length} file.`,
-        type: 'error'
-      });
-    }
-
-    setTimeout(() => setBatchNotification(null), 6000);
+    finishUpload(successCount, errorCount, isSingle ? 'single' : 'batch');
   };
+  // 👇 INCOLLA QUI IL CERVELLO RADAR E IL SALVATAGGIO 👇
+
+  // --- 🤖 ANTENNA RADAR AI GLOBALE (VERSIONE SILENZIATA) ---
+  const hasPromptedTfrRef = useRef(false);
+
+  useEffect(() => {
+    const handleAiTfr = (e: any) => {
+      const { amount, year } = e.detail;
+      // ✨ LA MAGIA: Scatta SOLO se non abbiamo già chiesto in questa sessione e se il campo è vuoto!
+      if (!hasPromptedTfrRef.current && (!worker?.tfr_pregresso || worker.tfr_pregresso === 0)) {
+        hasPromptedTfrRef.current = true; // Blocca chiamate successive
+        setAiTfrAmount(amount.toString());
+        setAiTfrYear(year.toString());
+        setIsAiTfrModalOpen(true);
+        // Niente più notifica fissa qui: il modale basta e avanza!
+      }
+    };
+    window.addEventListener('ai-found-tfr-base', handleAiTfr);
+    return () => window.removeEventListener('ai-found-tfr-base', handleAiTfr);
+  }, [worker]);
+
+  const handleSaveAiTfr = () => {
+    if (!aiTfrAmount || !aiTfrYear) return;
+    const rawData = localStorage.getItem('workers_data');
+    if (rawData && worker) {
+      let workers = JSON.parse(rawData);
+      const amount = parseFloat(aiTfrAmount.replace(',', '.'));
+      const year = parseInt(aiTfrYear);
+
+      workers = workers.map((w: any) => w.id === worker.id ? { ...w, tfr_pregresso: amount, tfr_pregresso_anno: year } : w);
+      localStorage.setItem('workers_data', JSON.stringify(workers));
+
+      worker.tfr_pregresso = amount;
+      worker.tfr_pregresso_anno = year;
+
+      setIsAiTfrModalOpen(false);
+      // ✨ FIX: Invia la notifica DIRETTAMENTE NEL TERMINALE DELL'ISOLA senza chiuderla!
+      window.dispatchEvent(new CustomEvent('island-scan-label', { detail: 'TFR STORICO SALVATO ✅' }));
+    }
+  };
+
+  const handleIgnoreAiTfr = () => {
+    setIsAiTfrModalOpen(false);
+    setBatchNotification(null); // Pulisce eventuali notifiche bloccate
+  };
+
   const handleDataChange = (newData: AnnoDati[]) => {
     setMonthlyInputs(newData);
     onUpdateData(newData);
@@ -600,49 +865,22 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
   const handleCellFocus = (rowIndex: number, colId: string) => {
     setActiveCell({ row: rowIndex, col: colId });
   };
-  // --- HELPER BASE64 ---
-  const toBase64 = (file: File) => new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = error => reject(error);
-  });
+
+
   // --- 🔥 3. FUNZIONE SINGOLA (WRAPPER) ---
-  // Reindirizza il file singolo alla logica Batch che è già perfetta e aggiornata
   const handleAnalyzePaySlip = async (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files.length > 0) {
-      // 1. Accendiamo la rotellina di caricamento del bottone
-      setIsAnalyzing(true);
-
-      // 2. Eseguiamo il caricamento
-      await handleBatchUpload(event);
-
-      // 3. Spegniamo la rotellina e resettiamo l'input (così puoi ricaricare lo stesso file se serve)
-      setIsAnalyzing(false);
+      await handleBatchUpload(event, true); // Passiamo 'true' per attivare la modale dedicata!
       if (scanRef.current) scanRef.current.value = '';
     }
   };
-  // --- 🔥 1. PARSER ROBUSTO (Sostituisci quello esistente) ---
-  const parseLocalFloat = (val: any) => {
-    if (!val) return 0;
-    if (typeof val === 'number') return val;
 
-    let str = val.toString();
-    // Logica Ibrida: Se c'è la virgola, è input utente (ITA).
-    if (str.includes(',')) {
-      str = str.replace(/\./g, ''); // Via i punti migliaia (1.000 -> 1000)
-      str = str.replace(',', '.');  // Virgola diventa punto (1000,50 -> 1000.50)
-    }
-
-    const num = parseFloat(str);
-    return isNaN(num) ? 0 : num;
-  };
   // --- FUNZIONE CERVELLO CORRETTA (Logica Anno Precedente + Filtro Anno Inizio) ---
   const calculateAnnualLegalData = (data: AnnoDati[], profile: any, withExFest: boolean, startClaimYear: number) => {
     const years = Array.from(new Set(data.map(d => Number(d.year)))).sort((a, b) => a - b);
 
     const indennitaCols = getColumnsByProfile(profile).filter(c =>
-      !['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'coeffPercepito', 'coeffTicket', 'note', 'arretrati'].includes(c.id)
+      !['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'coeffPercepito', 'coeffTicket', 'note', 'arretrati', '3B70', '3B71'].includes(c.id)
     );
 
     // 1. PASSO PRELIMINARE: Calcoliamo le medie giornaliere per OGNI anno disponibile (anche il 2007)
@@ -679,7 +917,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
 
     years.forEach(year => {
       // --- MODIFICA FONDAMENTALE ---
-      // Se l'anno è precedente all'inizio della vertenza (es. 2007 < 2008), 
+      // Se l'anno è precedente all'inizio della vertenza (es. 2007 < 2008), 
       // NON sommare nulla ai totali globali. Serve solo per la media calcolata sopra.
       if (year < startClaimYear) return;
 
@@ -715,20 +953,15 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
     return { globalLordo, globalTicket, globalFerieEffettive, globalFeriePagate };
   };
 
-  // --- PUNTO 2: DEAL MAKER STRATEGICO (AGGIORNATO CON FILTRO ANNI) ---
+  // --- CALCOLO VALORE TOTALE (Per il Ticker della Dynamic Island) ---
   const dealStats = useMemo(() => {
-    // 1. Passiamo startClaimYear alla funzione di calcolo
     const { globalLordo, globalTicket } = calculateAnnualLegalData(monthlyInputs, worker.profilo, includeExFest, startClaimYear);
-
-    // 2. Calcolo Percepito da detrarre (solo su gg utili e ANNI VALIDI)
     const TETTO = includeExFest ? 32 : 28;
     let totalPercepito = 0;
 
     const years = Array.from(new Set(monthlyInputs.map(d => Number(d.year))));
     years.forEach(year => {
-      // --- FILTRO: Se l'anno è precedente all'inizio della vertenza, lo ignoriamo ---
       if (year < startClaimYear) return;
-
       const months = monthlyInputs.filter(d => Number(d.year) === year).sort((a, b) => a.monthIndex - b.monthIndex);
       let acc = 0;
       months.forEach(m => {
@@ -740,31 +973,12 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
       });
     });
 
-    // IL CREDITO LORDO (Base della causa)
     const grossClaim = (globalLordo - totalPercepito) + globalTicket;
 
-    // --- SIMULAZIONE SCENARI ---
-
-    // A. Tassazione (Stimata al 23% medio per arretrati anni precedenti)
-    const TAX_RATE = 0.23;
-    const netClaim = grossClaim * (1 - TAX_RATE);
-
-    // B. Valore Atteso dalla Causa (Expected Value)
-    const baseValue = isNetMode ? netClaim : grossClaim;
-    const courtExpectedValue = (baseValue * (winProb / 100)) - legalCosts;
-
-    // C. Valore del Tempo
-    const inflationFactor = Math.pow(1.03, yearsDuration);
-    const courtRealValue = courtExpectedValue / inflationFactor;
-
     return {
-      netDifference: grossClaim,
-      grossClaim: grossClaim > 0 ? grossClaim : 0,
-      netClaim: netClaim > 0 ? netClaim : 0,
-      courtRealValue: courtRealValue > 0 ? courtRealValue : 0,
-      displayTarget: isNetMode ? netClaim : grossClaim
+      displayTarget: grossClaim > 0 ? grossClaim : 0
     };
-  }, [monthlyInputs, worker.profilo, includeExFest, isNetMode, winProb, legalCosts, yearsDuration, startClaimYear]); // <--- Aggiunto startClaimYear qui!
+  }, [monthlyInputs, worker.profilo, includeExFest, includeTickets, startClaimYear]);
 
   // --- GESTIONE INVIO PEC ---
   const handleSendPec = () => {
@@ -785,7 +999,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
     const totalPagesExp = '{total_pages_count_string}'; // Variabile necessaria
 
     const indennitaCols = getColumnsByProfile(worker.profilo).filter(c =>
-      !['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'coeffPercepito', 'coeffTicket', 'note', 'arretrati'].includes(c.id)
+      !['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'coeffPercepito', 'coeffTicket', 'note', 'arretrati', '3B70', '3B71'].includes(c.id)
     );
 
     const fmt = (n: number) => n !== 0 ? n.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-';
@@ -835,12 +1049,14 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
     let grandTotalFerieEffettive = 0;
     let grandTotalFeriePagate = 0;
     let grandTotalIndemnity = 0;
-
-    let ferieCumulateCounter = 0;
+    let grandTotalPercepito = 0; // <--- AGGIUNTO PER EVITARE BUG NEL FINALE
 
     // --- B. COSTRUZIONE DATI TABELLA 1 (RIEPILOGO) ---
     yearsToPrint.forEach((yearVal) => {
       const year = Number(yearVal);
+
+      // 🔥 FIX 1: AZZERIAMO IL CONTATORE FERIE AD OGNI ANNO 🔥
+      let ferieCumulateCounter = 0;
 
       let mediaApplicata = yearlyAverages[year - 1];
       if (mediaApplicata === undefined || mediaApplicata === 0) {
@@ -863,7 +1079,6 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
           const val = parseLocalFloat(row[col.id]);
           monthVoci += val;
 
-          // 🔥 MODIFICA CHIRURGICA: Inseriamo il Codice tra parentesi quadre nella chiave della Pivot
           const pivotKey = `[${col.id}] ${col.label}`;
           if (!pivotData[pivotKey]) pivotData[pivotKey] = {};
           if (!pivotData[pivotKey][year]) pivotData[pivotKey][year] = 0;
@@ -918,6 +1133,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
         grandTotalNet += yNetto;
         grandTotalFerieEffettive += yFerieEffettive;
         grandTotalFeriePagate += yFeriePagate;
+        grandTotalPercepito += yPercepito; // Accumuliamo in modo pulito
       }
     });
 
@@ -941,10 +1157,19 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
       doc.setFontSize(16); doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold');
       doc.text(`CONTEGGIO DIFFERENZE RETRIBUTIVE (Max ${TETTO}gg)`, 14, 12);
       doc.setFontSize(10); doc.setFont('helvetica', 'normal'); doc.setTextColor(200, 200, 200);
-      doc.text(`Pratica: ${worker.cognome} ${worker.nome} (Matr. ${worker.id})`, pageWidth - 14, 12, { align: 'right' });
+      // Sostituita Matricola con Profilo Professionale (Ruolo)
+      doc.text(`Pratica: ${worker.cognome} ${worker.nome} - Profilo: ${worker.ruolo}`, pageWidth - 14, 12, { align: 'right' });
 
       doc.setFontSize(7); doc.setTextColor(100);
-      const note = "Calcolo elaborato ai sensi Cass. n. 20216/2022 e Art. 64 CCNL Mobilità. La media giornaliera è calcolata sul totale delle voci variabili diviso i giorni di effettiva presenza. Limite giorni indennizzabili: 28.";
+
+      // Dinamizza il nome del contratto in base all'azienda
+      let nomeCCNL = 'CCNL di Categoria';
+      if (worker.profilo === 'RFI') nomeCCNL = 'CCNL Mobilità';
+      if (worker.profilo === 'REKEEP') nomeCCNL = 'CCNL Multiservizi';
+      if (worker.profilo === 'ELIOR') nomeCCNL = 'CCNL Ristorazione';
+
+      // Applica il nome del contratto e il tetto giorni reale (28 o 32)
+      const note = `Calcolo elaborato ai sensi Cass. n. 20216/2022 e Art. 64 ${nomeCCNL}. La media giornaliera è calcolata sul totale delle voci variabili diviso i giorni di effettiva presenza. Limite giorni indennizzabili: ${TETTO}.`;
       doc.text(note, 14, pageHeight - 10);
       const str = "Pagina " + doc.getNumberOfPages();
       doc.text(str, pageWidth - 14, pageHeight - 10, { align: 'right' });
@@ -976,12 +1201,12 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
     // @ts-ignore
     currentY = doc.lastAutoTable.finalY + 3;
 
-    // NOTA A PIE DI TABELLA 1 (Spiegazione Asterisco e GG Ferie)
+    // NOTA A PIE DI TABELLA 1
     doc.setFontSize(8); doc.setTextColor(100); doc.setFont('helvetica', 'italic');
     doc.text(`* La dicitura "GG FERIE / TOT" indica i giorni effettivamente conteggiati ai fini del calcolo rispetto a quelli goduti. In caso di superamento del limite legale (${TETTO}gg annui), l'eccedenza è stata esclusa dal conteggio economico.`, 14, currentY);
     currentY += 12;
 
-    // --- TABELLA 2 (IL VERO PROBLEMA RISOLTO) ---
+    // --- TABELLA 2 (PIVOT) ---
     // @ts-ignore
     if (currentY > 150) { doc.addPage(); currentY = 30; }
 
@@ -991,7 +1216,6 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
     const pivotHead = ['CODICE E VOCE', ...yearsToPrint.map(String), 'TOTALE'];
     const pivotBody = Object.keys(pivotData).sort().map(key => {
       let rowTotal = 0;
-      // Tagliamo leggermente la label per farci stare il codice (es. "[0152] Straord...")
       const shortKey = key.length > 25 ? key.substring(0, 23) + '..' : key;
       const row = [shortKey];
 
@@ -1010,29 +1234,15 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
       head: [pivotHead],
       body: pivotBody,
       theme: 'grid',
-      styles: {
-        fontSize: 6.5,
-        cellPadding: 1.5,
-        textColor: 50
-      },
-      headStyles: {
-        fillColor: [234, 88, 12],
-        textColor: 255,
-        halign: 'center',
-        valign: 'middle',
-        fontStyle: 'bold'
-      },
+      styles: { fontSize: 6.5, cellPadding: 1.5, textColor: 50 },
+      headStyles: { fillColor: [234, 88, 12], textColor: 255, halign: 'center', valign: 'middle', fontStyle: 'bold' },
       bodyStyles: { halign: 'right', valign: 'middle' },
-      columnStyles: {
-        0: { halign: 'left', fontStyle: 'bold', cellWidth: 40 } // Allargato leggermente per il codice
-      },
-      // MAGIA: Forza le colonne numeriche a non andare a capo + Evidenzia Colonna Totali
+      columnStyles: { 0: { halign: 'left', fontStyle: 'bold', cellWidth: 40 } },
       didParseCell: function (data) {
         if (data.column.index > 0) {
           data.cell.styles.cellWidth = 'wrap';
           data.cell.styles.minCellWidth = 14;
         }
-        // Evidenzia visivamente l'ultima colonna (Il Totale Finale a destra)
         if (data.section === 'body' && data.column.index === pivotHead.length - 1) {
           data.cell.styles.fontStyle = 'bold';
           data.cell.styles.fillColor = [245, 245, 245];
@@ -1048,12 +1258,13 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
     doc.setFontSize(12); doc.setTextColor(23, 37, 84);
     doc.text("3. DETTAGLIO MENSILE ANALITICO", 14, currentY);
 
-    let monthlyFerieCounter = 0;
-
     yearsToPrint.forEach(yearVal => {
       const year = Number(yearVal);
       // @ts-ignore
       if (currentY > 160) { doc.addPage(); currentY = 30; }
+
+      // 🔥 FIX 2: AZZERIAMO IL CONTATORE FERIE MENSILE AD OGNI ANNO 🔥
+      let monthlyFerieCounter = 0;
 
       let media = yearlyAverages[year - 1];
       if (media === undefined || media === 0) media = yearlyAverages[year] || 0;
@@ -1063,7 +1274,6 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
 
       const yearRows = monthlyInputs.filter(d => Number(d.year) === year).sort((a, b) => a.monthIndex - b.monthIndex);
 
-      // 🔥 MODIFICA CHIRURGICA: Codice al primo rigo, descrizione al secondo. Cambiato GG UTILI in GG FERIE
       const tableHead = [
         'MESE',
         ...indennitaCols.map(c => `${c.id}\n${c.label.substring(0, 8)}.`),
@@ -1098,7 +1308,6 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
         const rNetto = (rLordo - (showPercepito ? rPercepito : 0)) + rTicket;
 
         rowData.push(ggLav > 0 ? String(ggLav) : '');
-        // Mantiene l'asterisco per i mesi in cui interviene il taglio
         rowData.push(gu !== vac ? `${fmtInt(gu)}*` : fmtInt(gu));
         rowData.push(fmt(rLordo));
 
@@ -1117,7 +1326,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
         theme: 'grid',
         styles: { fontSize: 7, cellPadding: 1.5, halign: 'right', lineColor: [220, 220, 220], lineWidth: 0.1 },
         headStyles: { fillColor: [23, 37, 84], textColor: 255, fontStyle: 'bold', halign: 'center' },
-        alternateRowStyles: { fillColor: [248, 250, 252] }, // 🔥 ZEBRA STRIPING per leggibilità orizzontale!
+        alternateRowStyles: { fillColor: [248, 250, 252] },
         columnStyles: {
           0: { halign: 'left', fontStyle: 'bold', cellWidth: 12, fillColor: [241, 245, 249] },
           [tableHead.length - 1]: { fontStyle: 'bold', fillColor: [240, 253, 250], textColor: [21, 128, 61] }
@@ -1153,27 +1362,11 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
       currentY += 12;
     };
 
-    let recalcPercepitoTotal = 0;
-    let tempFerie = 0;
-
-    const allSorted = [...monthlyInputs].sort((a, b) => {
-      return (Number(a.year) - Number(b.year)) || (a.monthIndex - b.monthIndex);
-    });
-
-    allSorted.forEach(row => {
-      if (Number(row.year) < startClaimYear) return;
-
-      const v = parseLocalFloat(row.daysVacation);
-      const s = Math.max(0, TETTO - tempFerie);
-      const gu = Math.min(v, s);
-      tempFerie += v;
-      if (gu > 0) recalcPercepitoTotal += (gu * parseLocalFloat(row.coeffPercepito));
-    });
-
+    // 🔥 FIX 3: USIAMO I TOTALI PULITI CALCOLATI NELLA TABELLA 1 🔥
     printRow("Totale Lordo Spettante", fmt(grandTotalLordo));
 
     if (showPercepito) {
-      printRow("Totale Già Percepito (Voce Busta)", fmt(recalcPercepitoTotal));
+      printRow("Totale Già Percepito (Voce Busta)", fmt(grandTotalPercepito));
     }
 
     if (includeTickets) {
@@ -1181,7 +1374,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
     }
 
     currentY += 5;
-    const veroNettoDaStampare = (grandTotalLordo - (showPercepito ? recalcPercepitoTotal : 0)) + (includeTickets ? grandTotalTicket : 0);
+    const veroNettoDaStampare = (grandTotalLordo - (showPercepito ? grandTotalPercepito : 0)) + (includeTickets ? grandTotalTicket : 0);
     printRow("TOTALE NETTO DA LIQUIDARE", fmt(veroNettoDaStampare), true);
 
     currentY += 20;
@@ -1263,10 +1456,49 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
     setMonthlyInputs(newData);
     onUpdateData(newData);
   };
+  // --- INIZIO NUOVO HELPER: ORDINAMENTO CRONOLOGICO BUSTE PAGA ---
+  const getFilenameDateScore = (filename: string) => {
+    const name = filename.toLowerCase();
+    let month = 0;
+    let year = 0;
 
+    // 1. Cerca l'anno (es. 2023, 2024)
+    const yearMatch = name.match(/(20\d{2})/);
+    if (yearMatch) year = parseInt(yearMatch[1]);
+
+    // 2. Cerca i mesi in formato testuale (gennaio, feb, mar...)
+    const monthNames = ['gen', 'feb', 'mar', 'apr', 'mag', 'giu', 'lug', 'ago', 'set', 'ott', 'nov', 'dic'];
+    monthNames.forEach((m, index) => {
+      if (name.includes(m)) month = index + 1;
+    });
+
+    // 3. Se non ha trovato il testo, cerca i mesi a numero (01, 02... 12)
+    if (month === 0) {
+      // Cerca numeri da 01 a 12 separati da underscore o trattini
+      const numMatch = name.match(/[^0-9](0[1-9]|1[0-2])[^0-9]/) || name.match(/^(0[1-9]|1[0-2])[^0-9]/);
+      if (numMatch) month = parseInt(numMatch[1] || numMatch[0].replace(/[^0-9]/g, ''));
+    }
+
+    // Restituisce un numero ordinabile (es. Anno 2024, Mese 1 = 202401)
+    return (year * 100) + month;
+  };
+  // --- FINE HELPER ---
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      const newFiles = Array.from(e.target.files).map((file: any) => URL.createObjectURL(file as Blob));
+      // 1. Prendi i file veri
+      const filesArray = Array.from(e.target.files) as File[];
+
+      // 2. Ordinali magicamente usando il nome!
+      filesArray.sort((a, b) => {
+        const scoreA = getFilenameDateScore(a.name);
+        const scoreB = getFilenameDateScore(b.name);
+        if (scoreA !== scoreB) return scoreA - scoreB;
+        return a.name.localeCompare(b.name); // Fallback alfabetico
+      });
+
+      // 3. Trasformali in URL da mostrare
+      const newFiles = filesArray.map(file => URL.createObjectURL(file));
+
       setPayslipFiles(prev => [...prev, ...newFiles]);
       setCurrentFileIndex(prev => prev === 0 && payslipFiles.length === 0 ? 0 : prev);
       setShowSplit(true);
@@ -1300,7 +1532,20 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
     e.stopPropagation();
 
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      const newFiles = Array.from(e.dataTransfer.files).map((file: any) => URL.createObjectURL(file));
+      // 1. Prendi i file veri dal Drag
+      const filesArray = Array.from(e.dataTransfer.files) as File[];
+
+      // 2. Ordinali magicamente
+      filesArray.sort((a, b) => {
+        const scoreA = getFilenameDateScore(a.name);
+        const scoreB = getFilenameDateScore(b.name);
+        if (scoreA !== scoreB) return scoreA - scoreB;
+        return a.name.localeCompare(b.name);
+      });
+
+      // 3. Trasformali in URL
+      const newFiles = filesArray.map(file => URL.createObjectURL(file));
+
       setPayslipFiles(prev => [...prev, ...newFiles]);
 
       // Se è il primo caricamento, resetta la vista
@@ -1387,7 +1632,8 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
           fileData: base64String,
           mimeType: blob.type || "application/pdf",
           action: 'explain',
-          company: worker.profilo
+          company: worker.profilo,
+          customColumns: getCustomColumnsForAI() // Inietta i codici custom anche all'avvocato!
         })
       });
 
@@ -1465,29 +1711,24 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
       );
     });
   };
-  // --- 🔥 MODIFICA 2: CALCOLO STATISTICHE ALLINEATO AL PDF ---
-  const globalStats = useMemo(() => {
-    if (!monthlyInputs || !Array.isArray(monthlyInputs)) return [];
+  // --- 🔥 MODIFICA 2: CALCOLO STATISTICHE UNIFICATO E TICKER ISTAT (GOD TIER UX) ---
+  const statsData = useMemo(() => {
+    if (!monthlyInputs || !Array.isArray(monthlyInputs)) return { cards: [], rawTotal: 0 };
 
-    // Filtriamo solo le colonne che sono indennità (escludendo giorni, ticket, ecc)
     const indennitaCols = getColumnsByProfile(worker.profilo).filter(c =>
-      !['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'coeffPercepito', 'coeffTicket', 'note', 'arretrati'].includes(c.id)
+      !['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'coeffPercepito', 'coeffTicket', 'note', 'arretrati', '3B70', '3B71'].includes(c.id)
     );
 
-    // 1. PRE-CALCOLO MEDIE (Cervello)
     const yearlyRawStats: Record<number, { totVar: number; ggLav: number }> = {};
 
     monthlyInputs.forEach(row => {
       const y = Number(row.year);
       if (!yearlyRawStats[y]) yearlyRawStats[y] = { totVar: 0, ggLav: 0 };
-
-      const ggLav = parseLocalFloat(row.daysWorked);
+      const ggLav = parseFloatSafe(row.daysWorked);
 
       if (ggLav > 0) {
         let sommaIndennitaRow = 0;
-        indennitaCols.forEach(c => {
-          sommaIndennitaRow += parseLocalFloat(row[c.id]);
-        });
+        indennitaCols.forEach(c => { sommaIndennitaRow += parseFloatSafe(row[c.id]); });
         yearlyRawStats[y].totVar += sommaIndennitaRow;
         yearlyRawStats[y].ggLav += ggLav;
       }
@@ -1500,86 +1741,200 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
       yearlyAverages[y] = t.ggLav > 0 ? t.totVar / t.ggLav : 0;
     });
 
-    // 2. CALCOLO SPETTANZE FINALI
     let totLordoSpettante = 0;
     let totTicket = 0;
     let totGiaPercepito = 0;
+    let totaleISTATeInteressi = 0;
 
     const TETTO = includeExFest ? 32 : 28;
     const availableYears = Array.from(new Set(monthlyInputs.map(d => Number(d.year)))).sort((a, b) => a - b);
 
     availableYears.forEach(year => {
-      // --- FILTRO: Se l'anno è precedente all'inizio impostato, lo ignoriamo nei totali ---
       if (year < startClaimYear) return;
 
       let ferieCumulateAnno = 0;
-
-      // Logica Media: Anno Precedente (Fallback su corrente se manca)
       let mediaDaUsare = yearlyAverages[year - 1];
-      if (mediaDaUsare === undefined || mediaDaUsare === 0) {
-        mediaDaUsare = yearlyAverages[year] || 0;
-      }
+      if (mediaDaUsare === undefined || mediaDaUsare === 0) mediaDaUsare = yearlyAverages[year] || 0;
 
-      const monthsInYear = monthlyInputs
-        .filter(d => Number(d.year) === year)
-        .sort((a, b) => a.monthIndex - b.monthIndex);
+      const monthsInYear = monthlyInputs.filter(d => Number(d.year) === year).sort((a, b) => a.monthIndex - b.monthIndex);
+
+      let lordoAnno = 0;
+      let percepitoAnno = 0;
+      let ticketAnno = 0;
 
       monthsInYear.forEach(row => {
-        const vacDays = parseLocalFloat(row.daysVacation);
-        const coeffTicket = parseLocalFloat(row.coeffTicket);
-        const coeffPercepito = parseLocalFloat(row.coeffPercepito);
+        const vacDays = parseFloatSafe(row.daysVacation);
+        const coeffTicket = parseFloatSafe(row.coeffTicket);
+        const coeffPercepito = parseFloatSafe(row.coeffPercepito);
 
-        // Saturazione Tetto
         const spazio = Math.max(0, TETTO - ferieCumulateAnno);
         const giorniUtili = Math.min(vacDays, spazio);
         ferieCumulateAnno += vacDays;
 
         if (giorniUtili > 0) {
-          totLordoSpettante += (giorniUtili * mediaDaUsare);
-          totGiaPercepito += (giorniUtili * coeffPercepito);
-
-          if (includeTickets) {
-            totTicket += (giorniUtili * coeffTicket);
-          }
+          lordoAnno += (giorniUtili * mediaDaUsare);
+          percepitoAnno += (giorniUtili * coeffPercepito);
+          if (includeTickets) ticketAnno += (giorniUtili * coeffTicket);
         }
       });
+
+      totLordoSpettante += lordoAnno;
+      totGiaPercepito += percepitoAnno;
+      totTicket += ticketAnno;
+
+      const nettoAnno = (lordoAnno - percepitoAnno) + ticketAnno;
+      if (nettoAnno > 0) {
+        const risultatoIstat = calculateLegalInterestsAndRevaluation(nettoAnno, year);
+        totaleISTATeInteressi += risultatoIstat.totaleDovuto;
+      }
     });
 
     const differenzaRetributiva = totLordoSpettante - totGiaPercepito;
     const nettoRecuperabile = differenzaRetributiva + totTicket;
+    const tfrSulleDifferenze = totLordoSpettante / 13.5;
 
-    return [
+    const cards = [
       {
         label: "TOTALE DA LIQUIDARE",
         value: formatCurrency(nettoRecuperabile),
         icon: Wallet,
-        color: "text-emerald-600 bg-emerald-50 border-emerald-200",
-        note: `Diff. Retr. (${formatCurrency(differenzaRetributiva)}) + Ticket`
+        color: "bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800/50",
+        textColor: "text-emerald-600 dark:text-emerald-400",
+        note: `Diff. Retr. (${formatCurrency(differenzaRetributiva)}) + Ticket`,
+        tooltip: (
+          <div className="space-y-3 text-[14px] leading-relaxed text-slate-300">
+            <div className="bg-emerald-950/40 p-4 rounded-xl border border-emerald-500/30 shadow-inner">
+              <strong className="text-emerald-400 block mb-1.5 tracking-wide uppercase text-xs">Il Valore di Conciliazione</strong>
+              <p className="text-sm">Questa è la somma liquida, netta ed esigibile che il lavoratore deve incassare <em>immediatamente</em> alla chiusura della vertenza.</p>
+            </div>
+            <p className="pl-2">Rappresenta la differenza pura tra ciò che gli spettava di diritto e ciò che l'azienda gli ha effettivamente pagato nei periodi di ferie, al netto delle imposte e con l'aggiunta dell'indennità sostitutiva dei buoni pasto. È la <strong>bottom line</strong> per qualsiasi trattativa stragiudiziale.</p>
+          </div>
+        )
+      },
+      {
+        label: "TOTALE ISTAT + INTERESSI",
+        value: formatCurrency(totaleISTATeInteressi),
+        icon: LineChart,
+        color: "bg-fuchsia-50 dark:bg-fuchsia-900/20 border-fuchsia-200 dark:border-fuchsia-800/50",
+        textColor: "text-fuchsia-600 dark:text-fuchsia-400",
+        note: "Rivalutazione e Mora (Art. 429 c.p.c.)",
+        tooltip: (
+          <div className="space-y-3 text-[14px] leading-relaxed text-slate-300">
+            <div className="bg-fuchsia-950/40 p-4 rounded-xl border border-fuchsia-500/30 shadow-inner">
+              <strong className="text-fuchsia-400 block mb-1.5 tracking-wide uppercase text-xs">Lo Scudo Finanziario</strong>
+              <p className="text-sm">L'importo massimo inattaccabile da esigere in caso di ricorso in Giudizio.</p>
+            </div>
+            <p className="pl-2">La giurisprudenza protegge i crediti di lavoro imponendo due oneri all'azienda inadempiente: la <strong>Rivalutazione Monetaria</strong> (che neutralizza l'inflazione usando gli indici ISTAT FOI) e gli <strong>Interessi Legali</strong> (calcolati sul capitale progressivamente rivalutato anno per anno). Il tempo, qui, gioca a favore del lavoratore.</p>
+          </div>
+        )
       },
       {
         label: "LORDO SPETTANTE",
         value: formatCurrency(totLordoSpettante),
         icon: TrendingUp,
-        color: "text-blue-600 bg-blue-50 border-blue-200",
-        note: "Basato su media annuale"
+        color: "bg-blue-50 dark:bg-cyan-900/20 border-blue-200 dark:border-cyan-800/50",
+        textColor: "text-blue-600 dark:text-cyan-400",
+        note: "Basato su media annuale",
+        tooltip: (
+          <div className="space-y-3 text-[14px] leading-relaxed text-slate-300">
+            <div className="bg-cyan-950/40 p-4 rounded-xl border border-cyan-500/30 shadow-inner">
+              <strong className="text-cyan-400 block mb-1.5 tracking-wide uppercase text-xs">Il Motore della Vertenza</strong>
+              <p className="text-sm">Il fulcro matematico e giuridico dell'intera operazione, basato sull'Ordinanza <strong>Cass. n. 20216/2022</strong>.</p>
+            </div>
+            <p className="pl-2">Durante le ferie, la retribuzione non può subire flessioni. Questo valore calcola <em>al centesimo</em> quanto l'azienda avrebbe dovuto pagare, applicando il <strong>Principio di Onnicomprensività</strong>: la media giornaliera di tutte le voci variabili e continuative percepite nell'anno, moltiplicata per i giorni di riposo costituzionalmente garantito.</p>
+          </div>
+        )
+      },
+      {
+        label: "TFR SU DIFFERENZE",
+        value: formatCurrency(tfrSulleDifferenze),
+        icon: Banknote,
+        color: "bg-violet-50 dark:bg-violet-900/20 border-violet-200 dark:border-violet-800/50",
+        textColor: "text-violet-600 dark:text-violet-400",
+        note: "Da aggiungere alla liquidazione",
+        tooltip: (
+          <div className="space-y-3 text-[14px] leading-relaxed text-slate-300">
+            <div className="bg-violet-950/40 p-4 rounded-xl border border-violet-500/30 shadow-inner">
+              <strong className="text-violet-400 block mb-1.5 tracking-wide uppercase text-xs">L'Effetto Domino</strong>
+              <p className="text-sm">Il danno economico si ripercuote matematicamente sulla Liquidazione Finale del lavoratore.</p>
+            </div>
+            <p className="pl-2">Essendo il Trattamento di Fine Rapporto calcolato dividendo la retribuzione annua utile per 13,5, ogni euro di indennità illecitamente trattenuto durante le ferie ha generato un ammanco nel fondo. Questo valore ripristina la quota esatta di liquidazione sottratta negli anni.</p>
+          </div>
+        )
       },
       {
         label: "GIÀ PERCEPITO",
         value: formatCurrency(totGiaPercepito),
         icon: CheckCircle2,
-        color: "text-orange-600 bg-orange-50 border-orange-200",
-        note: "Importo già erogato"
+        color: "bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800/50",
+        textColor: "text-orange-600 dark:text-orange-400",
+        note: "Importo già erogato",
+        tooltip: (
+          <div className="space-y-3 text-[14px] leading-relaxed text-slate-300">
+            <div className="bg-orange-950/40 p-4 rounded-xl border border-orange-500/30 shadow-inner">
+              <strong className="text-orange-400 block mb-1.5 tracking-wide uppercase text-xs">L'Ammortizzatore di Rischio Legale</strong>
+              <p className="text-sm">Previene contestazioni di controparte o rischi di indebito arricchimento.</p>
+            </div>
+            <p className="pl-2">Indica le somme "tampone" che l'azienda ha già versato a titolo di indennità ferie (spesso forfettarie o calcolate al ribasso). Sottraendo rigorosamente questo importo dal <em>Lordo Spettante</em>, il nostro calcolo si trasforma in un'<strong>armatura matematica inattaccabile</strong> in sede processuale.</p>
+          </div>
+        )
       },
       {
         label: "TOTALE BUONI PASTO",
         value: formatCurrency(totTicket),
         icon: Ticket,
-        color: "text-indigo-600 bg-indigo-50 border-indigo-200",
-        note: "Indennità sostitutiva"
-      },
+        color: "bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200 dark:border-indigo-800/50",
+        textColor: "text-indigo-600 dark:text-indigo-400",
+        note: "Indennità sostitutiva",
+        tooltip: (
+          <div className="space-y-3 text-[14px] leading-relaxed text-slate-300">
+            <div className="bg-indigo-950/40 p-4 rounded-xl border border-indigo-500/30 shadow-inner">
+              <strong className="text-indigo-400 block mb-1.5 tracking-wide uppercase text-xs">L'Indennità Sostitutiva</strong>
+              <p className="text-sm">Il riconoscimento del buono pasto come elemento ordinario della retribuzione.</p>
+            </div>
+            <p className="pl-2">La giurisprudenza consolida un principio chiaro: se il Ticket Restaurant è erogato con carattere di continuità, la sua mancata corresponsione produce un danno. Questo indicatore monetizza il controvalore esatto dei buoni pasto illecitamente trattenuti dall'azienda durante i giorni di ferie.</p>
+          </div>
+        )
+      }
     ];
-  }, [monthlyInputs, worker.profilo, includeExFest, includeTickets, startClaimYear]);
-  const tickerItems = [...globalStats, ...globalStats, ...globalStats];
+
+    if (worker.tfr_pregresso && worker.tfr_pregresso > 0) {
+      cards.push({
+        label: "FONDO TFR STORICO",
+        value: formatCurrency(worker.tfr_pregresso),
+        icon: Scale,
+        color: "bg-slate-100 dark:bg-slate-800/80 border-slate-300 dark:border-slate-700",
+        textColor: "text-slate-700 dark:text-slate-300",
+        note: `Base AI dal ${worker.tfr_pregresso_anno}`,
+        tooltip: (
+          <div className="space-y-3 text-[14px] leading-relaxed text-slate-300">
+            <div className="bg-slate-800 p-4 rounded-xl border border-slate-600 shadow-inner">
+              <strong className="text-white block mb-1.5 tracking-wide uppercase text-xs">Il Punto Zero (AI Vision)</strong>
+              <p className="text-sm">L'Ancora Temporale estratta in automatico dal Motore Neurale.</p>
+            </div>
+            <p className="pl-2">È il capitale di partenza del Trattamento di Fine Rapporto, letto dall'Intelligenza Artificiale dai documenti originali (CU o Buste Paga dell'anno {worker.tfr_pregresso_anno}). Serve da base infallibile per innescare l'algoritmo di rivalutazione composta ISTAT nel Prospetto TFR.</p>
+          </div>
+        )
+      });
+    }
+
+    return { cards, rawTotal: nettoRecuperabile };
+  }, [monthlyInputs, worker.profilo, includeExFest, includeTickets, startClaimYear, worker.tfr_pregresso, worker.tfr_pregresso_anno]);
+
+  // Passiamo i dati delle card al Ticker scorrevole
+  const tickerItems = [...statsData.cards, ...statsData.cards, ...statsData.cards];
+
+  // --- TRASMETTITORE PER LA DYNAMIC ISLAND ---
+  useEffect(() => {
+    // Invia il valore TOTALE esatto e sincronizzato all'Island
+    window.dispatchEvent(new CustomEvent('island-ticker', { detail: statsData.rawTotal }));
+
+    // Quando usciamo dalla pagina, resetta a null
+    return () => {
+      window.dispatchEvent(new CustomEvent('island-ticker', { detail: null }));
+    };
+  }, [statsData.rawTotal]);
+
   // COMPONENTE TIMELINE (Semaforo Style)
   const TimelineStep = ({ step, label, icon: Icon, activeStatus }: any) => {
     const steps = ['analisi', 'pronta', 'inviata', 'trattativa', 'chiusa'];
@@ -1587,27 +1942,25 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
     const isPast = steps.indexOf(activeStatus) > steps.indexOf(step);
 
     // Mappa colori stato
-    let colorClass = 'text-slate-400 border-slate-300 bg-white';
+    let colorClass = 'text-slate-400 border-slate-300 dark:text-slate-500 dark:border-slate-700 bg-white dark:bg-slate-800';
     if (isActive || isPast) {
-      if (step === 'analisi' || step === 'trattativa') colorClass = 'text-white bg-red-500 border-red-500'; // Rosso
-      else if (step === 'pronta' || step === 'inviata') colorClass = 'text-white bg-amber-500 border-amber-500'; // Giallo
-      else if (step === 'chiusa') colorClass = 'text-white bg-emerald-500 border-emerald-500'; // Verde
+      if (step === 'analisi' || step === 'trattativa') colorClass = 'text-white bg-red-500 border-red-500 dark:bg-red-600 dark:border-red-500 dark:shadow-[0_0_10px_rgba(220,38,38,0.5)]'; // Rosso
+      else if (step === 'pronta' || step === 'inviata') colorClass = 'text-white bg-amber-500 border-amber-500 dark:bg-amber-600 dark:border-amber-500 dark:shadow-[0_0_10px_rgba(217,119,6,0.5)]'; // Giallo
+      else if (step === 'chiusa') colorClass = 'text-white bg-emerald-500 border-emerald-500 dark:bg-emerald-600 dark:border-emerald-500 dark:shadow-[0_0_10px_rgba(5,150,105,0.5)]'; // Verde
     }
 
     return (
       <div
         onClick={() => {
-          setLegalStatus(step);  // 1. Aggiorna la grafica locale
-          if (onUpdateStatus) {
-            onUpdateStatus(step);  // 2. Aggiorna il database (Dashboard)
-          }
+          setLegalStatus(step);
+          if (onUpdateStatus) onUpdateStatus(step);
         }}
         className={`flex flex-col items-center gap-2 cursor-pointer transition-all ${isActive ? 'scale-110' : 'opacity-70 hover:opacity-100'}`}
       >
-        <div className={`w-10 h-10 rounded-full flex items-center justify-center border-2 transition-colors shadow-sm ${colorClass}`}>
+        <div className={`w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all shadow-sm ${colorClass}`}>
           <Icon className="w-5 h-5" />
         </div>
-        <span className={`text-[9px] font-bold uppercase tracking-wider ${isActive ? 'text-slate-800 dark:text-white' : 'text-slate-400'}`}>{label}</span>
+        <span className={`text-[9px] font-bold uppercase tracking-wider transition-colors ${isActive ? 'text-slate-800 dark:text-cyan-300' : 'text-slate-400 dark:text-slate-500'}`}>{label}</span>
       </div>
     );
   };
@@ -1628,7 +1981,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
   }
   return (
     <div
-      className="min-h-screen bg-slate-50 font-sans text-slate-900 relative flex flex-col overflow-hidden"
+      className="min-h-screen bg-slate-50 dark:bg-[#020617] font-sans text-slate-900 dark:text-slate-100 relative flex flex-col overflow-hidden transition-colors duration-500"
       onDragEnter={(e) => { e.preventDefault(); setIsGlobalDragging(true); }}
       onDragOver={(e) => e.preventDefault()}
       onDrop={(e) => {
@@ -1640,22 +1993,39 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
         }
       }}
     >
+
       {/* --- 1. GLOBAL MAGNETIC DROPZONE --- */}
       <AnimatePresence>
         {isGlobalDragging && (
           <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[999] bg-slate-950/80 backdrop-blur-md flex flex-col items-center justify-center border-[8px] border-dashed border-fuchsia-500/50 m-4 rounded-[3rem]"
+            // 1. VIA DI FUGA: Se l'utente clicca ovunque sullo sfondo scuro, si chiude.
+            onClick={() => setIsGlobalDragging(false)}
+            className="fixed inset-0 z-[999] bg-slate-950/90 backdrop-blur-md flex flex-col items-center justify-center border-[8px] border-dashed border-fuchsia-500/50 m-4 rounded-[3rem] cursor-pointer"
             onDragLeave={(e) => {
-              // Evita flickering se il cursore passa sopra figli del div
+              // Sicurezza nativa del browser
               if (e.clientX === 0 || e.clientY === 0) setIsGlobalDragging(false);
             }}
           >
             <motion.div animate={{ scale: [1, 1.1, 1] }} transition={{ repeat: Infinity, duration: 1.5 }}>
               <Bot className="w-32 h-32 text-fuchsia-400 drop-shadow-[0_0_40px_rgba(217,70,239,0.8)]" />
             </motion.div>
-            <h2 className="text-4xl font-black text-white mt-8 tracking-widest uppercase">Sgancia i file qui</h2>
-            <p className="text-fuchsia-300 font-bold mt-2">Il Motore Neurale li processerà in automatico.</p>
+            <h2 className="text-4xl font-black text-white mt-8 tracking-widest uppercase text-center">Sgancia i file qui</h2>
+            <p className="text-fuchsia-300 font-bold mt-2 text-center">Il Motore Neurale li processerà in automatico.</p>
+
+            {/* 2. VIA DI FUGA VISIVA: Bottone esplicito per rassicurare l'utente */}
+            <div className="mt-12 flex flex-col items-center">
+              <span className="text-slate-400 text-sm mb-4">oppure</span>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation(); // Evita che il click si propaghi al div genitore
+                  setIsGlobalDragging(false);
+                }}
+                className="flex items-center gap-2 px-6 py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-full font-bold transition-all border border-slate-600 hover:border-slate-400 shadow-xl active:scale-95"
+              >
+                <X className="w-5 h-5" /> Annulla e Chiudi
+              </button>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -1664,8 +2034,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
       <style>{GLOBAL_STYLES}</style>
 
       <MovingGrid />
-
-      <div className="relative z-50 pt-6 px-6 pb-2">
+      <div className="relative z-50 pt-20 px-6 pb-2"> {/* AUMENTATO IL PADDING TOP A 20 PER L'ISLAND */}
         {/* HEADER GLASSMORPHISM (Colori Blindati con style) */}
         <motion.div
           initial={{ y: -50, opacity: 0 }}
@@ -1731,74 +2100,50 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
             </div>
 
             {/* USER INFO (Ripristinato) */}
-            <div className="flex items-center gap-5 border-l-2 border-slate-200/60 pl-8 h-20">
-              <div className="w-14 h-14 rounded-2xl flex items-center justify-center shadow-xl text-white shadow-indigo-200 ring-4 ring-white shrink-0"
+            <div className="flex items-center gap-5 border-l-2 border-slate-200/60 dark:border-slate-700/50 pl-8 h-20 transition-colors">
+              <div className="w-14 h-14 rounded-2xl flex items-center justify-center shadow-xl text-white shadow-indigo-200 dark:shadow-indigo-900/40 ring-4 ring-white dark:ring-slate-800 shrink-0 transition-all"
                 style={{ background: `linear-gradient(135deg, ${worker.accentColor === 'indigo' ? '#6366f1' : worker.accentColor === 'emerald' ? '#10b981' : worker.accentColor === 'orange' ? '#f97316' : '#3b82f6'}, ${worker.accentColor === 'indigo' ? '#4f46e5' : worker.accentColor === 'emerald' ? '#059669' : worker.accentColor === 'orange' ? '#ea580c' : '#2563eb'})` }}>
                 <User className="w-7 h-7" strokeWidth={2} />
               </div>
               <div className="hidden md:block">
                 <div className="flex items-center gap-2">
-                  <h1 className="text-2xl font-black text-slate-800 tracking-tight leading-none">
+                  <h1 className="text-2xl font-black text-slate-800 dark:text-white tracking-tight leading-none transition-colors">
                     {worker.cognome} {worker.nome}
                   </h1>
-                  <BadgeCheck className="w-6 h-6 text-blue-500" />
-                  <div className={`ml-2 px-2.5 py-1 rounded-md text-[11px] font-black uppercase tracking-tighter border ${worker.profilo === 'ELIOR'
-                    ? 'bg-orange-50 text-orange-600 border-orange-200'
-                    : 'bg-blue-50 text-blue-600 border-blue-200'
-                    }`}>
+                  <BadgeCheck className="w-6 h-6 text-blue-500 dark:text-cyan-400 transition-colors" />
+                  <div className={`ml-2 px-2.5 py-1 rounded-md text-[11px] font-black uppercase tracking-tighter border transition-colors ${badgeStyles}`}>
                     {worker.profilo}
                   </div>
                 </div>
-                <div className="flex items-center gap-3 text-sm font-bold text-slate-400 uppercase tracking-wider mt-1.5">
+                <div className="flex items-center gap-3 text-sm font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mt-1.5 transition-colors">
                   <Briefcase className="w-4 h-4" />
                   <span>{worker.ruolo}</span>
                 </div>
+
               </div>
             </div>
           </div>
 
-          {/* TICKER CENTRALE */}
-          <div className="flex-1 hidden lg:flex items-center justify-center overflow-hidden relative h-12 bg-slate-50/50 rounded-xl border border-slate-100/50 mx-4 shadow-inner">
-            <div className="absolute left-0 top-0 bottom-0 w-16 bg-gradient-to-r from-white via-white/80 to-transparent z-10"></div>
-            <div className="absolute right-0 top-0 bottom-0 w-16 bg-gradient-to-l from-white via-white/80 to-transparent z-10"></div>
-            <div className="w-full overflow-hidden flex items-center">
-              <motion.div
-                className="flex gap-12 items-center whitespace-nowrap"
-                animate={{ x: ["0%", "-33.33%"] }}
-                transition={{ repeat: Infinity, ease: "linear", duration: 40 }} // Rallentato un po' per leggere le note
-              >
-                {tickerItems.map((stat, idx) => (
-                  <div key={idx} className="flex items-center gap-3 px-4 py-1 border-r border-slate-200/50 last:border-0">
-                    <div className={`p-2 rounded-xl bg-white shadow-sm border ${stat.color}`}>
-                      {/* @ts-ignore */}
-                      <stat.icon className="w-5 h-5" strokeWidth={2.5} />
-                    </div>
-                    <div className="flex flex-col justify-center">
-                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-tight">
-                        {stat.label}
-                      </span>
-                      <span className={`text-base font-black ${stat.color.split(' ')[0]} leading-tight`}>
-                        {stat.value}
-                      </span>
-                      {/* NUOVA RIGA: NOTA LEGALE */}
-                      <span className="text-[9px] font-medium text-slate-400 italic leading-none mt-0.5">
-                        {/* @ts-ignore */}
-                        {stat.note}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </motion.div>
-            </div>
-          </div>
+
 
           <div className="flex items-center gap-3 shrink-0">
 
-            {/* TASTO PEC */}
+            {/* TASTO CALCOLO ISTAT E INTERESSI */}
+            <button
+              onClick={() => setIsIstatModalOpen(true)}
+              className="group relative px-6 py-2.5 rounded-xl font-bold text-white shadow-[0_0_15px_rgba(234,179,8,0.4)] hover:shadow-[0_0_25px_rgba(217,70,239,0.6)] hover:-translate-y-0.5 active:scale-95 transition-all duration-300 border border-white/20 overflow-hidden flex items-center gap-2"
+              style={{ background: 'linear-gradient(135deg, #eab308 0%, #d946ef 100%)' }} // Gold -> Fuchsia
+            >
+              <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500 rotate-12"></div>
+              <LineChart className="w-4 h-4 transition-transform duration-500 group-hover:-translate-y-1" strokeWidth={2.5} />
+              <span className="hidden lg:inline tracking-wide">Calcolo interessi (ISTAT)</span>
+            </button>
+
+            {/* TASTO PEC (Originale Invariato) */}
             <button
               onClick={handleSendPec}
               className="group relative px-6 py-2.5 rounded-xl font-bold text-white shadow-lg hover:shadow-xl hover:-translate-y-0.5 active:scale-95 transition-all duration-300 border border-white/10 overflow-hidden flex items-center gap-2"
-              style={{ background: 'linear-gradient(90deg, #334155 0%, #475569 100%)' }} // Slate
+              style={{ background: 'linear-gradient(90deg, #334155 0%, #475569 100%)' }}
             >
               <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500 rotate-12"></div>
               <Send className="w-4 h-4 transition-transform duration-500 group-hover:-translate-y-1 group-hover:translate-x-1" strokeWidth={2.5} />
@@ -1829,378 +2174,400 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
         </motion.div>
       </div>
 
-      <div className="relative z-10 flex-1 p-6 flex gap-6 max-w-[1800px] mx-auto w-full h-[calc(100vh-100px)] overflow-hidden">
+      <div className="relative z-10 flex-1 p-6 flex flex-col gap-6 max-w-[1800px] mx-auto w-full">
 
-        {/* --- COLONNA PRINCIPALE --- */}
-        <div className="flex-1 flex flex-col h-full overflow-hidden">
 
-          {/* TIMELINE STATO VERTENZA E PARAMETRI (A TENDINA) */}
-          <div className="lg:col-span-2 bg-white/70 backdrop-blur-md rounded-[1.5rem] px-6 py-4 shadow-sm border border-white/60 relative overflow-hidden transition-all duration-300">
 
-            {/* Header: Pulsante apri/chiudi a sinistra, Toggle sempre visibili a destra */}
-            <div className="flex justify-between items-center">
+        {/* TIMELINE STATO VERTENZA E PARAMETRI (A TENDINA) */}
+        <div className="lg:col-span-2 bg-white/70 dark:bg-slate-900/60 backdrop-blur-md rounded-[1.5rem] px-6 py-4 shadow-sm dark:shadow-[0_0_20px_rgba(34,211,238,0.15)] border border-white/60 dark:border-cyan-400 relative overflow-hidden transition-all duration-300">
 
-              <button
-                onClick={() => setIsTimelineOpen(!isTimelineOpen)}
-                className="group flex items-center gap-2 text-sm font-black text-slate-700 hover:text-indigo-600 transition-colors focus:outline-none"
-              >
-                <div className="p-1.5 bg-indigo-100 rounded-lg group-hover:bg-indigo-200 transition-colors">
-                  <Gavel className="w-4 h-4 text-indigo-600" />
-                </div>
-                STATO VERTENZA
-                <motion.div animate={{ rotate: isTimelineOpen ? 180 : 0 }} transition={{ duration: 0.3 }}>
-                  <ChevronDown className="w-4 h-4 text-slate-400 group-hover:text-indigo-500" />
+          {/* Header: Pulsante apri/chiudi a sinistra, Toggle sempre visibili a destra */}
+          <div className="flex justify-between items-center">
+
+            <button
+              onClick={() => setIsTimelineOpen(!isTimelineOpen)}
+              className="group flex items-center gap-2 text-sm font-black text-slate-700 dark:text-cyan-400 hover:text-indigo-600 dark:hover:text-cyan-300 transition-colors focus:outline-none"
+            >
+              <div className="p-1.5 bg-indigo-100 dark:bg-cyan-900/40 rounded-lg group-hover:bg-indigo-200 dark:group-hover:bg-cyan-800/60 transition-colors">
+                <Gavel className="w-4 h-4 text-indigo-600 dark:text-cyan-400" />
+              </div>
+              STATO VERTENZA
+              <motion.div animate={{ rotate: isTimelineOpen ? 180 : 0 }} transition={{ duration: 0.3 }}>
+                <ChevronDown className="w-4 h-4 text-slate-400 dark:text-cyan-500/50 group-hover:text-indigo-500 dark:group-hover:text-cyan-400" />
+              </motion.div>
+            </button>
+            {/* 👇 IL NUOVO TICKER CENTRALE (Incollato qui) 👇 */}
+            <div className="flex-1 hidden xl:flex items-center justify-center overflow-hidden relative h-12 bg-slate-50/50 dark:bg-slate-950/40 rounded-xl border border-slate-200/50 dark:border-cyan-900/30 mx-8 shadow-inner transition-colors">
+              <div className="absolute left-0 top-0 bottom-0 w-16 bg-gradient-to-r from-white/90 dark:from-[#0f172a]/90 to-transparent z-10 transition-colors"></div>
+              <div className="absolute right-0 top-0 bottom-0 w-16 bg-gradient-to-l from-white/90 dark:from-[#0f172a]/90 to-transparent z-10 transition-colors"></div>
+              <div className="w-full overflow-hidden flex items-center">
+                <motion.div
+                  className="flex gap-12 items-center whitespace-nowrap"
+                  animate={{ x: ["0%", "-33.33%"] }}
+                  transition={{ repeat: Infinity, ease: "linear", duration: 40 }}
+                >
+                  {tickerItems.map((stat: any, idx: number) => (
+                    <div
+                      key={idx}
+                      className="flex items-center gap-3 px-4 py-1 border-r border-slate-200/50 dark:border-slate-700/50 last:border-0 transition-colors cursor-pointer hover:bg-slate-100/10 dark:hover:bg-slate-800/50 rounded-lg"
+                      onClick={() => setActiveTickerModal({ title: stat.label, content: stat.tooltip })} // 👈 SOLO QUESTA MODIFICA QUI
+                    >
+                      <div className={`p-2 rounded-xl shadow-sm border ${stat.color} ${stat.textColor} bg-white dark:bg-slate-900 transition-colors`}>
+                        <stat.icon className="w-5 h-5" strokeWidth={2.5} />
+                      </div>
+                      <div className="flex flex-col justify-center">
+                        <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest leading-tight transition-colors flex items-center gap-1">
+                          {stat.label} <span className="text-[8px] opacity-60 font-bold">(?)</span>
+                        </span>
+                        <span className={`text-base font-black ${stat.textColor} leading-tight transition-colors`}>
+                          {stat.value}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
                 </motion.div>
-              </button>
-
-              {/* TOGGLES PARAMETRI CALCOLO (SEMPRE VISIBILI) */}
-              <div className="flex items-center p-1 bg-slate-100/50 backdrop-blur-sm rounded-full border border-slate-200/80 shadow-sm shrink-0">
-                <button
-                  onClick={() => setIncludeExFest(!includeExFest)}
-                  className={`group flex items-center gap-1.5 px-3 py-1.5 rounded-full font-bold text-xs transition-all duration-300 border ${includeExFest
-                    ? 'bg-gradient-to-r from-amber-100 to-orange-100 text-amber-800 border-amber-300/50 shadow-[0_1px_6px_rgba(251,191,36,0.2)]'
-                    : 'bg-transparent text-slate-500 border-transparent hover:bg-white hover:border-amber-200/60 hover:text-amber-600'
-                    }`}
-                  title="Includi/Escludi Ex-Festività"
-                >
-                  <CalendarPlus size={14} className={`transition-transform duration-300 ${includeExFest ? 'rotate-0' : 'group-hover:rotate-12'}`} strokeWidth={2.5} />
-                  <span>{includeExFest ? "32gg" : "28gg"}</span>
-                </button>
-
-                <button
-                  onClick={() => setIncludeTickets(!includeTickets)}
-                  className={`group flex items-center gap-1.5 px-3 py-1.5 rounded-full font-bold text-xs transition-all duration-300 border ml-1 ${includeTickets
-                    ? 'bg-gradient-to-r from-indigo-100 to-blue-100 text-indigo-800 border-indigo-300/50 shadow-[0_1px_6px_rgba(99,102,241,0.2)]'
-                    : 'bg-transparent text-slate-400 border-transparent hover:bg-white hover:border-indigo-200/60 hover:text-indigo-600 line-through opacity-70 hover:opacity-100 hover:no-underline'
-                    }`}
-                  title="Includi/Escludi Ticket Restaurant"
-                >
-                  <Ticket size={14} className={`transition-transform duration-300 ${includeTickets ? 'rotate-0' : 'group-hover:-rotate-12'}`} strokeWidth={2.5} />
-                  Ticket
-                </button>
               </div>
             </div>
-
-            {/* TIMELINE A SCOMPARSA */}
-            <AnimatePresence>
-              {isTimelineOpen && (
-                <motion.div
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: 'auto', opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  transition={{ duration: 0.3, ease: "easeInOut" }}
-                  className="overflow-hidden"
-                >
-                  <div className="mt-6 mb-2 relative flex justify-between items-center z-10 px-4">
-                    <div className="absolute top-5 left-0 w-full h-0.5 bg-slate-200 -z-10"></div>
-                    <TimelineStep step="analisi" label="Analisi" icon={Search} activeStatus={legalStatus} />
-                    <TimelineStep step="pronta" label="Conteggi" icon={Calculator} activeStatus={legalStatus} />
-                    <TimelineStep step="inviata" label="PEC Inviata" icon={Send} activeStatus={legalStatus} />
-                    <TimelineStep step="trattativa" label="Trattativa" icon={Handshake} activeStatus={legalStatus} />
-                    <TimelineStep step="chiusa" label="Chiusa" icon={CheckCircle2} activeStatus={legalStatus} />
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-
-          <div className="flex justify-center mb-6 z-20 shrink-0">
-            {/* Contenitore con CURSOR SPOTLIGHT (Infallibile) */}
-            <div
-              ref={commandBarRef}
-              onMouseMove={(e) => {
-                if (!commandBarRef.current) return;
-                const rect = commandBarRef.current.getBoundingClientRect();
-                // Calcola le coordinate in tempo reale
-                commandBarRef.current.style.setProperty('--x', `${e.clientX - rect.left}px`);
-                commandBarRef.current.style.setProperty('--y', `${e.clientY - rect.top}px`);
-              }}
-              onMouseEnter={() => {
-                // Accende la luce quando entri con il mouse
-                if (commandBarRef.current) commandBarRef.current.style.setProperty('--spotlight-opacity', '1');
-              }}
-              onMouseLeave={() => {
-                // Spegne la luce quando esci
-                if (commandBarRef.current) commandBarRef.current.style.setProperty('--spotlight-opacity', '0');
-              }}
-              className="relative flex p-2 bg-white/60 dark:bg-slate-900/60 backdrop-blur-2xl border border-white/50 dark:border-slate-700/50 rounded-2xl shadow-2xl gap-3 overflow-x-auto w-full justify-start md:justify-center no-scrollbar"
-            >
-              {/* La Luce della Torcia (Ora è Indaco/Azzurrina e usa variabili native) */}
-              <div
-                className="pointer-events-none absolute -inset-px rounded-2xl transition-opacity duration-300 z-0"
-                style={{
-                  opacity: 'var(--spotlight-opacity, 0)',
-                  background: 'radial-gradient(300px circle at var(--x, 50%) var(--y, 50%), rgba(99, 102, 241, 0.25), transparent 50%)'
-                }}
-              ></div>
-              {/* --- INPUT FILE NASCOSTO --- */}
-              <input
-                type="file"
-                multiple
-                accept="application/pdf,image/*"
-                onChange={handleBatchUpload}
-                className="hidden"
-                id="dashboard-ai-upload"
-                disabled={isBatchProcessing}
-              />
-
-              {/* --- TASTO AI AGENT (Plasma Violet Theme - Immobile) --- */}
+            {/* 👆 FINE TICKER 👆 */}
+            {/* TOGGLES PARAMETRI CALCOLO (SEMPRE VISIBILI) */}
+            <div className="flex items-center p-1 bg-slate-100/50 dark:bg-slate-950/50 backdrop-blur-sm rounded-full border border-slate-200/80 dark:border-cyan-900/50 shadow-sm shrink-0 transition-colors">
               <button
-                onClick={() => document.getElementById('dashboard-ai-upload')?.click()}
-                disabled={isBatchProcessing}
-                className={`group relative px-6 py-3 rounded-xl font-bold text-sm transition-all duration-500 flex items-center gap-3 overflow-hidden border-2 shrink-0
-                  ${isBatchProcessing
-                    ? 'bg-slate-100 border-slate-200 opacity-50 cursor-not-allowed'
-                    // A riposo: Vetro grigio. Hover: Si oscura e si accende di Fucsia SENZA sollevarsi.
-                    : 'bg-white/40 dark:bg-slate-800/40 text-slate-600 dark:text-slate-400 border-transparent hover:border-transparent hover:shadow-[0_0_40px_rgba(217,70,239,0.3)]'
+                onClick={() => setIncludeExFest(!includeExFest)}
+                className={`group flex items-center gap-1.5 px-3 py-1.5 rounded-full font-bold text-xs transition-all duration-300 border ${includeExFest
+                  ? 'bg-gradient-to-r from-amber-100 to-orange-100 dark:from-amber-900/60 dark:to-orange-900/60 text-amber-800 dark:text-amber-300 border-amber-300/50 dark:border-amber-500/50 shadow-[0_1px_6px_rgba(251,191,36,0.2)] dark:shadow-[0_0_10px_rgba(245,158,11,0.3)]'
+                  : 'bg-transparent text-slate-500 dark:text-slate-400 border-transparent hover:bg-white dark:hover:bg-slate-800 hover:border-amber-200/60 dark:hover:border-amber-700/50 hover:text-amber-600 dark:hover:text-amber-400'
                   }`}
+                title="Includi/Escludi Ex-Festività"
               >
-                {/* 1. SFONDO SCURO CHE APPARE IN HOVER */}
-                <div className="absolute inset-0 bg-slate-900 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-
-                {/* 2. BORDO ROTANTE DI ENERGIA (Fucsia: #d946ef) */}
-                <div className="absolute inset-[-150%] bg-[conic-gradient(from_0deg,transparent_0_300deg,#d946ef_360deg)] opacity-0 group-hover:opacity-100 group-hover:animate-[spin_2s_linear_infinite] transition-opacity duration-300"></div>
-
-                {/* 3. CORE INTERNO SCURO (Lascia solo il bordo fine) */}
-                <div className="absolute inset-[2px] bg-slate-900 rounded-[10px] opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-0"></div>
-
-                {/* 4. GLOW FUCSIA DI FONDO */}
-                <div className="absolute inset-0 bg-fuchsia-500/20 opacity-0 group-hover:opacity-100 transition-opacity duration-500 z-0 blur-xl"></div>
-
-                {/* 5. CONTENUTO FRONTALE */}
-                <div className="relative z-10 flex items-center gap-2.5 transition-colors duration-300">
-                  <div className="relative flex items-center justify-center">
-                    {/* Icona Robot: Diventa Fucsia in hover */}
-                    <Bot className="w-5 h-5 transition-all duration-500 group-hover:text-fuchsia-400" />
-                    {/* Occhi Laser del Robot */}
-                    <div className="absolute inset-0 bg-fuchsia-400 blur-md opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-                  </div>
-
-                  <div className="flex flex-col items-start leading-none text-left">
-                    <span className="text-[8.5px] uppercase tracking-[0.2em] opacity-70 group-hover:opacity-100 group-hover:text-fuchsia-200 transition-all duration-300 mb-0.5 font-black">
-                      Auto-Scan
-                    </span>
-                    <span className="tracking-widest font-black text-[13px] group-hover:text-white group-hover:drop-shadow-[0_0_10px_rgba(217,70,239,0.8)] transition-all duration-300">
-                      AI AGENT
-                    </span>
-                  </div>
-                </div>
+                <CalendarPlus size={14} className={`transition-transform duration-300 ${includeExFest ? 'rotate-0' : 'group-hover:rotate-12'}`} strokeWidth={2.5} />
+                <span>{includeExFest ? "32gg" : "28gg"}</span>
               </button>
 
-              {/* TASTO CARICA BUSTA (Pink) */}
               <button
-                onClick={() => setShowSplit(!showSplit)}
-                className={`group relative px-6 py-3 rounded-xl font-bold text-sm transition-all duration-300 flex items-center gap-2 overflow-hidden border-2 shrink-0
-                  ${showSplit
-                    ? 'text-white shadow-lg shadow-pink-500/30 border-white/20' // Attivo: Bordo visibile
-                    : 'bg-white/40 dark:bg-slate-800/40 text-slate-600 dark:text-slate-400 border-transparent hover:bg-white dark:hover:bg-slate-700 hover:text-pink-500 hover:shadow-md' // Inattivo: Bordo TRASPARENTE
+                onClick={() => setIncludeTickets(!includeTickets)}
+                className={`group flex items-center gap-1.5 px-3 py-1.5 rounded-full font-bold text-xs transition-all duration-300 border ml-1 ${includeTickets
+                  ? 'bg-gradient-to-r from-indigo-100 to-blue-100 dark:from-indigo-900/60 dark:to-blue-900/60 text-indigo-800 dark:text-indigo-300 border-indigo-300/50 dark:border-indigo-500/50 shadow-[0_1px_6px_rgba(99,102,241,0.2)] dark:shadow-[0_0_10px_rgba(99,102,241,0.3)]'
+                  : 'bg-transparent text-slate-400 dark:text-slate-500 border-transparent hover:bg-white dark:hover:bg-slate-800 hover:border-indigo-200/60 dark:hover:border-indigo-700/50 hover:text-indigo-600 dark:hover:text-indigo-400 line-through opacity-70 hover:opacity-100 hover:no-underline'
                   }`}
-                style={showSplit ? { backgroundImage: 'linear-gradient(135deg, #ec4899 0%, #f43f5e 100%)' } : {}}
+                title="Includi/Escludi Ticket Restaurant"
               >
-                {/* EFFETTO SERRANDA DI LUCE */}
-                <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500 rotate-12"></div>
-
-                <div className="relative z-10 flex items-center gap-2">
-                  {showSplit ? <X className="w-5 h-5" /> : <Eye className="w-5 h-5 transition-transform duration-300 group-hover:scale-110" />}
-                  <span className="hidden lg:inline">{showSplit ? 'Chiudi Visore' : 'Carica Busta Paga'}</span>
-                </div>
-              </button>
-              {/* --- TASTO SCAN AI (VERSIONE "STEALTH TECH") --- */}
-              <style>{`
-                @keyframes scan-vertical {
-                  0% { transform: translateY(-100%); opacity: 0; }
-                  15% { opacity: 1; }
-                  85% { opacity: 1; }
-                  100% { transform: translateY(200%); opacity: 0; }
-                }
-                @keyframes icon-float-subtle {
-                  0%, 100% { transform: translateY(0); }
-                  50% { transform: translateY(-2px); }
-                }
-                .group:hover .animate-scan-vertical {
-                  animation: scan-vertical 1.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-                }
-                .group:hover .animate-icon-subtle {
-                  animation: icon-float-subtle 1.5s ease-in-out infinite;
-                }
-              `}</style>
-
-              <button
-                onClick={() => scanRef.current?.click()}
-                disabled={isAnalyzing}
-                className={`group relative px-6 py-3 rounded-xl font-bold text-sm transition-all duration-300 flex items-center gap-2 overflow-hidden border-2 shrink-0
-                  ${isAnalyzing
-                    ? 'bg-slate-100 border-slate-200 cursor-not-allowed opacity-70'
-                    : 'bg-white/40 dark:bg-slate-800/40 text-slate-600 dark:text-slate-400 border-transparent hover:border-cyan-400/50 hover:shadow-[0_0_20px_rgba(6,182,212,0.4)]'
-                  // ^^^ MODIFICA QUI: Sfondo "glass" (white/40) e bordo trasparente a riposo.
-                  }`}
-              >
-
-                {/* 1. SFONDO SCURO CHE APPARE (Per contrasto massimo in hover) */}
-                <div className="absolute inset-0 bg-slate-900/95 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-
-                {/* 2. RAGGIO LASER DI SCANSIONE (Visibile solo in Hover) */}
-                <div className="absolute inset-0 w-full h-full pointer-events-none opacity-0 group-hover:opacity-100 overflow-hidden">
-                  <div className="absolute top-0 left-0 w-full h-1/2 bg-gradient-to-b from-transparent via-cyan-500/30 to-cyan-400/80 animate-scan-vertical"></div>
-                </div>
-
-                {/* 3. CONTENUTO */}
-                <div className="relative z-10 flex items-center gap-2.5 transition-colors duration-300 group-hover:text-white">
-
-                  {isAnalyzing ? (
-                    <>
-                      <Loader2 className="w-5 h-5 animate-spin text-indigo-500" />
-                      <span className="font-medium">Analisi in corso...</span>
-                    </>
-                  ) : (
-                    <>
-                      {/* Icona: Colore base ereditato (slate), diventa Ciano in hover */}
-                      <ScanLine className="w-5 h-5 transition-colors duration-300 group-hover:text-cyan-400 animate-icon-subtle" />
-
-                      <span className="font-bold transition-colors duration-300 group-hover:text-white tracking-wide flex gap-1.5">
-                        SCAN
-                        <span className="group-hover:text-cyan-400 transition-colors duration-300 group-hover:drop-shadow-[0_0_5px_rgba(34,211,238,0.8)]">
-                          AI
-                        </span>
-                        Busta paga
-                      </span>
-                    </>
-                  )}
-                </div>
-              </button>
-
-              {/* INPUT FILE NASCOSTO COLLEGATO AL TASTO */}
-              <input
-                type="file"
-                accept="image/*,.pdf"
-                ref={scanRef}
-                className="hidden"
-                onChange={handleAnalyzePaySlip}
-              />
-              {/* TASTO MOBILE SCAN - DESIGN SMARTPHONE 3D (Completamente trasparente a riposo) */}
-              <button
-                onClick={() => setIsQRModalOpen(true)}
-                className="group relative flex items-center gap-3 px-4 py-2 ml-2 bg-white/40 dark:bg-slate-800/40 border-2 border-transparent hover:bg-slate-900 hover:border-indigo-500 rounded-2xl transition-all duration-300 hover:shadow-[0_0_20px_rgba(79,70,229,0.3)] overflow-hidden shrink-0"
-                title="Connetti lo Smartphone"
-              >
-                {/* Effetto Riflesso Vetro (Solo hover) */}
-                <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-
-                {/* IL MINI-SMARTPHONE CSS */}
-                <div className="relative w-6 h-10 border-[1.5px] border-slate-400 dark:border-slate-500 group-hover:border-indigo-400 rounded-[6px] flex flex-col items-center p-[2px] transition-colors duration-300 shadow-inner bg-transparent group-hover:bg-slate-950">
-                  {/* Notch / Altoparlante */}
-                  <div className="w-2 h-[2px] bg-slate-400 dark:bg-slate-500 group-hover:bg-indigo-400 rounded-full mb-0.5 transition-colors duration-300"></div>
-
-                  {/* Schermo che si illumina (Solo hover) */}
-                  <div className="flex-1 w-full bg-slate-300/50 dark:bg-slate-700/50 group-hover:bg-indigo-500/20 rounded-[2px] flex items-center justify-center relative overflow-hidden transition-colors duration-300">
-                    <QrCode className="w-3.5 h-3.5 text-indigo-400 opacity-0 group-hover:opacity-100 transition-opacity duration-300 scale-75 group-hover:scale-100" />
-                  </div>
-
-                  {/* Home Indicator */}
-                  <div className="w-2.5 h-[1.5px] bg-slate-400 dark:bg-slate-500 group-hover:bg-indigo-500 rounded-full mt-0.5 transition-colors duration-300"></div>
-                </div>
-
-                {/* Testo del Bottone */}
-                <div className="flex flex-col items-start text-left relative z-10">
-                  <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 group-hover:text-indigo-300 transition-colors uppercase tracking-widest leading-none mb-1">
-                    Connetti
-                  </span>
-                  <span className="text-sm font-black text-slate-600 dark:text-slate-400 group-hover:text-white transition-colors leading-none">
-                    Mobile Scan
-                  </span>
-                </div>
-
-                {/* Pallino di notifica: Grigio base, Verde e pulsante in hover */}
-                <div className="absolute top-2 right-2 w-2 h-2">
-                  <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-0 group-hover:opacity-75 group-hover:animate-ping transition-opacity duration-300"></span>
-                  <span className="relative inline-flex rounded-full w-2 h-2 bg-slate-400 dark:bg-slate-600 group-hover:bg-emerald-500 transition-colors duration-300"></span>
-                </div>
-              </button>
-              <div className="w-px bg-slate-300 dark:bg-slate-700 mx-1"></div>
-
-              {/* TASTO INSERIMENTO MENSILE (Blue) */}
-              <button
-                onClick={() => setActiveTab('input')}
-                className={`group relative px-6 py-3 rounded-xl font-bold text-sm transition-all duration-300 flex items-center gap-2 overflow-hidden border-2 shrink-0
-                  ${activeTab === 'input'
-                    ? 'text-white shadow-lg shadow-blue-500/30 border-white/20'
-                    : 'bg-white/40 dark:bg-slate-800/40 text-slate-600 dark:text-slate-400 border-transparent hover:bg-white dark:hover:bg-slate-700 hover:text-blue-500 hover:shadow-md'
-                  }`}
-                style={activeTab === 'input' ? { backgroundImage: 'linear-gradient(135deg, #2563eb 0%, #06b6d4 100%)' } : {}}
-              >
-                {/* EFFETTO SERRANDA DI LUCE */}
-                <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500 rotate-12"></div>
-
-                <LayoutGrid className={`w-5 h-5 transition-transform duration-300 relative z-10 ${activeTab === 'input' ? 'rotate-0' : 'group-hover:rotate-90'}`} />
-                <span className="relative z-10">Inserimento Mensile</span>
-              </button>
-
-              {/* TASTO RIEPILOGO ANNUALE (Emerald) */}
-              <button
-                onClick={() => setActiveTab('calc')}
-                className={`group relative px-6 py-3 rounded-xl font-bold text-sm transition-all duration-300 flex items-center gap-2 overflow-hidden border-2 shrink-0
-                  ${activeTab === 'calc'
-                    ? 'text-white shadow-lg shadow-emerald-500/30 border-white/20'
-                    : 'bg-white/40 dark:bg-slate-800/40 text-slate-600 dark:text-slate-400 border-transparent hover:bg-white dark:hover:bg-slate-700 hover:text-emerald-500 hover:shadow-md'
-                  }`}
-                style={activeTab === 'calc' ? { backgroundImage: 'linear-gradient(135deg, #10b981 0%, #14b8a6 100%)' } : {}}
-              >
-                {/* EFFETTO SERRANDA DI LUCE */}
-                <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500 rotate-12"></div>
-
-                <Calculator className={`w-5 h-5 transition-transform duration-300 relative z-10 ${activeTab === 'calc' ? 'rotate-0' : 'group-hover:rotate-12'}`} />
-                <span className="relative z-10">Riepilogo Annuale</span>
-              </button>
-
-              {/* TASTO ANALISI VOCI (Amber) */}
-              <button
-                onClick={() => setActiveTab('pivot')}
-                className={`group relative px-6 py-3 rounded-xl font-bold text-sm transition-all duration-300 flex items-center gap-2 overflow-hidden border-2 shrink-0
-                  ${activeTab === 'pivot'
-                    ? 'text-white shadow-lg shadow-amber-500/30 border-white/20'
-                    : 'bg-white/40 dark:bg-slate-800/40 text-slate-600 dark:text-slate-400 border-transparent hover:bg-white dark:hover:bg-slate-700 hover:text-amber-500 hover:shadow-md'
-                  }`}
-                style={activeTab === 'pivot' ? { backgroundImage: 'linear-gradient(135deg, #f59e0b 0%, #fb923c 100%)' } : {}}
-              >
-                {/* EFFETTO SERRANDA DI LUCE */}
-                <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500 rotate-12"></div>
-
-                <TrendingUp className={`w-5 h-5 transition-transform duration-300 relative z-10 ${activeTab === 'pivot' ? 'rotate-0' : 'group-hover:-translate-y-1 group-hover:translate-x-1'}`} />
-                <span className="relative z-10">Analisi Voci</span>
-              </button>
-
-              <div className="w-px bg-slate-300 dark:bg-slate-700 mx-1"></div>
-
-              {/* TASTO DEAL MAKER (Dark/Slate) */}
-              <button
-                onClick={() => setShowDealMaker(!showDealMaker)}
-                className={`group relative px-6 py-3 rounded-xl font-bold text-sm transition-all duration-300 flex items-center gap-2 overflow-hidden border-2 shrink-0
-                  ${showDealMaker
-                    ? 'text-white shadow-lg shadow-slate-500/30 border-white/20 scale-105'
-                    : 'bg-white/40 dark:bg-slate-800/40 text-slate-600 dark:text-slate-400 border-transparent hover:bg-white dark:hover:bg-slate-700 hover:text-indigo-600 hover:shadow-md'
-                  }`}
-                style={showDealMaker ? { backgroundImage: 'linear-gradient(135deg, #1e293b 0%, #334155 100%)' } : {}}
-              >
-                {/* EFFETTO SERRANDA DI LUCE */}
-                <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500 rotate-12"></div>
-
-                <Handshake className={`w-5 h-5 transition-transform duration-300 relative z-10 ${showDealMaker ? 'text-emerald-400' : 'group-hover:text-emerald-500'}`} />
-                <span className="hidden lg:inline relative z-10">Deal Maker</span>
-              </button>
-
-              {/* TASTO CALCOLATRICE */}
-              <button
-                onClick={() => setShowCalc(!showCalc)}
-                className={`group relative px-4 py-3 rounded-xl font-bold text-sm transition-all duration-300 flex items-center gap-2 overflow-hidden border-2 shrink-0
-                  ${showCalc ? 'text-white border-white/20 shadow-lg' : 'bg-white/40 dark:bg-slate-800/40 text-slate-600 border-transparent hover:bg-white hover:text-indigo-500'}`}
-                style={showCalc ? { backgroundImage: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)' } : {}}
-              >
-                <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500 rotate-12"></div>
-                <Calculator className="w-5 h-5 relative z-10" />
+                <Ticket size={14} className={`transition-transform duration-300 ${includeTickets ? 'rotate-0' : 'group-hover:-rotate-12'}`} strokeWidth={2.5} />
+                Ticket
               </button>
             </div>
           </div>
-          <div className="flex-1 bg-white/60 backdrop-blur-md rounded-[2.5rem] border border-white/60 shadow-2xl overflow-hidden flex flex-col relative min-h-0">
+
+          {/* TIMELINE A SCOMPARSA */}
+          <AnimatePresence>
+            {isTimelineOpen && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.3, ease: "easeInOut" }}
+                className="overflow-hidden"
+              >
+                <div className="mt-6 mb-2 relative flex justify-between items-center z-10 px-4">
+                  <div className="absolute top-5 left-0 w-full h-0.5 bg-slate-200 dark:bg-slate-700 -z-10 transition-colors"></div>
+                  <TimelineStep step="analisi" label="Analisi" icon={Search} activeStatus={legalStatus} />
+                  <TimelineStep step="pronta" label="Conteggi" icon={Calculator} activeStatus={legalStatus} />
+                  <TimelineStep step="inviata" label="PEC Inviata" icon={Send} activeStatus={legalStatus} />
+                  <TimelineStep step="trattativa" label="Trattativa" icon={Handshake} activeStatus={legalStatus} />
+                  <TimelineStep step="chiusa" label="Chiusa" icon={CheckCircle2} activeStatus={legalStatus} />
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+
+        <div className="flex justify-center mb-6 z-20 shrink-0">
+          {/* Contenitore con CURSOR SPOTLIGHT (Infallibile) */}
+          <div
+            ref={commandBarRef}
+            onMouseMove={(e) => {
+              if (!commandBarRef.current) return;
+              const rect = commandBarRef.current.getBoundingClientRect();
+              // Calcola le coordinate in tempo reale
+              commandBarRef.current.style.setProperty('--x', `${e.clientX - rect.left}px`);
+              commandBarRef.current.style.setProperty('--y', `${e.clientY - rect.top}px`);
+            }}
+            onMouseEnter={() => {
+              // Accende la luce quando entri con il mouse
+              if (commandBarRef.current) commandBarRef.current.style.setProperty('--spotlight-opacity', '1');
+            }}
+            onMouseLeave={() => {
+              // Spegne la luce quando esci
+              if (commandBarRef.current) commandBarRef.current.style.setProperty('--spotlight-opacity', '0');
+            }}
+            className="relative flex flex-wrap p-2 bg-white/60 dark:bg-slate-900/60 backdrop-blur-2xl border border-white/50 dark:border-slate-700/50 rounded-2xl shadow-2xl gap-3 w-full justify-center"
+          >
+            {/* La Luce della Torcia (Ora è Indaco/Azzurrina e usa variabili native) */}
+            <div
+              className="pointer-events-none absolute -inset-px rounded-2xl transition-opacity duration-300 z-0"
+              style={{
+                opacity: 'var(--spotlight-opacity, 0)',
+                background: 'radial-gradient(300px circle at var(--x, 50%) var(--y, 50%), rgba(99, 102, 241, 0.25), transparent 50%)'
+              }}
+            ></div>
+            {/* --- INPUT FILE NASCOSTO --- */}
+            <input
+              type="file"
+              multiple
+              accept="application/pdf,image/*"
+              onChange={(e) => handleBatchUpload(e, false)}
+              className="hidden"
+              id="dashboard-ai-upload"
+              disabled={isBatchProcessing}
+            />
+
+            {/* --- TASTO AI AGENT (Plasma Violet Theme - Immobile) --- */}
+            <button
+              onClick={() => document.getElementById('dashboard-ai-upload')?.click()}
+              disabled={isBatchProcessing}
+              className={`group relative px-6 py-3 rounded-xl font-bold text-sm transition-all duration-500 flex items-center gap-3 overflow-hidden border-2 shrink-0
+                  ${isBatchProcessing
+                  ? 'bg-slate-100 border-slate-200 opacity-50 cursor-not-allowed'
+                  // A riposo: Vetro grigio. Hover: Si oscura e si accende di Fucsia SENZA sollevarsi.
+                  : 'bg-white/40 dark:bg-slate-800/40 text-slate-600 dark:text-slate-400 border-transparent hover:border-transparent hover:shadow-[0_0_40px_rgba(217,70,239,0.3)]'
+                }`}
+            >
+              {/* 1. SFONDO SCURO CHE APPARE IN HOVER */}
+              <div className="absolute inset-0 bg-slate-900 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+
+              {/* 2. BORDO ROTANTE DI ENERGIA (Fucsia: #d946ef) */}
+              <div className="absolute inset-[-150%] bg-[conic-gradient(from_0deg,transparent_0_300deg,#d946ef_360deg)] opacity-0 group-hover:opacity-100 group-hover:animate-[spin_2s_linear_infinite] transition-opacity duration-300"></div>
+
+              {/* 3. CORE INTERNO SCURO (Lascia solo il bordo fine) */}
+              <div className="absolute inset-[2px] bg-slate-900 rounded-[10px] opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-0"></div>
+
+              {/* 4. GLOW FUCSIA DI FONDO */}
+              <div className="absolute inset-0 bg-fuchsia-500/20 opacity-0 group-hover:opacity-100 transition-opacity duration-500 z-0 blur-xl"></div>
+
+              {/* 5. CONTENUTO FRONTALE */}
+              <div className="relative z-10 flex items-center gap-2.5 transition-colors duration-300">
+                <div className="relative flex items-center justify-center">
+                  {/* Icona Robot: Diventa Fucsia in hover */}
+                  <Bot className="w-5 h-5 transition-all duration-500 group-hover:text-fuchsia-400" />
+                  {/* Occhi Laser del Robot */}
+                  <div className="absolute inset-0 bg-fuchsia-400 blur-md opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+                </div>
+
+                <div className="flex flex-col items-start leading-none text-left">
+                  <span className="text-[8.5px] uppercase tracking-[0.2em] opacity-70 group-hover:opacity-100 group-hover:text-fuchsia-200 transition-all duration-300 mb-0.5 font-black">
+                    Auto-Scan
+                  </span>
+                  <span className="tracking-widest font-black text-[13px] group-hover:text-white group-hover:drop-shadow-[0_0_10px_rgba(217,70,239,0.8)] transition-all duration-300">
+                    AI AGENT
+                  </span>
+                </div>
+              </div>
+            </button>
+
+            {/* TASTO CARICA BUSTA (Pink) */}
+            <button
+              onClick={() => setShowSplit(!showSplit)}
+              className={`group relative px-6 py-3 rounded-xl font-bold text-sm transition-all duration-300 flex items-center gap-2 overflow-hidden border-2 shrink-0
+                  ${showSplit
+                  ? 'text-white shadow-lg shadow-pink-500/30 border-white/20' // Attivo: Bordo visibile
+                  : 'bg-white/40 dark:bg-slate-800/40 text-slate-600 dark:text-slate-400 border-transparent hover:bg-white dark:hover:bg-slate-700 hover:text-pink-500 hover:shadow-md' // Inattivo: Bordo TRASPARENTE
+                }`}
+              style={showSplit ? { backgroundImage: 'linear-gradient(135deg, #ec4899 0%, #f43f5e 100%)' } : {}}
+            >
+              {/* EFFETTO SERRANDA DI LUCE */}
+              <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500 rotate-12"></div>
+
+              <div className="relative z-10 flex items-center gap-2">
+                {showSplit ? <X className="w-5 h-5" /> : <Eye className="w-5 h-5 transition-transform duration-300 group-hover:scale-110" />}
+                <span className="hidden lg:inline">{showSplit ? 'Chiudi Visore' : 'Carica Busta Paga'}</span>
+              </div>
+            </button>
+            {/* --- TASTO SCAN AI (VERSIONE STEALTH BLINDATA + ICONA FLUTTUANTE) --- */}
+            <button
+              onClick={() => scanRef.current?.click()}
+              disabled={isAnalyzing}
+              className={`group relative px-6 py-3 rounded-xl font-bold text-sm transition-all duration-300 flex items-center gap-2 overflow-hidden border-2 shrink-0
+                  ${isAnalyzing
+                  ? 'bg-slate-100 border-slate-200 cursor-not-allowed opacity-70'
+                  : 'bg-white/40 dark:bg-slate-800/40 text-slate-600 dark:text-slate-400 border-transparent hover:border-cyan-400/50 hover:shadow-[0_0_20px_rgba(6,182,212,0.4)]'
+                }`}
+            >
+
+              {/* 1. SFONDO SCURO (Per contrasto massimo in hover) */}
+              <div className="absolute inset-0 bg-slate-900/95 opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-0"></div>
+
+              {/* 2. RAGGIO LASER (Indistruttibile con Framer Motion) */}
+              <div className="absolute inset-0 w-full h-full pointer-events-none opacity-0 group-hover:opacity-100 overflow-hidden z-0 transition-opacity duration-300">
+                <motion.div
+                  animate={{
+                    top: ['-50%', '150%'],
+                    opacity: [0, 1, 1, 0]
+                  }}
+                  transition={{
+                    repeat: Infinity,
+                    duration: 1.5,
+                    ease: "linear",
+                    times: [0, 0.15, 0.85, 1]
+                  }}
+                  className="absolute left-0 w-full h-[50%] bg-gradient-to-b from-transparent via-cyan-500/20 to-cyan-400/80"
+                >
+                  <div className="absolute bottom-0 left-0 w-full h-[2px] bg-cyan-300 shadow-[0_0_8px_#22d3ee,0_0_15px_#22d3ee]"></div>
+                </motion.div>
+              </div>
+
+              {/* 3. CONTENUTO FRONTALE ANIMATO */}
+              <div className="relative z-10 flex items-center gap-2.5 transition-colors duration-300 group-hover:text-white">
+                {isAnalyzing ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin text-indigo-500" />
+                    <span className="font-medium">Analisi in corso...</span>
+                  </>
+                ) : (
+                  <>
+                    {/* ✨ FIX DEFINITIVO: Animazione fluida che si attiva SOLO in hover! */}
+                    <style>{`
+                        @keyframes scanIconFloat {
+                          0%, 100% { transform: translateY(0); }
+                          50% { transform: translateY(-4px); }
+                        }
+                        .group:hover .scan-icon-animate {
+                          animation: scanIconFloat 1.2s ease-in-out infinite;
+                        }
+                      `}</style>
+
+                    <div className="scan-icon-animate transition-transform">
+                      <ScanLine className="w-5 h-5 transition-colors duration-300 text-slate-500 group-hover:text-cyan-400" />
+                    </div>
+
+                    <span className="font-bold transition-colors duration-300 group-hover:text-white tracking-wide flex gap-1.5">
+                      SCAN
+                      <span className="group-hover:text-cyan-400 transition-colors duration-300 group-hover:drop-shadow-[0_0_5px_rgba(34,211,238,0.8)]">
+                        AI
+                      </span>
+                      Busta paga
+                    </span>
+                  </>
+                )}
+              </div>
+            </button>
+
+            {/* INPUT FILE NASCOSTO COLLEGATO AL TASTO */}
+            <input
+              type="file"
+              accept="image/*,.pdf"
+              ref={scanRef}
+              className="hidden"
+              onChange={handleAnalyzePaySlip}
+            />
+            {/* TASTO MOBILE SCAN - DESIGN SMARTPHONE 3D (Completamente trasparente a riposo) */}
+            <button
+              onClick={() => setIsQRModalOpen(true)}
+              className="group relative flex items-center gap-3 px-4 py-2 ml-2 bg-white/40 dark:bg-slate-800/40 border-2 border-transparent hover:bg-slate-900 hover:border-indigo-500 rounded-2xl transition-all duration-300 hover:shadow-[0_0_20px_rgba(79,70,229,0.3)] overflow-hidden shrink-0"
+              title="Connetti lo Smartphone"
+            >
+              {/* Effetto Riflesso Vetro (Solo hover) */}
+              <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+
+              {/* IL MINI-SMARTPHONE CSS */}
+              <div className="relative w-6 h-10 border-[1.5px] border-slate-400 dark:border-slate-500 group-hover:border-indigo-400 rounded-[6px] flex flex-col items-center p-[2px] transition-colors duration-300 shadow-inner bg-transparent group-hover:bg-slate-950">
+                {/* Notch / Altoparlante */}
+                <div className="w-2 h-[2px] bg-slate-400 dark:bg-slate-500 group-hover:bg-indigo-400 rounded-full mb-0.5 transition-colors duration-300"></div>
+
+                {/* Schermo che si illumina (Solo hover) */}
+                <div className="flex-1 w-full bg-slate-300/50 dark:bg-slate-700/50 group-hover:bg-indigo-500/20 rounded-[2px] flex items-center justify-center relative overflow-hidden transition-colors duration-300">
+                  <QrCode className="w-3.5 h-3.5 text-indigo-400 opacity-0 group-hover:opacity-100 transition-opacity duration-300 scale-75 group-hover:scale-100" />
+                </div>
+
+                {/* Home Indicator */}
+                <div className="w-2.5 h-[1.5px] bg-slate-400 dark:bg-slate-500 group-hover:bg-indigo-500 rounded-full mt-0.5 transition-colors duration-300"></div>
+              </div>
+
+              {/* Testo del Bottone */}
+              <div className="flex flex-col items-start text-left relative z-10">
+                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 group-hover:text-indigo-300 transition-colors uppercase tracking-widest leading-none mb-1">
+                  Connetti
+                </span>
+                <span className="text-sm font-black text-slate-600 dark:text-slate-400 group-hover:text-white transition-colors leading-none">
+                  Mobile Scan
+                </span>
+              </div>
+
+              {/* Pallino di notifica: Grigio base, Verde e pulsante in hover */}
+              <div className="absolute top-2 right-2 w-2 h-2">
+                <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-0 group-hover:opacity-75 group-hover:animate-ping transition-opacity duration-300"></span>
+                <span className="relative inline-flex rounded-full w-2 h-2 bg-slate-400 dark:bg-slate-600 group-hover:bg-emerald-500 transition-colors duration-300"></span>
+              </div>
+            </button>
+            <div className="w-px bg-slate-300 dark:bg-slate-700 mx-1"></div>
+
+            {/* TASTO INSERIMENTO MENSILE (Blue) */}
+            <button
+              onClick={() => setActiveTab('input')}
+              className={`group relative px-6 py-3 rounded-xl font-bold text-sm transition-all duration-300 flex items-center gap-2 overflow-hidden border-2 shrink-0
+                  ${activeTab === 'input'
+                  ? 'text-white shadow-lg shadow-blue-500/30 border-white/20'
+                  : 'bg-white/40 dark:bg-slate-800/40 text-slate-600 dark:text-slate-400 border-transparent hover:bg-white dark:hover:bg-slate-800 hover:text-blue-500 dark:hover:text-cyan-400 hover:shadow-md'
+                }`}
+              style={activeTab === 'input' ? { backgroundImage: 'linear-gradient(135deg, #2563eb 0%, #06b6d4 100%)' } : {}}
+            >
+              <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500 rotate-12"></div>
+              <LayoutGrid className={`w-5 h-5 transition-transform duration-300 relative z-10 ${activeTab === 'input' ? 'rotate-0' : 'group-hover:rotate-90'}`} />
+              <span className="relative z-10">Inserimento Mensile</span>
+            </button>
+
+            {/* TASTO RIEPILOGO ANNUALE (Emerald) */}
+            <button
+              onClick={() => setActiveTab('calc')}
+              className={`group relative px-6 py-3 rounded-xl font-bold text-sm transition-all duration-300 flex items-center gap-2 overflow-hidden border-2 shrink-0
+                  ${activeTab === 'calc'
+                  ? 'text-white shadow-lg shadow-emerald-500/30 border-white/20'
+                  : 'bg-white/40 dark:bg-slate-800/40 text-slate-600 dark:text-slate-400 border-transparent hover:bg-white dark:hover:bg-slate-800 hover:text-emerald-500 dark:hover:text-emerald-400 hover:shadow-md'
+                }`}
+              style={activeTab === 'calc' ? { backgroundImage: 'linear-gradient(135deg, #10b981 0%, #14b8a6 100%)' } : {}}
+            >
+              <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500 rotate-12"></div>
+              <Calculator className={`w-5 h-5 transition-transform duration-300 relative z-10 ${activeTab === 'calc' ? 'rotate-0' : 'group-hover:rotate-12'}`} />
+              <span className="relative z-10">Riepilogo Annuale</span>
+            </button>
+
+            {/* TASTO ANALISI VOCI (Amber) */}
+            <button
+              onClick={() => setActiveTab('pivot')}
+              className={`group relative px-6 py-3 rounded-xl font-bold text-sm transition-all duration-300 flex items-center gap-2 overflow-hidden border-2 shrink-0
+                  ${activeTab === 'pivot'
+                  ? 'text-white shadow-lg shadow-amber-500/30 border-white/20'
+                  : 'bg-white/40 dark:bg-slate-800/40 text-slate-600 dark:text-slate-400 border-transparent hover:bg-white dark:hover:bg-slate-800 hover:text-amber-500 dark:hover:text-amber-400 hover:shadow-md'
+                }`}
+              style={activeTab === 'pivot' ? { backgroundImage: 'linear-gradient(135deg, #f59e0b 0%, #fb923c 100%)' } : {}}
+            >
+              <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500 rotate-12"></div>
+              <TrendingUp className={`w-5 h-5 transition-transform duration-300 relative z-10 ${activeTab === 'pivot' ? 'rotate-0' : 'group-hover:-translate-y-1 group-hover:translate-x-1'}`} />
+              <span className="relative z-10">Analisi Voci</span>
+            </button>
+            <div className="w-px bg-slate-300 dark:bg-slate-700 mx-1"></div>
+            {/* TASTO PROSPETTO TFR (Fucsia) */}
+            <button
+              onClick={() => setActiveTab('tfr')}
+              className={`group relative px-6 py-3 rounded-xl font-bold text-sm transition-all duration-300 flex items-center gap-2 overflow-hidden border-2 shrink-0
+                  ${activeTab === 'tfr'
+                  ? 'text-white shadow-lg shadow-fuchsia-500/30 border-white/20'
+                  : 'bg-white/40 dark:bg-slate-800/40 text-slate-600 dark:text-slate-400 border-transparent hover:bg-white dark:hover:bg-slate-800 hover:text-fuchsia-500 hover:shadow-md'
+                }`}
+              style={activeTab === 'tfr' ? { backgroundImage: 'linear-gradient(135deg, #d946ef 0%, #a855f7 100%)' } : {}}
+            >
+              <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500 rotate-12"></div>
+              <Wallet className={`w-5 h-5 transition-transform duration-300 relative z-10 ${activeTab === 'tfr' ? 'rotate-0' : 'group-hover:-translate-y-1 group-hover:translate-x-1'}`} />
+              <span className="relative z-10">Prospetto TFR</span>
+            </button>
+
+
+
+
+
+          </div>
+        </div>
+        {/* --- SPLIT SCREEN CONTAINER (Tabella + Visore partono da qui!) --- */}
+        <div className="flex flex-row gap-6 w-full items-stretch relative min-h-[calc(100vh-250px)]">
+          <div className="flex-1 bg-white/60 dark:bg-slate-950/80 backdrop-blur-md rounded-[2.5rem] border border-white/60 dark:border-cyan-400 shadow-2xl dark:shadow-[inset_0_0_50px_rgba(34,211,238,0.15),0_0_30px_rgba(34,211,238,0.3)] overflow-hidden flex flex-col relative min-h-0 transition-all duration-300">
             <div className="flex-1 p-2 sm:p-6 overflow-hidden relative">
               <AnimatePresence mode="wait">
                 {isExplainerOpen ? (
@@ -2231,7 +2598,10 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
                       </button>
                     </div>
 
-                    <div className="flex-1 p-6 sm:p-8 overflow-y-auto custom-scrollbar relative">
+                    <div
+                      className="flex-1 p-6 sm:p-8 overflow-y-auto custom-scrollbar relative"
+                      onScroll={handleContainerScroll}
+                    >
                       <Bot className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 text-white opacity-5 pointer-events-none" />
 
                       {isExplaining ? (
@@ -2259,7 +2629,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
                     className="h-full w-full"
                   >
                     {activeTab === 'input' && (
-                      <div className="h-full flex flex-col">
+                      <div className="h-full flex flex-col overflow-auto custom-scrollbar">
                         <MonthlyDataGrid
                           data={monthlyInputs}
                           onDataChange={handleDataChange}
@@ -2283,373 +2653,239 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
                         <IndemnityPivotTable data={monthlyInputs} profilo={worker.profilo} startClaimYear={startClaimYear} />
                       </div>
                     )}
+                    {activeTab === 'tfr' && (
+                      <div className="h-full overflow-hidden">
+                        <TfrCalculationTable
+                          data={monthlyInputs}
+                          worker={worker}
+                          startClaimYear={startClaimYear}
+                          onDataChange={handleDataChange}
+                        />
+                      </div>
+                    )}
                   </motion.div>
                 )}
               </AnimatePresence>
             </div>
           </div>
-        </div>
-        {/* --- SPLIT SCREEN SIDEBAR (MULTI-FILE) --- */}
-        <AnimatePresence>
-          {showSplit && (
-            <motion.div
-              initial={{ width: 0, opacity: 0, x: -50 }}
-              animate={{ width: "45%", opacity: 1, x: 0 }}
-              exit={{ width: 0, opacity: 0, x: -50 }}
-              className="bg-slate-900 rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col border border-slate-700 relative shrink-0"
-              // 1. ASSEGNAZIONE EVENTI DRAG & DROP
-              onDragOver={handleDragOver}
-              onDrop={handleDrop}
-            >
 
-              {/* 2. INPUT SPOSTATO E CORRETTO (Un solo ref) */}
-              <input
-                type="file"
-                ref={fileInputRef} // <--- SOLO QUESTO REF
-                className="hidden"
-                onChange={handleImageUpload}
-                accept="image/*,application/pdf"
-                multiple
-              />
+          {/* --- SPLIT SCREEN SIDEBAR (MULTI-FILE) --- */}
+          <AnimatePresence>
+            {showSplit && (
+              <motion.div
+                initial={{ width: 0, opacity: 0, x: -50 }}
+                animate={{ width: "45%", opacity: 1, x: 0 }}
+                exit={{ width: 0, opacity: 0, x: -50 }}
+                className="bg-slate-900 rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col border border-slate-700 shrink-0 z-40"
+                // 1. ASSEGNAZIONE EVENTI DRAG & DROP
+                onDragOver={handleDragOver}
+                onDrop={handleDrop}
+              >
 
-              {/* HEADER VISORE CON NAVIGAZIONE */}
-              <div className="p-4 bg-slate-800/80 backdrop-blur border-b border-slate-700 flex justify-between items-center z-20">
-                <div className="flex items-center gap-3">
-                  {/* TASTO BATCH UPLOAD - PREMIUM AI STYLE */}
-                  <div className="relative mr-2">
-                    <input
-                      type="file"
-                      multiple
-                      accept="application/pdf,image/*"
-                      ref={batchInputRef}
-                      onChange={handleBatchUpload}
-                      className="hidden"
-                    />
-                    <button
-                      onClick={() => batchInputRef.current?.click()}
-                      disabled={isBatchProcessing}
-                      className={`group relative px-5 py-2 rounded-xl font-bold text-sm text-white shadow-lg transition-all duration-300 overflow-hidden flex items-center gap-2.5 border border-white/10
-                        ${isBatchProcessing
-                          ? 'bg-slate-800 cursor-wait opacity-80'
-                          : 'bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 shadow-indigo-500/30 hover:shadow-indigo-500/50 hover:-translate-y-0.5 active:scale-95'
-                        }`}
-                    >
-                      {/* Effetto Luce "Shimmer" al passaggio del mouse */}
-                      {!isBatchProcessing && (
-                        <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500 rotate-12"></div>
-                      )}
+                {/* 2. INPUT SPOSTATO E CORRETTO (Un solo ref) */}
+                <input
+                  type="file"
+                  ref={fileInputRef} // <--- SOLO QUESTO REF
+                  className="hidden"
+                  onChange={handleImageUpload}
+                  accept="image/*,application/pdf"
+                  multiple
+                />
 
-                      {isBatchProcessing ? (
-                        <>
-                          <Loader2 className="w-4 h-4 animate-spin text-violet-200" />
-                          <span className="tracking-wide text-xs">AI WORKING...</span>
-                        </>
-                      ) : (
-                        <>
-                          <div className="relative">
-                            <FileStack className="w-4 h-4 text-white" strokeWidth={2.5} />
-                            {/* Piccola stellina che pulsa per indicare l'AI */}
-                            <Sparkles className="w-2.5 h-2.5 absolute -top-2 -right-2 text-amber-300 animate-pulse" fill="currentColor" />
-                          </div>
-                          <span className="tracking-wide">Smart Upload 12</span>
-                        </>
-                      )}
-                    </button>
+                {/* HEADER VISORE CON NAVIGAZIONE */}
+                <div className="p-4 bg-slate-800/80 backdrop-blur border-b border-slate-700 flex justify-between items-center z-20">
+                  <div className="flex items-center gap-3">
+                    {/* TASTO BATCH UPLOAD - PREMIUM AI STYLE */}
+                    <div className="relative mr-2">
+                      <input
+                        type="file"
+                        multiple
+                        accept="application/pdf,image/*"
+                        ref={batchInputRef}
+                        onChange={handleBatchUpload}
+                        className="hidden"
+                      />
+                      <button
+                        onClick={() => batchInputRef.current?.click()}
+                        disabled={isBatchProcessing}
+                        className={`group relative px-5 py-2 rounded-xl font-bold text-sm text-white shadow-lg transition-all duration-300 overflow-hidden flex items-center gap-2.5 border border-white/10
+                        ${isBatchProcessing
+                            ? 'bg-slate-800 cursor-wait opacity-80'
+                            : 'bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 shadow-indigo-500/30 hover:shadow-indigo-500/50 hover:-translate-y-0.5 active:scale-95'
+                          }`}
+                      >
+                        {/* Effetto Luce "Shimmer" al passaggio del mouse */}
+                        {!isBatchProcessing && (
+                          <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500 rotate-12"></div>
+                        )}
+
+                        {isBatchProcessing ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin text-violet-200" />
+                            <span className="tracking-wide text-xs">AI WORKING...</span>
+                          </>
+                        ) : (
+                          <>
+                            <div className="relative">
+                              <FileStack className="w-4 h-4 text-white" strokeWidth={2.5} />
+                              {/* Piccola stellina che pulsa per indicare l'AI */}
+                              <Sparkles className="w-2.5 h-2.5 absolute -top-2 -right-2 text-amber-300 animate-pulse" fill="currentColor" />
+                            </div>
+                            <span className="tracking-wide">Smart Upload 12</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                    {payslipFiles.length > 1 ? (
+                      <div className="flex items-center gap-2 bg-slate-950/50 rounded-lg p-1 border border-slate-700">
+                        <button onClick={prevFile} disabled={currentFileIndex === 0} className="p-1.5 hover:bg-slate-700 rounded text-white disabled:opacity-30 transition-colors"><ChevronLeft size={14} /></button>
+                        <span className="text-xs font-mono font-bold text-cyan-400 w-16 text-center">{currentFileIndex + 1} / {payslipFiles.length}</span>
+                        <button onClick={nextFile} disabled={currentFileIndex === payslipFiles.length - 1} className="p-1.5 hover:bg-slate-700 rounded text-white disabled:opacity-30 transition-colors"><ChevronRight size={14} /></button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 text-slate-300">
+                        {isSniperMode ? <Crosshair className="w-5 h-5 text-red-500 animate-pulse" /> : <Eye className="w-5 h-5 text-indigo-400" />}
+                        <span className="text-xs font-bold uppercase tracking-wider">{isSniperMode ? 'MODALITÀ CECCHINO' : 'Visore Buste paga'}</span>
+                      </div>
+                    )}
                   </div>
-                  {payslipFiles.length > 1 ? (
-                    <div className="flex items-center gap-2 bg-slate-950/50 rounded-lg p-1 border border-slate-700">
-                      <button onClick={prevFile} disabled={currentFileIndex === 0} className="p-1.5 hover:bg-slate-700 rounded text-white disabled:opacity-30 transition-colors"><ChevronLeft size={14} /></button>
-                      <span className="text-xs font-mono font-bold text-cyan-400 w-16 text-center">{currentFileIndex + 1} / {payslipFiles.length}</span>
-                      <button onClick={nextFile} disabled={currentFileIndex === payslipFiles.length - 1} className="p-1.5 hover:bg-slate-700 rounded text-white disabled:opacity-30 transition-colors"><ChevronRight size={14} /></button>
+
+                  <div className="flex items-center gap-2">
+                    {payslipFiles.length > 0 && (
+                      <>
+                        <button onClick={() => setIsSniperMode(!isSniperMode)} disabled={isProcessing} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${isSniperMode ? 'bg-red-500 text-white shadow-[0_0_15px_rgba(239,68,68,0.6)]' : 'bg-slate-700 text-white hover:bg-slate-600'}`}>
+                          {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <ScanEye className="w-4 h-4" />}
+                          {isSniperMode ? 'STOP' : 'OCR'}
+                        </button>
+                        <div className="h-6 w-px bg-slate-600 mx-2"></div>
+
+                        {/* NUOVI STRUMENTI: BACCHETTA MAGICA E ROTAZIONE */}
+                        <button onClick={() => setImgFilter(prev => prev === 'none' ? 'contrast' : 'none')} className={`p-2 rounded-lg transition-colors ${imgFilter === 'contrast' ? 'bg-indigo-600 text-white' : 'bg-slate-700 hover:bg-slate-600 text-white'}`} title="Migliora Leggibilità Busta Paga Sbiadita"><Wand2 className="w-4 h-4" /></button>
+                        <button onClick={() => setImgRotation(prev => prev + 90)} className="p-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-white transition-colors" title="Ruota Immagine"><RotateCw className="w-4 h-4" /></button>
+                        <div className="h-6 w-px bg-slate-600 mx-1"></div>
+
+                        <button onClick={() => handleZoom(-0.1)} className="p-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-white transition-colors" title="Riduci Zoom"><ZoomOut className="w-4 h-4" /></button>
+                        <button onClick={() => { setImgScale(1); setImgPos({ x: 0, y: 0 }); setImgRotation(0); }} className="p-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-white transition-colors" title="Centra e Ripristina"><Maximize className="w-4 h-4" /></button>
+                        <button onClick={() => handleZoom(0.1)} className="p-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-white transition-colors" title="Aumenta Zoom"><ZoomIn className="w-4 h-4" /></button>
+
+                        {/* CESTINO FIXATO (Non chiude il visore) */}
+                        <button onClick={() => {
+                          const newFiles = payslipFiles.filter((_, i) => i !== currentFileIndex);
+                          setPayslipFiles(newFiles);
+                          if (newFiles.length > 0 && currentFileIndex >= newFiles.length) {
+                            setCurrentFileIndex(newFiles.length - 1);
+                          } else if (newFiles.length === 0) {
+                            setCurrentFileIndex(0);
+                            setImgScale(1); setImgPos({ x: 0, y: 0 }); setImgRotation(0); setImgFilter('none');
+                          }
+                        }} className="p-2 bg-red-900/50 hover:bg-red-900/80 text-red-400 rounded-lg ml-2 transition-colors"><Trash2 className="w-4 h-4" /></button>
+                      </>
+                    )}
+                    <button onClick={() => setShowSplit(false)} className="p-2 hover:bg-slate-700 rounded-lg text-slate-400 hover:text-white ml-2" title="Chiudi Visore"><X className="w-5 h-5" /></button>
+                  </div>
+                </div>
+                {/* BODY DEL VISORE */}
+                <div
+                  ref={containerRef}
+                  className={`flex-1 bg-slate-950 relative overflow-hidden flex items-center justify-center ${isSniperMode ? 'cursor-crosshair' : 'cursor-grab active:cursor-grabbing'}`}
+                  onMouseDown={handleMouseDown}
+                  onMouseUp={handleMouseUp}
+                  onMouseLeave={handleMouseUp}
+                  onMouseMove={handleMouseMove}
+                >
+                  {payslipFiles.length > 0 ? (
+                    <div className="relative w-full h-full flex items-center justify-center">
+
+                      {/* VISUALIZZATORE PDF / IMG */}
+                      <object
+                        data={payslipFiles[currentFileIndex]}
+                        type="application/pdf"
+                        className="w-full h-full rounded-none"
+                        style={{
+                          // IMPORTANTE: pointerEvents 'auto' permette lo scroll del PDF. 'none' solo se sei in modalità cecchino.
+                          pointerEvents: isSniperMode ? 'none' : 'auto',
+                          display: payslipFiles[currentFileIndex].endsWith('.pdf') || payslipFiles[currentFileIndex].startsWith('blob:') ? 'block' : 'none'
+                        }}
+                      >
+                        {/* Fallback IMG (Solo se il PDF non va o è un'immagine) */}
+                        <img
+                          ref={imgRef}
+                          src={payslipFiles[currentFileIndex]}
+                          alt="Busta Paga"
+                          draggable={false}
+                          style={{
+                            // QUI AGGIUNGIAMO LA ROTAZIONE
+                            transform: `scale(${imgScale}) translate(${imgPos.x}px, ${imgPos.y}px) rotate(${imgRotation}deg)`,
+                            transition: isDragging ? 'none' : 'transform 0.2s ease-out',
+                            pointerEvents: 'auto', // Riabilita interazione img
+                            // QUI AGGIUNGIAMO IL FILTRO BACCHETTA MAGICA
+                            filter: imgFilter === 'contrast' ? 'contrast(150%) grayscale(100%)' : 'none'
+                          }}
+                          className={`max-w-full max-h-full object-contain select-none ${isSniperMode ? '' : 'cursor-grab active:cursor-grabbing'}`}
+                        />
+                      </object>
+                      {/* IL ROBOTTINO FLUTTUANTE (Visibile solo se l'Auditor è chiuso e c'è un PDF) */}
+                      {payslipFiles.length > 0 && !isExplainerOpen && (
+                        <button
+                          onClick={handleExplainPayslip}
+                          className="absolute bottom-6 right-6 z-50 p-4 bg-slate-900 border border-slate-700 hover:border-fuchsia-500 rounded-full shadow-[0_0_20px_rgba(192,38,211,0.3)] hover:shadow-[0_0_30px_rgba(192,38,211,0.6)] transition-all duration-300 group hover:-translate-y-1"
+                        >
+                          <Bot className="w-6 h-6 text-fuchsia-500 group-hover:text-fuchsia-400 group-hover:animate-pulse" />
+
+                          {/* Tooltip nascosto che compare al passaggio del mouse */}
+                          <span className="absolute right-full top-1/2 -translate-y-1/2 mr-4 px-3 py-1.5 bg-slate-900 border border-slate-700 text-white text-xs font-bold rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none shadow-xl">
+                            Spiega questa Busta Paga
+                          </span>
+                        </button>
+                      )}
+                      {/* BOX CECCHINO */}
+                      {isSniperMode && selectionBox && (
+                        <div
+                          style={{
+                            position: 'absolute',
+                            left: (selectionBox.x * imgScale) + imgPos.x,
+                            top: (selectionBox.y * imgScale) + imgPos.y,
+                            width: selectionBox.w * imgScale,
+                            height: selectionBox.h * imgScale,
+                            border: '2px solid #ef4444',
+                            backgroundColor: 'rgba(239, 68, 68, 0.2)',
+                            pointerEvents: 'none',
+                            zIndex: 50
+                          }}
+                        />
+                      )}
+                      {/* 👇 INCOLLA QUESTO: MESSAGGIO DISCRETO IN BASSO 👇 */}
+                      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-black/60 backdrop-blur px-5 py-2 rounded-full text-[10px] text-white/70 pointer-events-none border border-white/10 z-[60]">
+                        {isSniperMode ? "DISEGNA UN RETTANGOLO SUL NUMERO" : "Trascina per spostare • Usa i tasti per lo zoom"}
+                      </div>
                     </div>
                   ) : (
-                    <div className="flex items-center gap-2 text-slate-300">
-                      {isSniperMode ? <Crosshair className="w-5 h-5 text-red-500 animate-pulse" /> : <Eye className="w-5 h-5 text-indigo-400" />}
-                      <span className="text-xs font-bold uppercase tracking-wider">{isSniperMode ? 'MODALITÀ CECCHINO' : 'Visore Buste paga'}</span>
-                    </div>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-2">
-                  {payslipFiles.length > 0 && (
-                    <>
-                      <button onClick={() => setIsSniperMode(!isSniperMode)} disabled={isProcessing} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${isSniperMode ? 'bg-red-500 text-white shadow-[0_0_15px_rgba(239,68,68,0.6)]' : 'bg-slate-700 text-white hover:bg-slate-600'}`}>
-                        {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <ScanEye className="w-4 h-4" />}
-                        {isSniperMode ? 'STOP' : 'OCR'}
-                      </button>
-                      <div className="h-6 w-px bg-slate-600 mx-2"></div>
-
-                      {/* NUOVI STRUMENTI: BACCHETTA MAGICA E ROTAZIONE */}
-                      <button onClick={() => setImgFilter(prev => prev === 'none' ? 'contrast' : 'none')} className={`p-2 rounded-lg transition-colors ${imgFilter === 'contrast' ? 'bg-indigo-600 text-white' : 'bg-slate-700 hover:bg-slate-600 text-white'}`} title="Migliora Leggibilità Busta Paga Sbiadita"><Wand2 className="w-4 h-4" /></button>
-                      <button onClick={() => setImgRotation(prev => prev + 90)} className="p-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-white transition-colors" title="Ruota Immagine"><RotateCw className="w-4 h-4" /></button>
-                      <div className="h-6 w-px bg-slate-600 mx-1"></div>
-
-                      <button onClick={() => handleZoom(-0.1)} className="p-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-white transition-colors" title="Riduci Zoom"><ZoomOut className="w-4 h-4" /></button>
-                      <button onClick={() => { setImgScale(1); setImgPos({ x: 0, y: 0 }); setImgRotation(0); }} className="p-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-white transition-colors" title="Centra e Ripristina"><Maximize className="w-4 h-4" /></button>
-                      <button onClick={() => handleZoom(0.1)} className="p-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-white transition-colors" title="Aumenta Zoom"><ZoomIn className="w-4 h-4" /></button>
-
-                      {/* CESTINO FIXATO (Non chiude il visore) */}
-                      <button onClick={() => {
-                        const newFiles = payslipFiles.filter((_, i) => i !== currentFileIndex);
-                        setPayslipFiles(newFiles);
-                        if (newFiles.length > 0 && currentFileIndex >= newFiles.length) {
-                          setCurrentFileIndex(newFiles.length - 1);
-                        } else if (newFiles.length === 0) {
-                          setCurrentFileIndex(0);
-                          setImgScale(1); setImgPos({ x: 0, y: 0 }); setImgRotation(0); setImgFilter('none');
-                        }
-                      }} className="p-2 bg-red-900/50 hover:bg-red-900/80 text-red-400 rounded-lg ml-2 transition-colors"><Trash2 className="w-4 h-4" /></button>
-                    </>
-                  )}
-                  <button onClick={() => setShowSplit(false)} className="p-2 hover:bg-slate-700 rounded-lg text-slate-400 hover:text-white ml-2" title="Chiudi Visore"><X className="w-5 h-5" /></button>
-                </div>
-              </div>
-              {/* BODY DEL VISORE */}
-              <div
-                ref={containerRef}
-                className={`flex-1 bg-slate-950 relative overflow-hidden flex items-center justify-center ${isSniperMode ? 'cursor-crosshair' : 'cursor-grab active:cursor-grabbing'}`}
-                onMouseDown={handleMouseDown}
-                onMouseUp={handleMouseUp}
-                onMouseLeave={handleMouseUp}
-                onMouseMove={handleMouseMove}
-              >
-                {payslipFiles.length > 0 ? (
-                  <div className="relative w-full h-full flex items-center justify-center">
-
-                    {/* VISUALIZZATORE PDF / IMG */}
-                    <object
-                      data={payslipFiles[currentFileIndex]}
-                      type="application/pdf"
-                      className="w-full h-full rounded-none"
-                      style={{
-                        // IMPORTANTE: pointerEvents 'auto' permette lo scroll del PDF. 'none' solo se sei in modalità cecchino.
-                        pointerEvents: isSniperMode ? 'none' : 'auto',
-                        display: payslipFiles[currentFileIndex].endsWith('.pdf') || payslipFiles[currentFileIndex].startsWith('blob:') ? 'block' : 'none'
-                      }}
+                    // AREA UPLOAD (RIPRISTINATO STILE RIQUADRO CENTRALE CON ANIMAZIONE)
+                    <div
+                      onClick={() => fileInputRef.current?.click()}
+                      // Aggiunto 'group' per gestire l'hover
+                      className="group flex flex-col items-center justify-center text-slate-500 hover:text-indigo-400 transition-all cursor-pointer p-8 border-2 border-dashed border-slate-700 rounded-3xl hover:border-indigo-500 hover:bg-slate-900/50 w-64 h-64"
                     >
-                      {/* Fallback IMG (Solo se il PDF non va o è un'immagine) */}
-                      <img
-                        ref={imgRef}
-                        src={payslipFiles[currentFileIndex]}
-                        alt="Busta Paga"
-                        draggable={false}
-                        style={{
-                          // QUI AGGIUNGIAMO LA ROTAZIONE
-                          transform: `scale(${imgScale}) translate(${imgPos.x}px, ${imgPos.y}px) rotate(${imgRotation}deg)`,
-                          transition: isDragging ? 'none' : 'transform 0.2s ease-out',
-                          pointerEvents: 'auto', // Riabilita interazione img
-                          // QUI AGGIUNGIAMO IL FILTRO BACCHETTA MAGICA
-                          filter: imgFilter === 'contrast' ? 'contrast(150%) grayscale(100%)' : 'none'
-                        }}
-                        className={`max-w-full max-h-full object-contain select-none ${isSniperMode ? '' : 'cursor-grab active:cursor-grabbing'}`}
-                      />
-                    </object>
-                    {/* IL ROBOTTINO FLUTTUANTE (Visibile solo se l'Auditor è chiuso e c'è un PDF) */}
-                    {payslipFiles.length > 0 && !isExplainerOpen && (
-                      <button
-                        onClick={handleExplainPayslip}
-                        className="absolute bottom-6 right-6 z-50 p-4 bg-slate-900 border border-slate-700 hover:border-fuchsia-500 rounded-full shadow-[0_0_20px_rgba(192,38,211,0.3)] hover:shadow-[0_0_30px_rgba(192,38,211,0.6)] transition-all duration-300 group hover:-translate-y-1"
-                      >
-                        <Bot className="w-6 h-6 text-fuchsia-500 group-hover:text-fuchsia-400 group-hover:animate-pulse" />
-
-                        {/* Tooltip nascosto che compare al passaggio del mouse */}
-                        <span className="absolute right-full top-1/2 -translate-y-1/2 mr-4 px-3 py-1.5 bg-slate-900 border border-slate-700 text-white text-xs font-bold rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none shadow-xl">
-                          Spiega questa Busta Paga
-                        </span>
-                      </button>
-                    )}
-                    {/* BOX CECCHINO */}
-                    {isSniperMode && selectionBox && (
-                      <div
-                        style={{
-                          position: 'absolute',
-                          left: (selectionBox.x * imgScale) + imgPos.x,
-                          top: (selectionBox.y * imgScale) + imgPos.y,
-                          width: selectionBox.w * imgScale,
-                          height: selectionBox.h * imgScale,
-                          border: '2px solid #ef4444',
-                          backgroundColor: 'rgba(239, 68, 68, 0.2)',
-                          pointerEvents: 'none',
-                          zIndex: 50
-                        }}
-                      />
-                    )}
-                  </div>
-                ) : (
-                  // AREA UPLOAD (RIPRISTINATO STILE RIQUADRO CENTRALE CON ANIMAZIONE)
-                  <div
-                    onClick={() => fileInputRef.current?.click()}
-                    // Aggiunto 'group' per gestire l'hover
-                    className="group flex flex-col items-center justify-center text-slate-500 hover:text-indigo-400 transition-all cursor-pointer p-8 border-2 border-dashed border-slate-700 rounded-3xl hover:border-indigo-500 hover:bg-slate-900/50 w-64 h-64"
-                  >
-                    {/* Icona che rimbalza in hover */}
-                    <div className="mb-4 p-4 bg-slate-900 rounded-full group-hover:scale-110 transition-transform duration-300 border border-slate-800 group-hover:border-indigo-500/30">
-                      <Upload className="w-8 h-8 group-hover:-translate-y-1 transition-transform duration-500 ease-in-out" />
-                    </div>
-                    <p className="font-bold text-sm uppercase tracking-wider text-slate-400 group-hover:text-white transition-colors">Carica Buste Paga</p>
-                    <p className="text-[10px] mt-2 opacity-50 text-center px-4 group-hover:opacity-100 transition-opacity">
-                      Trascina qui o clicca.<br />Supporta PDF, JPG, PNG (Max 12)
-                    </p>
-                    <p className="text-[10px] mt-1 opacity-40 pointer-events-none">Carica fino a 12 file insieme!</p>
-                  </div>
-
-                )}
-              </div>
-              {payslipFiles.length > 0 && (
-                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/60 backdrop-blur px-4 py-1.5 rounded-full text-[10px] text-white/70 pointer-events-none border border-white/10 z-30">
-                  {isSniperMode ? "DISEGNA UN RETTANGOLO SUL NUMERO" : "Trascina per spostare • Usa i tasti per lo zoom"}
-                </div>
-              )}
-            </motion.div>
-          )}
-        </AnimatePresence>
-        {/* SIDEBAR DEAL MAKER A SCOMPARSA */}
-        <AnimatePresence>
-          {showDealMaker && (
-            <motion.div
-              initial={{ width: 0, opacity: 0, x: 50 }}
-              animate={{ width: "400px", opacity: 1, x: 0 }}
-              exit={{ width: 0, opacity: 0, x: 50 }}
-              className="bg-[#0f172a] rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col border border-slate-700 relative shrink-0 z-50"
-            >
-              {/* HEADER SIDEBAR */}
-              <div className="p-5 border-b border-slate-800 flex justify-between items-center bg-[#020617]">
-                <div className="flex items-center gap-2">
-                  <Scale className="w-5 h-5 text-emerald-400" />
-                  <div>
-                    <h3 className="text-sm font-black text-white leading-none">STRATEGIA LEGALE</h3>
-                    <p className="text-[10px] text-slate-500 font-medium">Simulatore Transattivo</p>
-                  </div>
-                </div>
-                <button onClick={() => setShowDealMaker(false)} className="text-slate-500 hover:text-white transition-colors">
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              <div className="p-5 flex-1 flex flex-col gap-5 overflow-y-auto custom-scrollbar">
-
-                {/* 1. SELETTORE LORDO / NETTO */}
-                <div className="flex bg-slate-800 p-1 rounded-xl">
-                  <button
-                    onClick={() => setIsNetMode(false)}
-                    className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${!isNetMode ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
-                  >
-                    LORDO (Ricorso)
-                  </button>
-                  <button
-                    onClick={() => setIsNetMode(true)}
-                    className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${isNetMode ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
-                  >
-                    NETTO (In Tasca)
-                  </button>
-                </div>
-
-                {/* 2. IL TARGET (BATNA) */}
-                <div className="text-center relative">
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">
-                    {isNetMode ? "Valore Netto Reale" : "Valore Nominale Causa"}
-                  </p>
-                  <div className="text-4xl font-black text-white tracking-tight">
-                    {formatCurrency(dealStats.displayTarget)}
-                  </div>
-                  {isNetMode && <p className="text-[9px] text-slate-500 mt-1">Stima tassazione separata ~23%</p>}
-                </div>
-
-                <div className="h-px bg-slate-800 w-full"></div>
-
-                {/* 3. SIMULATORE RISCHIO CAUSA */}
-                <div className="space-y-4">
-                  <div className="flex justify-between items-center">
-                    <label className="text-xs font-bold text-slate-300">Probabilità Vittoria</label>
-                    <span className={`text-xs font-bold ${winProb > 70 ? 'text-emerald-400' : 'text-amber-400'}`}>{winProb}%</span>
-                  </div>
-                  <input
-                    type="range" min="50" max="100" step="5"
-                    value={winProb} onChange={(e) => setWinProb(Number(e.target.value))}
-                    className="w-full h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-indigo-500"
-                  />
-
-                  <div className="flex gap-3">
-                    <div className="flex-1">
-                      <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Costi Legali (€)</label>
-                      <input
-                        type="number" value={legalCosts} onChange={(e) => setLegalCosts(Number(e.target.value))}
-                        className="w-full bg-slate-800 border border-slate-700 rounded-lg py-2 px-3 text-white text-xs font-bold focus:outline-none focus:border-indigo-500"
-                      />
-                    </div>
-                    <div className="flex-1">
-                      <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Durata (Anni)</label>
-                      <input
-                        type="number" value={yearsDuration} onChange={(e) => setYearsDuration(Number(e.target.value))}
-                        className="w-full bg-slate-800 border border-slate-700 rounded-lg py-2 px-3 text-white text-xs font-bold focus:outline-none focus:border-indigo-500"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* 4. CONFRONTO OFFERTA */}
-                <div className="bg-slate-800/50 rounded-2xl p-5 border border-slate-700 space-y-4">
-                  <div>
-                    <label className="text-xs font-bold text-indigo-300 uppercase tracking-wider mb-2 block">Offerta Azienda</label>
-                    <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold">€</span>
-                      <input
-                        type="number" value={offerAmount} onChange={(e) => setOfferAmount(e.target.value)}
-                        className="w-full bg-slate-900 border border-slate-600 rounded-xl py-3 pl-8 pr-4 text-white font-bold text-lg focus:outline-none focus:border-emerald-500 shadow-inner"
-                        placeholder="0"
-                      />
-                    </div>
-                  </div>
-
-                  {/* BARRA DI CONFRONTO VISIVA */}
-                  {offerAmount && (
-                    <div className="space-y-2 pt-2">
-                      <div className="flex justify-between text-[10px] font-bold text-slate-400">
-                        <span>Offerta: {formatCurrency(parseFloat(offerAmount))}</span>
-                        <span>vs Scenario Causa: {formatCurrency(dealStats.courtRealValue)}</span>
+                      {/* Icona che rimbalza in hover */}
+                      <div className="mb-4 p-4 bg-slate-900 rounded-full group-hover:scale-110 transition-transform duration-300 border border-slate-800 group-hover:border-indigo-500/30">
+                        <Upload className="w-8 h-8 group-hover:-translate-y-1 transition-transform duration-500 ease-in-out" />
                       </div>
-                      <div className="h-3 w-full bg-slate-900 rounded-full overflow-hidden flex">
-                        <div
-                          style={{ width: `${Math.min(100, (parseFloat(offerAmount) / dealStats.displayTarget) * 100)}%` }}
-                          className={`h-full transition-all duration-500 ${parseFloat(offerAmount) >= dealStats.courtRealValue ? 'bg-emerald-500' : 'bg-red-500'}`}
-                        ></div>
-                        {/* Marker del Valore Atteso Causa */}
-                        <div
-                          style={{ left: `${Math.min(100, (dealStats.courtRealValue / dealStats.displayTarget) * 100)}%` }}
-                          className="absolute top-0 bottom-0 w-0.5 bg-white h-3 z-10 shadow-[0_0_10px_white]"
-                          title="Punto di Indifferenza (Break-even)"
-                        ></div>
-                      </div>
+                      <p className="font-bold text-sm uppercase tracking-wider text-slate-400 group-hover:text-white transition-colors">Carica Buste Paga</p>
+                      <p className="text-[10px] mt-2 opacity-50 text-center px-4 group-hover:opacity-100 transition-opacity">
+                        Trascina qui o clicca.<br />Supporta PDF, JPG, PNG (Max 12)
+                      </p>
+                      <p className="text-[10px] mt-1 opacity-40 pointer-events-none">Carica fino a 12 file insieme!</p>
                     </div>
-                  )}
 
-                  {/* VERDETTO STRATEGICO */}
-                  {offerAmount && (
-                    <div className={`p-3 rounded-xl border text-xs leading-relaxed font-medium ${parseFloat(offerAmount) >= dealStats.courtRealValue
-                      ? 'bg-emerald-900/30 border-emerald-500/50 text-emerald-200'
-                      : 'bg-red-900/30 border-red-500/50 text-red-200'
-                      }`}>
-                      {parseFloat(offerAmount) >= dealStats.courtRealValue ? (
-                        <span className="flex gap-2"><CheckCircle2 className="w-4 h-4 shrink-0" /> <b>CONVIENE ACCETTARE.</b> L'offerta supera il valore atteso della causa considerando rischi, costi e tempi.</span>
-                      ) : (
-                        <span className="flex gap-2"><AlertCircle className="w-4 h-4 shrink-0" /> <b>NON CONVIENE.</b> L'offerta è inferiore al valore reale atteso in giudizio. Meglio procedere o rilanciare.</span>
-                      )}
-                    </div>
                   )}
                 </div>
 
-              </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
-              {/* FOOTER */}
-              <div className="p-4 bg-slate-900 border-t border-slate-800 text-center">
-                <p className="text-[9px] text-slate-500">
-                  Il calcolo "Scenario Causa" include: Probabilità {winProb}%, Costi {formatCurrency(legalCosts)}, Svalutazione {yearsDuration} anni.
-                </p>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
 
+        </div>
       </div>
       {/* --- HUD INTELLIGENZA ARTIFICIALE (Plasma & Supernova) --- */}
       <AnimatePresence>
@@ -2663,7 +2899,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
               animate={{ scale: showSupernova ? 1.05 : 1, y: 0 }}
               transition={{ type: "spring", stiffness: 300, damping: 20 }}
               className={`p-8 sm:p-12 rounded-[2.5rem] flex flex-col items-center max-w-sm w-full relative overflow-hidden border transition-all duration-500
-                ${showSupernova ? 'bg-emerald-950 border-emerald-500 shadow-[0_0_150px_rgba(16,185,129,0.8)]' : 'bg-slate-900 border-slate-700 shadow-[0_0_120px_rgba(217,70,239,0.15)]'}`}
+                ${showSupernova ? 'bg-emerald-950 border-emerald-500 shadow-[0_0_150px_rgba(16,185,129,0.8)]' : 'bg-slate-900 border-slate-700 shadow-[0_0_120px_rgba(217,70,239,0.15)]'}`}
             >
               {/* FLASH SUPERNOVA (Bianco abbagliante che svanisce) */}
               <AnimatePresence>
@@ -2725,14 +2961,66 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
           </motion.div>
         )}
       </AnimatePresence>
-      {/* RENDER CALCOLATRICE */}
-      <AnimatePresence>
-        {showCalc && (
-          <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}>
-            <FloatingCalculator onClose={() => setShowCalc(false)} />
+      {/* --- HUD DELLO SCANNER SINGOLO (Tema Stealth / Ciano) --- */}
+      {isAnalyzing && !showSplit && (
+        <motion.div
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+          className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-950/85 backdrop-blur-xl"
+        >
+          <motion.div
+            initial={{ scale: 0.9, y: 30 }} animate={{ scale: 1, y: 0 }}
+            transition={{ type: "spring", stiffness: 200, damping: 20 }}
+            className="p-10 rounded-[3rem] flex flex-col items-center relative overflow-hidden bg-slate-900 border border-cyan-500/20 shadow-[0_0_80px_rgba(6,182,212,0.15)]"
+          >
+            {/* Luce di fondo ciano */}
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-cyan-500/10 blur-[80px] rounded-full pointer-events-none"></div>
+
+            {/* Header Scanner */}
+            <div className="flex items-center gap-3 mb-10 relative z-10">
+              <ScanLine className="w-6 h-6 text-cyan-400" />
+              <h3 className="font-black tracking-[0.3em] text-[12px] uppercase text-cyan-400">
+                Sistema di Scansione Attivo
+              </h3>
+            </div>
+
+            {/* L'ANIMAZIONE DELLO SCANNER */}
+            <div className="relative w-40 h-48 flex items-center justify-center mb-8">
+              {/* Mirino (Angoli) */}
+              <div className="absolute inset-0 border-2 border-slate-700 rounded-xl" style={{ animation: 'bracket-pulse 2s ease-in-out infinite' }}></div>
+              <div className="absolute -top-1 -left-1 w-4 h-4 border-t-4 border-l-4 border-cyan-400 rounded-tl-lg"></div>
+              <div className="absolute -top-1 -right-1 w-4 h-4 border-t-4 border-r-4 border-cyan-400 rounded-tr-lg"></div>
+              <div className="absolute -bottom-1 -left-1 w-4 h-4 border-b-4 border-l-4 border-cyan-400 rounded-bl-lg"></div>
+              <div className="absolute -bottom-1 -right-1 w-4 h-4 border-b-4 border-r-4 border-cyan-400 rounded-br-lg"></div>
+
+              {/* Il Documento al centro */}
+              <FileText className="w-20 h-20 text-slate-500 opacity-50" />
+
+              {/* IL RAGGIO LASER */}
+              <div className="absolute inset-0 overflow-hidden rounded-xl z-20">
+                <div
+                  className="absolute left-0 right-0 h-[2px] bg-cyan-400"
+                  style={{ animation: 'single-scan-laser 2.5s cubic-bezier(0.4, 0, 0.2, 1) infinite' }}
+                >
+                  {/* Sfumatura sotto al raggio */}
+                  <div className="absolute top-0 left-0 right-0 h-10 bg-gradient-to-t from-cyan-400/20 to-transparent -translate-y-full"></div>
+                </div>
+              </div>
+            </div>
+
+            {/* Testi dinaminici di attesa */}
+            <p className="text-white font-medium text-lg text-center mb-2 relative z-10">
+              Lettura OCR in corso...
+            </p>
+
+            <div className="flex items-center gap-2 relative z-10">
+              <Loader2 className="w-3.5 h-3.5 animate-spin text-cyan-500" />
+              <p className="text-[10px] uppercase tracking-[0.2em] font-bold text-slate-400">
+                Tempo stimato: ~20 secondi
+              </p>
+            </div>
           </motion.div>
-        )}
-      </AnimatePresence>
+        </motion.div>
+      )}
       {/* --- TOAST NOTIFICATION (Premium Modern Style) --- */}
       <AnimatePresence>
         {batchNotification && (
@@ -2744,13 +3032,13 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
             className="fixed bottom-8 right-8 z-[250] flex flex-col gap-2"
           >
             <div className={`relative flex items-start gap-3 p-4 pr-12 w-80 rounded-2xl shadow-2xl backdrop-blur-2xl border border-white/10 overflow-hidden
-              ${batchNotification.type === 'success' ? 'bg-slate-900/90 shadow-[0_10px_40px_-10px_rgba(16,185,129,0.3)]' :
+              ${batchNotification.type === 'success' ? 'bg-slate-900/90 shadow-[0_10px_40px_-10px_rgba(16,185,129,0.3)]' :
                 batchNotification.type === 'warning' ? 'bg-slate-900/90 shadow-[0_10px_40px_-10px_rgba(245,158,11,0.3)]' :
                   'bg-slate-900/90 shadow-[0_10px_40px_-10px_rgba(239,68,68,0.3)]'}`}>
 
               {/* Linea colorata laterale per indicare lo status */}
-              <div className={`absolute left-0 top-0 bottom-0 w-1.5 
-                ${batchNotification.type === 'success' ? 'bg-emerald-500' :
+              <div className={`absolute left-0 top-0 bottom-0 w-1.5 
+                ${batchNotification.type === 'success' ? 'bg-emerald-500' :
                   batchNotification.type === 'warning' ? 'bg-amber-500' : 'bg-red-500'}`}
               ></div>
 
@@ -2788,15 +3076,135 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
         )}
         {/* MODALE QR CODE SCANNER */}
         <QRScannerModal
+          key="qr-scanner-modal" // <--- AGGIUNGI QUESTA RIGA! È LA CHIAVE MAGICA!
           isOpen={isQRModalOpen}
           onClose={() => setIsQRModalOpen(false)}
           onScanSuccess={handleQRData}
           company={worker.profilo || 'RFI'}
           workerName={`${worker.cognome} ${worker.nome}`}
+          customColumns={getCustomColumnsForAI()}
         />
+        <IstatDashboardModal
+          isOpen={isIstatModalOpen}
+          onClose={() => setIsIstatModalOpen(false)}
+          worker={worker}
+          monthlyInputs={monthlyInputs}
+          startClaimYear={startClaimYear}
+          includeExFest={includeExFest}
+          includeTickets={includeTickets}
+        />
+        {/* --- ✨ MODALE AI RADAR TFR (Vero Pop-up a schermo intero) --- */}
+        <AnimatePresence>
+          {isAiTfrModalOpen && (
+            <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xl" onClick={() => setIsAiTfrModalOpen(false)}>
+              <motion.div
+                initial={{ opacity: 0, scale: 0.9, y: 30 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.9, y: 30 }}
+                transition={{ type: "spring", stiffness: 300, damping: 25 }}
+                className="relative w-full max-w-md bg-slate-900 rounded-[2.5rem] shadow-[0_0_80px_rgba(99,102,241,0.2)] border border-slate-700 overflow-hidden"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-32 bg-indigo-500/20 blur-[60px] pointer-events-none"></div>
+
+                <div className="relative px-8 pt-8 pb-4 text-center">
+                  <div className="w-16 h-16 mx-auto bg-slate-950 rounded-2xl border border-indigo-500/30 flex items-center justify-center shadow-[0_0_30px_rgba(99,102,241,0.3)] mb-4 relative group">
+                    <div className="absolute inset-0 rounded-2xl bg-indigo-400 opacity-20 animate-ping"></div>
+                    <Wallet className="w-8 h-8 text-indigo-400 relative z-10" strokeWidth={1.5} />
+                  </div>
+                  <h3 className="text-2xl font-black text-white tracking-tight">TFR Storico Rilevato!</h3>
+                  <p className="text-sm text-slate-400 mt-2 font-medium">L'Intelligenza Artificiale ha letto questi dati dal documento. Vuoi impostarli come base di calcolo?</p>
+                </div>
+
+                <div className="px-8 pb-8 space-y-5 relative z-10">
+                  <style>{`
+                  .hide-arrows::-webkit-outer-spin-button, .hide-arrows::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+                  .hide-arrows { -moz-appearance: textfield; }
+                `}</style>
+
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest pl-1">Importo Trovato</label>
+                    <div className="relative group">
+                      <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                        <span className="text-indigo-400 font-black text-lg">€</span>
+                      </div>
+                      <input
+                        type="number" value={aiTfrAmount} onChange={(e) => setAiTfrAmount(e.target.value)}
+                        className="hide-arrows w-full bg-slate-950 border border-slate-700 text-white rounded-2xl py-4 pl-10 pr-4 focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-mono text-lg shadow-inner"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest pl-1">Anno di riferimento</label>
+                    <div className="relative group">
+                      <input
+                        type="number" value={aiTfrYear} onChange={(e) => setAiTfrYear(e.target.value)}
+                        className="hide-arrows w-full bg-slate-950 border border-slate-700 text-white rounded-2xl py-4 px-4 text-center focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-mono text-lg shadow-inner"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex gap-3 pt-4">
+                    <button onClick={handleIgnoreAiTfr} className="flex-1 py-4 rounded-xl font-bold text-sm text-slate-400 bg-slate-800/50 hover:bg-slate-800 hover:text-white transition-colors border border-slate-700">Ignora</button>
+                    <button onClick={handleSaveAiTfr} className="flex-[2] py-4 rounded-xl font-black text-sm bg-indigo-600 hover:bg-indigo-500 text-white shadow-[0_0_20px_rgba(79,70,229,0.4)] transition-all active:scale-95 flex items-center justify-center gap-2">
+                      <Save size={18} /> CONFERMA
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+      </AnimatePresence>
+      {/* --- INFO MODAL (TICKER) --- */}
+      <AnimatePresence>
+        {activeTickerModal && (
+          <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md" onClick={() => setActiveTickerModal(null)}>
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              transition={{ type: "spring", stiffness: 300, damping: 25 }}
+              // Ingrandito da max-w-sm a max-w-lg per far respirare il testo
+              className="relative w-full max-w-lg bg-slate-900 rounded-[2rem] shadow-[0_0_60px_rgba(79,70,229,0.3)] border border-slate-700 overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Linea colorata decorativa in alto */}
+              <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500"></div>
+
+              <div className="p-8">
+                <div className="flex justify-between items-start mb-6">
+                  {/* Icona "i" stilizzata */}
+                  <div className="w-12 h-12 bg-slate-800 rounded-2xl border border-slate-700 text-indigo-400 flex items-center justify-center font-serif text-2xl font-black italic shadow-inner">
+                    i
+                  </div>
+                  <button onClick={() => setActiveTickerModal(null)} className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-full transition-colors">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <h3 className="text-xl font-black text-white tracking-tight mb-4 uppercase">
+                  {activeTickerModal.title}
+                </h3>
+
+                {/* Qui stampiamo il ReactNode (HTML/JSX) che abbiamo scritto nelle cards */}
+                <div className="text-left">
+                  {activeTickerModal.content}
+                </div>
+              </div>
+
+              <div className="p-5 bg-slate-950 border-t border-slate-800 text-center">
+                <button onClick={() => setActiveTickerModal(null)} className="w-full py-3.5 rounded-xl font-black tracking-wide text-sm bg-indigo-600 hover:bg-indigo-500 text-white transition-colors active:scale-95 shadow-lg shadow-indigo-600/20">
+                  HO CAPITO
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
       </AnimatePresence>
     </div >
   );
 };
 
-export default WorkerDetailPage; 
+export default WorkerDetailPage   

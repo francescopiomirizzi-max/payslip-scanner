@@ -528,10 +528,33 @@ const StatsDashboard: React.FC<StatsDashboardProps> = ({ workers = [], onBack })
                             {Object.entries(stats.byProfile).map(([profile, data]: [string, { count: number, value: number }], idx) => {
                                 const percent = (data.value / stats.totalRevenue) * 100 || 0;
 
-                                let barColor = '#3b82f6';
+                                let barColor = '#3b82f6'; // Default Blue (RFI)
                                 let bgClass = 'bg-blue-500';
-                                if (profile === 'ELIOR') { barColor = '#f97316'; bgClass = 'bg-orange-500'; }
-                                if (profile === 'REKEEP') { barColor = '#10b981'; bgClass = 'bg-emerald-500'; }
+
+                                if (profile === 'ELIOR') {
+                                    barColor = '#f97316';
+                                    bgClass = 'bg-orange-500';
+                                } else if (profile === 'REKEEP') {
+                                    barColor = '#10b981';
+                                    bgClass = 'bg-emerald-500';
+                                } else if (profile !== 'RFI' && profile !== 'ALTRO') {
+                                    // AZIENDE CUSTOM (Usa lo stesso algoritmo basato sul nome)
+                                    const customColors = [
+                                        { bar: '#d946ef', bg: 'bg-fuchsia-500' },
+                                        { bar: '#8b5cf6', bg: 'bg-violet-500' },
+                                        { bar: '#06b6d4', bg: 'bg-cyan-500' },
+                                        { bar: '#f43f5e', bg: 'bg-rose-500' },
+                                        { bar: '#6366f1', bg: 'bg-indigo-500' },
+                                        { bar: '#14b8a6', bg: 'bg-teal-500' }
+                                    ];
+                                    let hash = 0;
+                                    for (let i = 0; i < profile.length; i++) {
+                                        hash = profile.charCodeAt(i) + ((hash << 5) - hash);
+                                    }
+                                    const theme = customColors[Math.abs(hash) % customColors.length];
+                                    barColor = theme.bar;
+                                    bgClass = theme.bg;
+                                }
 
                                 return (
                                     <div key={profile} className="group">
@@ -599,10 +622,10 @@ const StatsDashboard: React.FC<StatsDashboardProps> = ({ workers = [], onBack })
                                                 )}
                                             </div>
                                             <div className="flex items-center gap-2 mt-1">
-                                                <span className={`text-[9px] font-black px-1.5 py-0.5 rounded border ${w.profilo === 'RFI' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' :
-                                                    w.profilo === 'ELIOR' ? 'bg-orange-500/10 text-orange-400 border-orange-500/20' :
-                                                        'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                                                    }`}>{w.profilo}</span>
+                                                {/* BADGE PROFILO */}
+                                                <span className="text-[9px] font-black px-1.5 py-0.5 rounded border bg-slate-800 text-slate-300 border-slate-600 shadow-sm uppercase">
+                                                    {w.profilo}
+                                                </span>
                                             </div>
                                         </div>
                                     </div>

@@ -1,15 +1,17 @@
 [build]
   command = "npm run build"
-  publish = "dist" 
-  # Nota: Se usi Create-React-App invece di Vite, cambia "dist" con "build"
-
-[functions]
-  directory = "netlify/functions"
-  node_bundler = "esbuild"
-
+  publish = "dist"
 
 [dev]
-  command = "npm run dev"
+  framework = "#custom"
+  command = "vite --host"
   targetPort = 5173
   port = 8888
   publish = "dist"
+  startTimeout = 60
+
+[functions]
+  node_bundler = "esbuild"
+
+[functions."*"]
+  timeout = 60

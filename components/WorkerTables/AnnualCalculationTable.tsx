@@ -70,7 +70,28 @@ const AnnualCalculationTable: React.FC<AnnualCalculationTableProps> = ({
   const [showDetails, setShowDetails] = useState(false);
   const [includeExFest, setIncludeExFest] = useState(false);
   const [interestRate, setInterestRate] = useState<string>("0");
+  const badgeClass = useMemo(() => {
+    if (profilo === 'ELIOR') return 'text-orange-400 border-orange-600 bg-orange-900/30';
+    if (profilo === 'REKEEP') return 'text-emerald-400 border-emerald-600 bg-emerald-900/30';
+    if (profilo === 'RFI') return 'text-blue-400 border-blue-600 bg-blue-900/30';
 
+    // AZIENDE CUSTOM (Palette dinamica)
+    const customPalette = [
+      'text-fuchsia-400 border-fuchsia-600 bg-fuchsia-900/30',
+      'text-violet-400 border-violet-600 bg-violet-900/30',
+      'text-cyan-400 border-cyan-600 bg-cyan-900/30',
+      'text-rose-400 border-rose-600 bg-rose-900/30',
+      'text-indigo-400 border-indigo-600 bg-indigo-900/30',
+      'text-teal-400 border-teal-600 bg-teal-900/30'
+    ];
+    let hash = 0;
+    if (profilo) {
+      for (let i = 0; i < profilo.length; i++) {
+        hash = profilo.charCodeAt(i) + ((hash << 5) - hash);
+      }
+    }
+    return customPalette[Math.abs(hash) % customPalette.length];
+  }, [profilo]);
   const toggleYear = (year: number) => {
     const newSet = new Set(expandedYears);
     if (newSet.has(year)) newSet.delete(year);
@@ -126,9 +147,9 @@ const AnnualCalculationTable: React.FC<AnnualCalculationTableProps> = ({
     let sum = 0;
     const specificColumns = getColumnsByProfile(profilo);
     specificColumns.forEach(col => {
-      // Escludiamo i campi tecnici e calcoliamo solo le voci economiche variabili
-      if (!['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'coeffPercepito', 'coeffTicket', 'note', 'arretrati'].includes(col.id)) {
-        sum += parseLocalFloat(monthRow[col.id]); // <--- USO PARSER UNIFICATO
+      // Escludiamo i campi tecnici e i premi di produttività (3B70, 3B71)
+      if (!['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'coeffPercepito', 'coeffTicket', 'note', 'arretrati', '3B70', '3B71'].includes(col.id)) {
+        sum += parseLocalFloat(monthRow[col.id]);
       }
     });
     return sum;
@@ -298,13 +319,15 @@ const AnnualCalculationTable: React.FC<AnnualCalculationTableProps> = ({
   };
 
   return (
-    <div className="bg-white shadow-xl rounded-lg overflow-hidden border border-slate-200 flex flex-col h-full">
+    <div className="bg-white dark:bg-slate-900 shadow-xl dark:shadow-[0_0_20px_rgba(34,211,238,0.15)] rounded-lg overflow-hidden border border-slate-200 dark:border-cyan-400 flex flex-col h-full transition-all duration-300">
       <div className="p-3 bg-slate-800 text-white font-bold text-sm tracking-wide flex justify-between items-center shrink-0">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
             <Calculator className="w-4 h-4 text-emerald-400" />
             <span>CALCOLO DIFFERENZE PER ANNO</span>
-            <span className="px-2 py-0.5 bg-slate-700 rounded text-[10px] text-blue-400 border border-slate-600">{profilo}</span>
+            <span className={`px-2 py-0.5 rounded text-[10px] font-bold tracking-widest border uppercase ${badgeClass}`}>
+              {profilo}
+            </span>
           </div>
 
           <button
@@ -332,27 +355,27 @@ const AnnualCalculationTable: React.FC<AnnualCalculationTableProps> = ({
       <div className="flex-1 overflow-auto border-b border-slate-200">
         <table className="w-full text-sm border-collapse table-fixed min-w-[1000px]">
           <thead className="sticky top-0 z-10 shadow-sm">
-            <tr className="bg-slate-100 text-slate-600 border-b border-slate-300 h-14 text-xs uppercase">
-              <th className="p-2 text-left font-bold border-r border-slate-300 w-48 pl-4 sticky left-0 bg-slate-100 z-20">ANNO / MESE</th>
-              <th className="p-2 text-right font-bold border-r border-slate-300 w-32 bg-blue-50/50">Indennità<br />Totali Mensili</th>
-              <th className="p-2 text-right font-bold border-r border-slate-300 w-24">Giorni<br />Lavorati</th>
-              <th className="p-2 text-right font-bold border-r border-slate-300 w-28 bg-amber-50 text-amber-800">Media<br />Giornaliera</th>
+            <tr className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-b border-slate-300 dark:border-slate-700 h-14 text-xs uppercase transition-colors">
+              <th className="p-2 text-left font-bold border-r border-slate-300 dark:border-slate-700 w-48 pl-4 sticky left-0 bg-slate-100 dark:bg-slate-800 z-20">ANNO / MESE</th>
+              <th className="p-2 text-right font-bold border-r border-slate-300 dark:border-slate-700 w-32 bg-blue-50/50 dark:bg-blue-900/20">Indennità<br />Totali Mensili</th>
+              <th className="p-2 text-right font-bold border-r border-slate-300 dark:border-slate-700 w-24">Giorni<br />Lavorati</th>
+              <th className="p-2 text-right font-bold border-r border-slate-300 dark:border-slate-700 w-28 bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-400">Media<br />Giornaliera</th>
 
-              <th className="p-2 text-right font-bold border-r border-slate-300 w-28">
-                Giorni<br />{includeExFest ? "Ferie+ExF" : "Ferie"} <span className="text-[9px] lowercase font-normal text-slate-500">(utili)</span>
+              <th className="p-2 text-right font-bold border-r border-slate-300 dark:border-slate-700 w-28">
+                Giorni<br />{includeExFest ? "Ferie+ExF" : "Ferie"} <span className="text-[9px] lowercase font-normal text-slate-500 dark:text-slate-400">(utili)</span>
               </th>
-              <th className="p-2 text-right font-bold border-r border-slate-300 w-32 bg-indigo-50/50">Spettante<br />(Lordo)</th>
+              <th className="p-2 text-right font-bold border-r border-slate-300 dark:border-slate-700 w-32 bg-indigo-50/50 dark:bg-indigo-900/20">Spettante<br />(Lordo)</th>
 
               {showDetails && (
                 <>
-                  <th className="p-2 text-center font-bold border-r border-slate-300 w-24 bg-orange-50 text-orange-700">Coeff.<br />Percepito</th>
-                  <th className="p-2 text-right font-bold border-r border-slate-300 w-32 bg-orange-50 text-orange-700">Indennità<br />Percepita</th>
-                  <th className="p-2 text-center font-bold border-r border-slate-300 w-24 bg-teal-50 text-teal-700">Coeff.<br />Ticket</th>
-                  <th className="p-2 text-right font-bold border-r border-slate-300 w-32 bg-teal-50 text-teal-700">Buoni<br />Pasto</th>
+                  <th className="p-2 text-center font-bold border-r border-slate-300 dark:border-slate-700 w-24 bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-400">Coeff.<br />Percepito</th>
+                  <th className="p-2 text-right font-bold border-r border-slate-300 dark:border-slate-700 w-32 bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-400">Indennità<br />Percepita</th>
+                  <th className="p-2 text-center font-bold border-r border-slate-300 dark:border-slate-700 w-24 bg-teal-50 dark:bg-teal-900/20 text-teal-700 dark:text-teal-400">Coeff.<br />Ticket</th>
+                  <th className="p-2 text-right font-bold border-r border-slate-300 dark:border-slate-700 w-32 bg-teal-50 dark:bg-teal-900/20 text-teal-700 dark:text-teal-400">Buoni<br />Pasto</th>
                 </>
               )}
 
-              <th className="p-2 text-right font-black bg-emerald-100 text-emerald-800 w-36">DIFFERENZA<br />DOVUTA</th>
+              <th className="p-2 text-right font-black bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-400 w-36">DIFFERENZA<br />DOVUTA</th>
             </tr>
           </thead>
           <tbody>
@@ -363,20 +386,20 @@ const AnnualCalculationTable: React.FC<AnnualCalculationTableProps> = ({
 
               // STILE RIGHE ANNO RIFERIMENTO
               const rowClass = row.isReferenceYear
-                ? "bg-slate-50 text-slate-400 font-medium"
-                : (isExpanded ? 'bg-slate-200' : 'bg-slate-100 hover:bg-slate-200');
+                ? "bg-slate-50 dark:bg-slate-900/40 text-slate-400 dark:text-slate-500 font-medium"
+                : (isExpanded ? 'bg-slate-200 dark:bg-slate-800' : 'bg-slate-100 dark:bg-slate-800/40 hover:bg-slate-200 dark:hover:bg-slate-700');
 
               return (
                 <React.Fragment key={row.year}>
-                  <tr className={`transition-colors duration-150 border-b border-slate-300 h-12 ${rowClass}`}>
-                    <td onClick={() => toggleYear(row.year)} className={`p-2 border-r border-slate-300 font-bold flex items-center gap-2 h-12 sticky left-0 z-10 cursor-pointer ${row.isReferenceYear ? 'bg-slate-50 text-slate-500' : 'bg-inherit text-slate-800'}`}>
+                  <tr className={`transition-colors duration-150 border-b border-slate-300 dark:border-slate-700 h-12 ${rowClass}`}>
+                    <td onClick={() => toggleYear(row.year)} className={`p-2 border-r border-slate-300 dark:border-slate-700 font-bold flex items-center gap-2 h-12 sticky left-0 z-10 cursor-pointer ${row.isReferenceYear ? 'bg-slate-50 dark:bg-slate-900/40 text-slate-500 dark:text-slate-400' : 'bg-inherit text-slate-800 dark:text-slate-200'}`}>
                       {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-                      {row.year} {row.isReferenceYear && <span className="text-[9px] uppercase border border-slate-300 px-1 rounded bg-white ml-2">Rif. Media</span>}
+                      {row.year} {row.isReferenceYear && <span className="text-[9px] uppercase border border-slate-300 dark:border-slate-600 px-1 rounded bg-white dark:bg-slate-800 ml-2">Rif. Media</span>}
                     </td>
-                    <td className="p-2 border-r border-slate-300 text-right font-bold">{formatCurrency(row.sumIndennitaTotali)}</td>
-                    <td className="p-2 border-r border-slate-300 text-right font-bold">{formatInteger(row.sumGiorniLav)}</td>
+                    <td className="p-2 border-r border-slate-300 dark:border-slate-700 text-right font-bold dark:text-slate-200">{formatCurrency(row.sumIndennitaTotali)}</td>
+                    <td className="p-2 border-r border-slate-300 dark:border-slate-700 text-right font-bold dark:text-slate-200">{formatInteger(row.sumGiorniLav)}</td>
 
-                    <td className={`p-2 border-r border-slate-300 text-right font-mono font-bold relative group cursor-help ${row.isReferenceYear ? '' : 'text-amber-800 bg-amber-50'}`}>
+                    <td className={`p-2 border-r border-slate-300 dark:border-slate-700 text-right font-mono font-bold relative group cursor-help ${row.isReferenceYear ? 'dark:text-slate-300' : 'text-amber-800 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20'}`}>
                       {formatCurrency(row.avgApplied)}
                       {row.isFallback && (
                         <>
@@ -388,7 +411,7 @@ const AnnualCalculationTable: React.FC<AnnualCalculationTableProps> = ({
                       )}
                     </td>
 
-                    <td className="p-2 border-r border-slate-300 text-right font-bold">
+                    <td className="p-2 border-r border-slate-300 dark:border-slate-700 text-right font-bold dark:text-slate-200">
                       <div className="flex flex-col items-end leading-none">
                         <span>{formatInteger(row.sumGiorniFerieUtili)}</span>
                         {row.sumGiorniFerieReali > row.sumGiorniFerieUtili && (
@@ -397,110 +420,109 @@ const AnnualCalculationTable: React.FC<AnnualCalculationTableProps> = ({
                       </div>
                     </td>
 
-                    {/* SE E' ANNO RIFERIMENTO, NASCONDIAMO I SOLDI */}
-                    <td className={`p-2 border-r border-slate-300 text-right font-bold ${row.isReferenceYear ? 'text-xs' : 'text-indigo-700 bg-indigo-100/30'}`}>
+                    <td className={`p-2 border-r border-slate-300 dark:border-slate-700 text-right font-bold ${row.isReferenceYear ? 'text-xs dark:text-slate-400' : 'text-indigo-700 dark:text-indigo-400 bg-indigo-100/30 dark:bg-indigo-900/30'}`}>
                       {row.isReferenceYear ? "(Solo Media)" : formatCurrency(row.sumIndennitaSpettante)}
                     </td>
 
                     {showDetails && (
                       <>
-                        <td className="p-1 border-r border-slate-300 text-center" onClick={(e) => e.stopPropagation()}>
+                        <td className="p-1 border-r border-slate-300 dark:border-slate-700 text-center" onClick={(e) => e.stopPropagation()}>
                           {!row.isReferenceYear && (
                             <input
                               type="text"
                               inputMode="decimal"
-                              className="w-full h-8 text-center text-sm font-bold border border-orange-300 rounded focus:border-orange-500 outline-none text-orange-800 bg-white"
+                              className="w-full h-8 text-center text-sm font-bold border border-orange-300 dark:border-orange-700/50 rounded focus:border-orange-500 outline-none text-orange-800 dark:text-orange-300 bg-white dark:bg-slate-900 transition-colors"
                               placeholder="Misto"
                               value={displayAnnualPercepito}
                               onChange={(e) => handleAnnualCoeffChange(row.year, 'coeffPercepito', e.target.value)}
                             />
                           )}
                         </td>
-                        <td className="p-2 border-r border-slate-300 text-right font-bold text-orange-700 bg-orange-50/30">
+                        <td className="p-2 border-r border-slate-300 dark:border-slate-700 text-right font-bold text-orange-700 dark:text-orange-400 bg-orange-50/30 dark:bg-orange-900/20">
                           {row.isReferenceYear ? "-" : formatCurrency(row.sumIndennitaPercepita)}
                         </td>
-                        <td className="p-1 border-r border-slate-300 text-center" onClick={(e) => e.stopPropagation()}>
+                        <td className="p-1 border-r border-slate-300 dark:border-slate-700 text-center" onClick={(e) => e.stopPropagation()}>
                           {!row.isReferenceYear && (
                             <input
                               type="text"
                               inputMode="decimal"
-                              className="w-full h-8 text-center text-sm font-bold border border-teal-300 rounded focus:border-teal-500 outline-none text-teal-800 bg-white"
+                              className="w-full h-8 text-center text-sm font-bold border border-teal-300 dark:border-teal-700/50 rounded focus:border-teal-500 outline-none text-teal-800 dark:text-teal-300 bg-white dark:bg-slate-900 transition-colors"
                               placeholder="Misto"
                               value={displayAnnualTicket}
                               onChange={(e) => handleAnnualCoeffChange(row.year, 'coeffTicket', e.target.value)}
                             />
                           )}
                         </td>
-                        <td className="p-2 border-r border-slate-300 text-right font-bold text-teal-700 bg-teal-50/30">
+                        <td className="p-2 border-r border-slate-300 dark:border-slate-700 text-right font-bold text-teal-700 dark:text-teal-400 bg-teal-50/30 dark:bg-teal-900/20">
                           {row.isReferenceYear ? "-" : formatCurrency(row.sumBuoniPasto)}
                         </td>
                       </>
                     )}
 
-                    <td className={`p-2 text-right font-black text-sm ${row.isReferenceYear ? 'text-slate-400' : 'text-emerald-800 bg-emerald-200/50'}`}>
+                    <td className={`p-2 text-right font-black text-sm ${row.isReferenceYear ? 'text-slate-400 dark:text-slate-500' : 'text-emerald-800 dark:text-cyan-400 bg-emerald-200/50 dark:bg-emerald-900/40'}`}>
                       {row.isReferenceYear ? "-" : formatCurrency(row.sumNetto)}
                     </td>
                   </tr>
 
                   {isExpanded && row.monthlyDetails.map((month) => (
-                    <tr key={`${row.year}-${month.index}`} className={`border-b border-slate-100 last:border-slate-300 h-10 ${row.isReferenceYear ? 'bg-slate-50 opacity-75' : 'bg-white hover:bg-slate-50'}`}>
-                      <td className="py-1 pr-2 pl-10 border-r border-slate-200 text-xs font-medium text-slate-500 uppercase tracking-wide h-10 sticky left-0 z-10 flex items-center bg-inherit">
+                    <tr key={`${row.year}-${month.index}`} className={`border-b border-slate-100 dark:border-slate-700/50 last:border-slate-300 dark:last:border-slate-600 h-10 transition-colors ${row.isReferenceYear ? 'bg-slate-50 dark:bg-slate-900/60 opacity-75' : 'bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/80'}`}>
+                      <td className="py-1 pr-2 pl-10 border-r border-slate-200 dark:border-slate-700/50 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide h-10 sticky left-0 z-10 flex items-center bg-inherit">
                         <span className={`w-2.5 h-2.5 rounded-full mr-3 shadow-sm ${MONTH_COLORS[month.index]}`}></span>
                         {month.name}
                       </td>
 
-                      <td className="px-2 border-r border-slate-200 text-right text-xs text-slate-600">{month.indennitaMensile !== 0 ? formatCurrency(month.indennitaMensile) : '-'}</td>
-                      <td className="px-2 border-r border-slate-200 text-right text-xs text-slate-600">{month.giorniLav !== 0 ? formatInteger(month.giorniLav) : '-'}</td>
+                      <td className="px-2 border-r border-slate-200 dark:border-slate-700/50 text-right text-xs text-slate-600 dark:text-slate-300">{month.indennitaMensile !== 0 ? formatCurrency(month.indennitaMensile) : '-'}</td>
+                      <td className="px-2 border-r border-slate-200 dark:border-slate-700/50 text-right text-xs text-slate-600 dark:text-slate-300">{month.giorniLav !== 0 ? formatInteger(month.giorniLav) : '-'}</td>
 
-                      <td className="px-2 border-r border-slate-200 text-right text-xs font-mono text-amber-700/50">{formatCurrency(row.avgApplied)}</td>
+                      <td className="px-2 border-r border-slate-200 dark:border-slate-700/50 text-right text-xs font-mono text-amber-700/50 dark:text-amber-500/50">{formatCurrency(row.avgApplied)}</td>
 
-                      <td className="px-2 border-r border-slate-200 text-right text-xs bg-yellow-50/50">
+                      <td className="px-2 border-r border-slate-200 dark:border-slate-700/50 text-right text-xs bg-yellow-50/50 dark:bg-amber-900/10">
                         <div className="flex flex-col items-end">
-                          <span className={month.giorniFerieReali > month.giorniUtili ? "text-red-600 font-bold" : "text-emerald-700 font-bold"}>
+                          <span className={month.giorniFerieReali > month.giorniUtili ? "text-red-600 dark:text-red-400 font-bold" : "text-emerald-700 dark:text-emerald-400 font-bold"}>
                             {formatInteger(month.giorniUtili)}
                           </span>
                         </div>
                       </td>
 
                       {/* CELLE MONETARIE MENSILI */}
-                      <td className="px-2 border-r border-slate-200 text-right text-xs text-indigo-600 font-medium bg-indigo-50/20">
+                      <td className="px-2 border-r border-slate-200 dark:border-slate-700/50 text-right text-xs text-indigo-600 dark:text-indigo-300 font-medium bg-indigo-50/20 dark:bg-indigo-900/20">
                         {row.isReferenceYear ? '-' : (month.indennitaSpettante !== 0 ? formatCurrency(month.indennitaSpettante) : '-')}
                       </td>
 
                       {showDetails && (
                         <>
-                          <td className="px-1 border-r border-slate-200 text-center bg-orange-50/10">
+                          <td className="px-1 border-r border-slate-200 dark:border-slate-700/50 text-center bg-orange-50/10 dark:bg-orange-900/10">
                             {!row.isReferenceYear && (
                               <input
                                 type="text"
                                 inputMode="decimal"
-                                className="w-full h-7 text-center text-xs border border-orange-200 rounded focus:border-orange-500 outline-none text-orange-700 bg-white"
+                                className="w-full h-7 text-center text-xs border border-orange-200 dark:border-orange-800/50 rounded focus:border-orange-500 outline-none text-orange-700 dark:text-orange-300 bg-white dark:bg-slate-900 transition-colors"
                                 value={month.rawPercepito}
                                 onChange={(e) => handleCoeffChange(row.year, month.index, 'coeffPercepito', e.target.value)}
                               />
                             )}
                           </td>
-                          <td className="px-2 border-r border-slate-200 text-right text-xs text-orange-600 bg-orange-50/10">
+                          <td className="px-2 border-r border-slate-200 dark:border-slate-700/50 text-right text-xs text-orange-600 dark:text-orange-400 bg-orange-50/10 dark:bg-orange-900/10">
                             {row.isReferenceYear ? '-' : (month.indennitaPercepita !== 0 ? formatCurrency(month.indennitaPercepita) : '-')}
                           </td>
-                          <td className="px-1 border-r border-slate-200 text-center bg-teal-50/10">
+                          <td className="px-1 border-r border-slate-200 dark:border-slate-700/50 text-center bg-teal-50/10 dark:bg-teal-900/10">
                             {!row.isReferenceYear && (
                               <input
                                 type="text"
                                 inputMode="decimal"
-                                className="w-full h-7 text-center text-xs border border-teal-200 rounded focus:border-teal-500 outline-none text-teal-700 bg-white"
+                                className="w-full h-7 text-center text-xs border border-teal-200 dark:border-teal-800/50 rounded focus:border-teal-500 outline-none text-teal-700 dark:text-teal-300 bg-white dark:bg-slate-900 transition-colors"
                                 value={month.rawTicket}
                                 onChange={(e) => handleCoeffChange(row.year, month.index, 'coeffTicket', e.target.value)}
                               />
                             )}
                           </td>
-                          <td className="px-2 border-r border-slate-200 text-right text-xs text-teal-600 bg-teal-50/10">
+                          <td className="px-2 border-r border-slate-200 dark:border-slate-700/50 text-right text-xs text-teal-600 dark:text-teal-400 bg-teal-50/10 dark:bg-teal-900/10">
                             {row.isReferenceYear ? '-' : (month.buoniPasto !== 0 ? formatCurrency(month.buoniPasto) : '-')}
                           </td>
                         </>
                       )}
 
-                      <td className={`px-2 text-right text-xs font-bold ${row.isReferenceYear ? 'text-slate-400' : 'text-emerald-700 bg-emerald-50/30'}`}>
+                      <td className={`px-2 text-right text-xs font-bold ${row.isReferenceYear ? 'text-slate-400 dark:text-slate-500' : 'text-emerald-700 dark:text-cyan-400 bg-emerald-50/30 dark:bg-emerald-900/20'}`}>
                         {row.isReferenceYear ? '-' : (month.netto !== 0 ? formatCurrency(month.netto) : '-')}
                       </td>
                     </tr>
@@ -512,70 +534,70 @@ const AnnualCalculationTable: React.FC<AnnualCalculationTableProps> = ({
         </table>
       </div>
 
-      <div className="shrink-0 bg-slate-50 p-6 border-t border-slate-200">
-        <div className="bg-blue-50/50 border border-blue-200 rounded-xl p-5 shadow-sm">
+      <div className="shrink-0 bg-slate-50 dark:bg-slate-950 p-6 border-t border-slate-200 dark:border-slate-700 transition-colors">
+        <div className="bg-blue-50/50 dark:bg-slate-900 border border-blue-200 dark:border-slate-700 rounded-xl p-5 shadow-sm transition-colors">
           {/* ... HEADER DEL SUMMARY ... */}
           <div className="flex items-center gap-2 mb-4 justify-between">
             <div className="flex items-center gap-2">
-              <h3 className="text-xs font-black text-blue-800 uppercase tracking-widest">
+              <h3 className="text-xs font-black text-blue-800 dark:text-blue-400 uppercase tracking-widest">
                 Riepilogo Finale
               </h3>
-              <div className="flex items-center gap-1 text-[10px] text-blue-600 bg-blue-100 px-2 py-0.5 rounded-full">
+              <div className="flex items-center gap-1 text-[10px] text-blue-600 dark:text-blue-300 bg-blue-100 dark:bg-blue-900/50 px-2 py-0.5 rounded-full">
                 <AlertCircle size={10} />
                 <span>Tetto: {includeExFest ? "32" : "28"} GG</span>
               </div>
             </div>
 
-            <div className="flex items-center gap-2 bg-white px-2 py-1 rounded-lg border border-indigo-200 shadow-sm">
-              <Percent size={12} className="text-indigo-500" />
-              <span className="text-[10px] font-bold text-indigo-700 uppercase">Interessi/Rivalutazione:</span>
+            <div className="flex items-center gap-2 bg-white dark:bg-slate-800 px-2 py-1 rounded-lg border border-indigo-200 dark:border-slate-600 shadow-sm transition-colors">
+              <Percent size={12} className="text-indigo-500 dark:text-indigo-400" />
+              <span className="text-[10px] font-bold text-indigo-700 dark:text-indigo-300 uppercase">Interessi/Rivalutazione:</span>
               <input
                 type="text"
-                className="w-12 text-right text-xs font-bold text-indigo-700 outline-none border-b border-indigo-200 focus:border-indigo-500 bg-transparent"
+                className="w-12 text-right text-xs font-bold text-indigo-700 dark:text-cyan-300 outline-none border-b border-indigo-200 dark:border-indigo-500 focus:border-indigo-500 dark:focus:border-cyan-400 bg-transparent transition-colors"
                 placeholder="0"
                 value={interestRate}
                 onChange={(e) => setInterestRate(e.target.value)}
               />
-              <span className="text-xs text-indigo-500 font-bold">%</span>
+              <span className="text-xs text-indigo-500 dark:text-indigo-400 font-bold">%</span>
             </div>
           </div>
 
           <div className="flex flex-col gap-3">
-            <div className="flex justify-between items-center border-b border-slate-200 pb-2 border-dashed">
-              <span className="text-xs uppercase text-slate-500 font-bold tracking-wide">TOT. SPETTANTE LORDO (Media Applicata)</span>
-              <span className="text-lg font-bold text-indigo-700 tabular-nums">{formatCurrency(summary.totalGrossIndemnity)}</span>
+            <div className="flex justify-between items-center border-b border-slate-200 dark:border-slate-700 pb-2 border-dashed">
+              <span className="text-xs uppercase text-slate-500 dark:text-slate-400 font-bold tracking-wide">TOT. SPETTANTE LORDO (Media Applicata)</span>
+              <span className="text-lg font-bold text-indigo-700 dark:text-indigo-400 tabular-nums">{formatCurrency(summary.totalGrossIndemnity)}</span>
             </div>
-            <div className="flex justify-between items-center border-b border-slate-200 pb-2 border-dashed">
-              <span className="text-xs uppercase text-slate-500 font-bold tracking-wide">TOT. GIA' PERCEPITO</span>
-              <span className="text-lg font-bold text-orange-600 tabular-nums">- {formatCurrency(summary.totalPaid)}</span>
+            <div className="flex justify-between items-center border-b border-slate-200 dark:border-slate-700 pb-2 border-dashed">
+              <span className="text-xs uppercase text-slate-500 dark:text-slate-400 font-bold tracking-wide">TOT. GIA' PERCEPITO</span>
+              <span className="text-lg font-bold text-orange-600 dark:text-orange-400 tabular-nums">- {formatCurrency(summary.totalPaid)}</span>
             </div>
-            <div className="flex justify-between items-center border-b border-slate-200 pb-2 border-dashed">
-              <span className="text-xs uppercase text-slate-500 font-bold tracking-wide">TOT. BUONI PASTO</span>
-              <span className="text-lg font-bold text-teal-600 tabular-nums">+ {formatCurrency(summary.totalTickets)}</span>
+            <div className="flex justify-between items-center border-b border-slate-200 dark:border-slate-700 pb-2 border-dashed">
+              <span className="text-xs uppercase text-slate-500 dark:text-slate-400 font-bold tracking-wide">TOT. BUONI PASTO</span>
+              <span className="text-lg font-bold text-teal-600 dark:text-teal-400 tabular-nums">+ {formatCurrency(summary.totalTickets)}</span>
             </div>
 
             {summary.interestAmount > 0 && (
-              <div className="flex justify-between items-center border-b border-emerald-200 pb-2 border-dashed bg-emerald-50/50 px-2 rounded">
-                <span className="text-xs uppercase text-emerald-600 font-bold tracking-wide">
+              <div className="flex justify-between items-center border-b border-emerald-200 dark:border-emerald-800/50 pb-2 border-dashed bg-emerald-50/50 dark:bg-emerald-900/20 px-2 rounded">
+                <span className="text-xs uppercase text-emerald-600 dark:text-emerald-400 font-bold tracking-wide">
                   + INTERESSI E RIVALUTAZIONE ({interestRate}%)
                 </span>
-                <span className="text-lg font-bold text-emerald-600 tabular-nums">+ {formatCurrency(summary.interestAmount)}</span>
+                <span className="text-lg font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">+ {formatCurrency(summary.interestAmount)}</span>
               </div>
             )}
 
-            <div className="flex justify-between items-center mt-2 bg-white p-3 rounded-lg border border-emerald-200 shadow-sm">
+            <div className="flex justify-between items-center mt-2 bg-white dark:bg-slate-800 p-3 rounded-lg border border-emerald-200 dark:border-emerald-800 shadow-sm transition-colors">
               <div className="flex flex-col">
-                <span className="text-xs uppercase text-emerald-700 font-black tracking-wide">TOTALE DA LIQUIDARE</span>
+                <span className="text-xs uppercase text-emerald-700 dark:text-emerald-400 font-black tracking-wide">TOTALE DA LIQUIDARE</span>
                 <div className="flex items-center gap-1">
-                  <Info size={10} className="text-emerald-400" />
-                  <span className="text-[9px] text-emerald-500 font-medium">Netto = (Spettante - Percepito) + Ticket {summary.interestAmount > 0 ? "+ Interessi" : ""}</span>
+                  <Info size={10} className="text-emerald-400 dark:text-emerald-500" />
+                  <span className="text-[9px] text-emerald-500 dark:text-emerald-400/70 font-medium">Netto = (Spettante - Percepito) + Ticket {summary.interestAmount > 0 ? "+ Interessi" : ""}</span>
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                <span className="text-2xl font-black text-emerald-700 tabular-nums tracking-tight">{formatCurrency(summary.grandTotal)}</span>
+                <span className="text-2xl font-black text-emerald-700 dark:text-cyan-400 tabular-nums tracking-tight">{formatCurrency(summary.grandTotal)}</span>
                 <button
                   onClick={handleCopyTotal}
-                  className="p-1.5 rounded-full hover:bg-emerald-50 text-emerald-400 hover:text-emerald-700 transition-colors"
+                  className="p-1.5 rounded-full hover:bg-emerald-50 dark:hover:bg-slate-700 text-emerald-400 dark:text-cyan-500 hover:text-emerald-700 dark:hover:text-cyan-300 transition-colors"
                   title="Copia totale"
                 >
                   {isCopied ? <Check className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
