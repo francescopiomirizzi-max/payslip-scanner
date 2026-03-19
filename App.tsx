@@ -761,12 +761,15 @@ const App: React.FC = () => {
     };
 
     const handleUpdateWorkerData = (updatedAnni: AnnoDati[]) => {
-        if (!selectedWorker) return;
-        const updatedWorkers = workers.map(w =>
-            w.id === selectedWorker.id ? { ...w, anni: updatedAnni } : w
+        setWorkers(prevWorkers => {
+            if (!selectedWorker) return prevWorkers;
+            return prevWorkers.map(w =>
+                w.id === selectedWorker.id ? { ...w, anni: updatedAnni } : w
+            );
+        });
+        setSelectedWorker(prevSelected => 
+            prevSelected ? { ...prevSelected, anni: updatedAnni } : null
         );
-        setWorkers(updatedWorkers);
-        setSelectedWorker({ ...selectedWorker, anni: updatedAnni });
     };
 
     const handleUpdateStatus = (status: string) => {

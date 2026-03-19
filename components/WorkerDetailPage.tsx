@@ -188,6 +188,16 @@ const MovingGrid = () => (
 
 const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateData, onUpdateStatus, onBack, onOpenReport }) => {
   const [monthlyInputs, setMonthlyInputs] = useState<AnnoDati[]>(Array.isArray(worker?.anni) ? worker.anni : []);
+  
+  // DYNAMIC SYNC: Lo stato locale comanda, il Parent riceve aggiornamenti in automatico
+  const lastSyncRef = useRef<AnnoDati[]>(monthlyInputs);
+  useEffect(() => {
+    if (monthlyInputs !== lastSyncRef.current) {
+      lastSyncRef.current = monthlyInputs;
+      onUpdateData(monthlyInputs);
+    }
+  }, [monthlyInputs, onUpdateData]);
+
   // ✨ INIEZIONE CERVELLO NELLA PAGINA LAVORATORE
   const { showNotification, setQuickActions, startUpload, updateUploadProgress, finishUpload } = useIsland();
 
@@ -445,44 +455,55 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
   const handleQRData = (aiResult: any) => {
     if (!aiResult) return;
 
-    // 1. IL FIX: Usiamo prevInputs! Questo obbliga React a guardare i dati AGGIORNATI al millesimo di secondo, non quelli "congelati"
-    setMonthlyInputs((prevInputs) => {
-      let currentAnni = JSON.parse(JSON.stringify(prevInputs));
+    // 2. TRADUTTORE TITANIUM PER L'ANNO (Fuori dallo State Updater per Side Effects)
+    let targetYear = parseInt(String(aiResult.year || "").replace(/[^\d]/g, ''));
+    if (isNaN(targetYear) || targetYear < 2000) {
+      const yMatchMonth = String(aiResult.month || "").match(/(20\d{2})/);
+      if (yMatchMonth) targetYear = parseInt(yMatchMonth[1]);
+      else return; // Anno introvabile, scartiamo per sicurezza
+    }
 
-      // 2. TRADUTTORE TITANIUM PER L'ANNO
-      let targetYear = parseInt(String(aiResult.year || "").replace(/[^\d]/g, ''));
-      if (isNaN(targetYear) || targetYear < 2000) {
-        const yMatchMonth = String(aiResult.month || "").match(/(20\d{2})/);
-        if (yMatchMonth) targetYear = parseInt(yMatchMonth[1]);
-        else return prevInputs; // Anno introvabile, scartiamo per sicurezza e restituiamo lo stato intatto
-      }
+    // 3. TRADUTTORE TITANIUM PER IL MESE
+    const isCUD = aiResult.isCUD === true;
+    let targetMonthIndex = -1;
 
-      // 3. TRADUTTORE TITANIUM PER IL MESE (Evita che Febbraio e Aprile finiscano nello stesso buco nero)
-      const isCUD = aiResult.isCUD === true;
-      let targetMonthIndex = -1;
+    if (isCUD) {
+      targetMonthIndex = 11; // 11 = Dicembre
+    } else if (aiResult.month) {
+      const mesiStr = ['gen', 'feb', 'mar', 'apr', 'mag', 'giu', 'lug', 'ago', 'set', 'ott', 'nov', 'dic'];
+      let monthRaw = String(aiResult.month).toLowerCase().trim();
+      targetMonthIndex = mesiStr.findIndex(m => monthRaw.includes(m));
 
-      if (isCUD) {
-        targetMonthIndex = 11; // 11 = Dicembre
-      } else if (aiResult.month) {
-        const mesiStr = ['gen', 'feb', 'mar', 'apr', 'mag', 'giu', 'lug', 'ago', 'set', 'ott', 'nov', 'dic'];
-        let monthRaw = String(aiResult.month).toLowerCase().trim();
-        targetMonthIndex = mesiStr.findIndex(m => monthRaw.includes(m));
-
-        if (targetMonthIndex === -1) {
-          const numMatch = monthRaw.match(/\b(0?[1-9]|1[0-2])\b/);
-          if (numMatch) {
-            targetMonthIndex = parseInt(numMatch[1]) - 1;
-          } else if (monthRaw.length >= 5) {
-            const firstTwo = parseInt(monthRaw.substring(0, 2));
-            if (firstTwo >= 1 && firstTwo <= 12) targetMonthIndex = firstTwo - 1;
-          }
+      if (targetMonthIndex === -1) {
+        const numMatch = monthRaw.match(/\b(0?[1-9]|1[0-2])\b/);
+        if (numMatch) {
+          targetMonthIndex = parseInt(numMatch[1]) - 1;
+        } else if (monthRaw.length >= 5) {
+          const firstTwo = parseInt(monthRaw.substring(0, 2));
+          if (firstTwo >= 1 && firstTwo <= 12) targetMonthIndex = firstTwo - 1;
         }
       }
+    }
 
-      if (targetMonthIndex < 0 || targetMonthIndex > 11) {
-        console.error("Mese non riconosciuto dal QR:", aiResult.month);
-        targetMonthIndex = 0;
-      }
+    if (targetMonthIndex < 0 || targetMonthIndex > 11) {
+      console.error("Mese non riconosciuto dal QR:", aiResult.month);
+      targetMonthIndex = 0;
+    }
+
+    // SIDE EFFECTS ESEGUITI FUORI DALLO STATE UPDATER
+    setCurrentYear(targetYear);
+    window.dispatchEvent(new CustomEvent('island-scan-label', { detail: `${MONTH_NAMES[targetMonthIndex]} ${targetYear}` }));
+
+    const fondoPregresso = aiResult.fondo_pregresso_31_12 !== undefined ? parseLocalFloat(aiResult.fondo_pregresso_31_12) : null;
+    if (fondoPregresso !== null && !isNaN(fondoPregresso) && fondoPregresso > 0) {
+      window.dispatchEvent(new CustomEvent('ai-found-tfr-base', {
+        detail: { amount: fondoPregresso, year: targetYear - 1 }
+      }));
+    }
+
+    // 1. IL FIX: Usiamo prevInputs puro senza produrre side effects interni
+    setMonthlyInputs((prevInputs) => {
+      let currentAnni = JSON.parse(JSON.stringify(prevInputs));
 
       // 4. CERCA O CREA LA RIGA CORRETTA
       let rowIndex = currentAnni.findIndex((r: any) => Number(r.year) === targetYear && r.monthIndex === targetMonthIndex);
@@ -523,16 +544,8 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
         row.imponibile_tfr_mensile = isCUD ? newVal : (row.imponibile_tfr_mensile || 0) + newVal;
       }
 
-      if (aiResult.fondo_pregresso_31_12 !== undefined) {
-        const fondoTrovato = parseLocalFloat(aiResult.fondo_pregresso_31_12);
-        if (!isNaN(fondoTrovato)) {
-          row.fondo_pregresso_31_12 = fondoTrovato;
-          if (fondoTrovato > 0) {
-            window.dispatchEvent(new CustomEvent('ai-found-tfr-base', {
-              detail: { amount: fondoTrovato, year: targetYear - 1 }
-            }));
-          }
-        }
+      if (fondoPregresso !== null && !isNaN(fondoPregresso)) {
+         row.fondo_pregresso_31_12 = fondoPregresso;
       }
 
       // MAPPA I CODICI IN TABELLA
@@ -554,12 +567,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
       currentAnni[rowIndex] = row;
       currentAnni.sort((a: any, b: any) => (a.year - b.year) || (a.monthIndex - b.monthIndex));
 
-      // 6. AGGIORNA GENITORE E RESTITUISCE I DATI A REACT
-      onUpdateData(currentAnni);
-      setCurrentYear(targetYear);
-      window.dispatchEvent(new CustomEvent('island-scan-label', { detail: `${MONTH_NAMES[targetMonthIndex]} ${targetYear}` }));
-
-      return currentAnni; // <-- Questo è fondamentale per permettere a React di accodare i mesi
+      return currentAnni; // <-- Dati Puri. useEffect pensa ad avvisare il padre!
     });
   };
   // Helper per far "respirare" l'IA tra un file e l'altro
@@ -824,7 +832,6 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
     });
 
     setMonthlyInputs(currentAnni);
-    onUpdateData(currentAnni);
     if (lastDetectedYear) setCurrentYear(lastDetectedYear);
 
     if (batchInputRef.current) batchInputRef.current.value = '';
@@ -879,7 +886,6 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
 
   const handleDataChange = (newData: AnnoDati[]) => {
     setMonthlyInputs(newData);
-    onUpdateData(newData);
   };
 
   // --- GESTIONE CELLA ATTIVA ---
@@ -1475,7 +1481,6 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
     const otherData = monthlyInputs.filter(d => !(d.year === currentYear && d.monthIndex === row));
     const newData = [...otherData, updatedRow];
     setMonthlyInputs(newData);
-    onUpdateData(newData);
   };
   // --- INIZIO NUOVO HELPER: ORDINAMENTO CRONOLOGICO BUSTE PAGA ---
   const getFilenameDateScore = (filename: string) => {
