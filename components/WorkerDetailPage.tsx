@@ -445,122 +445,122 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
   const handleQRData = (aiResult: any) => {
     if (!aiResult) return;
 
-    // 1. Lavoriamo su una copia fresca dello stato attuale (Fuori dal setter pericoloso di React)
-    let currentAnni = JSON.parse(JSON.stringify(monthlyInputs));
+    // 1. IL FIX: Usiamo prevInputs! Questo obbliga React a guardare i dati AGGIORNATI al millesimo di secondo, non quelli "congelati"
+    setMonthlyInputs((prevInputs) => {
+      let currentAnni = JSON.parse(JSON.stringify(prevInputs));
 
-    // 2. TRADUTTORE TITANIUM PER L'ANNO
-    let targetYear = parseInt(String(aiResult.year || "").replace(/[^\d]/g, ''));
-    if (isNaN(targetYear) || targetYear < 2000) {
-      const yMatchMonth = String(aiResult.month || "").match(/(20\d{2})/);
-      if (yMatchMonth) targetYear = parseInt(yMatchMonth[1]);
-      else return; // Anno introvabile, scartiamo la scansione per sicurezza
-    }
-
-    // 3. TRADUTTORE TITANIUM PER IL MESE (Evita che Febbraio e Aprile finiscano nello stesso buco nero)
-    const isCUD = aiResult.isCUD === true;
-    let targetMonthIndex = -1;
-
-    if (isCUD) {
-      targetMonthIndex = 11; // 11 = Dicembre
-    } else if (aiResult.month) {
-      const mesiStr = ['gen', 'feb', 'mar', 'apr', 'mag', 'giu', 'lug', 'ago', 'set', 'ott', 'nov', 'dic'];
-      let monthRaw = String(aiResult.month).toLowerCase().trim();
-      targetMonthIndex = mesiStr.findIndex(m => monthRaw.includes(m));
-
-      if (targetMonthIndex === -1) {
-        const numMatch = monthRaw.match(/\b(0?[1-9]|1[0-2])\b/);
-        if (numMatch) {
-          targetMonthIndex = parseInt(numMatch[1]) - 1;
-        } else if (monthRaw.length >= 5) {
-          const firstTwo = parseInt(monthRaw.substring(0, 2));
-          if (firstTwo >= 1 && firstTwo <= 12) targetMonthIndex = firstTwo - 1;
-        }
+      // 2. TRADUTTORE TITANIUM PER L'ANNO
+      let targetYear = parseInt(String(aiResult.year || "").replace(/[^\d]/g, ''));
+      if (isNaN(targetYear) || targetYear < 2000) {
+        const yMatchMonth = String(aiResult.month || "").match(/(20\d{2})/);
+        if (yMatchMonth) targetYear = parseInt(yMatchMonth[1]);
+        else return prevInputs; // Anno introvabile, scartiamo per sicurezza e restituiamo lo stato intatto
       }
-    }
 
-    // Se l'OCR fallisce totalmente a leggere il mese, fallback all'inizio dell'anno
-    if (targetMonthIndex < 0 || targetMonthIndex > 11) {
-      console.error("Mese non riconosciuto dal QR:", aiResult.month);
-      targetMonthIndex = 0;
-    }
+      // 3. TRADUTTORE TITANIUM PER IL MESE (Evita che Febbraio e Aprile finiscano nello stesso buco nero)
+      const isCUD = aiResult.isCUD === true;
+      let targetMonthIndex = -1;
 
-    // 4. CERCA O CREA LA RIGA CORRETTA
-    let rowIndex = currentAnni.findIndex((r: any) => Number(r.year) === targetYear && r.monthIndex === targetMonthIndex);
+      if (isCUD) {
+        targetMonthIndex = 11; // 11 = Dicembre
+      } else if (aiResult.month) {
+        const mesiStr = ['gen', 'feb', 'mar', 'apr', 'mag', 'giu', 'lug', 'ago', 'set', 'ott', 'nov', 'dic'];
+        let monthRaw = String(aiResult.month).toLowerCase().trim();
+        targetMonthIndex = mesiStr.findIndex(m => monthRaw.includes(m));
 
-    if (rowIndex === -1) {
-      currentAnni.push({
-        id: Date.now().toString() + Math.random().toString(),
-        year: targetYear,
-        monthIndex: targetMonthIndex,
-        month: MONTH_NAMES[targetMonthIndex],
-        daysWorked: 0, daysVacation: 0, ticket: 0, arretrati: 0, note: '', coeffTicket: 0, coeffPercepito: 0
-      });
-      rowIndex = currentAnni.length - 1;
-    }
-
-    const row = currentAnni[rowIndex];
-
-    // 5. INIEZIONE DATI SICURA CON PROTEZIONE DECIMALI
-    if (!isCUD) {
-      if (aiResult.daysWorked !== undefined && aiResult.daysWorked !== null) row.daysWorked = parseLocalFloat(aiResult.daysWorked);
-      if (aiResult.daysVacation !== undefined && aiResult.daysVacation !== null) row.daysVacation = parseLocalFloat(aiResult.daysVacation);
-    }
-
-    const ticketVal = parseLocalFloat(aiResult.ticketRate);
-    if (!isNaN(ticketVal) && ticketVal > 0) row.coeffTicket = ticketVal;
-
-    const arretratiVal = parseLocalFloat(aiResult.arretrati);
-    if (!isNaN(arretratiVal) && arretratiVal !== 0) row.arretrati = arretratiVal;
-
-    const sep = '  •  ';
-    if (isCUD && !row.note?.includes("CUD")) row.note = row.note ? `[📄 Dati da CUD]${sep}${row.note}` : `[📄 Dati da CUD]`;
-    if (aiResult.eventNote && !row.note?.includes(aiResult.eventNote)) row.note = row.note ? `${row.note}${sep}[${aiResult.eventNote}]` : `[${aiResult.eventNote}]`;
-    if (aiResult.aiWarning && aiResult.aiWarning !== "Nessuna anomalia" && !row.note?.includes("⚠️")) row.note = row.note ? `${row.note}${sep}[⚠️ AI: ${aiResult.aiWarning}]` : `[⚠️ AI: ${aiResult.aiWarning}]`;
-
-    // SALVATAGGIO TFR INVISIBILE
-    if (aiResult.imponibile_tfr_mensile !== undefined) {
-      const newVal = parseLocalFloat(aiResult.imponibile_tfr_mensile);
-      row.imponibile_tfr_mensile = isCUD ? newVal : (row.imponibile_tfr_mensile || 0) + newVal;
-    }
-
-    if (aiResult.fondo_pregresso_31_12 !== undefined) {
-      const fondoTrovato = parseLocalFloat(aiResult.fondo_pregresso_31_12);
-      if (!isNaN(fondoTrovato)) {
-        row.fondo_pregresso_31_12 = fondoTrovato;
-        if (fondoTrovato > 0) {
-          window.dispatchEvent(new CustomEvent('ai-found-tfr-base', {
-            detail: { amount: fondoTrovato, year: targetYear - 1 }
-          }));
-        }
-      }
-    }
-
-    // MAPPA I CODICI IN TABELLA
-    if (aiResult.codes) {
-      const expectedColumns = getColumnsByProfile(worker.profilo) || [];
-      Object.entries(aiResult.codes).forEach(([code, value]) => {
-        const numValue = parseLocalFloat(value);
-        if (!isNaN(numValue) && numValue !== 0) {
-          const matchedCol = expectedColumns.find(c => code.toUpperCase().includes(c.id.toUpperCase()));
-          if (matchedCol) {
-            row[matchedCol.id] = numValue;
-          } else {
-            row[code] = numValue;
+        if (targetMonthIndex === -1) {
+          const numMatch = monthRaw.match(/\b(0?[1-9]|1[0-2])\b/);
+          if (numMatch) {
+            targetMonthIndex = parseInt(numMatch[1]) - 1;
+          } else if (monthRaw.length >= 5) {
+            const firstTwo = parseInt(monthRaw.substring(0, 2));
+            if (firstTwo >= 1 && firstTwo <= 12) targetMonthIndex = firstTwo - 1;
           }
         }
-      });
-    }
+      }
 
-    currentAnni[rowIndex] = row;
-    currentAnni.sort((a: any, b: any) => (a.year - b.year) || (a.monthIndex - b.monthIndex));
+      if (targetMonthIndex < 0 || targetMonthIndex > 11) {
+        console.error("Mese non riconosciuto dal QR:", aiResult.month);
+        targetMonthIndex = 0;
+      }
 
-    // 6. SALVATAGGIO FINALE PULITO (Fuori dal setState pericoloso!)
-    setMonthlyInputs(currentAnni);
-    onUpdateData(currentAnni);
-    setCurrentYear(targetYear);
+      // 4. CERCA O CREA LA RIGA CORRETTA
+      let rowIndex = currentAnni.findIndex((r: any) => Number(r.year) === targetYear && r.monthIndex === targetMonthIndex);
 
-    // Sveglia l'Isola Dinamica
-    window.dispatchEvent(new CustomEvent('island-scan-label', { detail: `${MONTH_NAMES[targetMonthIndex]} ${targetYear}` }));
+      if (rowIndex === -1) {
+        currentAnni.push({
+          id: Date.now().toString() + Math.random().toString(),
+          year: targetYear,
+          monthIndex: targetMonthIndex,
+          month: MONTH_NAMES[targetMonthIndex],
+          daysWorked: 0, daysVacation: 0, ticket: 0, arretrati: 0, note: '', coeffTicket: 0, coeffPercepito: 0
+        });
+        rowIndex = currentAnni.length - 1;
+      }
+
+      const row = currentAnni[rowIndex];
+
+      // 5. INIEZIONE DATI SICURA CON PROTEZIONE DECIMALI
+      if (!isCUD) {
+        if (aiResult.daysWorked !== undefined && aiResult.daysWorked !== null) row.daysWorked = parseLocalFloat(aiResult.daysWorked);
+        if (aiResult.daysVacation !== undefined && aiResult.daysVacation !== null) row.daysVacation = parseLocalFloat(aiResult.daysVacation);
+      }
+
+      const ticketVal = parseLocalFloat(aiResult.ticketRate);
+      if (!isNaN(ticketVal) && ticketVal > 0) row.coeffTicket = ticketVal;
+
+      const arretratiVal = parseLocalFloat(aiResult.arretrati);
+      if (!isNaN(arretratiVal) && arretratiVal !== 0) row.arretrati = arretratiVal;
+
+      const sep = '  •  ';
+      if (isCUD && !row.note?.includes("CUD")) row.note = row.note ? `[📄 Dati da CUD]${sep}${row.note}` : `[📄 Dati da CUD]`;
+      if (aiResult.eventNote && !row.note?.includes(aiResult.eventNote)) row.note = row.note ? `${row.note}${sep}[${aiResult.eventNote}]` : `[${aiResult.eventNote}]`;
+      if (aiResult.aiWarning && aiResult.aiWarning !== "Nessuna anomalia" && !row.note?.includes("⚠️")) row.note = row.note ? `${row.note}${sep}[⚠️ AI: ${aiResult.aiWarning}]` : `[⚠️ AI: ${aiResult.aiWarning}]`;
+
+      // SALVATAGGIO TFR INVISIBILE
+      if (aiResult.imponibile_tfr_mensile !== undefined) {
+        const newVal = parseLocalFloat(aiResult.imponibile_tfr_mensile);
+        row.imponibile_tfr_mensile = isCUD ? newVal : (row.imponibile_tfr_mensile || 0) + newVal;
+      }
+
+      if (aiResult.fondo_pregresso_31_12 !== undefined) {
+        const fondoTrovato = parseLocalFloat(aiResult.fondo_pregresso_31_12);
+        if (!isNaN(fondoTrovato)) {
+          row.fondo_pregresso_31_12 = fondoTrovato;
+          if (fondoTrovato > 0) {
+            window.dispatchEvent(new CustomEvent('ai-found-tfr-base', {
+              detail: { amount: fondoTrovato, year: targetYear - 1 }
+            }));
+          }
+        }
+      }
+
+      // MAPPA I CODICI IN TABELLA
+      if (aiResult.codes) {
+        const expectedColumns = getColumnsByProfile(worker.profilo) || [];
+        Object.entries(aiResult.codes).forEach(([code, value]) => {
+          const numValue = parseLocalFloat(value);
+          if (!isNaN(numValue) && numValue !== 0) {
+            const matchedCol = expectedColumns.find(c => code.toUpperCase().includes(c.id.toUpperCase()));
+            if (matchedCol) {
+              row[matchedCol.id] = numValue;
+            } else {
+              row[code] = numValue;
+            }
+          }
+        });
+      }
+
+      currentAnni[rowIndex] = row;
+      currentAnni.sort((a: any, b: any) => (a.year - b.year) || (a.monthIndex - b.monthIndex));
+
+      // 6. AGGIORNA GENITORE E RESTITUISCE I DATI A REACT
+      onUpdateData(currentAnni);
+      setCurrentYear(targetYear);
+      window.dispatchEvent(new CustomEvent('island-scan-label', { detail: `${MONTH_NAMES[targetMonthIndex]} ${targetYear}` }));
+
+      return currentAnni; // <-- Questo è fondamentale per permettere a React di accodare i mesi
+    });
   };
   // Helper per far "respirare" l'IA tra un file e l'altro
   const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
