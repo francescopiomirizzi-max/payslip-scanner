@@ -21,6 +21,19 @@
   background: rgba(100, 116, 139, 0.5);
 }
 
+/* --- GLASSMORPHISM UTILITIES --- */
+@layer components {
+  .glass-panel {
+    @apply bg-white/70 dark:bg-slate-800/70 backdrop-blur-xl border border-white/40 dark:border-slate-700/50 shadow-xl rounded-2xl;
+  }
+  .glass-btn {
+    @apply bg-white/50 hover:bg-white/80 dark:bg-slate-700/50 dark:hover:bg-slate-600/80 backdrop-blur-md border border-white/40 dark:border-slate-600/50 shadow-sm rounded-xl transition-all duration-300;
+  }
+  .glass-input {
+    @apply bg-white/30 dark:bg-slate-800/50 border border-slate-200/50 dark:border-slate-600/40 rounded-xl focus:ring-2 focus:ring-indigo-500/50 backdrop-blur-md transition-all duration-300;
+  }
+}
+
 /* --- ANIMAZIONI GLOBALI AGGIUNTIVE --- */
 /* (Queste servono se Tailwind non le ha caricate dal config, ma è una sicurezza in più) */
 @keyframes blob {

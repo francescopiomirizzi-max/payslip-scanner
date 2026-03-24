@@ -43,7 +43,8 @@ import MobileUploadPage from './pages/MobileUploadPage';
 import CompanyBuilder from './components/CompanyBuilder';
 import { useIsland } from './IslandContext';
 // Importiamo tipi e logica
-import { Worker, AnnoDati, parseFloatSafe, getColumnsByProfile } from './types';
+import { Worker, AnnoDati, getColumnsByProfile } from './types';
+import { parseLocalFloat, getFormattedDate, getFormattedTime } from './utils/formatters';
 import { DEFAULT_YEARS_TEMPLATE } from './constants';
 import HiddenClasses from './HiddenClasses';
 // --- CONFIGURAZIONE COLORI STATICA (FULL PALETTE) ---
@@ -537,10 +538,8 @@ const App: React.FC = () => {
     useEffect(() => {
         if (isAuthenticated) {
             const now = new Date();
-            const giorni = ['Domenica', 'Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì', 'Sabato'];
-            const mesi = ['Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno', 'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'];
-            const dataFormattata = `${giorni[now.getDay()]} ${now.getDate()} ${mesi[now.getMonth()]}`;
-            const oraFormattata = now.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+            const dataFormattata = getFormattedDate(now);
+            const oraFormattata = getFormattedTime(now);
 
             setTimeout(() => {
                 showNotification(
@@ -782,17 +781,7 @@ const App: React.FC = () => {
     };
 
     const getEditingWorkerData = () => editingWorkerId ? workers.find(w => w.id === editingWorkerId) : null;
-    // --- HELPER: PARSER ROBUSTO (AGGIUNGI DENTRO App, PRIMA DEI USEMEMO) ---
-    const parseLocalFloat = (val: any) => {
-        if (!val) return 0;
-        if (typeof val === 'number') return val;
-        let str = val.toString();
-        if (str.includes(',')) {
-            str = str.replace(/\./g, '').replace(',', '.');
-        }
-        const num = parseFloat(str);
-        return isNaN(num) ? 0 : num;
-    };
+    // --- HELPER: IMPORTATO DA UTILS ---
     // --- MOTORE STILI BOTTONI DINAMICI ---
     const getFilterStyle = (filterId: string, isActive: boolean) => {
         const inactiveClasses = "bg-white/40 dark:bg-slate-800/60 text-slate-500 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-700 hover:text-indigo-600 dark:hover:text-indigo-400 hover:border-indigo-200 dark:hover:border-indigo-500/50 border border-white/40 dark:border-slate-700 hover:shadow-lg hover:shadow-indigo-500/10 hover:-translate-y-0.5";

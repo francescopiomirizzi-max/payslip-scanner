@@ -2,34 +2,16 @@ import React, { useMemo, useState } from 'react';
 import {
   AnnoDati,
   YEARS,
-  formatCurrency,
-  formatInteger,
   INDENNITA_RFI,
   INDENNITA_ELIOR,
   INDENNITA_REKEEP,
   getColumnsByProfile,
   ProfiloAzienda
 } from '../../types';
-import { Info, TrendingUp, DollarSign } from 'lucide-react';
+import { parseLocalFloat, formatCurrency, formatDay } from '../../utils/formatters';
+import { Info, TrendingUp, DollarSign, FileSearch } from 'lucide-react';
 
-// --- PARSER INTELLIGENTE (IBRIDO AI/UTENTE) ---
-// Sostituiamo parseFloatSafe con questa versione locale più robusta per visualizzazione
-const parseLocalFloat = (val: any) => {
-  if (!val) return 0;
-  if (typeof val === 'number') return val;
 
-  let str = val.toString();
-
-  // Logica Ibrida: Se c'è la virgola, è input utente (ITA).
-  if (str.includes(',')) {
-    str = str.replace(/\./g, ''); // Via i punti migliaia
-    str = str.replace(',', '.');  // Virgola diventa punto
-  }
-  // Se non c'è virgola ma c'è punto, è formato AI -> Lasciamo così
-
-  const num = parseFloat(str);
-  return isNaN(num) ? 0 : num;
-};
 
 // --- MAPPATURA DESCRIZIONI ---
 const INDENNITA_DESCRIPTIONS: Record<string, string> = {
@@ -189,6 +171,28 @@ const IndemnityPivotTable: React.FC<IndemnityPivotTableProps> = ({
   const badgeClass = customTheme.badge;
   const headerColorClass = customTheme.header;
 
+  const hasActualData = useMemo(() => {
+    const indemnityCols = pivotConfig.map(c => c.id);
+    return data.some(d => {
+      const hasIndemnity = indemnityCols.some(id => parseLocalFloat(d[id]) > 0);
+      return hasIndemnity || parseLocalFloat(d.daysWorked) > 0;
+    });
+  }, [data, pivotConfig]);
+
+  if (!data || !hasActualData) {
+    return (
+      <div className="flex flex-col items-center justify-center p-16 text-center mt-4 border-dashed border-2 border-slate-300 dark:border-slate-700/50 bg-white/40 dark:bg-slate-900/40 backdrop-blur-md rounded-2xl h-full min-h-[400px] shadow-lg transition-all">
+        <div className="w-24 h-24 mb-6 rounded-full bg-teal-50 dark:bg-slate-800/80 flex items-center justify-center shadow-inner ring-4 ring-white dark:ring-slate-800">
+          <FileSearch className="w-12 h-12 text-teal-500 dark:text-cyan-400 animate-pulse" />
+        </div>
+        <h2 className="text-2xl font-black text-slate-800 dark:text-slate-200 mb-3 tracking-tight">Nessun Riepilogo Disponibile</h2>
+        <p className="text-slate-500 dark:text-slate-400 max-w-md mb-8 leading-relaxed text-base font-medium">
+          Non ci sono voci variabili registrate. Inserisci i dati mensili nel tab "Gestione Dati" per visualizzare la tabella pivot delle indennità.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="bg-white dark:bg-slate-900 shadow-xl dark:shadow-[0_0_20px_rgba(34,211,238,0.15)] rounded-lg overflow-hidden border border-slate-200 dark:border-cyan-400 flex flex-col h-full transition-all duration-300">
       <div className="p-3 bg-slate-800 text-white font-bold text-sm tracking-wide flex justify-between items-center shrink-0">
@@ -256,7 +260,7 @@ const IndemnityPivotTable: React.FC<IndemnityPivotTableProps> = ({
                   <div className="flex flex-col items-end">
                     <span>{year}</span>
                     {viewMode === 'average' && (
-                      <span className="text-[9px] font-normal text-slate-400 dark:text-slate-500">Div: {formatInteger(yearlyDaysWorked[year] || 0)} gg</span>
+                      <span className="text-[9px] font-normal text-slate-400 dark:text-slate-500">Div: {formatDay(yearlyDaysWorked[year] || 0)} gg</span>
                     )}
                   </div>
                 </th>

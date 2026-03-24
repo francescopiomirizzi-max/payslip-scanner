@@ -189,33 +189,8 @@ export const getColumnsByProfile = (profilo: ProfiloAzienda): ColumnDef[] => {
   ];
 };
 
-// 4. HELPER FUNCTIONS
-export const formatCurrency = (value: number | string | undefined) => {
-  if (value === undefined || value === null || value === '') return '-';
-  const num = typeof value === 'string' ? parseFloat(value.replace(',', '.')) : value;
-  if (isNaN(num) || num === 0) return '-';
-  return `€ ${num.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-};
+import { parseFloatSafe } from './utils/formatters';
 
-export const formatInteger = (value: number | string | undefined) => {
-  if (value === undefined || value === null || value === '') return '0';
-  return value.toString();
-};
-
-export const parseFloatSafe = (value: any): number => {
-  if (!value) return 0;
-  if (typeof value === 'number') return value;
-
-  let cleanStr = value.toString().trim();
-  if (cleanStr.includes(',') && (!cleanStr.includes('.') || cleanStr.indexOf(',') > cleanStr.lastIndexOf('.'))) {
-    cleanStr = cleanStr.replace(/\./g, '').replace(',', '.');
-  } else {
-    cleanStr = cleanStr.replace(/,/g, '');
-  }
-
-  const num = parseFloat(cleanStr);
-  return isNaN(num) ? 0 : num;
-};
 // --- FORMULA ENGINE: IL CERVELLO MATEMATICO ---
 export const evaluateFormula = (formulaStr: string | undefined, rowData: any): number => {
   if (!formulaStr || typeof formulaStr !== 'string') return 0;
@@ -249,5 +224,3 @@ export const evaluateFormula = (formulaStr: string | undefined, rowData: any): n
     return 0;
   }
 };
-// Alias per retrocompatibilità con i nuovi moduli
-export const parseLocalFloat = parseFloatSafe;

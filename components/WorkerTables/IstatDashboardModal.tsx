@@ -4,7 +4,8 @@ import { X, Scale, LineChart, Percent, FileSignature, TrendingUp, Info } from 'l
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { calculateLegalInterestsAndRevaluation, fetchIstatFOI } from '../../istatService';
-import { Worker, AnnoDati, parseFloatSafe, getColumnsByProfile } from '../../types';
+import { Worker, AnnoDati, getColumnsByProfile } from '../../types';
+import { parseFloatSafe } from '../../utils/formatters';
 
 interface IstatDashboardModalProps {
     isOpen: boolean;

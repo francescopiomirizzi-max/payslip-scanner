@@ -3,13 +3,12 @@ import { createPortal } from 'react-dom';
 import {
   MONTH_NAMES,
   YEARS,
-  formatCurrency,
-  formatInteger,
   AnnoDati,
   getColumnsByProfile,
   ProfiloAzienda,
   evaluateFormula
 } from '../../types';
+import { parseLocalFloat, formatCurrency, formatDay } from '../../utils/formatters';
 import {
   MessageSquareText,
   X,
@@ -172,24 +171,7 @@ interface MonthlyDataGridProps {
   onCellFocus?: (rowIndex: number, colId: string) => void;
 }
 
-const parseLocalFloat = (val: any) => {
-  if (!val) return 0;
-  if (typeof val === 'number') return val;
-
-  let str = val.toString();
-
-  // LOGICA INTELLIGENTE:
-  // 1. Se la stringa contiene una virgola (es. "345,16" o "1.000,50"),
-  //    allora è formato ITALIANO (Utente).
-  if (str.includes(',')) {
-    str = str.replace(/\./g, ''); // Rimuovi i punti delle migliaia
-    str = str.replace(',', '.');  // Trasforma la virgola in punto
-  }
-  // 2. Altrimenti, se NON c'è virgola (es. "345.16"), 
-  //    assumiamo sia formato AI/INGLESE. Non tocchiamo nulla.
-
-  return parseFloat(str) || 0;
-};
+// parseLocalFloat importato da formatters
 
 // Helper per ottenere giorni nel mese
 const getDaysInMonth = (year: number, monthIndex: number) => {
@@ -312,6 +294,15 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
 
   let ferieCumulateCounter = 0;
   const TETTO_FERIE = 28;
+
+  // --- CLEANUP GLOBALE TIMERS E INTERVALS (Anti-Memory Leak) ---
+  useEffect(() => {
+    return () => {
+      if (undoTimeoutRef.current) clearTimeout(undoTimeoutRef.current);
+      if (scrollInterval.current) clearInterval(scrollInterval.current);
+      if (scrollTimeout.current) clearTimeout(scrollTimeout.current);
+    };
+  }, []);
 
   useEffect(() => { setSelectedYear(initialYear); }, [initialYear]);
 
@@ -624,8 +615,7 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
 
     const nextId = `input-${nextRow}-${editableColumns[nextColIdx].id}`;
 
-    setTimeout(() => {
-      const nextEl = document.getElementById(nextId) as HTMLInputElement;
+    const nextEl = document.getElementById(nextId) as HTMLInputElement;
       if (nextEl) {
         // Focus istantaneo senza far saltare la pagina
         nextEl.focus({ preventScroll: true });
@@ -683,7 +673,7 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
           }
         }
       }
-    }, 0);
+    
   };
   const handlePaste = (e: React.ClipboardEvent, startRowIndex: number, startColId: string) => {
     e.preventDefault();
@@ -969,10 +959,10 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
           <div className="flex-1 overflow-hidden relative h-full flex items-center">
 
             {/* Sfumatura sinistra (perfetta per la dark mode) */}
-            <div className="absolute left-0 top-0 bottom-0 w-6 bg-gradient-to-r from-amber-50 dark:from-slate-900 to-transparent z-10"></div>
+            <div className="absolute left-0 top-0 bottom-0 w-6 bg-linear-to-r from-amber-50 dark:from-slate-900 to-transparent z-10"></div>
 
             {/* Sfumatura destra */}
-            <div className="absolute right-0 top-0 bottom-0 w-6 bg-gradient-to-l from-amber-50 dark:from-slate-900 to-transparent z-10"></div>
+            <div className="absolute right-0 top-0 bottom-0 w-6 bg-linear-to-l from-amber-50 dark:from-slate-900 to-transparent z-10"></div>
 
             <motion.div
               className="whitespace-nowrap text-[11px] font-medium text-amber-800 dark:text-amber-200 flex gap-12 pl-4" // pl-4 per dare respiro iniziale
@@ -1042,8 +1032,8 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
                          p-2 font-bold text-center border-r border-slate-300 dark:border-slate-700 select-none transition-colors
                           ${col.width ? col.width : 'w-24'} 
                           ${col.id === 'total' ? 'bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200' : ''} 
-                          ${idx === 0 ? 'sticky left-0 bg-slate-100 dark:bg-slate-800 border-r-2 border-slate-300 dark:border-slate-600 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] dark:shadow-[2px_0_5px_-2px_rgba(0,0,0,0.5)] z-[200]' : 'z-[150]'}
-                          relative hover:!z-[9999]
+                          ${idx === 0 ? 'sticky left-0 bg-slate-100 dark:bg-slate-800 border-r-2 border-slate-300 dark:border-slate-600 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] dark:shadow-[2px_0_5px_-2px_rgba(0,0,0,0.5)] z-200' : 'z-150'}
+                          relative hover:z-9999!
                         `}
                       >
                         <div className="flex flex-col items-center justify-center leading-tight h-10 group/head relative">
@@ -1126,10 +1116,10 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
                   });
                   const isDivisorError = hasIndennita && workedDays === 0;
 
-                  // Colore Riga Validazione
+                  // Colore Riga Validazione: Premium UX Puntamento
                   let rowClass = isActiveRow
-                    ? 'bg-indigo-100/70 dark:bg-indigo-900/50 shadow-[inset_4px_0_0_0_#4f46e5] dark:shadow-[inset_4px_0_0_0_#818cf8] ring-1 ring-indigo-300 dark:ring-indigo-700 z-20 relative transition-all duration-300'
-                    : 'group hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors duration-150';
+                    ? 'bg-blue-50/80 dark:bg-indigo-950/60 shadow-[inset_6px_0_0_0_#3b82f6] dark:shadow-[inset_6px_0_0_0_#06b6d4] ring-2 ring-blue-400 dark:ring-cyan-500 z-30 relative transition-all duration-300'
+                    : 'group hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors duration-150 relative z-0';
                   if (isDayCountError) rowClass = 'bg-orange-50 hover:bg-orange-100 ring-1 ring-orange-200 z-10 relative';
                   if (isDivisorError) rowClass = 'bg-red-50 hover:bg-red-100 ring-1 ring-red-200 z-10 relative';
 
@@ -1175,8 +1165,8 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
                             className={`
                                 border-r border-b border-slate-300 dark:border-slate-700 p-0 relative transition-colors
                                 ${colIndex === 0 ? 'sticky left-0 bg-white dark:bg-slate-900 font-semibold text-slate-700 dark:text-slate-300 z-20 border-r-2 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] dark:shadow-[2px_0_5px_-2px_rgba(0,0,0,0.5)]' : ''}
-                                ${(isDayCountError || isDivisorError) && colIndex === 0 ? (isDivisorError ? '!bg-red-100 dark:!bg-red-900/60 text-red-800 dark:text-red-300' : '!bg-orange-100 dark:!bg-orange-900/60 text-orange-800 dark:text-orange-300') : ''}
-                                ${isActiveRow && colIndex === 0 && !isDayCountError && !isDivisorError ? '!bg-indigo-100 dark:!bg-indigo-900/60 text-indigo-800 dark:text-cyan-300' : ''}
+                                ${(isDayCountError || isDivisorError) && colIndex === 0 ? (isDivisorError ? 'bg-red-100! dark:bg-red-900/60! text-red-800 dark:text-red-300' : 'bg-orange-100! dark:bg-orange-900/60! text-orange-800 dark:text-orange-300') : ''}
+                                ${isActiveRow && colIndex === 0 && !isDayCountError && !isDivisorError ? 'bg-blue-100! dark:bg-indigo-900/80! text-blue-900 dark:text-cyan-300 font-black' : ''}
                                 ${isTotal ? 'bg-slate-50 dark:bg-slate-800/80 font-bold text-slate-800 dark:text-cyan-100 text-right pr-2' : ''}
                                 ${isVacation ? 'bg-amber-50/20' : ''}
                                 ${isVacationWarning ? 'ring-2 ring-inset ring-red-400/50' : ''}
@@ -1235,7 +1225,7 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
                                         w-full h-full bg-transparent px-2 text-right outline-none transition-colors duration-75 tabular-nums text-xs placeholder:text-transparent
                                         ${col.type === 'formula'
                                       ? 'cursor-not-allowed bg-indigo-50/50 dark:bg-indigo-900/10 text-indigo-700 font-black italic'
-                                      : `focus:bg-white dark:focus:bg-slate-950 focus:z-20 focus:ring-2 focus:ring-indigo-500 dark:focus:ring-cyan-500 focus:text-indigo-700 dark:focus:text-cyan-300 font-medium hover:bg-slate-50/80 dark:hover:bg-slate-800/80
+                                      : `focus:bg-white dark:focus:bg-slate-950 focus:z-50 focus:ring-4 focus:ring-offset-1 focus:ring-indigo-500 dark:focus:ring-offset-slate-900 dark:focus:ring-cyan-400 bg-white/50 dark:bg-slate-800/80 shadow-[0_0_15px_rgba(79,70,229,0.3)] focus:text-indigo-700 dark:focus:text-cyan-300 font-medium hover:bg-slate-50/80 dark:hover:bg-slate-800/80
                                                ${cellValue ? 'text-slate-900 dark:text-cyan-400' : 'text-slate-500 dark:text-slate-600'}`
                                     }
                                         ${isVacationWarning ? 'text-red-600 dark:text-red-400 font-black decoration-4 decoration-red-500 bg-[linear-gradient(45deg,transparent_45%,rgba(255,0,0,0.3)_50%,transparent_55%)]' : ''}
@@ -1277,15 +1267,15 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
                                         <AlertCircle size={12} /> Soglia Legale Superata
                                       </div>
                                       <div className="space-y-1.5">
-                                        <div className="flex justify-between items-center text-slate-300"><span>Hai inserito:</span> <span className="font-bold text-white text-xs">{formatInteger(vacDays)} gg</span></div>
+                                        <div className="flex justify-between items-center text-slate-300"><span>Hai inserito:</span> <span className="font-bold text-white text-xs">{formatDay(vacDays)} gg</span></div>
                                         <div className="flex justify-between items-center text-slate-300"><span>Massimo (Legale):</span> <span className="font-mono text-xs">{TETTO_FERIE} gg</span></div>
                                         <div className="flex justify-between items-center bg-red-500/20 px-2 py-1 rounded border border-red-500/30">
                                           <span className="text-red-300 font-bold">Eccedenza (Tagliata):</span>
-                                          <span className="font-black text-red-400 text-xs">+{formatInteger(eccedenza)} gg</span>
+                                          <span className="font-black text-red-400 text-xs">+{formatDay(eccedenza)} gg</span>
                                         </div>
                                         <div className="flex justify-between items-center bg-emerald-500/20 px-2 py-1 rounded border border-emerald-500/30">
                                           <span className="text-emerald-300 font-bold">Conteggiati:</span>
-                                          <span className="font-black text-emerald-400 text-xs">{formatInteger(utili)} gg</span>
+                                          <span className="font-black text-emerald-400 text-xs">{formatDay(utili)} gg</span>
                                         </div>
                                         <p className="text-[9px] text-slate-400 mt-2 italic leading-relaxed border-t border-slate-700 pt-1">
                                           Ai sensi della <strong>Sentenza Cass. 23/6/2022 n. 20216</strong>, il periodo minimo protetto è di 28 giorni. L'eccedenza non concorre al calcolo della retribuzione feriale.
@@ -1339,7 +1329,7 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
                     // Tutte le altre colonne
                     const cellBg = col.id === 'total' ? 'bg-slate-200 dark:bg-slate-700 text-slate-900 dark:text-slate-100' : 'bg-amber-100/50 dark:bg-amber-900/20';
                     return <td key={`total-${col.id}`} className={`border-r border-slate-300 dark:border-slate-700 px-2 py-3 text-right tabular-nums text-xs transition-colors ${cellBg}`}>
-                      {col.type === 'integer' ? (totalVal !== 0 ? formatInteger(totalVal) : '-') : (totalVal && totalVal !== 0 ? formatCurrency(totalVal) : '-')}
+                      {col.type === 'integer' ? (totalVal !== 0 ? formatDay(totalVal) : '-') : (totalVal && totalVal !== 0 ? formatCurrency(totalVal) : '-')}
                     </td>;
                   })}
                 </tr>
@@ -1483,7 +1473,7 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
               >
                 <div className="p-8 text-center relative overflow-hidden">
                   {/* Effetto luce rossa dietro */}
-                  <div className="absolute top-[-50%] left-[50%] -translate-x-1/2 w-48 h-48 bg-red-500/10 rounded-full blur-[40px] pointer-events-none"></div>
+                  <div className="absolute top-[-50%] left-[50%] -translate-x-1/2 w-48 h-48 bg-red-500/10 rounded-full blur-2xl pointer-events-none"></div>
 
                   <div className="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-5 bg-gradient-to-br from-red-100 to-rose-100 text-red-500 shadow-inner ring-4 ring-white relative z-10">
                     <Eraser className="w-10 h-10" strokeWidth={2} />

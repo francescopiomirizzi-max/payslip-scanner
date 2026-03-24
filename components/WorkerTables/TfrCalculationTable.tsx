@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom'; // <--- AGGIUNGI QUESTA RIGA
-import { AnnoDati, Worker, formatCurrency } from '../../types';
-import { Wallet, Printer, Edit3, Save, X, Info, Calculator, BookOpen, Calendar } from 'lucide-react';
+import { AnnoDati, Worker } from '../../types';
+import { formatCurrency } from '../../utils/formatters';
+import { Wallet, Printer, Edit3, Save, X, Info, Calculator, BookOpen, Calendar, FileSearch } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { calculateTFR } from '../../utils/tfrCalculator';
@@ -204,7 +205,7 @@ const TfrCalculationTable: React.FC<TfrCalculationTableProps> = ({
                     )}
                 </div>
 
-                <div className="absolute top-full mt-3 left-1/2 -translate-x-1/2 w-64 p-4 bg-slate-900/95 dark:bg-[#0B1120]/95 backdrop-blur-xl border border-slate-700/50 text-white rounded-2xl shadow-[0_20px_40px_-10px_rgba(0,0,0,0.4)] opacity-0 invisible group-hover/th:opacity-100 group-hover/th:visible transition-all duration-300 z-[999] text-left normal-case pointer-events-none transform group-hover/th:translate-y-0 translate-y-2">
+                <div className="absolute top-full mt-3 left-1/2 -translate-x-1/2 w-64 p-4 bg-slate-900/95 dark:bg-[#0B1120]/95 backdrop-blur-xl border border-slate-700/50 text-white rounded-2xl shadow-[0_20px_40px_-10px_rgba(0,0,0,0.4)] opacity-0 invisible group-hover/th:opacity-100 group-hover/th:visible transition-all duration-300 z-999 text-left normal-case pointer-events-none transform group-hover/th:translate-y-0 translate-y-2">
                     <div className="absolute -top-2 left-1/2 -translate-x-1/2 border-4 border-transparent border-b-slate-700/50"></div>
                     <div className="flex items-center gap-2 mb-2 border-b border-slate-700/50 pb-2">
                         <div className={`p-1.5 rounded-lg bg-white/10`}>
@@ -217,6 +218,22 @@ const TfrCalculationTable: React.FC<TfrCalculationTableProps> = ({
             </th>
         );
     };
+
+    const hasActualTfr = tfrData.some(row => row.imponibileLordo > 0 || row.fondoIniziale > 0);
+
+    if (!tfrData || !hasActualTfr) {
+        return (
+            <div className="flex flex-col items-center justify-center p-16 text-center mt-4 border-dashed border-2 border-slate-300 dark:border-slate-700/50 bg-white/40 dark:bg-slate-900/40 backdrop-blur-md rounded-2xl h-full min-h-[400px] shadow-lg transition-all">
+                <div className="w-24 h-24 mb-6 rounded-full bg-indigo-50 dark:bg-slate-800/80 flex items-center justify-center shadow-inner ring-4 ring-white dark:ring-slate-800">
+                    <FileSearch className="w-12 h-12 text-indigo-500 dark:text-cyan-400 animate-pulse" />
+                </div>
+                <h2 className="text-2xl font-black text-slate-800 dark:text-slate-200 mb-3 tracking-tight">Nessun TFR Calcolato</h2>
+                <p className="text-slate-500 dark:text-slate-400 max-w-md mb-8 leading-relaxed text-base font-medium">
+                    Non ci sono dati sufficienti per il calcolo del TFR. Assicurati che siano presenti importi spettanti nel tab "Gestione Dati" per gli anni lavorati.
+                </p>
+            </div>
+        );
+    }
 
     return (
         <div className="flex flex-col h-full bg-white dark:bg-[#0B1120] shadow-2xl rounded-2xl overflow-hidden border border-slate-200/60 dark:border-slate-800/60 transition-colors duration-300 select-none relative">
@@ -233,11 +250,11 @@ const TfrCalculationTable: React.FC<TfrCalculationTableProps> = ({
             <div className="bg-slate-900 dark:bg-slate-950 text-white px-6 py-4 flex items-center justify-between shrink-0 z-20 shadow-lg border-b border-slate-800">
 
                 <div className="flex items-center gap-4">
-                    <div className="flex items-center justify-center p-2.5 bg-gradient-to-br from-indigo-500/20 to-blue-500/10 border border-indigo-500/20 text-indigo-400 rounded-xl shadow-inner">
+                    <div className="flex items-center justify-center p-2.5 bg-linear-to-br from-indigo-500/20 to-blue-500/10 border border-indigo-500/20 text-indigo-400 rounded-xl shadow-inner">
                         <Calculator size={20} strokeWidth={2} />
                     </div>
                     <div>
-                        <h2 className="text-base font-black uppercase tracking-[0.1em] text-slate-100 leading-none">Rivalutazione TFR</h2>
+                        <h2 className="text-base font-black uppercase tracking-widest text-slate-100 leading-none">Rivalutazione TFR</h2>
 
                         {/* BADGE INTERATTIVO PUNTO ZERO (Nuovo Posizionamento) */}
                         <div className="mt-2">
@@ -266,10 +283,10 @@ const TfrCalculationTable: React.FC<TfrCalculationTableProps> = ({
                 <div>
                     <button
                         onClick={handlePrintTFR}
-                        disabled={tfrData.length === 0}
-                        className="group relative px-6 py-2.5 bg-gradient-to-br from-indigo-600 to-blue-700 text-white rounded-xl text-xs font-bold shadow-[0_0_20px_rgba(79,70,229,0.3)] hover:shadow-[0_0_30px_rgba(79,70,229,0.5)] transition-all duration-300 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed border border-indigo-400/30 overflow-hidden flex items-center gap-2"
+                        disabled={!hasActualTfr}
+                        className="group relative px-6 py-2.5 bg-linear-to-br from-indigo-600 to-blue-700 text-white rounded-xl text-xs font-bold shadow-[0_0_20px_rgba(79,70,229,0.3)] hover:shadow-[0_0_30px_rgba(79,70,229,0.5)] transition-all duration-300 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed border border-indigo-400/30 overflow-hidden flex items-center gap-2"
                     >
-                        <div className="absolute inset-0 -translate-x-full w-1/2 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-shine z-0"></div>
+                        <div className="absolute inset-0 -translate-x-full w-1/2 bg-linear-to-r from-transparent via-white/30 to-transparent animate-shine z-0"></div>
                         <Printer size={15} className="relative z-10 drop-shadow-md" />
                         <span className="relative z-10 tracking-wide uppercase text-[11px] font-black">Genera Report</span>
                     </button>
@@ -280,7 +297,7 @@ const TfrCalculationTable: React.FC<TfrCalculationTableProps> = ({
             <div className="flex-1 overflow-auto custom-scrollbar bg-white dark:bg-[#0B1120] relative">
                 <table className="w-full text-sm border-collapse table-fixed">
 
-                    <thead className="sticky top-0 z-[100] shadow-sm">
+                    <thead className="sticky top-0 z-100 shadow-sm">
                         <tr>
                             <HeaderTooltip align="center" title="Anno" colorTheme="slate" description="L'anno solare di riferimento per il calcolo della quota di accantonamento e della rivalutazione." />
                             <HeaderTooltip title="Fondo Iniziale" colorTheme="slate" description="Il TFR accumulato dal lavoratore fino al 31 Dicembre dell'anno precedente. Costituisce la base su cui calcolare l'interesse ISTAT." />
@@ -334,12 +351,12 @@ const TfrCalculationTable: React.FC<TfrCalculationTableProps> = ({
                                     ) : row.isPuntoZeroYear ? (
                                         <div className="flex flex-col items-end">
                                             <span className="text-[9px] uppercase tracking-widest font-black text-indigo-500 dark:text-indigo-400 mb-1 opacity-80">Base Storica (31/12)</span>
-                                            <span className="font-mono text-[14px] font-black tabular-nums bg-clip-text text-transparent bg-gradient-to-r from-slate-800 to-indigo-600 dark:from-slate-100 dark:to-indigo-400">
+                                            <span className="font-mono text-[14px] font-black tabular-nums bg-clip-text text-transparent bg-linear-to-r from-slate-800 to-indigo-600 dark:from-slate-100 dark:to-indigo-400">
                                                 {formatCurrency(row.fondoFinale)}
                                             </span>
                                         </div>
                                     ) : (
-                                        <span className="font-mono text-[14px] font-black tabular-nums bg-clip-text text-transparent bg-gradient-to-r from-slate-800 to-fuchsia-600 dark:from-slate-100 dark:to-fuchsia-400">
+                                        <span className="font-mono text-[14px] font-black tabular-nums bg-clip-text text-transparent bg-linear-to-r from-slate-800 to-fuchsia-600 dark:from-slate-100 dark:to-fuchsia-400">
                                             {formatCurrency(row.fondoFinale)}
                                         </span>
                                     )}
@@ -347,7 +364,7 @@ const TfrCalculationTable: React.FC<TfrCalculationTableProps> = ({
                             </tr>
                         ))}
 
-                        {tfrData.length === 0 && (
+                        {!hasActualTfr && (
                             <tr>
                                 <td colSpan={6} className="p-20 text-center">
                                     <div className="flex flex-col items-center justify-center">
@@ -381,7 +398,7 @@ const TfrCalculationTable: React.FC<TfrCalculationTableProps> = ({
                                 <td className="px-4 py-4 text-right bg-fuchsia-50/40 dark:bg-fuchsia-900/20 rounded-br-2xl">
                                     <div className="flex flex-col items-end">
                                         <span className="text-[9px] uppercase tracking-widest font-black text-fuchsia-500 dark:text-fuchsia-400 mb-1 opacity-80">TFR Spettante</span>
-                                        <span className="font-mono text-lg font-black tabular-nums bg-clip-text text-transparent bg-gradient-to-r from-slate-800 to-fuchsia-600 dark:from-slate-100 dark:to-fuchsia-400 drop-shadow-sm">
+                                        <span className="font-mono text-lg font-black tabular-nums bg-clip-text text-transparent bg-linear-to-r from-slate-800 to-fuchsia-600 dark:from-slate-100 dark:to-fuchsia-400 drop-shadow-sm">
                                             {formatCurrency(tfrData[tfrData.length - 1].fondoFinale)}
                                         </span>
                                     </div>
@@ -396,7 +413,7 @@ const TfrCalculationTable: React.FC<TfrCalculationTableProps> = ({
             {typeof document !== 'undefined' && createPortal(
                 <AnimatePresence>
                     {isModalOpen && (
-                        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xl" onClick={() => setIsModalOpen(false)}>
+                        <div className="fixed inset-0 z-99999 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xl" onClick={() => setIsModalOpen(false)}>
                             <motion.div
                                 initial={{ opacity: 0, scale: 0.9, y: 30 }}
                                 animate={{ opacity: 1, scale: 1, y: 0 }}

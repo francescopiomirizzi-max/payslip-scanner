@@ -219,8 +219,16 @@ const WorkerModal: React.FC<WorkerModalProps> = ({ isOpen, onClose, onConfirm, i
     // --- NUOVI STATI PER QR CODE ---
     const [qrSessionId, setQrSessionId] = useState('');
     const [isQrActive, setIsQrActive] = useState(false);
-    const pollingRef = useRef<boolean>(false);
     // Refs
+    const pollingRef = useRef<boolean>(false);
+
+    // --- CLEANUP GLOBALE POLLING (Anti-Memory Leak) ---
+    useEffect(() => {
+        return () => {
+            pollingRef.current = false;
+        };
+    }, []);
+
     const nomeRef = useRef<HTMLInputElement>(null);
     const cognomeRef = useRef<HTMLInputElement>(null);
     const ruoloRef = useRef<HTMLInputElement>(null);

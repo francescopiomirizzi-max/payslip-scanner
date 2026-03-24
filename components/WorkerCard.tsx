@@ -1,5 +1,6 @@
 import React, { useMemo, useState, useRef } from 'react';
 import { Worker, getColumnsByProfile } from '../types';
+import { parseLocalFloat } from '../utils/formatters';
 import { motion } from 'framer-motion';
 import { Tilt } from 'react-tilt';
 import {
@@ -17,20 +18,7 @@ const scrollbarStyles = `
   .custom-scrollbar:hover::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.3); }
 `;
 
-// --- 🔥 PARSER INTELLIGENTE (FONDAMENTALE) ---
-// Usiamo questo invece di parseFloatSafe importato, per garanzia assoluta
-const parseLocalFloat = (val: any) => {
-  if (!val) return 0;
-  if (typeof val === 'number') return val;
-  let str = val.toString();
-  // Logica Ibrida: Se c'è la virgola, è input utente (ITA).
-  if (str.includes(',')) {
-    str = str.replace(/\./g, ''); // Via i punti migliaia
-    str = str.replace(',', '.');  // Virgola diventa punto
-  }
-  const num = parseFloat(str);
-  return isNaN(num) ? 0 : num;
-};
+
 
 // --- COMPONENTE SPARKLINE (FRONTE) ---
 const Sparkline = ({ worker }: { worker: Worker }) => {
@@ -373,7 +361,7 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
     <>
       <style>{scrollbarStyles}</style>
       <motion.div variants={{ hidden: { opacity: 0, y: 30 }, show: { opacity: 1, y: 0 } }} className="relative w-full h-full [perspective:1500px]">
-        <motion.div animate={{ rotateY: isFlipped ? 180 : 0 }} transition={{ duration: 0.8, type: "spring", stiffness: 50, damping: 15 }} className="relative w-full h-full [transform-style:preserve-3d]">
+        <motion.div animate={{ rotateY: isFlipped ? 180 : 0 }} transition={{ type: "spring", stiffness: 350, damping: 30 }} className="relative w-full h-full [transform-style:preserve-3d]">
 
           {/* LATO FRONTALE */}
           <div className="w-full h-full [backface-visibility:hidden]">
@@ -439,9 +427,9 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
                       whileTap="tap"
                       variants={{ idle: { scale: 1 }, hover: { scale: 1.05 }, tap: { scale: 0.95 } }}
                       onClick={() => onOpenComplex(worker.id)}
-                      className="flex items-center justify-center gap-2 px-3 py-3.5 rounded-2xl bg-white/40 dark:bg-slate-900/40 border border-white/60 dark:border-slate-700/50 text-slate-500 dark:text-slate-400 text-[9px] font-black tracking-tighter shadow-sm hover:shadow-lg hover:border-white dark:hover:border-slate-500 hover:bg-white/80 dark:hover:bg-slate-800/80 backdrop-blur-md transition-all group"
+                      className="flex items-center justify-center gap-2 px-6 py-3 rounded-2xl bg-white/40 dark:bg-slate-900/40 border border-white/60 dark:border-slate-700/50 text-slate-500 dark:text-slate-300 text-[9px] font-black tracking-widest shadow-sm hover:shadow-lg hover:border-white dark:hover:border-slate-500 hover:bg-white/80 dark:hover:bg-slate-800/80 backdrop-blur-md transition-all group"
                     >
-                      <motion.div variants={{ idle: { rotate: 0, scale: 1 }, hover: { rotate: 90, scale: 1.2 } }} transition={{ type: "spring", stiffness: 200, damping: 10 }}>
+                      <motion.div variants={{ idle: { rotate: 0, scale: 1 }, hover: { rotate: 90, scale: 1.2 } }} transition={{ type: "spring", stiffness: 350, damping: 30 }}>
                         <LayoutGrid className="w-4 h-4" />
                       </motion.div>
                       <span className="group-hover:text-current transition-colors" style={{ color: 'inherit' }}>GESTIONE BUSTE PAGA</span>
@@ -453,7 +441,7 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
                       whileTap="tap"
                       variants={{ idle: { scale: 1, boxShadow: "0 0 0px 0px rgba(0,0,0,0)" }, hover: { scale: 1.05, boxShadow: `0 0 25px -5px ${theme.rawColor.glow}` }, tap: { scale: 0.95 } }}
                       onClick={() => onOpenSimple(worker.id)}
-                      className="relative overflow-hidden flex items-center justify-center gap-2 px-4 py-3.5 rounded-2xl text-white text-[10px] font-black tracking-tighter shadow-lg transition-all"
+                      className="relative overflow-hidden flex items-center justify-center gap-2 px-6 py-3 rounded-2xl text-white text-[10px] font-black tracking-widest shadow-lg transition-all"
                       style={theme.gradientStyle}
                     >
                       <motion.div variants={{ idle: { y: 0 }, hover: { y: [0, -4, 0], transition: { repeat: Infinity, duration: 0.6 } } }}>

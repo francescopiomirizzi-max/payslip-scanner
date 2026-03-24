@@ -1,6 +1,7 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { useIsland } from '../IslandContext'; // 👈 ECCOLA QUI!
 import { Worker, AnnoDati, YEARS, getColumnsByProfile } from '../types';
+import { parseLocalFloat, formatCurrency, formatNumber, formatLongDate } from '../utils/formatters';
 import {
   Printer,
   ArrowLeft,
@@ -14,7 +15,9 @@ import {
   Info,
   Ticket,
   Eye,
-  EyeOff
+  EyeOff,
+  FileQuestion,
+  FileSearch
 } from 'lucide-react';
 import { RelazioneModal } from '../RelazioneModal';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -29,29 +32,7 @@ interface TableComponentProps {
   startClaimYear: number;
 }
 
-const formatCurrency = (value: number) =>
-  new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(value);
-
-const formatNumber = (value: number) =>
-  new Intl.NumberFormat('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
-
-// --- PARSER INTELLIGENTE (IBRIDO AI/UTENTE) ---
-// Fondamentale per leggere correttamente sia 1.200,50 che 1200.50
-const parseLocalFloat = (val: any) => {
-  if (!val) return 0;
-  if (typeof val === 'number') return val;
-
-  let str = val.toString();
-
-  // Se c'è una virgola, è formato UTENTE ITALIANO (es. 1.200,50)
-  if (str.includes(',')) {
-    str = str.replace(/\./g, ''); // Via i punti migliaia
-    str = str.replace(',', '.');  // Virgola diventa punto
-  }
-
-  const num = parseFloat(str);
-  return isNaN(num) ? 0 : num;
-};
+// --- FUNZIONI UTILITY RIMOSSE ---
 
 // --- FUNZIONE PDF ---
 const handleDownloadPDF = (
@@ -410,7 +391,7 @@ const TableComponent: React.FC<TableComponentProps> = ({ worker, onBack, onEdit,
 
   const handlePrintDiffida = () => {
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-    const today = new Date().toLocaleDateString('it-IT', { year: 'numeric', month: 'long', day: 'numeric' });
+    const today = formatLongDate(new Date());
 
     doc.setFont("times", "roman");
     doc.setTextColor(0, 0, 0);
@@ -597,8 +578,8 @@ Distinti saluti.
             <div>
               <h1 className="text-2xl font-bold tracking-wide text-slate-100">Prospetto Ufficiale</h1>
               <div className="flex items-center gap-2">
-                <p className="text-sm uppercase font-medium text-slate-400 tracking-wider">Report Annuale</p>
-                <span className={`text-[10px] px-2 py-0.5 rounded border flex items-center gap-1 ${includeExFest ? 'text-amber-400 border-amber-500 bg-amber-500/10' : 'text-slate-400 border-slate-500'}`}>
+                <p className="text-sm uppercase font-medium text-slate-400 dark:text-slate-200 tracking-wider">Report Annuale</p>
+                <span className={`text-[10px] px-2 py-0.5 rounded border flex items-center gap-1 ${includeExFest ? 'text-amber-400 border-amber-500 bg-amber-500/10' : 'text-slate-400 dark:text-slate-200 border-slate-500'}`}>
                   {includeExFest ? <AlertCircle size={10} /> : null}
                   {includeExFest ? 'Tetto 32gg' : 'Tetto 28gg'}
                 </span>
@@ -660,7 +641,7 @@ Distinti saluti.
             </button>
 
             {/* TOOLTIP/MODALE INFO */}
-            <AnimatePresence>
+            <AnimatePresence mode="wait">
               {showInfoTetto && (
                 <motion.div
                   initial={{ opacity: 0, y: 10, scale: 0.95 }}
@@ -749,6 +730,20 @@ Distinti saluti.
       <div id="report-content" className="w-full flex justify-center print:block">
         <div className="print-container mt-12 print:mt-0 w-full max-w-[1400px]">
           {/* Rimossa la larghezza forzata e i bordi ingombranti in stampa */}
+          {tableData.length === 0 ? (
+            <div className="flex flex-col items-center justify-center p-16 text-center mt-8 border-dashed border-2 border-slate-300 dark:border-slate-700/50 bg-white/40 dark:bg-slate-900/40 backdrop-blur-md rounded-2xl h-full min-h-[400px] shadow-lg transition-all">
+              <div className="w-24 h-24 mb-6 rounded-full bg-indigo-50 dark:bg-slate-800/80 flex items-center justify-center shadow-inner ring-4 ring-white dark:ring-slate-800">
+                <FileSearch className="w-12 h-12 text-indigo-500 dark:text-cyan-400 animate-pulse" />
+              </div>
+              <h2 className="text-2xl font-black text-slate-800 dark:text-slate-200 mb-3 tracking-tight">Nessuna Griglia Elaborata</h2>
+              <p className="text-slate-500 dark:text-slate-400 max-w-md mb-8 leading-relaxed text-base font-medium">
+                La tabella classica è vuota. Non ci sono mesi registrati. Inserisci i dati nel tab "Gestione Dati" per generare il prospetto generale.
+              </p>
+              <button onClick={onBack} className="px-8 py-3.5 bg-gradient-to-br from-indigo-500 to-blue-600 text-white font-bold rounded-xl shadow-lg hover:-translate-y-0.5 active:scale-95 transition-all duration-300 ring-4 ring-indigo-500/20">
+                 Torna alla Dashboard
+              </button>
+            </div>
+          ) : (
           <div className="bg-white text-black dark:text-black border-2 border-black dark:border-slate-800 rounded-2xl overflow-hidden shadow-2xl">
 
             <div className="bg-gray-200 border-b border-black text-center py-6">
@@ -826,6 +821,7 @@ Distinti saluti.
               </tfoot>
             </table>
           </div>
+          )}
         </div>
       </div>
 

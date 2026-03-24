@@ -13,7 +13,8 @@ import { calculateLegalInterestsAndRevaluation } from '../istatService'; // <---
 // Import necessario per i calcoli della stampa
 import QRScannerModal from '../components/QRScannerModal';
 import DynamicIsland from '../components/DynamicIsland'; // <--- AGGIUNGI QUESTA RIGA
-import { Worker, AnnoDati, parseFloatSafe, getColumnsByProfile, MONTH_NAMES, formatCurrency, YEARS } from '../types';
+import { Worker, AnnoDati, getColumnsByProfile, MONTH_NAMES, YEARS } from '../types';
+import { parseLocalFloat, parseFloatSafe, formatCurrency } from '../utils/formatters';
 import {
   ArrowLeft,
   FileSpreadsheet,
@@ -189,6 +190,8 @@ const MovingGrid = () => (
 const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateData, onUpdateStatus, onBack, onOpenReport }) => {
   const [monthlyInputs, setMonthlyInputs] = useState<AnnoDati[]>(Array.isArray(worker?.anni) ? worker.anni : []);
   
+  
+
   // DYNAMIC SYNC: Lo stato locale comanda, il Parent riceve aggiornamenti in automatico
   const lastSyncRef = useRef<AnnoDati[]>(monthlyInputs);
   useEffect(() => {
@@ -450,6 +453,29 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
     }
   }, [batchNotification]);
 
+  // --- GLOBAL SHORTCUTS (ESC & CTRL+S) ---
+  useEffect(() => {
+    const handleGlobalShortcuts = (e: KeyboardEvent) => {
+      // ESC per chiudere i modali
+      if (e.key === 'Escape') {
+        if (showSplit) setShowSplit(false);
+        if (isQRModalOpen) setIsQRModalOpen(false);
+        if (showReport) setShowReport(false);
+        if (isAiTfrModalOpen) setIsAiTfrModalOpen(false);
+        if (activeTickerModal) setActiveTickerModal(null);
+        if (isExplainerOpen) setIsExplainerOpen(false);
+      }
+      // CTRL+S o CMD+S per forzare sync visivo
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        onUpdateData(monthlyInputs);
+        setBatchNotification({ type: 'success', msg: 'Dati sincronizzati e salvati correttamente.' });
+      }
+    };
+    window.addEventListener('keydown', handleGlobalShortcuts);
+    return () => window.removeEventListener('keydown', handleGlobalShortcuts);
+  }, [showSplit, isQRModalOpen, showReport, isAiTfrModalOpen, activeTickerModal, isExplainerOpen, onUpdateData, monthlyInputs]);
+
 
   // --- FUNZIONE CHE RICEVE I DATI DAL TELEFONO (ANTI-SOVRASCRITTURA DEFINITIVA FIXATA) ---
   const handleQRData = (aiResult: any) => {
@@ -606,18 +632,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
     });
   };
 
-  // ✨ FUNZIONE DI SUPPORTO 2: Converte in modo sicuro i numeri con la virgola europea
-  const parseLocalFloat = (val: any): number => {
-    if (val === undefined || val === null || val === '') return 0;
-    if (typeof val === 'number') return val;
-    let str = String(val).trim();
-    if (str.includes('.') && str.includes(',')) {
-      str = str.replace(/\./g, '');
-    }
-    str = str.replace(',', '.');
-    const parsed = parseFloat(str);
-    return isNaN(parsed) ? 0 : parsed;
-  };
+  // ✨ FUNZIONE DI SUPPORTO 2: Importata da utils/formatters
   // --- 🔥 2. LOGICA UPLOAD COLLEGATA ALLA DYNAMIC ISLAND (CON PARSER TITANIUM V2) ---
   const handleBatchUpload = async (e: React.ChangeEvent<HTMLInputElement>, isSingle = false) => {
     const files = e.target.files;
@@ -1968,7 +1983,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
     const isPast = steps.indexOf(activeStatus) > steps.indexOf(step);
 
     // Mappa colori stato
-    let colorClass = 'text-slate-400 border-slate-300 dark:text-slate-500 dark:border-slate-700 bg-white dark:bg-slate-800';
+    let colorClass = 'text-slate-400 dark:text-slate-200 border-slate-300 dark:text-slate-500 dark:text-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800';
     if (isActive || isPast) {
       if (step === 'analisi' || step === 'trattativa') colorClass = 'text-white bg-red-500 border-red-500 dark:bg-red-600 dark:border-red-500 dark:shadow-[0_0_10px_rgba(220,38,38,0.5)]'; // Rosso
       else if (step === 'pronta' || step === 'inviata') colorClass = 'text-white bg-amber-500 border-amber-500 dark:bg-amber-600 dark:border-amber-500 dark:shadow-[0_0_10px_rgba(217,119,6,0.5)]'; // Giallo
@@ -1986,7 +2001,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
         <div className={`w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all shadow-sm ${colorClass}`}>
           <Icon className="w-5 h-5" />
         </div>
-        <span className={`text-[9px] font-bold uppercase tracking-wider transition-colors ${isActive ? 'text-slate-800 dark:text-cyan-300' : 'text-slate-400 dark:text-slate-500'}`}>{label}</span>
+        <span className={`text-[9px] font-bold uppercase tracking-wider transition-colors ${isActive ? 'text-slate-800 dark:text-cyan-300' : 'text-slate-400 dark:text-slate-500 dark:text-slate-300'}`}>{label}</span>
       </div>
     );
   };
@@ -2021,7 +2036,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
     >
 
       {/* --- 1. GLOBAL MAGNETIC DROPZONE --- */}
-      <AnimatePresence>
+      <AnimatePresence mode="wait">
         {isGlobalDragging && (
           <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -2041,7 +2056,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
 
             {/* 2. VIA DI FUGA VISIVA: Bottone esplicito per rassicurare l'utente */}
             <div className="mt-12 flex flex-col items-center">
-              <span className="text-slate-400 text-sm mb-4">oppure</span>
+              <span className="text-slate-400 dark:text-slate-200 text-sm mb-4">oppure</span>
               <button
                 onClick={(e) => {
                   e.stopPropagation(); // Evita che il click si propaghi al div genitore
@@ -2065,7 +2080,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
         <motion.div
           initial={{ y: -50, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
-          transition={{ type: "spring", stiffness: 100, damping: 20 }}
+          transition={{ type: "spring", stiffness: 300, damping: 30 }}
           className="glass-panel max-w-[1800px] mx-auto rounded-[2rem] p-4 flex justify-between items-center gap-6"
         >
           <div className="flex items-center gap-6 shrink-0">
@@ -2089,7 +2104,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
               {/* 2. NUOVO SELETTORE ANNO (Stile "Capsula Spaziale") */}
               <div className="relative group h-11 w-full">
                 {/* Glow arancione dietro */}
-                <div className="absolute inset-0 bg-orange-500 rounded-xl blur opacity-20 group-hover:opacity-50 transition duration-500"></div>
+                <div className="absolute inset-0 bg-orange-500 rounded-xl blur opacity-20 group-hover:opacity-50 dark:opacity-80 transition duration-500"></div>
 
                 <div className="relative flex items-center justify-between bg-slate-900 text-white rounded-xl border border-slate-700 group-hover:border-orange-500/50 transition-colors w-full h-full px-3 shadow-xl overflow-hidden">
 
@@ -2099,13 +2114,13 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
                       <CalendarClock size={18} strokeWidth={2.5} />
                     </div>
                     <div className="flex flex-col justify-center">
-                      <span className="text-[8px] uppercase font-bold text-slate-400 leading-none mb-0.5 tracking-widest">Start Year</span>
+                      <span className="text-[8px] uppercase font-bold text-slate-400 dark:text-slate-200 leading-none mb-0.5 tracking-widest">Start Year</span>
                       <span className="text-lg font-black text-white leading-none tracking-tight">{startClaimYear}</span>
                     </div>
                   </div>
 
                   {/* Freccia decorativa */}
-                  <ChevronDown size={16} className="text-slate-500 group-hover:text-orange-500 transition-colors z-10 pointer-events-none" />
+                  <ChevronDown size={16} className="text-slate-500 dark:text-slate-300 group-hover:text-orange-500 transition-colors z-10 pointer-events-none" />
 
                   {/* IL VERO SELECT (Invisibile sopra, ma con opzioni stilizzate) */}
                   <select
@@ -2141,7 +2156,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
                     {worker.profilo}
                   </div>
                 </div>
-                <div className="flex items-center gap-3 text-sm font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mt-1.5 transition-colors">
+                <div className="flex items-center gap-3 text-sm font-bold text-slate-400 dark:text-slate-500 dark:text-slate-300 uppercase tracking-wider mt-1.5 transition-colors">
                   <Briefcase className="w-4 h-4" />
                   <span>{worker.ruolo}</span>
                 </div>
@@ -2205,7 +2220,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
 
 
         {/* TIMELINE STATO VERTENZA E PARAMETRI (A TENDINA) */}
-        <div className="lg:col-span-2 bg-white/70 dark:bg-slate-900/60 backdrop-blur-md rounded-[1.5rem] px-6 py-4 shadow-sm dark:shadow-[0_0_20px_rgba(34,211,238,0.15)] border border-white/60 dark:border-cyan-400 relative overflow-hidden transition-all duration-300">
+        <div className="lg:col-span-2 glass-panel px-6 py-4 shadow-sm dark:shadow-[0_0_20px_rgba(34,211,238,0.15)] border border-white/60 dark:border-cyan-400 relative overflow-hidden transition-all duration-300">
 
           {/* Header: Pulsante apri/chiudi a sinistra, Toggle sempre visibili a destra */}
           <div className="flex justify-between items-center">
@@ -2219,7 +2234,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
               </div>
               STATO VERTENZA
               <motion.div animate={{ rotate: isTimelineOpen ? 180 : 0 }} transition={{ duration: 0.3 }}>
-                <ChevronDown className="w-4 h-4 text-slate-400 dark:text-cyan-500/50 group-hover:text-indigo-500 dark:group-hover:text-cyan-400" />
+                <ChevronDown className="w-4 h-4 text-slate-400 dark:text-slate-200 dark:text-cyan-500/50 group-hover:text-indigo-500 dark:group-hover:text-cyan-400" />
               </motion.div>
             </button>
             {/* 👇 IL NUOVO TICKER CENTRALE (Incollato qui) 👇 */}
@@ -2242,8 +2257,8 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
                         <stat.icon className="w-5 h-5" strokeWidth={2.5} />
                       </div>
                       <div className="flex flex-col justify-center">
-                        <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest leading-tight transition-colors flex items-center gap-1">
-                          {stat.label} <span className="text-[8px] opacity-60 font-bold">(?)</span>
+                        <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 dark:text-slate-300 uppercase tracking-widest leading-tight transition-colors flex items-center gap-1">
+                          {stat.label} <span className="text-[8px] opacity-60 dark:opacity-90 font-bold">(?)</span>
                         </span>
                         <span className={`text-base font-black ${stat.textColor} leading-tight transition-colors`}>
                           {stat.value}
@@ -2261,7 +2276,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
                 onClick={() => setIncludeExFest(!includeExFest)}
                 className={`group flex items-center gap-1.5 px-3 py-1.5 rounded-full font-bold text-xs transition-all duration-300 border ${includeExFest
                   ? 'bg-gradient-to-r from-amber-100 to-orange-100 dark:from-amber-900/60 dark:to-orange-900/60 text-amber-800 dark:text-amber-300 border-amber-300/50 dark:border-amber-500/50 shadow-[0_1px_6px_rgba(251,191,36,0.2)] dark:shadow-[0_0_10px_rgba(245,158,11,0.3)]'
-                  : 'bg-transparent text-slate-500 dark:text-slate-400 border-transparent hover:bg-white dark:hover:bg-slate-800 hover:border-amber-200/60 dark:hover:border-amber-700/50 hover:text-amber-600 dark:hover:text-amber-400'
+                  : 'bg-transparent text-slate-500 dark:text-slate-400 dark:text-slate-200 border-transparent hover:bg-white dark:hover:bg-slate-800 hover:border-amber-200/60 dark:hover:border-amber-700/50 hover:text-amber-600 dark:hover:text-amber-400'
                   }`}
                 title="Includi/Escludi Ex-Festività"
               >
@@ -2273,7 +2288,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
                 onClick={() => setIncludeTickets(!includeTickets)}
                 className={`group flex items-center gap-1.5 px-3 py-1.5 rounded-full font-bold text-xs transition-all duration-300 border ml-1 ${includeTickets
                   ? 'bg-gradient-to-r from-indigo-100 to-blue-100 dark:from-indigo-900/60 dark:to-blue-900/60 text-indigo-800 dark:text-indigo-300 border-indigo-300/50 dark:border-indigo-500/50 shadow-[0_1px_6px_rgba(99,102,241,0.2)] dark:shadow-[0_0_10px_rgba(99,102,241,0.3)]'
-                  : 'bg-transparent text-slate-400 dark:text-slate-500 border-transparent hover:bg-white dark:hover:bg-slate-800 hover:border-indigo-200/60 dark:hover:border-indigo-700/50 hover:text-indigo-600 dark:hover:text-indigo-400 line-through opacity-70 hover:opacity-100 hover:no-underline'
+                  : 'bg-transparent text-slate-400 dark:text-slate-500 dark:text-slate-300 border-transparent hover:bg-white dark:hover:bg-slate-800 hover:border-indigo-200/60 dark:hover:border-indigo-700/50 hover:text-indigo-600 dark:hover:text-indigo-400 line-through opacity-70 hover:opacity-100 hover:no-underline'
                   }`}
                 title="Includi/Escludi Ticket Restaurant"
               >
@@ -2284,7 +2299,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
           </div>
 
           {/* TIMELINE A SCOMPARSA */}
-          <AnimatePresence>
+          <AnimatePresence mode="wait">
             {isTimelineOpen && (
               <motion.div
                 initial={{ height: 0, opacity: 0 }}
@@ -2325,7 +2340,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
               // Spegne la luce quando esci
               if (commandBarRef.current) commandBarRef.current.style.setProperty('--spotlight-opacity', '0');
             }}
-            className="relative flex flex-wrap p-2 bg-white/60 dark:bg-slate-900/60 backdrop-blur-2xl border border-white/50 dark:border-slate-700/50 rounded-2xl shadow-2xl gap-3 w-full justify-center"
+            className="relative flex flex-wrap p-2 glass-panel gap-3 w-full justify-center"
           >
             {/* La Luce della Torcia (Ora è Indaco/Azzurrina e usa variabili native) */}
             <div
@@ -2352,9 +2367,9 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
               disabled={isBatchProcessing}
               className={`group relative px-6 py-3 rounded-xl font-bold text-sm transition-all duration-500 flex items-center gap-3 overflow-hidden border-2 shrink-0
                   ${isBatchProcessing
-                  ? 'bg-slate-100 border-slate-200 opacity-50 cursor-not-allowed'
+                  ? 'bg-slate-100 border-slate-200 opacity-50 dark:opacity-80 cursor-not-allowed'
                   // A riposo: Vetro grigio. Hover: Si oscura e si accende di Fucsia SENZA sollevarsi.
-                  : 'bg-white/40 dark:bg-slate-800/40 text-slate-600 dark:text-slate-400 border-transparent hover:border-transparent hover:shadow-[0_0_40px_rgba(217,70,239,0.3)]'
+                  : 'bg-white/40 dark:bg-slate-800/40 text-slate-600 dark:text-slate-400 dark:text-slate-200 border-transparent hover:border-transparent hover:shadow-[0_0_40px_rgba(217,70,239,0.3)]'
                 }`}
             >
               {/* 1. SFONDO SCURO CHE APPARE IN HOVER */}
@@ -2395,7 +2410,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
               className={`group relative px-6 py-3 rounded-xl font-bold text-sm transition-all duration-300 flex items-center gap-2 overflow-hidden border-2 shrink-0
                   ${showSplit
                   ? 'text-white shadow-lg shadow-pink-500/30 border-white/20' // Attivo: Bordo visibile
-                  : 'bg-white/40 dark:bg-slate-800/40 text-slate-600 dark:text-slate-400 border-transparent hover:bg-white dark:hover:bg-slate-700 hover:text-pink-500 hover:shadow-md' // Inattivo: Bordo TRASPARENTE
+                  : 'bg-white/40 dark:bg-slate-800/40 text-slate-600 dark:text-slate-400 dark:text-slate-200 border-transparent hover:bg-white dark:hover:bg-slate-700 hover:text-pink-500 hover:shadow-md' // Inattivo: Bordo TRASPARENTE
                 }`}
               style={showSplit ? { backgroundImage: 'linear-gradient(135deg, #ec4899 0%, #f43f5e 100%)' } : {}}
             >
@@ -2414,7 +2429,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
               className={`group relative px-6 py-3 rounded-xl font-bold text-sm transition-all duration-300 flex items-center gap-2 overflow-hidden border-2 shrink-0
                   ${isAnalyzing
                   ? 'bg-slate-100 border-slate-200 cursor-not-allowed opacity-70'
-                  : 'bg-white/40 dark:bg-slate-800/40 text-slate-600 dark:text-slate-400 border-transparent hover:border-cyan-400/50 hover:shadow-[0_0_20px_rgba(6,182,212,0.4)]'
+                  : 'bg-white/40 dark:bg-slate-800/40 text-slate-600 dark:text-slate-400 dark:text-slate-200 border-transparent hover:border-cyan-400/50 hover:shadow-[0_0_20px_rgba(6,182,212,0.4)]'
                 }`}
             >
 
@@ -2461,7 +2476,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
                       `}</style>
 
                     <div className="scan-icon-animate transition-transform">
-                      <ScanLine className="w-5 h-5 transition-colors duration-300 text-slate-500 group-hover:text-cyan-400" />
+                      <ScanLine className="w-5 h-5 transition-colors duration-300 text-slate-500 dark:text-slate-300 group-hover:text-cyan-400" />
                     </div>
 
                     <span className="font-bold transition-colors duration-300 group-hover:text-white tracking-wide flex gap-1.5">
@@ -2509,10 +2524,10 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
 
               {/* Testo del Bottone */}
               <div className="flex flex-col items-start text-left relative z-10">
-                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 group-hover:text-indigo-300 transition-colors uppercase tracking-widest leading-none mb-1">
+                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 dark:text-slate-200 group-hover:text-indigo-300 transition-colors uppercase tracking-widest leading-none mb-1">
                   Connetti
                 </span>
-                <span className="text-sm font-black text-slate-600 dark:text-slate-400 group-hover:text-white transition-colors leading-none">
+                <span className="text-sm font-black text-slate-600 dark:text-slate-400 dark:text-slate-200 group-hover:text-white transition-colors leading-none">
                   Mobile Scan
                 </span>
               </div>
@@ -2531,7 +2546,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
               className={`group relative px-6 py-3 rounded-xl font-bold text-sm transition-all duration-300 flex items-center gap-2 overflow-hidden border-2 shrink-0
                   ${activeTab === 'input'
                   ? 'text-white shadow-lg shadow-blue-500/30 border-white/20'
-                  : 'bg-white/40 dark:bg-slate-800/40 text-slate-600 dark:text-slate-400 border-transparent hover:bg-white dark:hover:bg-slate-800 hover:text-blue-500 dark:hover:text-cyan-400 hover:shadow-md'
+                  : 'bg-white/40 dark:bg-slate-800/40 text-slate-600 dark:text-slate-400 dark:text-slate-200 border-transparent hover:bg-white dark:hover:bg-slate-800 hover:text-blue-500 dark:hover:text-cyan-400 hover:shadow-md'
                 }`}
               style={activeTab === 'input' ? { backgroundImage: 'linear-gradient(135deg, #2563eb 0%, #06b6d4 100%)' } : {}}
             >
@@ -2546,7 +2561,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
               className={`group relative px-6 py-3 rounded-xl font-bold text-sm transition-all duration-300 flex items-center gap-2 overflow-hidden border-2 shrink-0
                   ${activeTab === 'calc'
                   ? 'text-white shadow-lg shadow-emerald-500/30 border-white/20'
-                  : 'bg-white/40 dark:bg-slate-800/40 text-slate-600 dark:text-slate-400 border-transparent hover:bg-white dark:hover:bg-slate-800 hover:text-emerald-500 dark:hover:text-emerald-400 hover:shadow-md'
+                  : 'bg-white/40 dark:bg-slate-800/40 text-slate-600 dark:text-slate-400 dark:text-slate-200 border-transparent hover:bg-white dark:hover:bg-slate-800 hover:text-emerald-500 dark:hover:text-emerald-400 hover:shadow-md'
                 }`}
               style={activeTab === 'calc' ? { backgroundImage: 'linear-gradient(135deg, #10b981 0%, #14b8a6 100%)' } : {}}
             >
@@ -2561,7 +2576,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
               className={`group relative px-6 py-3 rounded-xl font-bold text-sm transition-all duration-300 flex items-center gap-2 overflow-hidden border-2 shrink-0
                   ${activeTab === 'pivot'
                   ? 'text-white shadow-lg shadow-amber-500/30 border-white/20'
-                  : 'bg-white/40 dark:bg-slate-800/40 text-slate-600 dark:text-slate-400 border-transparent hover:bg-white dark:hover:bg-slate-800 hover:text-amber-500 dark:hover:text-amber-400 hover:shadow-md'
+                  : 'bg-white/40 dark:bg-slate-800/40 text-slate-600 dark:text-slate-400 dark:text-slate-200 border-transparent hover:bg-white dark:hover:bg-slate-800 hover:text-amber-500 dark:hover:text-amber-400 hover:shadow-md'
                 }`}
               style={activeTab === 'pivot' ? { backgroundImage: 'linear-gradient(135deg, #f59e0b 0%, #fb923c 100%)' } : {}}
             >
@@ -2576,7 +2591,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
               className={`group relative px-6 py-3 rounded-xl font-bold text-sm transition-all duration-300 flex items-center gap-2 overflow-hidden border-2 shrink-0
                   ${activeTab === 'tfr'
                   ? 'text-white shadow-lg shadow-fuchsia-500/30 border-white/20'
-                  : 'bg-white/40 dark:bg-slate-800/40 text-slate-600 dark:text-slate-400 border-transparent hover:bg-white dark:hover:bg-slate-800 hover:text-fuchsia-500 hover:shadow-md'
+                  : 'bg-white/40 dark:bg-slate-800/40 text-slate-600 dark:text-slate-400 dark:text-slate-200 border-transparent hover:bg-white dark:hover:bg-slate-800 hover:text-fuchsia-500 hover:shadow-md'
                 }`}
               style={activeTab === 'tfr' ? { backgroundImage: 'linear-gradient(135deg, #d946ef 0%, #a855f7 100%)' } : {}}
             >
@@ -2631,7 +2646,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
                       <Bot className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 text-white opacity-5 pointer-events-none" />
 
                       {isExplaining ? (
-                        <div className="flex flex-col items-center justify-center h-full gap-6 text-slate-400">
+                        <div className="flex flex-col items-center justify-center h-full gap-6 text-slate-400 dark:text-slate-200">
                           <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 2, ease: "linear" }}>
                             <Loader2 className="w-12 h-12 text-fuchsia-500" />
                           </motion.div>
@@ -2696,7 +2711,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
           </div>
 
           {/* --- SPLIT SCREEN SIDEBAR (MULTI-FILE) --- */}
-          <AnimatePresence>
+          <AnimatePresence mode="wait">
             {showSplit && (
               <motion.div
                 initial={{ width: 0, opacity: 0, x: -50 }}
@@ -2807,7 +2822,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
                         }} className="p-2 bg-red-900/50 hover:bg-red-900/80 text-red-400 rounded-lg ml-2 transition-colors"><Trash2 className="w-4 h-4" /></button>
                       </>
                     )}
-                    <button onClick={() => setShowSplit(false)} className="p-2 hover:bg-slate-700 rounded-lg text-slate-400 hover:text-white ml-2" title="Chiudi Visore"><X className="w-5 h-5" /></button>
+                    <button onClick={() => setShowSplit(false)} className="p-2 hover:bg-slate-700 rounded-lg text-slate-400 dark:text-slate-200 hover:text-white ml-2" title="Chiudi Visore"><X className="w-5 h-5" /></button>
                   </div>
                 </div>
                 {/* BODY DEL VISORE */}
@@ -2890,14 +2905,14 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
                     <div
                       onClick={() => fileInputRef.current?.click()}
                       // Aggiunto 'group' per gestire l'hover
-                      className="group flex flex-col items-center justify-center text-slate-500 hover:text-indigo-400 transition-all cursor-pointer p-8 border-2 border-dashed border-slate-700 rounded-3xl hover:border-indigo-500 hover:bg-slate-900/50 w-64 h-64"
+                      className="group flex flex-col items-center justify-center text-slate-500 dark:text-slate-300 hover:text-indigo-400 transition-all cursor-pointer p-8 border-2 border-dashed border-slate-700 rounded-3xl hover:border-indigo-500 hover:bg-slate-900/50 w-64 h-64"
                     >
                       {/* Icona che rimbalza in hover */}
                       <div className="mb-4 p-4 bg-slate-900 rounded-full group-hover:scale-110 transition-transform duration-300 border border-slate-800 group-hover:border-indigo-500/30">
                         <Upload className="w-8 h-8 group-hover:-translate-y-1 transition-transform duration-500 ease-in-out" />
                       </div>
-                      <p className="font-bold text-sm uppercase tracking-wider text-slate-400 group-hover:text-white transition-colors">Carica Buste Paga</p>
-                      <p className="text-[10px] mt-2 opacity-50 text-center px-4 group-hover:opacity-100 transition-opacity">
+                      <p className="font-bold text-sm uppercase tracking-wider text-slate-400 dark:text-slate-200 group-hover:text-white transition-colors">Carica Buste Paga</p>
+                      <p className="text-[10px] mt-2 opacity-50 dark:opacity-80 text-center px-4 group-hover:opacity-100 transition-opacity">
                         Trascina qui o clicca.<br />Supporta PDF, JPG, PNG (Max 12)
                       </p>
                       <p className="text-[10px] mt-1 opacity-40 pointer-events-none">Carica fino a 12 file insieme!</p>
@@ -2914,7 +2929,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
         </div>
       </div>
       {/* --- HUD INTELLIGENZA ARTIFICIALE (Plasma & Supernova) --- */}
-      <AnimatePresence>
+      <AnimatePresence mode="wait">
         {isBatchProcessing && !showSplit && (
           <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -2923,12 +2938,12 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
             <motion.div
               initial={{ scale: 0.8, y: 50 }}
               animate={{ scale: showSupernova ? 1.05 : 1, y: 0 }}
-              transition={{ type: "spring", stiffness: 300, damping: 20 }}
+              transition={{ type: "spring", stiffness: 300, damping: 30 }}
               className={`p-8 sm:p-12 rounded-[2.5rem] flex flex-col items-center max-w-sm w-full relative overflow-hidden border transition-all duration-500
                 ${showSupernova ? 'bg-emerald-950 border-emerald-500 shadow-[0_0_150px_rgba(16,185,129,0.8)]' : 'bg-slate-900 border-slate-700 shadow-[0_0_120px_rgba(217,70,239,0.15)]'}`}
             >
               {/* FLASH SUPERNOVA (Bianco abbagliante che svanisce) */}
-              <AnimatePresence>
+              <AnimatePresence mode="wait">
                 {showSupernova && (
                   <motion.div
                     initial={{ opacity: 1 }} animate={{ opacity: 0 }} transition={{ duration: 0.8 }}
@@ -2966,7 +2981,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
               </h3>
 
               <p className="text-white font-medium text-xl text-center mb-8 relative z-10">
-                Analisi busta paga <span className={`text-4xl font-black mx-1.5 ${showSupernova ? 'text-emerald-400 drop-shadow-[0_0_10px_rgba(16,185,129,0.5)]' : 'text-fuchsia-300 drop-shadow-[0_0_10px_rgba(217,70,239,0.5)]'}`}>{batchProgress}</span> di <span className="text-2xl text-slate-400 mx-1.5">{batchTotal}</span>
+                Analisi busta paga <span className={`text-4xl font-black mx-1.5 ${showSupernova ? 'text-emerald-400 drop-shadow-[0_0_10px_rgba(16,185,129,0.5)]' : 'text-fuchsia-300 drop-shadow-[0_0_10px_rgba(217,70,239,0.5)]'}`}>{batchProgress}</span> di <span className="text-2xl text-slate-400 dark:text-slate-200 mx-1.5">{batchTotal}</span>
               </p>
 
               {/* PROGRESS BAR */}
@@ -2995,7 +3010,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
         >
           <motion.div
             initial={{ scale: 0.9, y: 30 }} animate={{ scale: 1, y: 0 }}
-            transition={{ type: "spring", stiffness: 200, damping: 20 }}
+            transition={{ type: "spring", stiffness: 300, damping: 30 }}
             className="p-10 rounded-[3rem] flex flex-col items-center relative overflow-hidden bg-slate-900 border border-cyan-500/20 shadow-[0_0_80px_rgba(6,182,212,0.15)]"
           >
             {/* Luce di fondo ciano */}
@@ -3019,7 +3034,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
               <div className="absolute -bottom-1 -right-1 w-4 h-4 border-b-4 border-r-4 border-cyan-400 rounded-br-lg"></div>
 
               {/* Il Documento al centro */}
-              <FileText className="w-20 h-20 text-slate-500 opacity-50" />
+              <FileText className="w-20 h-20 text-slate-500 dark:text-slate-300 opacity-50 dark:opacity-80" />
 
               {/* IL RAGGIO LASER */}
               <div className="absolute inset-0 overflow-hidden rounded-xl z-20">
@@ -3040,7 +3055,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
 
             <div className="flex items-center gap-2 relative z-10">
               <Loader2 className="w-3.5 h-3.5 animate-spin text-cyan-500" />
-              <p className="text-[10px] uppercase tracking-[0.2em] font-bold text-slate-400">
+              <p className="text-[10px] uppercase tracking-[0.2em] font-bold text-slate-400 dark:text-slate-200">
                 Tempo stimato: ~20 secondi
               </p>
             </div>
@@ -3048,13 +3063,13 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
         </motion.div>
       )}
       {/* --- TOAST NOTIFICATION (Premium Modern Style) --- */}
-      <AnimatePresence>
+      <AnimatePresence mode="wait">
         {batchNotification && (
           <motion.div
             initial={{ opacity: 0, x: 100, scale: 0.9 }}
             animate={{ opacity: 1, x: 0, scale: 1 }}
             exit={{ opacity: 0, x: 100, scale: 0.9 }}
-            transition={{ type: "spring", stiffness: 400, damping: 30 }}
+            transition={{ type: "spring", stiffness: 300, damping: 30 }}
             className="fixed bottom-8 right-8 z-[250] flex flex-col gap-2"
           >
             <div className={`relative flex items-start gap-3 p-4 pr-12 w-80 rounded-2xl shadow-2xl backdrop-blur-2xl border border-white/10 overflow-hidden
@@ -3093,7 +3108,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
               {/* Tasto Chiudi */}
               <button
                 onClick={() => setBatchNotification(null)}
-                className="absolute top-4 right-4 p-1 bg-white/5 hover:bg-white/20 rounded-full transition-colors text-slate-400 hover:text-white"
+                className="absolute top-4 right-4 p-1 bg-white/5 hover:bg-white/20 rounded-full transition-colors text-slate-400 dark:text-slate-200 hover:text-white"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
@@ -3120,14 +3135,14 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
           includeTickets={includeTickets}
         />
         {/* --- ✨ MODALE AI RADAR TFR (Vero Pop-up a schermo intero) --- */}
-        <AnimatePresence>
+        <AnimatePresence mode="wait">
           {isAiTfrModalOpen && (
             <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xl" onClick={() => setIsAiTfrModalOpen(false)}>
               <motion.div
                 initial={{ opacity: 0, scale: 0.9, y: 30 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.9, y: 30 }}
-                transition={{ type: "spring", stiffness: 300, damping: 25 }}
+                transition={{ type: "spring", stiffness: 300, damping: 30 }}
                 className="relative w-full max-w-md bg-slate-900 rounded-[2.5rem] shadow-[0_0_80px_rgba(99,102,241,0.2)] border border-slate-700 overflow-hidden"
                 onClick={(e) => e.stopPropagation()}
               >
@@ -3139,7 +3154,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
                     <Wallet className="w-8 h-8 text-indigo-400 relative z-10" strokeWidth={1.5} />
                   </div>
                   <h3 className="text-2xl font-black text-white tracking-tight">TFR Storico Rilevato!</h3>
-                  <p className="text-sm text-slate-400 mt-2 font-medium">L'Intelligenza Artificiale ha letto questi dati dal documento. Vuoi impostarli come base di calcolo?</p>
+                  <p className="text-sm text-slate-400 dark:text-slate-200 mt-2 font-medium">L'Intelligenza Artificiale ha letto questi dati dal documento. Vuoi impostarli come base di calcolo?</p>
                 </div>
 
                 <div className="px-8 pb-8 space-y-5 relative z-10">
@@ -3149,7 +3164,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
                 `}</style>
 
                   <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest pl-1">Importo Trovato</label>
+                    <label className="text-[10px] font-bold text-slate-500 dark:text-slate-300 uppercase tracking-widest pl-1">Importo Trovato</label>
                     <div className="relative group">
                       <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                         <span className="text-indigo-400 font-black text-lg">€</span>
@@ -3162,7 +3177,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
                   </div>
 
                   <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest pl-1">Anno di riferimento</label>
+                    <label className="text-[10px] font-bold text-slate-500 dark:text-slate-300 uppercase tracking-widest pl-1">Anno di riferimento</label>
                     <div className="relative group">
                       <input
                         type="number" value={aiTfrYear} onChange={(e) => setAiTfrYear(e.target.value)}
@@ -3172,7 +3187,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
                   </div>
 
                   <div className="flex gap-3 pt-4">
-                    <button onClick={handleIgnoreAiTfr} className="flex-1 py-4 rounded-xl font-bold text-sm text-slate-400 bg-slate-800/50 hover:bg-slate-800 hover:text-white transition-colors border border-slate-700">Ignora</button>
+                    <button onClick={handleIgnoreAiTfr} className="flex-1 py-4 rounded-xl font-bold text-sm text-slate-400 dark:text-slate-200 bg-slate-800/50 hover:bg-slate-800 hover:text-white transition-colors border border-slate-700">Ignora</button>
                     <button onClick={handleSaveAiTfr} className="flex-[2] py-4 rounded-xl font-black text-sm bg-indigo-600 hover:bg-indigo-500 text-white shadow-[0_0_20px_rgba(79,70,229,0.4)] transition-all active:scale-95 flex items-center justify-center gap-2">
                       <Save size={18} /> CONFERMA
                     </button>
@@ -3184,14 +3199,14 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
         </AnimatePresence>
       </AnimatePresence>
       {/* --- INFO MODAL (TICKER) --- */}
-      <AnimatePresence>
+      <AnimatePresence mode="wait">
         {activeTickerModal && (
           <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md" onClick={() => setActiveTickerModal(null)}>
             <motion.div
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              transition={{ type: "spring", stiffness: 300, damping: 25 }}
+              transition={{ type: "spring", stiffness: 300, damping: 30 }}
               // Ingrandito da max-w-sm a max-w-lg per far respirare il testo
               className="relative w-full max-w-lg bg-slate-900 rounded-[2rem] shadow-[0_0_60px_rgba(79,70,229,0.3)] border border-slate-700 overflow-hidden"
               onClick={(e) => e.stopPropagation()}
@@ -3205,7 +3220,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
                   <div className="w-12 h-12 bg-slate-800 rounded-2xl border border-slate-700 text-indigo-400 flex items-center justify-center font-serif text-2xl font-black italic shadow-inner">
                     i
                   </div>
-                  <button onClick={() => setActiveTickerModal(null)} className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-full transition-colors">
+                  <button onClick={() => setActiveTickerModal(null)} className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-400 dark:text-slate-200 hover:text-white rounded-full transition-colors">
                     <X className="w-4 h-4" />
                   </button>
                 </div>

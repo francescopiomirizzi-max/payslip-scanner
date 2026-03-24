@@ -3,12 +3,15 @@ import {
   AnnoDati,
   YEARS,
   MONTH_NAMES,
-  formatCurrency,
-  formatInteger,
   getColumnsByProfile,
-  ProfiloAzienda,
-  parseFloatSafe
+  ProfiloAzienda
 } from '../../types';
+import {
+  parseLocalFloat,
+  parseFloatSafe,
+  formatCurrency,
+  formatDay
+} from '../../utils/formatters';
 import {
   ChevronRight,
   ChevronDown,
@@ -20,7 +23,8 @@ import {
   AlertCircle,
   Percent,
   CalendarPlus,
-  Info
+  Info,
+  FileSearch
 } from 'lucide-react';
 
 interface AnnualCalculationTableProps {
@@ -38,23 +42,7 @@ const MONTH_COLORS = [
   'bg-orange-600 shadow-orange-200', 'bg-slate-500 shadow-slate-200', 'bg-indigo-500 shadow-indigo-200'
 ];
 
-// --- 1. PARSER INTELLIGENTE (LO STESSO DI MonthlyDataGrid) ---
-// Questo garantisce che i numeri siano letti allo stesso modo ovunque
-const parseLocalFloat = (val: any) => {
-  if (!val) return 0;
-  if (typeof val === 'number') return val;
 
-  let str = val.toString();
-
-  // Logica Ibrida: Se c'è la virgola, è input utente (ITA). Se no, è AI (USA).
-  if (str.includes(',')) {
-    str = str.replace(/\./g, ''); // Via i punti migliaia
-    str = str.replace(',', '.');  // Virgola diventa punto
-  }
-
-  const num = parseFloat(str);
-  return isNaN(num) ? 0 : num;
-};
 
 const AnnualCalculationTable: React.FC<AnnualCalculationTableProps> = ({
   data = [],
@@ -318,6 +306,28 @@ const AnnualCalculationTable: React.FC<AnnualCalculationTableProps> = ({
     setTimeout(() => setIsCopied(false), 2000);
   };
 
+  const hasActualData = useMemo(() => {
+    return data.some(d => 
+      parseLocalFloat(d.daysWorked) > 0 || 
+      parseLocalFloat(d.daysVacation) > 0 ||
+      calculateMonthIndemnity(d) > 0
+    );
+  }, [data, profilo]);
+
+  if (!data || !hasActualData) {
+    return (
+      <div className="flex flex-col items-center justify-center p-16 text-center mt-4 border-dashed border-2 border-slate-300 dark:border-slate-700/50 bg-white/40 dark:bg-slate-900/40 backdrop-blur-md rounded-2xl h-full min-h-[400px] shadow-lg transition-all">
+        <div className="w-24 h-24 mb-6 rounded-full bg-blue-50 dark:bg-slate-800/80 flex items-center justify-center shadow-inner ring-4 ring-white dark:ring-slate-800">
+          <FileSearch className="w-12 h-12 text-blue-500 dark:text-cyan-400 animate-pulse" />
+        </div>
+        <h2 className="text-2xl font-black text-slate-800 dark:text-slate-200 mb-3 tracking-tight">Nessun Dato Calcolabile</h2>
+        <p className="text-slate-500 dark:text-slate-400 max-w-md mb-8 leading-relaxed text-base font-medium">
+          La tabella di calcolo annuale è vuota. Inserisci i dati mensili (ore o giornate lavorate/ferie) nel tab "Gestione Dati" per generare automaticamente il prospetto differenze.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="bg-white dark:bg-slate-900 shadow-xl dark:shadow-[0_0_20px_rgba(34,211,238,0.15)] rounded-lg overflow-hidden border border-slate-200 dark:border-cyan-400 flex flex-col h-full transition-all duration-300">
       <div className="p-3 bg-slate-800 text-white font-bold text-sm tracking-wide flex justify-between items-center shrink-0">
@@ -397,7 +407,7 @@ const AnnualCalculationTable: React.FC<AnnualCalculationTableProps> = ({
                       {row.year} {row.isReferenceYear && <span className="text-[9px] uppercase border border-slate-300 dark:border-slate-600 px-1 rounded bg-white dark:bg-slate-800 ml-2">Rif. Media</span>}
                     </td>
                     <td className="p-2 border-r border-slate-300 dark:border-slate-700 text-right font-bold dark:text-slate-200">{formatCurrency(row.sumIndennitaTotali)}</td>
-                    <td className="p-2 border-r border-slate-300 dark:border-slate-700 text-right font-bold dark:text-slate-200">{formatInteger(row.sumGiorniLav)}</td>
+                    <td className="p-2 border-r border-slate-300 dark:border-slate-700 text-right font-bold dark:text-slate-200">{formatDay(row.sumGiorniLav)}</td>
 
                     <td className={`p-2 border-r border-slate-300 dark:border-slate-700 text-right font-mono font-bold relative group cursor-help ${row.isReferenceYear ? 'dark:text-slate-300' : 'text-amber-800 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20'}`}>
                       {formatCurrency(row.avgApplied)}
@@ -413,9 +423,9 @@ const AnnualCalculationTable: React.FC<AnnualCalculationTableProps> = ({
 
                     <td className="p-2 border-r border-slate-300 dark:border-slate-700 text-right font-bold dark:text-slate-200">
                       <div className="flex flex-col items-end leading-none">
-                        <span>{formatInteger(row.sumGiorniFerieUtili)}</span>
+                        <span>{formatDay(row.sumGiorniFerieUtili)}</span>
                         {row.sumGiorniFerieReali > row.sumGiorniFerieUtili && (
-                          <span className="text-[9px] font-normal opacity-70">su {formatInteger(row.sumGiorniFerieReali)}</span>
+                          <span className="text-[9px] font-normal opacity-70">su {formatDay(row.sumGiorniFerieReali)}</span>
                         )}
                       </div>
                     </td>
@@ -472,14 +482,14 @@ const AnnualCalculationTable: React.FC<AnnualCalculationTableProps> = ({
                       </td>
 
                       <td className="px-2 border-r border-slate-200 dark:border-slate-700/50 text-right text-xs text-slate-600 dark:text-slate-300">{month.indennitaMensile !== 0 ? formatCurrency(month.indennitaMensile) : '-'}</td>
-                      <td className="px-2 border-r border-slate-200 dark:border-slate-700/50 text-right text-xs text-slate-600 dark:text-slate-300">{month.giorniLav !== 0 ? formatInteger(month.giorniLav) : '-'}</td>
+                      <td className="px-2 border-r border-slate-200 dark:border-slate-700/50 text-right text-xs text-slate-600 dark:text-slate-300">{month.giorniLav !== 0 ? formatDay(month.giorniLav) : '-'}</td>
 
                       <td className="px-2 border-r border-slate-200 dark:border-slate-700/50 text-right text-xs font-mono text-amber-700/50 dark:text-amber-500/50">{formatCurrency(row.avgApplied)}</td>
 
                       <td className="px-2 border-r border-slate-200 dark:border-slate-700/50 text-right text-xs bg-yellow-50/50 dark:bg-amber-900/10">
                         <div className="flex flex-col items-end">
                           <span className={month.giorniFerieReali > month.giorniUtili ? "text-red-600 dark:text-red-400 font-bold" : "text-emerald-700 dark:text-emerald-400 font-bold"}>
-                            {formatInteger(month.giorniUtili)}
+                            {formatDay(month.giorniUtili)}
                           </span>
                         </div>
                       </td>
