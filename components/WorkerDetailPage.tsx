@@ -218,6 +218,20 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
     const saved = localStorage.getItem(`startYear_${worker.id}`);
     return saved ? parseInt(saved) : 2008;
   });
+  // --- RANGE ANNI DINAMICO CENTRALIZZATO (Single Source of Truth) ---
+  const dynamicYears = useMemo(() => {
+    const DEFAULT_START = 2007;
+    const END_YEAR = 2025;
+    // Se l'utente ha impostato un anno specifico, il range parte da (startClaimYear - 1)
+    // per includere l'anno di riferimento per la media. Altrimenti mostra il default [2007..2025]
+    const effectiveStart = startClaimYear > DEFAULT_START + 1
+      ? startClaimYear - 1
+      : DEFAULT_START;
+    return Array.from(
+      { length: END_YEAR - effectiveStart + 1 },
+      (_, i) => effectiveStart + i
+    );
+  }, [startClaimYear]);
   // Stato per il Modale Informativo del Ticker
   const [activeTickerModal, setActiveTickerModal] = useState<{ title: string, content: React.ReactNode } | null>(null);
   // ✨ LOGICA ANNO CORRENTE INTELLIGENTE (Fixata per evitare anni fantasma)
@@ -227,7 +241,8 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
       // Filtriamo gli anni considerandoli validi solo se c'è un imponibile o dei giorni lavorati
       const activeInputs = worker.anni.filter((d: AnnoDati) =>
         (d.imponibile_tfr_mensile && d.imponibile_tfr_mensile > 0) ||
-        (d.daysWorked && Number(d.daysWorked) > 0)
+        (d.daysWorked && Number(d.daysWorked) > 0) ||
+        (d.daysVacation && Number(d.daysVacation) > 0)
       );
 
       const anniCompilati = activeInputs.map((d: AnnoDati) => Number(d.year)).filter((y: number) => !isNaN(y));
@@ -2678,6 +2693,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
                           onYearChange={setCurrentYear}
                           profilo={worker.profilo}
                           onCellFocus={handleCellFocus}
+                          years={dynamicYears}
                         />
                       </div>
                     )}
@@ -2685,13 +2701,13 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
                     {activeTab === 'calc' && (
                       <div className="h-full overflow-auto custom-scrollbar pr-2">
                         {/* Passiamo l'interruttore alla tabella aggiungendo includeTickets={includeTickets} */}
-                        <AnnualCalculationTable data={monthlyInputs} profilo={worker.profilo} onDataChange={handleDataChange} includeTickets={includeTickets} startClaimYear={startClaimYear} />
+                        <AnnualCalculationTable data={monthlyInputs} profilo={worker.profilo} onDataChange={handleDataChange} includeTickets={includeTickets} startClaimYear={startClaimYear} years={dynamicYears} />
                       </div>
                     )}
 
                     {activeTab === 'pivot' && (
                       <div className="h-full overflow-auto custom-scrollbar pr-2">
-                        <IndemnityPivotTable data={monthlyInputs} profilo={worker.profilo} startClaimYear={startClaimYear} />
+                        <IndemnityPivotTable data={monthlyInputs} profilo={worker.profilo} startClaimYear={startClaimYear} years={dynamicYears} />
                       </div>
                     )}
                     {activeTab === 'tfr' && (

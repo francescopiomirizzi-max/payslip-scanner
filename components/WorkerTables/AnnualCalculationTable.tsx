@@ -33,6 +33,7 @@ interface AnnualCalculationTableProps {
   onDataChange: (newData: AnnoDati[]) => void;
   includeTickets?: boolean;
   startClaimYear: number;
+  years: number[];  // Range dinamico controllato dal parent
 }
 
 const MONTH_COLORS = [
@@ -49,7 +50,8 @@ const AnnualCalculationTable: React.FC<AnnualCalculationTableProps> = ({
   profilo,
   onDataChange,
   includeTickets = true,
-  startClaimYear
+  startClaimYear,
+  years
 }) => {
   const [expandedYears, setExpandedYears] = useState<Set<number>>(new Set());
   const [isCopied, setIsCopied] = useState(false);
@@ -171,7 +173,9 @@ const AnnualCalculationTable: React.FC<AnnualCalculationTableProps> = ({
     });
 
     // 2. COSTRUZIONE RIGHE ANNUALI
-    const availableYears = Array.from(new Set(safeData.map(d => d.year))).sort((a, b) => a - b);
+    const availableYears = Array.from(new Set(safeData.map(d => d.year)))
+      .filter(y => years.includes(y))
+      .sort((a, b) => a - b);
 
     // FIX FONDAMENTALE: ferieCumulateCounter deve essere DENTRO il .map ma FUORI dal ciclo mesi
     // In questo modo si resetta ogni anno (nuovo plafond ferie) ma si accumula mese per mese.

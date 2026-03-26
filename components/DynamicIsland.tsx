@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     Bot, Calculator, Search, X, Loader2,
@@ -30,13 +30,13 @@ const getIslandStyles = (mode: string, isExpanded: boolean, uploadState: any) =>
 
     switch (mode) {
         case 'idle':
-            return `${base} bg-slate-400/10 dark:bg-slate-950/10 border border-slate-300/20 dark:border-cyan-500/10 rounded-full shadow-none hover:backdrop-blur-2xl hover:bg-white/80 dark:hover:bg-slate-900/90 hover:border-slate-300 dark:hover:border-cyan-400/50 hover:shadow-[0_10px_30px_rgba(0,0,0,0.1)] dark:hover:shadow-[0_0_15px_rgba(6,182,212,0.3)]`;
+            return `${base} bg-white/20 dark:bg-slate-900/30 border border-white/20 dark:border-cyan-500/15 rounded-full shadow-sm hover:backdrop-blur-2xl hover:bg-white/60 dark:hover:bg-slate-900/70 hover:border-slate-300 dark:hover:border-cyan-400/40 hover:shadow-[0_10px_30px_rgba(0,0,0,0.08)] dark:hover:shadow-[0_0_20px_rgba(6,182,212,0.25)]`;
         case 'dropzone':
             return `${base} bg-slate-950/90 border-2 border-fuchsia-500 rounded-[2.5rem] shadow-[0_0_50px_rgba(217,70,239,0.5)]`;
         case 'ticker':
             return `${base} bg-white/90 dark:bg-slate-950/90 border border-emerald-500/50 rounded-full shadow-[0_10px_30px_rgba(16,185,129,0.3)]`;
         default:
-            return `${base} bg-white/90 dark:bg-slate-950/90 border border-slate-300 dark:border-slate-700 rounded-[2rem] shadow-[0_20px_40px_rgba(0,0,0,0.5)]`;
+            return `${base} bg-white/70 dark:bg-slate-950/70 backdrop-blur-2xl border border-white/30 dark:border-cyan-500/10 rounded-[2rem] shadow-[0_20px_40px_rgba(0,0,0,0.15)] dark:shadow-[0_20px_40px_rgba(0,0,0,0.5)]`;
     }
 };
 
@@ -306,8 +306,21 @@ Regole d'ingaggio: Rispondi in modo preciso, tecnico ma sintetico. Fornisci rife
 
     return (
         <div ref={islandRef} className="fixed top-6 left-1/2 -translate-x-1/2 z-[9999] flex flex-col items-center pointer-events-none group/island print:hidden">
-            <motion.div layout className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full blur-[30px] -z-10 transition-colors duration-700"
-                style={{ backgroundColor: getGlowColor(), width: mode === 'idle' ? '120px' : mode === 'dropzone' ? '300px' : '400px', height: mode === 'idle' ? '30px' : '100px' }} />
+            <motion.div
+                layout
+                className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full blur-[40px] -z-10"
+                animate={{
+                    backgroundColor: getGlowColor(),
+                    width: mode === 'idle' ? ['90px', '160px', '90px'] : mode === 'dropzone' ? '300px' : '400px',
+                    height: mode === 'idle' ? ['20px', '50px', '20px'] : '100px',
+                    opacity: mode === 'idle' ? [0.3, 0.9, 0.3] : 1,
+                    scale: mode === 'idle' ? [0.9, 1.15, 0.9] : 1,
+                }}
+                transition={mode === 'idle'
+                    ? { repeat: Infinity, duration: 4, ease: "easeInOut" }
+                    : { duration: 0.7 }
+                }
+            />
 
             <motion.div
                 layout
@@ -327,12 +340,27 @@ Regole d'ingaggio: Rispondi in modo preciso, tecnico ma sintetico. Fornisci rife
                                                         mode === 'uploading' ? (isUploadExpanded ? '300px' : uploadState.isFinishing ? '280px' : '260px') : '320px',
                     minHeight: (mode === 'idle' || mode === 'notify' || mode === 'ticker' || mode === 'quick_actions' || (mode === 'uploading' && !isUploadExpanded)) ? '40px' : 'auto'
                 }}
-                // ✨ FIX: L'EFFETTO HEAD SHAKE (Tremolio se c'è un errore)
+                // ✨ BREATHING GLOW: boxShadow pulsante in idle + Head Shake su errore
                 animate={
                     (mode === 'uploading' && uploadState.isError) || display === 'Errore'
                         ? { x: [0, -8, 8, -6, 6, -3, 3, 0] }
-                        : { x: 0 }
+                        : {
+                            x: 0,
+                            boxShadow: mode === 'idle'
+                                ? [
+                                    `0 0 15px 2px ${getGlowColor()}, 0 0 30px 5px rgba(6,182,212,0)`,
+                                    `0 0 25px 8px ${getGlowColor()}, 0 0 50px 15px rgba(6,182,212,0.25)`,
+                                    `0 0 15px 2px ${getGlowColor()}, 0 0 30px 5px rgba(6,182,212,0)`
+                                  ]
+                                : `0 0 20px 5px ${getGlowColor()}`
+                          }
                 }
+                // ✨ HOVER INTENSIFICATION: Il glow esplode morbidamente al passaggio del mouse
+                whileHover={mode === 'idle' ? {
+                    boxShadow: `0 0 35px 12px ${getGlowColor()}, 0 0 60px 20px rgba(6,182,212,0.35)`,
+                    scale: 1.03,
+                    transition: { duration: 0.4, ease: "easeOut" }
+                } : undefined}
             >
                 <AnimatePresence mode="wait">
 
@@ -340,7 +368,7 @@ Regole d'ingaggio: Rispondi in modo preciso, tecnico ma sintetico. Fornisci rife
                     {mode === 'uploading' && (() => {
                         // ✨ BLOCCO 1 SOSTITUITO: I NUOVI COLORI E OMBRE PER I BAGLIORI
                         const activeTheme = uploadState.type === 'batch' ? {
-                            bg: 'bg-gradient-to-br from-violet-900 via-[#8b5cf6] to-fuchsia-800',
+                            bg: 'bg-linear-to-br from-violet-900 via-[#8b5cf6] to-fuchsia-800',
                             laser: 'border-fuchsia-400 shadow-[0_0_12px_1px_#d946ef]', // Updated rings
                             sparkle: 'text-fuchsia-200', // Robot color
                             timeline: 'bg-cyan-400 shadow-[0_0_12px_#22d3ee,0_0_4px_#fff]',
@@ -350,7 +378,7 @@ Regole d'ingaggio: Rispondi in modo preciso, tecnico ma sintetico. Fornisci rife
                             border: 'border-fuchsia-400 shadow-[0_4px_12px_rgba(217,70,239,0.2)]',
                             laserBar: 'bg-fuchsia-400'
                         } : uploadState.type === 'mobile' ? {
-                            bg: 'bg-gradient-to-br from-slate-900 via-indigo-600 to-blue-800',
+                            bg: 'bg-linear-to-br from-slate-900 via-indigo-600 to-blue-800',
                             laser: 'border-cyan-400 shadow-[0_0_12px_1px_#22d3ee]',
                             sparkle: 'text-cyan-200',
                             timeline: 'bg-cyan-400 shadow-[0_0_12px_#22d3ee,0_0_4px_#fff]',
@@ -360,7 +388,7 @@ Regole d'ingaggio: Rispondi in modo preciso, tecnico ma sintetico. Fornisci rife
                             border: 'border-cyan-400 shadow-[0_4px_12px_rgba(34,211,238,0.2)]',
                             laserBar: 'bg-indigo-400'
                         } : {
-                            bg: 'bg-gradient-to-br from-slate-900 via-cyan-600 to-sky-800',
+                            bg: 'bg-linear-to-br from-slate-900 via-cyan-600 to-sky-800',
                             laser: 'border-cyan-400 shadow-[0_0_12px_1px_#22d3ee]',
                             sparkle: 'text-cyan-200',
                             timeline: 'bg-cyan-400 shadow-[0_0_12px_#22d3ee,0_0_4px_#fff]',
@@ -392,7 +420,7 @@ Regole d'ingaggio: Rispondi in modo preciso, tecnico ma sintetico. Fornisci rife
 
                                 {/* Livello di Completamento (Verde o Rosso) che appare in morbida dissolvenza */}
                                 <motion.div
-                                    className={`absolute inset-0 z-0 ${uploadState.isError ? 'bg-gradient-to-br from-red-800 to-red-600' : 'bg-gradient-to-br from-emerald-500 to-teal-400'}`}
+                                    className={`absolute inset-0 z-0 ${uploadState.isError ? 'bg-linear-to-br from-red-800 to-red-600' : 'bg-linear-to-br from-emerald-500 to-teal-400'}`}
                                     initial={{ opacity: 0 }}
                                     animate={{ opacity: uploadState.isFinishing ? 1 : 0 }}
                                     transition={{ duration: 0.6, ease: "easeInOut" }}
@@ -410,8 +438,8 @@ Regole d'ingaggio: Rispondi in modo preciso, tecnico ma sintetico. Fornisci rife
                                     </div>
                                 )}
 
-                                <div className="absolute top-0 left-[5%] right-[5%] h-[1px] bg-gradient-to-r from-transparent via-white/50 to-transparent pointer-events-none z-10"></div>
-                                <div className="absolute top-0 left-0 right-0 h-[40px] bg-gradient-to-b from-white/20 to-transparent pointer-events-none z-10"></div>
+                                <div className="absolute top-0 left-[5%] right-[5%] h-[1px] bg-linear-to-r from-transparent via-white/50 to-transparent pointer-events-none z-10"></div>
+                                <div className="absolute top-0 left-0 right-0 h-[40px] bg-linear-to-b from-white/20 to-transparent pointer-events-none z-10"></div>
 
                                 {/* HEADER COMPATTO */}
                                 <motion.div layout="position" className="relative z-20 flex items-center justify-between px-4 h-[40px] shrink-0 w-full">
@@ -616,7 +644,7 @@ Regole d'ingaggio: Rispondi in modo preciso, tecnico ma sintetico. Fornisci rife
                                                     >
                                                         {/* ✨ RIFLESSO OLOGRAFICO (GLASS SWEEP) */}
                                                         <motion.div
-                                                            className="absolute inset-0 z-0 bg-gradient-to-r from-transparent via-white/20 dark:via-white/5 to-transparent skew-x-12 pointer-events-none"
+                                                            className="absolute inset-0 z-0 bg-linear-to-r from-transparent via-white/20 dark:via-white/5 to-transparent skew-x-12 pointer-events-none"
                                                             animate={{ left: ['-100%', '200%'] }}
                                                             transition={{ repeat: Infinity, duration: 3, ease: "easeInOut", repeatDelay: 1.5 }}
                                                         />
@@ -649,7 +677,7 @@ Regole d'ingaggio: Rispondi in modo preciso, tecnico ma sintetico. Fornisci rife
                                                                                     isCurrent ? `bg-white dark:bg-slate-900 border-2 ${activeTheme.border} scale-110 z-10 shadow-lg` :
                                                                                         'bg-slate-100/50 dark:bg-slate-800/30 border-slate-200/50 dark:border-slate-700/50 opacity-50'}`}
                                                                         >
-                                                                            <div className="absolute top-0 right-0 w-2.5 h-2.5 bg-gradient-to-bl from-transparent via-slate-200 to-slate-300 dark:via-slate-600 dark:to-slate-700 rounded-bl-sm z-10 shadow-[-1px_1px_2px_rgba(0,0,0,0.1)]"></div>
+                                                                            <div className="absolute top-0 right-0 w-2.5 h-2.5 bg-linear-to-bl from-transparent via-slate-200 to-slate-300 dark:via-slate-600 dark:to-slate-700 rounded-bl-sm z-10 shadow-[-1px_1px_2px_rgba(0,0,0,0.1)]"></div>
                                                                             <div className="absolute top-2 left-1.5 flex flex-col gap-[2px] opacity-30">
                                                                                 <div className="w-3 h-[1.5px] bg-slate-500 rounded-full"></div>
                                                                                 <div className="w-5 h-[1.5px] bg-slate-500 rounded-full"></div>
@@ -677,7 +705,7 @@ Regole d'ingaggio: Rispondi in modo preciso, tecnico ma sintetico. Fornisci rife
                                                         {uploadState.type === 'single' && (
                                                             <div className="relative z-10 flex justify-center items-center gap-6 mb-4 w-full px-2">
                                                                 <div className="relative w-[50px] h-[64px] bg-slate-50 dark:bg-slate-800 rounded-md border-2 border-slate-200 dark:border-slate-600 shadow-sm overflow-hidden shrink-0">
-                                                                    <div className="absolute top-0 right-0 w-4 h-4 bg-gradient-to-bl from-transparent via-slate-200 to-slate-300 dark:via-slate-600 dark:to-slate-700 rounded-bl-sm shadow-[-1px_1px_2px_rgba(0,0,0,0.1)] z-30"></div>
+                                                                    <div className="absolute top-0 right-0 w-4 h-4 bg-linear-to-bl from-transparent via-slate-200 to-slate-300 dark:via-slate-600 dark:to-slate-700 rounded-bl-sm shadow-[-1px_1px_2px_rgba(0,0,0,0.1)] z-30"></div>
                                                                     <div className="absolute top-3 left-2 flex flex-col gap-1.5 opacity-40">
                                                                         <div className="w-4 h-1 bg-slate-500 rounded-full"></div>
                                                                         <div className="w-8 h-0.5 bg-slate-500 rounded-full"></div>
@@ -687,7 +715,7 @@ Regole d'ingaggio: Rispondi in modo preciso, tecnico ma sintetico. Fornisci rife
                                                                     <motion.div
                                                                         animate={{ y: [-30, 70, -30] }}
                                                                         transition={{ repeat: Infinity, duration: 2.5, ease: "linear" }}
-                                                                        className="absolute top-0 left-0 right-0 h-8 bg-gradient-to-b from-transparent to-cyan-400/30 border-b-[2px] border-cyan-400 shadow-[0_4px_10px_rgba(34,211,238,0.5)] z-20"
+                                                                        className="absolute top-0 left-0 right-0 h-8 bg-linear-to-b from-transparent to-cyan-400/30 border-b-[2px] border-cyan-400 shadow-[0_4px_10px_rgba(34,211,238,0.5)] z-20"
                                                                     />
                                                                 </div>
                                                                 <div className="flex flex-col gap-2 w-full">
@@ -727,13 +755,13 @@ Regole d'ingaggio: Rispondi in modo preciso, tecnico ma sintetico. Fornisci rife
                                                                                 initial={{ top: -10, opacity: 0, scaleY: 0 }}
                                                                                 animate={{ top: 20, opacity: [0, 1, 0], scaleY: [0, 1, 0.5], y: [0, 10, 20] }}
                                                                                 transition={{ duration: 0.6, ease: "easeInOut" }}
-                                                                                className="absolute left-1/2 -translate-x-1/2 w-1 h-10 bg-gradient-to-b from-cyan-400 via-blue-500 to-transparent rounded-full blur-[2px] z-20"
+                                                                                className="absolute left-1/2 -translate-x-1/2 w-1 h-10 bg-linear-to-b from-cyan-400 via-blue-500 to-transparent rounded-full blur-[2px] z-20"
                                                                             />
                                                                         )}
 
                                                                         {/* Il Liquido Azzurro Elettrico Organico */}
                                                                         <motion.div
-                                                                            className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-blue-700 via-cyan-500 to-cyan-300 z-10"
+                                                                            className="absolute bottom-0 left-0 right-0 bg-linear-to-t from-blue-700 via-cyan-500 to-cyan-300 z-10"
                                                                             initial={{ height: '5%' }}
                                                                             // Il liquido sale a scatti (Max 10 file per ora, scalalo se serve)
                                                                             animate={{ height: `${Math.min(100, (uploadState.progress / Math.max(1, uploadState.total || 10)) * 100)}%` }}
@@ -770,7 +798,7 @@ Regole d'ingaggio: Rispondi in modo preciso, tecnico ma sintetico. Fornisci rife
                                                                 <div className="w-full bg-[#050505] border border-slate-700 rounded-lg overflow-hidden shadow-[0_10px_30px_rgba(0,0,0,0.8),inset_0_0_20px_rgba(0,0,0,0.5)] flex flex-col h-[95px] shrink-0 mb-3">
 
                                                                     {/* Header Finestra Stile macOS */}
-                                                                    <div className="h-5 bg-gradient-to-b from-slate-800 to-slate-900 border-b border-slate-700/80 flex items-center px-2 gap-1.5 shrink-0 w-full relative z-20">
+                                                                    <div className="h-5 bg-linear-to-b from-slate-800 to-slate-900 border-b border-slate-700/80 flex items-center px-2 gap-1.5 shrink-0 w-full relative z-20">
                                                                         <div className="w-2.5 h-2.5 rounded-full bg-[#ff5f56] shadow-[0_0_4px_#ff5f56]"></div>
                                                                         <div className="w-2.5 h-2.5 rounded-full bg-[#ffbd2e] shadow-[0_0_4px_#ffbd2e]"></div>
                                                                         <div className="w-2.5 h-2.5 rounded-full bg-[#27c93f] shadow-[0_0_4px_#27c93f]"></div>
@@ -783,7 +811,7 @@ Regole d'ingaggio: Rispondi in modo preciso, tecnico ma sintetico. Fornisci rife
                                                                     <div className="flex-1 p-2 pb-1 relative overflow-hidden flex flex-col justify-end bg-[linear-gradient(rgba(34,211,238,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(34,211,238,0.03)_1px,transparent_1px)] bg-[size:10px_10px]">
                                                                         {/* Scanline Dinamica */}
                                                                         <motion.div
-                                                                            className="absolute left-0 right-0 h-4 bg-gradient-to-b from-transparent via-cyan-500/10 to-transparent pointer-events-none z-10"
+                                                                            className="absolute left-0 right-0 h-4 bg-linear-to-b from-transparent via-cyan-500/10 to-transparent pointer-events-none z-10"
                                                                             animate={{ top: ['-10%', '110%'] }}
                                                                             transition={{ repeat: Infinity, duration: 2, ease: "linear" }}
                                                                         />
@@ -858,7 +886,7 @@ Regole d'ingaggio: Rispondi in modo preciso, tecnico ma sintetico. Fornisci rife
 
                     {/* STATO 1: IDLE */}
                     {mode === 'idle' && (
-                        <motion.div key="idle" initial={{ opacity: 0, filter: 'blur(5px)' }} animate={{ opacity: 1, filter: 'blur(0px)' }} exit={{ opacity: 0, filter: 'blur(5px)' }} className="flex items-center justify-center px-4 py-2.5 h-full w-full group cursor-pointer" onClick={() => setMode('menu')}>
+                        <motion.div key="idle" initial={{ opacity: 0, filter: 'blur(5px)' }} animate={{ opacity: 1, filter: 'blur(0px)' }} exit={{ opacity: 0, scale: 0.95, filter: 'blur(4px)' }} className="flex items-center justify-center px-4 py-2.5 h-full w-full group cursor-pointer" onClick={() => setMode('menu')}>
                             <div className="absolute w-6 h-1 bg-slate-400/30 dark:bg-cyan-500/30 rounded-full transition-all duration-300 group-hover:opacity-0 group-hover:scale-50"></div>
                             <div className="flex items-center justify-center gap-4 opacity-0 group-hover:opacity-100 transition-all duration-300 scale-95 group-hover:scale-100 w-full relative z-10">
                                 <button onClick={(e) => { e.stopPropagation(); setMode('menu'); }} className="text-slate-500 dark:text-cyan-600 hover:text-slate-800 dark:hover:text-cyan-300 transition-colors" title="Menu"><LayoutGrid size={16} strokeWidth={2.5} /></button>
@@ -872,7 +900,7 @@ Regole d'ingaggio: Rispondi in modo preciso, tecnico ma sintetico. Fornisci rife
 
                     {/* STATO 2: TICKER */}
                     {mode === 'ticker' && liveTicker !== null && (
-                        <motion.div key="ticker" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9 }} className="flex items-center justify-center gap-3 px-5 py-2.5 h-full w-full">
+                        <motion.div key="ticker" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, filter: 'blur(4px)' }} className="flex items-center justify-center gap-3 px-5 py-2.5 h-full w-full">
                             <div className="w-2 h-2 bg-emerald-500 rounded-full animate-ping"></div>
                             <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">Netto</span>
                             <span className="text-emerald-600 dark:text-emerald-400 font-mono font-black text-[15px] tracking-wide">
@@ -897,35 +925,35 @@ Regole d'ingaggio: Rispondi in modo preciso, tecnico ma sintetico. Fornisci rife
                         <motion.div
                             key="menu"
                             initial="hidden" animate="show" exit="hidden"
-                            variants={{ show: { transition: { staggerChildren: 0.05 } } }}
+                            variants={{ show: { transition: { staggerChildren: 0.08 } } }}
                             className="p-2 w-full flex items-center justify-between gap-2"
                         >
                             <div className="flex items-center gap-2 pl-2">
                                 {/* Tema */}
-                                <motion.button variants={{ hidden: { scale: 0, opacity: 0 }, show: { scale: 1, opacity: 1 } }} onClick={() => { window.dispatchEvent(new Event('island-theme')); setMode('idle'); }} className="p-2.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 rounded-xl transition-all text-amber-500 dark:text-amber-400 group" title="Tema Chiaro/Scuro">
+                                <motion.button variants={{ hidden: { scale: 0, opacity: 0 }, show: { scale: 1, opacity: 1 } }} onClick={() => { window.dispatchEvent(new Event('island-theme')); setMode('idle'); }} className="p-2.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 rounded-xl transition-all duration-200 hover:scale-105 text-amber-500 dark:text-amber-400 group" title="Tema Chiaro/Scuro">
                                     <Sun className="w-4 h-4 dark:hidden block group-hover:rotate-90 transition-transform" />
                                     <Moon className="w-4 h-4 hidden dark:block text-indigo-400 group-hover:-rotate-12 transition-transform" />
                                 </motion.button>
 
                                 {/* Aziende Custom */}
-                                <motion.button variants={{ hidden: { scale: 0, opacity: 0 }, show: { scale: 1, opacity: 1 } }} onClick={() => { window.dispatchEvent(new Event('island-company')); setMode('idle'); }} className="p-2.5 bg-slate-200 dark:bg-slate-800 hover:bg-cyan-100 dark:hover:bg-cyan-900/50 rounded-xl transition-colors text-cyan-600 dark:text-cyan-400" title="Aziende Custom">
+                                <motion.button variants={{ hidden: { scale: 0, opacity: 0 }, show: { scale: 1, opacity: 1 } }} onClick={() => { window.dispatchEvent(new Event('island-company')); setMode('idle'); }} className="p-2.5 bg-slate-200 dark:bg-slate-800 hover:bg-cyan-100 dark:hover:bg-cyan-900/50 rounded-xl transition-all duration-200 hover:scale-105 text-cyan-600 dark:text-cyan-400" title="Aziende Custom">
                                     <Database className="w-4 h-4" />
                                 </motion.button>
 
                                 {/* 👇 NUOVO TASTO: EXPORT BACKUP 👇 */}
-                                <motion.button variants={{ hidden: { scale: 0, opacity: 0 }, show: { scale: 1, opacity: 1 } }} onClick={(e) => { e.stopPropagation(); window.dispatchEvent(new CustomEvent('island-export')); setMode('idle'); }} className="p-2.5 bg-slate-200 dark:bg-slate-800 hover:bg-purple-100 dark:hover:bg-purple-900/50 rounded-xl transition-colors text-purple-600 dark:text-purple-400" title="Esporta Backup Globale">
+                                <motion.button variants={{ hidden: { scale: 0, opacity: 0 }, show: { scale: 1, opacity: 1 } }} onClick={(e) => { e.stopPropagation(); window.dispatchEvent(new CustomEvent('island-export')); setMode('idle'); }} className="p-2.5 bg-slate-200 dark:bg-slate-800 hover:bg-purple-100 dark:hover:bg-purple-900/50 rounded-xl transition-all duration-200 hover:scale-105 text-purple-600 dark:text-purple-400" title="Esporta Backup Globale">
                                     <DownloadCloud className="w-4 h-4" />
                                 </motion.button>
 
                                 {/* Password/Settings */}
-                                <motion.button variants={{ hidden: { scale: 0, opacity: 0 }, show: { scale: 1, opacity: 1 } }} onClick={() => { window.dispatchEvent(new Event('island-settings')); setMode('idle'); }} className="p-2.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 rounded-xl transition-colors text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white" title="Password di sicurezza">
+                                <motion.button variants={{ hidden: { scale: 0, opacity: 0 }, show: { scale: 1, opacity: 1 } }} onClick={() => { window.dispatchEvent(new Event('island-settings')); setMode('idle'); }} className="p-2.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 rounded-xl transition-all duration-200 hover:scale-105 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white" title="Password di sicurezza">
                                     <Settings className="w-4 h-4" />
                                 </motion.button>
 
                                 <motion.div variants={{ hidden: { height: 0 }, show: { height: 24 } }} className="w-px bg-slate-300 dark:bg-slate-700 mx-1"></motion.div>
 
                                 {/* Disconnetti */}
-                                <motion.button variants={{ hidden: { scale: 0, opacity: 0 }, show: { scale: 1, opacity: 1 } }} onClick={() => { window.dispatchEvent(new Event('island-logout')); setMode('idle'); }} className="p-2.5 bg-red-100 dark:bg-red-950/40 hover:bg-red-200 dark:hover:bg-red-900/60 rounded-xl transition-colors text-red-600 dark:text-red-400" title="Disconnetti">
+                                <motion.button variants={{ hidden: { scale: 0, opacity: 0 }, show: { scale: 1, opacity: 1 } }} onClick={() => { window.dispatchEvent(new Event('island-logout')); setMode('idle'); }} className="p-2.5 bg-red-100 dark:bg-red-950/40 hover:bg-red-200 dark:hover:bg-red-900/60 rounded-xl transition-all duration-200 hover:scale-105 text-red-600 dark:text-red-400" title="Disconnetti">
                                     <LogOut className="w-4 h-4" />
                                 </motion.button>
                             </div>
@@ -944,7 +972,7 @@ Regole d'ingaggio: Rispondi in modo preciso, tecnico ma sintetico. Fornisci rife
 
                     {/* STATO 6: CALCOLATRICE */}
                     {mode === 'calc' && (
-                        <motion.div key="calc" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="p-4 w-full flex flex-col">
+                        <motion.div key="calc" initial={{ opacity: 0, y: 8, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, scale: 0.95, filter: 'blur(4px)' }} className="p-4 w-full flex flex-col">
                             <div className="flex justify-between items-center mb-3">
                                 <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-widest flex items-center gap-2"><Calculator size={12} /> Calcolatrice</span>
                                 <div className="flex items-center gap-3">
@@ -968,12 +996,12 @@ Regole d'ingaggio: Rispondi in modo preciso, tecnico ma sintetico. Fornisci rife
 
                     {/* STATO 7: SPOTLIGHT AI POTENZIATO */}
                     {mode === 'ai' && (
-                        <motion.div key="ai" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="p-5 w-full flex flex-col gap-4 relative overflow-hidden">
+                        <motion.div key="ai" initial={{ opacity: 0, y: 8, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, scale: 0.95, filter: 'blur(4px)' }} className="p-5 w-full flex flex-col gap-4 relative overflow-hidden">
 
                             {/* ✨ NUOVO: Effetto Shimmer (Raggio di luce) durante l'elaborazione */}
                             {isAiThinking && (
                                 <motion.div
-                                    className="absolute inset-0 z-0 bg-gradient-to-r from-transparent via-fuchsia-500/10 to-transparent skew-x-12"
+                                    className="absolute inset-0 z-0 bg-linear-to-r from-transparent via-fuchsia-500/10 to-transparent skew-x-12"
                                     animate={{ left: ['-100%', '200%'] }}
                                     transition={{ repeat: Infinity, duration: 1.5, ease: "linear" }}
                                 />
@@ -1061,7 +1089,7 @@ Regole d'ingaggio: Rispondi in modo preciso, tecnico ma sintetico. Fornisci rife
                                         exit={{ opacity: 0, height: 0, y: -10 }}
                                         transition={{ type: "spring", damping: 25, stiffness: 300 }}
                                         // ✨ FIX: Aggiunto max-h-[60vh] e overflow-y-auto per permettere lo scorrimento
-                                        className="bg-gradient-to-br from-fuchsia-50/80 to-white/50 dark:from-fuchsia-950/30 dark:to-slate-900/50 border border-fuchsia-200/60 dark:border-fuchsia-500/20 p-4 rounded-xl relative z-10 backdrop-blur-md shadow-sm max-h-[60vh] overflow-y-auto custom-scrollbar pointer-events-auto"
+                                        className="bg-linear-to-br from-fuchsia-50/80 to-white/50 dark:from-fuchsia-950/30 dark:to-slate-900/50 border border-fuchsia-200/60 dark:border-fuchsia-500/20 p-4 rounded-xl relative z-10 backdrop-blur-md shadow-sm max-h-[60vh] overflow-y-auto custom-scrollbar pointer-events-auto"
                                     >
                                         <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">
                                             {aiResponse}
@@ -1108,7 +1136,7 @@ Regole d'ingaggio: Rispondi in modo preciso, tecnico ma sintetico. Fornisci rife
                             // ✨ FIX 2B: Initial in fade puro (senza muoversi dal basso), si "spalma" sulla pillola che si sta allargando
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1, transition: { delay: 0.1 } }}
-                            exit={{ opacity: 0, scale: 0.85, y: -20, filter: 'blur(4px)' }}
+                            exit={{ opacity: 0, scale: 0.95, filter: 'blur(4px)' }}
                             className="flex items-start gap-4 px-5 py-3 w-full h-full min-h-[48px] max-h-32 overflow-y-auto custom-scrollbar"
                         >
                             <motion.div
@@ -1171,7 +1199,7 @@ Regole d'ingaggio: Rispondi in modo preciso, tecnico ma sintetico. Fornisci rife
                                         closeIsland();
                                     }}
                                     // ✨ FIX 4: Ombra ricalibrata (meno espansa verticalmente) e transform più pulito
-                                    className="w-full py-3 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white rounded-xl font-bold text-xs shadow-[0_8px_20px_-6px_rgba(6,182,212,0.6)] transition-all active:scale-95 flex justify-center items-center gap-2"
+                                    className="w-full py-3 bg-linear-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white rounded-xl font-bold text-xs shadow-[0_8px_20px_-6px_rgba(6,182,212,0.6)] transition-all active:scale-95 flex justify-center items-center gap-2"
                                 >
                                     Apri Pratica Lavoratore <ArrowRight size={14} />
                                 </button>

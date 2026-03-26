@@ -543,7 +543,7 @@ const App: React.FC = () => {
 
             setTimeout(() => {
                 showNotification(
-                    `Bentornato, Francesco Pio!`,
+                    `Bentornato!`,
                     `Oggi è ${dataFormattata} • Ore ${oraFormattata}`,
                     'info',
                     5000 // Rimane per 5 secondi
@@ -766,7 +766,7 @@ const App: React.FC = () => {
                 w.id === selectedWorker.id ? { ...w, anni: updatedAnni } : w
             );
         });
-        setSelectedWorker(prevSelected => 
+        setSelectedWorker(prevSelected =>
             prevSelected ? { ...prevSelected, anni: updatedAnni } : null
         );
     };
@@ -1323,17 +1323,22 @@ const App: React.FC = () => {
                     initial={{ opacity: 0, scale: 0.9, y: 20 }}
                     animate={{ opacity: 1, scale: 1, y: 0 }}
                     transition={{ duration: 0.5 }}
-                    className="bg-white/10 backdrop-blur-xl border border-white/20 p-10 rounded-[2.5rem] shadow-2xl w-full max-w-md relative z-10 mx-4"
+                    className="bg-slate-900/40 backdrop-blur-2xl border border-white/[0.08] ring-1 ring-white/[0.05] p-10 rounded-[2.5rem] shadow-[0_8px_64px_rgba(0,0,0,0.5)] w-full max-w-md relative z-10 mx-4"
                 >
                     <div className="flex justify-center mb-8">
-                        <div className="w-24 h-24 bg-gradient-to-tr from-indigo-500 to-cyan-500 rounded-3xl flex items-center justify-center shadow-lg shadow-indigo-500/40 border border-white/20">
+                        <div className="w-24 h-24 bg-linear-to-tr from-cyan-500 to-blue-600 rounded-3xl flex items-center justify-center shadow-lg shadow-cyan-500/30 border border-white/10">
                             <Lock className="w-10 h-10 text-white" strokeWidth={2.5} />
                         </div>
                     </div>
 
                     <div className="text-center mb-8">
-                        <h2 className="text-3xl font-black text-white mb-2 tracking-tight">Accesso Gestionale</h2>
-                        <p className="text-slate-300 text-sm font-medium">Inserisci le credenziali per sbloccare il sistema.</p>
+                        <h2 className="text-4xl font-black tracking-tight mb-3 select-none">
+                            <span className="text-white">Rail</span>
+                            <span className="bg-linear-to-r from-cyan-400 via-blue-400 to-indigo-400 bg-clip-text text-transparent drop-shadow-[0_0_12px_rgba(6,182,212,0.4)]">
+                                Flow
+                            </span>
+                        </h2>
+                        <p className="text-slate-400/80 text-sm font-medium tracking-wide">Inserisci le credenziali per accedere al sistema.</p>
                     </div>
 
                     <form onSubmit={handleLogin} className="space-y-5">
@@ -1343,7 +1348,7 @@ const App: React.FC = () => {
                                 value={loginPassword}
                                 onChange={(e) => setLoginPassword(e.target.value)}
                                 placeholder="Password di Sicurezza"
-                                className={`w-full bg-slate-900/60 border ${loginError ? 'border-red-500' : 'border-white/10 group-hover:border-white/30'} rounded-2xl px-6 py-4 text-white placeholder-slate-400 focus:outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400/50 transition-all font-bold tracking-widest text-center`}
+                                className={`w-full bg-black/30 border ${loginError ? 'border-red-500' : 'border-white/[0.08] group-hover:border-cyan-500/30'} rounded-2xl px-6 py-4 text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500/50 focus:ring-2 focus:ring-cyan-500/50 transition-all font-bold tracking-widest text-center`}
                             />
                         </div>
 
@@ -1355,14 +1360,14 @@ const App: React.FC = () => {
 
                         <button
                             type="submit"
-                            className="w-full bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white font-black py-4 rounded-2xl shadow-lg shadow-indigo-500/40 transition-all transform active:scale-95 flex items-center justify-center gap-3 uppercase tracking-wide text-sm"
+                            className="w-full bg-linear-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-black py-4 rounded-2xl shadow-[0_0_30px_rgba(6,182,212,0.3)] hover:shadow-[0_0_40px_rgba(6,182,212,0.5)] transition-all transform active:scale-95 flex items-center justify-center gap-3 uppercase tracking-wide text-sm"
                         >
                             <LogIn className="w-5 h-5" /> Entra nel Sistema
                         </button>
                     </form>
 
                     <div className="mt-8 text-center">
-                        <p className="text-[10px] text-slate-400 uppercase tracking-widest font-bold opacity-60">Sistema Sicuro v2.0 • Protetto</p>
+                        <p className="text-[10px] text-slate-500/50 uppercase tracking-[0.3em] font-bold select-none">RailFlow v2.0 • Sistema Protetto</p>
                     </div>
                 </motion.div>
             </div>
@@ -1467,22 +1472,22 @@ const App: React.FC = () => {
                             </div>
                         </div>
 
-                        <div>
-                            <h1 className="text-4xl font-black text-slate-900 dark:text-white tracking-tight">
-                                Gestione{' '}
-                                <span
-                                    className="bg-clip-text text-transparent"
-                                    style={{
-                                        backgroundImage: 'linear-gradient(to right, #4f46e5, #3b82f6)', // Indigo -> Blue
-                                        WebkitBackgroundClip: 'text',
-                                        color: 'transparent'
-                                    }}
-                                >
-                                    Indennità
+                        <motion.div
+                            className="group/brand cursor-default"
+                            whileHover={{ scale: 1.02 }}
+                            transition={{ type: "spring", stiffness: 400, damping: 25 }}
+                        >
+                            <h1 className="text-5xl font-black tracking-tight select-none">
+                                <span className="text-slate-900 dark:text-white">Rail</span>
+                                <span className="bg-linear-to-r from-cyan-500 via-blue-600 to-indigo-600 dark:from-cyan-400 dark:via-blue-400 dark:to-indigo-400 bg-clip-text text-transparent transition-all duration-500 group-hover/brand:drop-shadow-[0_0_12px_rgba(6,182,212,0.5)]">
+                                    Flow
                                 </span>
                             </h1>
-                            <p className="text-slate-500 dark:text-slate-400 font-medium text-sm mt-1 flex items-center gap-2"><Sparkles className="w-3 h-3 text-amber-500" /> Pannello di Controllo Ferrovieri</p>
-                        </div>
+                            <p className="text-xs font-medium tracking-[0.25em] uppercase text-slate-400 dark:text-slate-500 mt-2 flex items-center gap-2 select-none">
+                                <Sparkles className="w-3.5 h-3.5 text-cyan-500/60 dark:text-cyan-400/40" />
+                                Pannello di controllo ferrovieri
+                            </p>
+                        </motion.div>
                     </div>
 
                     {/* DESTRA: PULSANTI AZIONE */}

@@ -7,9 +7,9 @@ const HiddenClasses = () => {
         Scrivendo le classi per intero qui, Tailwind non le cancellerà mai.
       */}
 
-            {/* --- 1. TITOLO "GESTIONE INDENNITÀ" --- */}
-            <div className="bg-gradient-to-r from-blue-600 via-indigo-500 to-violet-500 text-transparent bg-clip-text"></div>
-            <div className="dark:from-blue-400 dark:via-indigo-400 dark:to-violet-400"></div>
+            {/* --- 1. BRAND "RAILFLOW" (Safelist Gradienti) --- */}
+            <div className="bg-linear-to-r from-cyan-500 via-blue-600 to-indigo-600 text-transparent bg-clip-text"></div>
+            <div className="dark:from-cyan-400 dark:via-blue-400 dark:to-indigo-400"></div>
 
             {/* --- 2. TEMI COLORI (Indigo, Emerald, Orange, Blue) --- */}
             {/* INDIGO */}

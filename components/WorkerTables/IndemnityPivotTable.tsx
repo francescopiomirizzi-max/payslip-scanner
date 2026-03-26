@@ -37,6 +37,7 @@ interface IndemnityPivotTableProps {
   data: AnnoDati[];
   profilo: ProfiloAzienda;
   startClaimYear?: number;
+  years: number[];  // Range dinamico controllato dal parent
 }
 
 type ViewMode = 'total' | 'average';
@@ -44,15 +45,14 @@ type ViewMode = 'total' | 'average';
 const IndemnityPivotTable: React.FC<IndemnityPivotTableProps> = ({
   data = [],
   profilo,
-  startClaimYear = 2008
+  startClaimYear = 2008,
+  years
 }) => {
 
   const [viewMode, setViewMode] = useState<ViewMode>('total');
 
-  // --- FILTRO ANNI VISIBILI ---
-  const visibleYears = useMemo(() => {
-    return YEARS.filter(y => y >= startClaimYear);
-  }, [startClaimYear]);
+  // --- ANNI VISIBILI (Controllati centralmente dal parent) ---
+  const visibleYears = years;
 
   const pivotConfig = useMemo(() => {
     // Usiamo il motore universale. Togliamo le colonne di calcolo e di base (month, total, daysWorked, ecc)

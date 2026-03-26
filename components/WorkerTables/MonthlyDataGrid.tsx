@@ -169,6 +169,7 @@ interface MonthlyDataGridProps {
   onYearChange: (year: number) => void;
   profilo: ProfiloAzienda;
   onCellFocus?: (rowIndex: number, colId: string) => void;
+  years: number[];  // Range dinamico controllato dal parent
 }
 
 // parseLocalFloat importato da formatters
@@ -184,7 +185,8 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
   initialYear,
   onYearChange,
   profilo,
-  onCellFocus
+  onCellFocus,
+  years
 }) => {
   const [selectedYear, setSelectedYear] = useState<number>(initialYear);
 
@@ -883,7 +885,7 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
               <Calendar className="w-4 h-4 mr-2" />
               <span className="text-xs font-bold uppercase tracking-widest select-none">Periodo</span>
             </div>
-            {YEARS.map(year => (
+            {years.map(year => (
               <button
                 key={year}
                 onClick={() => handleYearChange(year)}
