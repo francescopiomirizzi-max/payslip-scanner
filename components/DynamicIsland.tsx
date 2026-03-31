@@ -22,8 +22,9 @@ const islandTransition = {
 // --- GESTORE DEGLI STILI ---
 const getIslandStyles = (mode: string, isExpanded: boolean, uploadState: any) => {
     if (mode === 'uploading') {
-        // ✨ FIX APPLICATO: pointer-events-auto per permettere l'espansione al click
-        return "pointer-events-auto bg-transparent border-none shadow-none !overflow-visible flex flex-col";
+        // ✨ FIX SQUADRATURE: Arrotondiamo il contenitore padre per curvare l'ombra e nascondiamo l'overflow
+        const radius = isExpanded && !uploadState.isFinishing ? 'rounded-[32px]' : 'rounded-[20px]';
+        return `pointer-events-auto bg-transparent border-none shadow-none overflow-hidden flex flex-col ${radius}`;
     }
 
     const base = "overflow-hidden backdrop-blur-md transition-all duration-500 pointer-events-auto flex flex-col";
@@ -351,9 +352,10 @@ Regole d'ingaggio: Rispondi in modo preciso, tecnico ma sintetico. Fornisci rife
                                     `0 0 15px 2px ${getGlowColor()}, 0 0 30px 5px rgba(6,182,212,0)`,
                                     `0 0 25px 8px ${getGlowColor()}, 0 0 50px 15px rgba(6,182,212,0.25)`,
                                     `0 0 15px 2px ${getGlowColor()}, 0 0 30px 5px rgba(6,182,212,0)`
-                                  ]
-                                : `0 0 20px 5px ${getGlowColor()}`
-                          }
+                                ]
+                                // ✨ FIX SQUADRATURE: Disattiviamo il glow del padre durante l'upload, la card ha già la sua ombra arrotondata!
+                                : mode === 'uploading' ? 'none' : `0 0 20px 5px ${getGlowColor()}`
+                        }
                 }
                 // ✨ HOVER INTENSIFICATION: Il glow esplode morbidamente al passaggio del mouse
                 whileHover={mode === 'idle' ? {
@@ -407,12 +409,12 @@ Regole d'ingaggio: Rispondi in modo preciso, tecnico ma sintetico. Fornisci rife
                                 layout
                                 initial={{ opacity: 0, y: -10, scale: 0.98, borderRadius: 20 }}
                                 animate={{ opacity: 1, y: 0, scale: 1, borderRadius: isUploadExpanded && !uploadState.isFinishing ? 32 : 20 }}
-                                // ✨ FIX 2A: Exit in fade puro (nessun restringimento o blur), così il verde svanisce morbidamente
                                 exit={{ opacity: 0, transition: { duration: 0.2 } }}
                                 transition={{ type: "spring", bounce: 0, duration: 0.4 }}
                                 onClick={() => !uploadState.isFinishing && setIsUploadExpanded(!isUploadExpanded)}
-                                style={{ overflow: 'hidden', WebkitMaskImage: '-webkit-radial-gradient(white, black)', isolation: 'isolate', transform: 'translateZ(0)' }}
-                                className="relative w-full flex flex-col cursor-pointer shadow-[0_20px_50px_-10px_rgba(0,0,0,0.5)] border border-white/20"
+                                // ✨ FIX SQUADRATURE: Maschere e fix obsoleti rimossi. Usiamo overflow nativo.
+                                style={{ overflow: 'hidden', isolation: 'isolate' }}
+                                className={`relative w-full flex flex-col cursor-pointer shadow-[0_20px_50px_-10px_rgba(0,0,0,0.5)] border border-white/20 overflow-hidden ${isUploadExpanded && !uploadState.isFinishing ? 'rounded-[32px]' : 'rounded-[20px]'}`}
                             >
                                 {/* ✨ FIX 1: CROSSFADE FLUIDO DEL BACKGROUND */}
                                 {/* Livello Base (Viola/Azzurro) */}

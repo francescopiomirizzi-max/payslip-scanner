@@ -189,8 +189,8 @@ const MovingGrid = () => (
 
 const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateData, onUpdateStatus, onBack, onOpenReport }) => {
   const [monthlyInputs, setMonthlyInputs] = useState<AnnoDati[]>(Array.isArray(worker?.anni) ? worker.anni : []);
-  
-  
+
+
 
   // DYNAMIC SYNC: Lo stato locale comanda, il Parent riceve aggiornamenti in automatico
   const lastSyncRef = useRef<AnnoDati[]>(monthlyInputs);
@@ -586,7 +586,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
       }
 
       if (fondoPregresso !== null && !isNaN(fondoPregresso)) {
-         row.fondo_pregresso_31_12 = fondoPregresso;
+        row.fondo_pregresso_31_12 = fondoPregresso;
       }
 
       // MAPPA I CODICI IN TABELLA
@@ -727,11 +727,15 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
           continue;
         }
 
-        // ✨ IL TRADUTTORE TITANIUM
-        let targetYear = parseInt(String(aiResult.year || "").replace(/[^\d]/g, ''));
-        if (isNaN(targetYear) || targetYear < 2000) {
-          if (yearMatchUI) targetYear = parseInt(yearMatchUI[1]);
-          else {
+        // ✨ IL TRADUTTORE TITANIUM V3 (Fix Integrità Dati)
+        // Diamo PRIORITÀ ASSOLUTA all'anno scritto nel nome del file dall'utente.
+        // Evitiamo che l'IA sbagli leggendo la "competenza" dell'anno precedente.
+        let targetYear: number;
+        if (yearMatchUI) {
+          targetYear = parseInt(yearMatchUI[1]);
+        } else {
+          targetYear = parseInt(String(aiResult.year || "").replace(/[^\d]/g, ''));
+          if (isNaN(targetYear) || targetYear < 2000) {
             const yMatchMonth = String(aiResult.month || "").match(/(20\d{2})/);
             if (yMatchMonth) targetYear = parseInt(yMatchMonth[1]);
           }
