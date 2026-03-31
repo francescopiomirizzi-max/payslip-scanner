@@ -168,11 +168,39 @@ const PROMPT_RFI = `
     }
   }
 `;
-// ==========================================
-// 2. PROMPT ELIOR - GOD TIER (ANTI-CRASH & REAL-DATA TRAINED)
-// ==========================================
-const PROMPT_ELIOR = `
-  Sei un estrattore dati deterministico specializzato in Buste Paga ELIOR RISTORAZIONE.
+export const getEliorPrompt = (eliorType = 'viaggiante') => {
+  const isMagazzino = eliorType === 'magazzino';
+
+  const codiciRicerca = isMagazzino
+    ? `- 1130 (Lav. Nott. / Magg. Notturna)
+  - 1131 (Lav. Domenicale)
+  - 2018, 2035 (Straordinari)
+  - 2235 (Maggiorazione 35%)
+  - 4133 (Funz. Diverse)
+  - 2313 (Ind. Cella)
+  - 4275 (Ind. Sottosuolo)
+  - 4285 (26/MI Retribuzione)`
+    : `- 1126 (Ind. Cassa)
+  - 1130 (Lav. Nott. / Magg. Notturna)
+  - 1131 (Lav. Domenicale)
+  - 2018, 2020, 2035 (Straordinari)
+  - 2235 (Maggiorazione 35%)
+  - 4133 (Funz. Diverse)
+  - 4254 (RFR Pasti < 8h)
+  - 4255, 4256 (Pernottamento / Pernottazione)
+  - 4300, 4305 (Ass. Res. No RS / RS)
+  - 4301 (Fuori Sede / Trasferta)
+  - 4320 (Diaria Scorta)
+  - 4325, 4330 (Flex Oraria / Residenza)
+  - 4345 (Riserva Pres.)
+  - 5655 (26/MI Retribuzione)`;
+
+  const codiciTicket = isMagazzino
+    ? `- Individua la riga col codice 0293 (Buono pasto per giornate di ferie). Estrai ESATTAMENTE il numero presente nella colonna "Valore Unitario" o "Base/Dato" (es. 5.20, 6.00, 7.00). IGNORA i totali finali. Mettilo nella variabile ticketRate.`
+    : `- Individua la riga col codice 2000 o 2001. Estrai ESATTAMENTE il numero presente nella colonna "Valore Unitario" o "Base/Dato" (es. 5.20, 6.00, 7.00). IGNORA i totali finali. Mettilo nella variabile ticketRate.`;
+
+  return `
+  Sei un estrattore dati deterministico specializzato in Buste Paga ELIOR RISTORAZIONE (${eliorType.toUpperCase()}).
   Attenzione: I documenti in input sono FOTOGRAFIE DI DOCUMENTI CARTACEI. Applica la massima tolleranza per i disallineamenti OCR.
   
   [REGOLE SUI NUMERI CRITICHE - PER EVITARE CRASH DI SISTEMA]: 
@@ -198,26 +226,12 @@ const PROMPT_ELIOR = `
     [Valore estratto di GG INPS] Meno [Valore finale calcolato di daysVacation].
     (Esempio: Se GG INPS è 26 e daysVacation è 1.42, daysWorked = 24.58).
 
-  ### 2. TICKET RESTAURANT (Codici 2000 / 2001)
-  - Individua la riga col codice 2000 o 2001. Estrai ESATTAMENTE il numero presente nella colonna "Valore Unitario" o "Base/Dato" (es. 5.20, 6.00, 7.00). IGNORA i totali finali.
+  ### 2. TICKET RESTAURANT
+  ${codiciTicket}
 
   ### 3. MAPPATURA CODICI SPECIFICI (Solo colonna COMPETENZE)
   Cerca l'intero documento e somma gli importi POSITIVI della colonna "COMPETENZE" per questi codici:
-  - 1126 (Ind. Cassa)
-  - 1130 (Lav. Nott. / Magg. Notturna - SOMMA TUTTE LE OCCORRENZE)
-  - 1131 (Lav. Domenicale)
-  - 1129 (Indennità Turno)
-  - 2018, 2020, 2035 (Straordinari)
-  - 2235 (Maggiorazione 35%)
-  - 4133 (Funz. Diverse)
-  - 4254 (RFR Pasti < 8h)
-  - 4255, 4256 (Pernottamento / Pernottazione)
-  - 4300, 4305 (Ass. Res. No RS / RS)
-  - 4301 (Fuori Sede / Trasferta)
-  - 4320 (Diaria Scorta)
-  - 4325, 4330 (Flex Oraria / Residenza)
-  - 4345 (Riserva Pres.)
-  - 5655 o 4285 (26/MI Retribuzione)
+  ${codiciRicerca}
 
   ### 4. MALATTIA, SCIOPERO E ARRETRATI (CRITICO)
   - Se trovi i codici 2600, 2650, 3100, 3150, 3232, 3262 (Integrazioni o Trattenute Assenza/Malattia), aggiungi "[Malattia/Assenza]" in "eventNote".
@@ -250,8 +264,8 @@ const PROMPT_ELIOR = `
   Analisi: Codice di assenza presente. Scrivo "[Malattia/Assenza]" in eventNote.
 
  ### 6. TFR E FONDO PREGRESSO (⚠️ REGOLA CRITICA DEL MESE DI DICEMBRE E GRANDEZZA NUMERI ⚠️)
-  - "fondo_pregresso_31_12": Cerca "Fondo TFR al 31/12", "F.do TFR AP". Estrai il valore numerico. Se assente, 0.0.
-  - "imponibile_tfr_mensile": [DIVIETO ASSOLUTO] Cerca il riquadro TFR SOLO se la busta paga è di DICEMBRE (Mese 12) o c'è scritto "Cessazione"/"Fine Rapporto". Estrai ESCLUSIVAMENTE il valore della riga "Imponibile" (che è una cifra alta, solitamente tra 15.000 e 35.000). È SEVERAMENTE VIETATO estrarre il valore della riga "Accantonamento" o "Quota" (che è molto più basso, solitamente sui 1.500-2.000). Per tutti i mesi da Gennaio a Novembre, restituisci SEMPRE E TASSATIVAMENTE 0.0, ignorando completamente il riquadro.
+  - "fondo_pregresso_31_12": Cerca "Fondo TFR al 31/12", "F.do TFR AP". Estrai il valore numerico. Se assente, 0.0.
+  - "imponibile_tfr_mensile": [DIVIETO ASSOLUTO] Cerca il riquadro TFR SOLO se la busta paga è di DICEMBRE (Mese 12) o c'è scritto "Cessazione"/"Fine Rapporto". Estrai ESCLUSIVAMENTE il valore della riga "Imponibile" (che è una cifra alta, solitamente tra 15.000 e 35.000). È SEVERAMENTE VIETATO estrarre il valore della riga "Accantonamento" o "Quota" (che è molto più basso, solitamente sui 1.500-2.000). Per tutti i mesi da Gennaio a Novembre, restituisci SEMPRE E TASSATIVAMENTE 0.0, ignorando completamente il riquadro.
 
   ### 7. 🚨 MODALITÀ CERTIFICAZIONE UNICA (CUD) 🚨
   Se il documento si intitola "CERTIFICAZIONE UNICA" o "CUD":
@@ -279,8 +293,8 @@ const PROMPT_ELIOR = `
       "4301": 0.0
     }
   }
-`;
-
+  `;
+}
 // ==========================================
 // 3. PROMPT DI EMERGENZA (UNIVERSALE)
 // ==========================================
@@ -304,8 +318,7 @@ const PROMPT_GENERICO = `
 // LA CABINA DI REGIA
 // ==========================================
 const PROMPT_DIRECTORY: Record<string, string> = {
-  "RFI": PROMPT_RFI,
-  "ELIOR": PROMPT_ELIOR
+  "RFI": PROMPT_RFI
 };
 
 export const handler: Handler = async (event, context) => {
@@ -321,7 +334,7 @@ export const handler: Handler = async (event, context) => {
     const body = JSON.parse(event.body || "{}");
 
     // 👇 Ora estraiamo anche customColumns per il Motore Mutaforma
-    const { fileData, mimeType, company, action, customColumns } = body;
+    const { fileData, mimeType, company, action, customColumns, eliorType } = body;
 
     if (!fileData) throw new Error("File mancante.");
     const cleanData = fileData.includes("base64,") ? fileData.split("base64,")[1] : fileData;
@@ -415,8 +428,13 @@ export const handler: Handler = async (event, context) => {
   }
       `;
     } else {
-      // Se non ci sono colonne custom, usa i prompt di sistema corazzati (RFI, ELIOR) o quello d'emergenza
-      targetPrompt = PROMPT_DIRECTORY[companyKey] || PROMPT_GENERICO;
+      // Se non ci sono colonne custom, usa i prompt di sistema
+      if (companyKey === 'ELIOR') {
+        // 🔥 MAGIA: Chiamiamo la funzione dinamica passandole il parametro!
+        targetPrompt = getEliorPrompt(eliorType);
+      } else {
+        targetPrompt = PROMPT_DIRECTORY[companyKey] || PROMPT_GENERICO;
+      }
     }
 
     console.log(`--- 🚀 AVVIO ANALISI NUMERICA PER: ${companyKey} ---`);

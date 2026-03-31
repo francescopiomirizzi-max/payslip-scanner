@@ -191,7 +191,8 @@ const WorkerModal: React.FC<WorkerModalProps> = ({ isOpen, onClose, onConfirm, i
         ruolo: string;
         profiloProfessionale: string; // NUOVO CAMPO
         profilo: ProfiloAzienda | null;
-    }>({ nome: '', cognome: '', ruolo: '', profiloProfessionale: '', profilo: null });
+        eliorType?: 'viaggiante' | 'magazzino';
+    }>({ nome: '', cognome: '', ruolo: '', profiloProfessionale: '', profilo: null, eliorType: 'viaggiante' });
 
     const [focusedField, setFocusedField] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -351,7 +352,8 @@ const WorkerModal: React.FC<WorkerModalProps> = ({ isOpen, onClose, onConfirm, i
                     cognome: initialData.cognome || '',
                     ruolo: initialData.ruolo || '',
                     profiloProfessionale: initialData.profiloProfessionale || '',
-                    profilo: initialData.profilo || null
+                    profilo: initialData.profilo || null,
+                    eliorType: initialData.eliorType || 'viaggiante'
                 });
             } else {
                 // Se stiamo creando, svuotiamo tutto
@@ -360,7 +362,8 @@ const WorkerModal: React.FC<WorkerModalProps> = ({ isOpen, onClose, onConfirm, i
                     cognome: '',
                     ruolo: '',
                     profiloProfessionale: '',
-                    profilo: null
+                    profilo: null,
+                    eliorType: 'viaggiante'
                 });
             }
         }
@@ -892,6 +895,54 @@ const WorkerModal: React.FC<WorkerModalProps> = ({ isOpen, onClose, onConfirm, i
                                         )}
                                     </div>
                                     {/* FINE RIQUADRO ESPANDIBILE */}
+
+                                    {/* SELETTORE SOTTO-PROFILO ELIOR (TOGGLE) */}
+                                    <AnimatePresence>
+                                        {formData.profilo === 'ELIOR' && (
+                                            <motion.div
+                                                initial={{ opacity: 0, height: 0, marginTop: 0 }}
+                                                animate={{ opacity: 1, height: 'auto', marginTop: 24 }}
+                                                exit={{ opacity: 0, height: 0, marginTop: 0 }}
+                                                className="overflow-hidden"
+                                            >
+                                                <div className="bg-slate-50 dark:bg-slate-800/50 p-6 rounded-3xl border border-slate-200 dark:border-slate-700/50">
+                                                    <div className="flex items-center gap-3 mb-4">
+                                                        <Briefcase className="w-5 h-5 text-orange-500" />
+                                                        <span className="text-sm font-black uppercase tracking-wider text-slate-700 dark:text-slate-300">Variante Profilo Elior</span>
+                                                    </div>
+                                                    
+                                                    {/* TOGGLE SWITCH GLASSMORPHISM */}
+                                                    <div className="relative flex p-1.5 bg-slate-200/50 dark:bg-slate-900/50 rounded-2xl backdrop-blur-md border border-white/40 dark:border-slate-700">
+                                                        {['viaggiante', 'magazzino'].map((type) => {
+                                                            const isSelected = formData.eliorType === type;
+                                                            return (
+                                                                <button
+                                                                    key={type}
+                                                                    type="button"
+                                                                    onClick={(e) => { e.preventDefault(); setFormData({ ...formData, eliorType: type as 'viaggiante' | 'magazzino' }); }}
+                                                                    className={`relative flex-1 py-3 text-sm font-black uppercase tracking-widest rounded-xl transition-all duration-300 z-10 flex items-center justify-center gap-2 ${isSelected ? 'text-white drop-shadow-md' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'}`}
+                                                                >
+                                                                    {isSelected && (
+                                                                        <motion.div
+                                                                            layoutId="eliorTypeToggle"
+                                                                            className="absolute inset-0 bg-gradient-to-r from-orange-500 to-red-500 rounded-xl shadow-[0_0_15px_-3px_rgba(249,115,22,0.4)] border border-white/20"
+                                                                            initial={false}
+                                                                            transition={{ type: "spring", stiffness: 300, damping: 25 }}
+                                                                        />
+                                                                    )}
+                                                                    <span className="relative z-10 flex items-center gap-2">
+                                                                        {type === 'viaggiante' ? <Train className="w-4 h-4" /> : <Building2 className="w-4 h-4" />}
+                                                                        {type}
+                                                                    </span>
+                                                                </button>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </div>
+                                            </motion.div>
+                                        )}
+                                    </AnimatePresence>
+
                                 </div>
 
                                 {/* FOOTER */}

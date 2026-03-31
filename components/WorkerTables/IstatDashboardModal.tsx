@@ -40,7 +40,7 @@ const IstatDashboardModal: React.FC<IstatDashboardModalProps> = ({
                 const rawYears: number[] = Array.from(new Set(monthlyInputs.map(d => Number(d.year))));
                 const years = rawYears.filter((y: number) => !isNaN(y) && y > 2000).sort((a: number, b: number) => a - b);
 
-                const indCols = getColumnsByProfile(worker.profilo).filter(c => !['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'coeffPercepito', 'coeffTicket', 'note', 'arretrati', '3B70', '3B71'].includes(c.id));
+                const indCols = getColumnsByProfile(worker.profilo, worker.eliorType).filter(c => !['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'coeffPercepito', 'coeffTicket', 'note', 'arretrati', '3B70', '3B71'].includes(c.id));
 
                 years.forEach(year => {
                     if (year < startClaimYear) return;

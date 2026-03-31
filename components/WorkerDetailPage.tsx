@@ -591,7 +591,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
 
       // MAPPA I CODICI IN TABELLA
       if (aiResult.codes) {
-        const expectedColumns = getColumnsByProfile(worker.profilo) || [];
+        const expectedColumns = getColumnsByProfile(worker.profilo, worker.eliorType) || [];
         Object.entries(aiResult.codes).forEach(([code, value]) => {
           const numValue = parseLocalFloat(value);
           if (!isNaN(numValue) && numValue !== 0) {
@@ -615,6 +615,12 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
   const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
   // --- HELPER: RECUPERA LE COLONNE CUSTOM DA INVIARE ALL'AI ---
   const getCustomColumnsForAI = () => {
+    // Se è la variante Elior Magazzino, passiamo le colonne di quel sotto-profilo al motore dinamico AI
+    if (worker.profilo === 'ELIOR' && worker.eliorType === 'magazzino') {
+      const columns = getColumnsByProfile(worker.profilo, worker.eliorType);
+      return columns.filter((c: any) => c.id !== 'month' && c.id !== 'total' && c.id !== 'note' && c.id !== 'arretrati');
+    }
+
     if (['RFI', 'ELIOR', 'REKEEP'].includes(worker.profilo)) return null;
 
     try {
@@ -662,7 +668,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
     let lastDetectedYear = null;
 
     // Recupera le colonne della tabella per mappare esattamente i codici
-    const expectedColumns = getColumnsByProfile(worker.profilo) || [];
+    const expectedColumns = getColumnsByProfile(worker.profilo, worker.eliorType) || [];
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
@@ -693,6 +699,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
             fileData: base64String,
             mimeType: file.type || "application/pdf",
             company: worker.profilo,
+            eliorType: worker.eliorType, // <--- INSERISCI QUESTA RIGA
             customColumns: getCustomColumnsForAI()
           })
         });
@@ -940,7 +947,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
   const calculateAnnualLegalData = (data: AnnoDati[], profile: any, withExFest: boolean, startClaimYear: number) => {
     const years = Array.from(new Set(data.map(d => Number(d.year)))).sort((a, b) => a - b);
 
-    const indennitaCols = getColumnsByProfile(profile).filter(c =>
+    const indennitaCols = getColumnsByProfile(profile, worker?.eliorType).filter(c =>
       !['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'coeffPercepito', 'coeffTicket', 'note', 'arretrati', '3B70', '3B71'].includes(c.id)
     );
 
@@ -1059,7 +1066,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
     const totalPagesExp = '{total_pages_count_string}'; // Variabile necessaria
 
-    const indennitaCols = getColumnsByProfile(worker.profilo).filter(c =>
+    const indennitaCols = getColumnsByProfile(worker.profilo, worker.eliorType).filter(c =>
       !['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'coeffPercepito', 'coeffTicket', 'note', 'arretrati', '3B70', '3B71'].includes(c.id)
     );
 
@@ -1693,6 +1700,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
           mimeType: blob.type || "application/pdf",
           action: 'explain',
           company: worker.profilo,
+          eliorType: worker.eliorType, // <--- INSERISCI QUESTA RIGA
           customColumns: getCustomColumnsForAI() // Inietta i codici custom anche all'avvocato!
         })
       });
@@ -1775,7 +1783,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
   const statsData = useMemo(() => {
     if (!monthlyInputs || !Array.isArray(monthlyInputs)) return { cards: [], rawTotal: 0 };
 
-    const indennitaCols = getColumnsByProfile(worker.profilo).filter(c =>
+    const indennitaCols = getColumnsByProfile(worker.profilo, worker.eliorType).filter(c =>
       !['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'coeffPercepito', 'coeffTicket', 'note', 'arretrati', '3B70', '3B71'].includes(c.id)
     );
 
@@ -2696,6 +2704,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
                           initialYear={currentYear}
                           onYearChange={setCurrentYear}
                           profilo={worker.profilo}
+                          eliorType={worker.eliorType}
                           onCellFocus={handleCellFocus}
                           years={dynamicYears}
                         />
@@ -2705,13 +2714,13 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
                     {activeTab === 'calc' && (
                       <div className="h-full overflow-auto custom-scrollbar pr-2">
                         {/* Passiamo l'interruttore alla tabella aggiungendo includeTickets={includeTickets} */}
-                        <AnnualCalculationTable data={monthlyInputs} profilo={worker.profilo} onDataChange={handleDataChange} includeTickets={includeTickets} startClaimYear={startClaimYear} years={dynamicYears} />
+                        <AnnualCalculationTable data={monthlyInputs} profilo={worker.profilo} eliorType={worker.eliorType} onDataChange={handleDataChange} includeTickets={includeTickets} startClaimYear={startClaimYear} years={dynamicYears} />
                       </div>
                     )}
 
                     {activeTab === 'pivot' && (
                       <div className="h-full overflow-auto custom-scrollbar pr-2">
-                        <IndemnityPivotTable data={monthlyInputs} profilo={worker.profilo} startClaimYear={startClaimYear} years={dynamicYears} />
+                        <IndemnityPivotTable data={monthlyInputs} profilo={worker.profilo} eliorType={worker.eliorType} startClaimYear={startClaimYear} years={dynamicYears} />
                       </div>
                     )}
                     {activeTab === 'tfr' && (

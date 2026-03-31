@@ -24,7 +24,7 @@ const scrollbarStyles = `
 const Sparkline = ({ worker }: { worker: Worker }) => {
   const dataPoints = useMemo(() => {
     if (!worker.anni || !Array.isArray(worker.anni) || worker.anni.length === 0) return [15, 16, 15, 17, 16];
-    const cols = getColumnsByProfile(worker.profilo);
+    const cols = getColumnsByProfile(worker.profilo, worker.eliorType);
 
     // Ordiniamo cronologicamente
     const sortedData = [...worker.anni].sort((a, b) => a.year - b.year || a.monthIndex - b.monthIndex);
@@ -90,7 +90,7 @@ const BackChart = ({ worker, theme, startYear }: { worker: Worker, theme: any, s
     const values = lastData.map(d => {
       // Visualizziamo il valore economico approssimativo del mese (Indennità lorde)
       // Questo rende il grafico coerente con "soldi", non "giorni"
-      const cols = getColumnsByProfile(worker.profilo);
+      const cols = getColumnsByProfile(worker.profilo, worker.eliorType);
       let sum = 0;
       cols.forEach(col => {
         if (!['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'note', 'arretrati'].includes(col.id))
@@ -216,7 +216,7 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
     const TETTO_FERIE = includeExFest ? 32 : 28;
 
     // Colonne da sommare
-    const indennitaCols = getColumnsByProfile(worker.profilo).filter(c =>
+    const indennitaCols = getColumnsByProfile(worker.profilo, worker.eliorType).filter(c =>
       !['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'coeffPercepito', 'coeffTicket', 'note', 'arretrati'].includes(c.id)
     );
 

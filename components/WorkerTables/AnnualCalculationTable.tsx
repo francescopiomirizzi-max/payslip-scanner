@@ -30,6 +30,7 @@ import {
 interface AnnualCalculationTableProps {
   data: AnnoDati[];
   profilo: ProfiloAzienda;
+  eliorType?: 'viaggiante' | 'magazzino';
   onDataChange: (newData: AnnoDati[]) => void;
   includeTickets?: boolean;
   startClaimYear: number;
@@ -48,6 +49,7 @@ const MONTH_COLORS = [
 const AnnualCalculationTable: React.FC<AnnualCalculationTableProps> = ({
   data = [],
   profilo,
+  eliorType,
   onDataChange,
   includeTickets = true,
   startClaimYear,
@@ -135,7 +137,7 @@ const AnnualCalculationTable: React.FC<AnnualCalculationTableProps> = ({
   const calculateMonthIndemnity = (monthRow: any) => {
     if (!monthRow) return 0;
     let sum = 0;
-    const specificColumns = getColumnsByProfile(profilo);
+    const specificColumns = getColumnsByProfile(profilo, eliorType);
     specificColumns.forEach(col => {
       // Escludiamo i campi tecnici e i premi di produttività (3B70, 3B71)
       if (!['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'coeffPercepito', 'coeffTicket', 'note', 'arretrati', '3B70', '3B71'].includes(col.id)) {

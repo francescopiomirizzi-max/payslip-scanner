@@ -227,7 +227,7 @@ const StatsDashboard: React.FC<StatsDashboardProps> = ({ workers = [], onBack })
             const safeAnni = (Array.isArray(w.anni) ? w.anni : []) as any[];
             const TETTO_FERIE = includeExFest ? 32 : 28;
 
-            const indennitaCols = getColumnsByProfile(w.profilo || 'RFI').filter(c =>
+            const indennitaCols = getColumnsByProfile(w.profilo || 'RFI', w.eliorType).filter(c =>
                 !['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'coeffPercepito', 'coeffTicket', 'note', 'arretrati'].includes(c.id)
             );
 

@@ -168,6 +168,7 @@ interface MonthlyDataGridProps {
   initialYear: number;
   onYearChange: (year: number) => void;
   profilo: ProfiloAzienda;
+  eliorType?: 'viaggiante' | 'magazzino';
   onCellFocus?: (rowIndex: number, colId: string) => void;
   years: number[];  // Range dinamico controllato dal parent
 }
@@ -185,6 +186,7 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
   initialYear,
   onYearChange,
   profilo,
+  eliorType,
   onCellFocus,
   years
 }) => {
@@ -385,7 +387,7 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
   }, [profilo, isScrolling]); // Si riaggiorna se cambia il profilo/colonne
   // --- 1. CONFIGURAZIONE COLONNE ---
   const currentColumns = useMemo(() => {
-    const cols = getColumnsByProfile(profilo);
+    const cols = getColumnsByProfile(profilo, eliorType);
     // ESCLUSIONE DEFINITIVA: Rimuoviamo Ticket e i codici di Produttività
     return cols.filter(c => !['ticket', '3B70', '3B71'].includes(c.id));
   }, [profilo]);

@@ -54,6 +54,8 @@ export interface Worker {
   // ✨ IL PUNTO ZERO DEL TFR (Inserito manualmente dall'utente nel Modale)
   tfr_pregresso?: number;
   tfr_pregresso_anno?: number;
+
+  eliorType?: 'viaggiante' | 'magazzino';
 }
 
 export interface ColumnDef {
@@ -117,6 +119,19 @@ export const INDENNITA_ELIOR: ColumnDef[] = [
   { id: '5655', label: '26/MI Retrib.', subLabel: '(5655)', width: 'min-w-[100px]' },
 ];
 
+// Colonne ELIOR MAGAZZINO (Aggiunto per gestire il nuovo sotto-profilo)
+export const INDENNITA_ELIOR_MAGAZZINO: ColumnDef[] = [
+  { id: '1130', label: 'Lav. Nott.', subLabel: '(1130)', width: 'min-w-[100px]' },
+  { id: '1131', label: 'Lav. Domen.', subLabel: '(1131)', width: 'min-w-[100px]' },
+  { id: '2018', label: 'Straord. 18%', subLabel: '(2018)', width: 'min-w-[100px]' },
+  { id: '2035', label: 'Straord. 35%', subLabel: '(2035)', width: 'min-w-[100px]' },
+  { id: '2235', label: 'Magg. 35%', subLabel: '(2235)', width: 'min-w-[100px]' },
+  { id: '4133', label: 'Funz. Diverse', subLabel: '(4133)', width: 'min-w-[100px]' },
+  { id: '2313', label: 'Ind. Cella', subLabel: '(2313)', width: 'min-w-[100px]' },
+  { id: '4275', label: 'Ind. Sottosuolo', subLabel: '(4275)', width: 'min-w-[100px]' },
+  { id: '4285', label: '26/MI Retrib.', subLabel: '(4285)', width: 'min-w-[100px]' },
+];
+
 // Colonne REKEEP (Invariato)
 export const INDENNITA_REKEEP: ColumnDef[] = [
   { id: 'I1037C', label: 'Ind. Domenicale', subLabel: '(I1037C)', width: 'min-w-[110px]', type: 'currency' },
@@ -142,7 +157,7 @@ export const COLONNA_ARRETRATI: ColumnDef = {
 // --- MODIFICA CHIRURGICA 2: IL MOTORE DI FUSIONE ---
 // Questa funzione adesso cerca prima nei salvataggi locali. Se non trova l'azienda custom, 
 // usa i profili di sistema standard (RFI, ELIOR, REKEEP).
-export const getColumnsByProfile = (profilo: ProfiloAzienda): ColumnDef[] => {
+export const getColumnsByProfile = (profilo: ProfiloAzienda, eliorType?: 'viaggiante' | 'magazzino'): ColumnDef[] => {
   let specificColumns: ColumnDef[] = [];
 
   // 1. Prova a pescare le colonne personalizzate dal LocalStorage (Company Builder)
@@ -164,7 +179,7 @@ export const getColumnsByProfile = (profilo: ProfiloAzienda): ColumnDef[] => {
   if (specificColumns.length === 0) {
     switch (profilo) {
       case 'ELIOR':
-        specificColumns = INDENNITA_ELIOR;
+        specificColumns = eliorType === 'magazzino' ? INDENNITA_ELIOR_MAGAZZINO : INDENNITA_ELIOR;
         break;
       case 'REKEEP':
         specificColumns = INDENNITA_REKEEP;

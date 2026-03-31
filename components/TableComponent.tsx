@@ -254,7 +254,7 @@ const TableComponent: React.FC<TableComponentProps> = ({ worker, onBack, onEdit,
   const tableData = useMemo(() => {
     const sortedYears = [...YEARS].sort((a: number, b: number) => a - b);
     const TETTO_FERIE = includeExFest ? 32 : 28;
-    const profileColumns = getColumnsByProfile(worker.profilo);
+    const profileColumns = getColumnsByProfile(worker.profilo, worker.eliorType);
 
     // STEP A: PRE-CALCOLO MEDIE ANNUALI
     const yearlyRawStats: Record<number, { totVar: number; ggLav: number }> = {};

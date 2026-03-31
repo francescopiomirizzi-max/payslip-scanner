@@ -741,7 +741,14 @@ const App: React.FC = () => {
             addToast("Nuovo lavoratore aggiunto!", "success");
             triggerConfetti();
         } else {
-            setWorkers(workers.map(w => w.id === editingWorkerId ? { ...w, ...data } : w));
+            const currentEditingWorker = workers.find(w => w.id === editingWorkerId);
+            const updatedWorker = { ...currentEditingWorker, ...data } as any;
+            
+            setWorkers(workers.map(w => w.id === editingWorkerId ? updatedWorker : w));
+            
+            // Sincronizza il selectedWorker (la scheda aperta) se stiamo modificando proprio quello
+            setSelectedWorker(prev => (prev && prev.id === editingWorkerId ? updatedWorker : prev));
+            
             addToast("Modifiche salvate con successo.", "success");
         }
         setIsModalOpen(false);
@@ -836,7 +843,7 @@ const App: React.FC = () => {
             const TETTO_FERIE = includeExFest ? 32 : 28;
             const safeAnni = (Array.isArray(worker.anni) ? worker.anni : []) as any[];
 
-            const indCols = getColumnsByProfile(worker.profilo || 'RFI').filter(c =>
+            const indCols = getColumnsByProfile(worker.profilo || 'RFI', worker.eliorType).filter(c =>
                 !['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'coeffPercepito', 'coeffTicket', 'note', 'arretrati'].includes(c.id)
             );
 
@@ -928,7 +935,7 @@ const App: React.FC = () => {
             const TETTO_FERIE = includeExFest ? 32 : 28;
             const safeAnni = (Array.isArray(worker.anni) ? worker.anni : []) as any[];
 
-            const indCols = getColumnsByProfile(worker.profilo || 'RFI').filter(c =>
+            const indCols = getColumnsByProfile(worker.profilo || 'RFI', worker.eliorType).filter(c =>
                 !['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'coeffPercepito', 'coeffTicket', 'note', 'arretrati'].includes(c.id)
             );
 

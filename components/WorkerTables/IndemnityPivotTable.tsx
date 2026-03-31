@@ -36,6 +36,7 @@ const INDENNITA_DESCRIPTIONS: Record<string, string> = {
 interface IndemnityPivotTableProps {
   data: AnnoDati[];
   profilo: ProfiloAzienda;
+  eliorType?: 'viaggiante' | 'magazzino';
   startClaimYear?: number;
   years: number[];  // Range dinamico controllato dal parent
 }
@@ -45,6 +46,7 @@ type ViewMode = 'total' | 'average';
 const IndemnityPivotTable: React.FC<IndemnityPivotTableProps> = ({
   data = [],
   profilo,
+  eliorType,
   startClaimYear = 2008,
   years
 }) => {
@@ -57,10 +59,10 @@ const IndemnityPivotTable: React.FC<IndemnityPivotTableProps> = ({
   const pivotConfig = useMemo(() => {
     // Usiamo il motore universale. Togliamo le colonne di calcolo e di base (month, total, daysWorked, ecc)
     // per lasciare SOLO le indennità vere e proprie da mostrare nella Pivot
-    return getColumnsByProfile(profilo).filter(c =>
+    return getColumnsByProfile(profilo, eliorType).filter(c =>
       !['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'note', 'arretrati', 'coeffPercepito', 'coeffTicket'].includes(c.id)
     );
-  }, [profilo]);
+  }, [profilo, eliorType]);
 
   // --- CALCOLO AVANZATO ---
   const { rows, yearlyTotals, grandTotal, yearlyDaysWorked } = useMemo(() => {
