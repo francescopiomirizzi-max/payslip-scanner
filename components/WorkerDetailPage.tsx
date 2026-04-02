@@ -79,78 +79,8 @@ import Tesseract from 'tesseract.js';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
-// --- STILI CSS AVANZATI (AGGIUNTI PER EFFETTI TOP TIER) ---
-const GLOBAL_STYLES = `
-  @keyframes blob {
-    0% { transform: translate(0px, 0px) scale(1); }
-    33% { transform: translate(30px, -50px) scale(1.1); }
-    66% { transform: translate(-20px, 20px) scale(0.9); }
-    100% { transform: translate(0px, 0px) scale(1); }
-  }
-  .animate-blob {
-    animation: blob 7s infinite;
-  }
-  .animation-delay-2000 {
-    animation-delay: 2s;
-  }
-  .animation-delay-4000 {
-    animation-delay: 4s;
-  }
-  @keyframes shimmer {
-    0% { background-position: 200% 0; }
-    100% { background-position: -200% 0; }
-  }
-  .animate-shimmer {
-    background-size: 200% auto;
-    animation: shimmer 4s linear infinite;
-}
-@keyframes aurora {
-    0%, 100% { background-position: 0% 50%; }
-    50% { background-position: 100% 50%; }
-  }
-  .animate-aurora {
-    background-size: 200% 200%;
-    animation: aurora 3s ease infinite;
-  }
-  
-  /* Glassmorphism 2.0 (Dinamico) */
-  .glass-panel {
-    background: rgba(255, 255, 255, 0.75);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    border: 1px solid rgba(255, 255, 255, 0.5);
-    border-top: 1px solid rgba(255, 255, 255, 0.9);
-    box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.07);
-    transition: all 0.5s ease;
-  }
-  
-  html.dark .glass-panel {
-    background: rgba(15, 23, 42, 0.65); /* slate-900 trasparente */
-    border: 1px solid rgba(255, 255, 255, 0.05);
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
-    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
-  }
-  
-/* Nasconde la barra di scorrimento mantenendo lo scroll attivo */
-  .no-scrollbar::-webkit-scrollbar {
-    display: none;
-  }
-  .no-scrollbar {
-    -ms-overflow-style: none;  /* IE e Edge */
-    scrollbar-width: none;  /* Firefox */
-  }
-/* --- FISICA DELLO SCANNER SINGOLO (Ciano/Stealth) --- */
-  @keyframes single-scan-laser {
-    0% { top: -10%; opacity: 0; filter: drop-shadow(0 0 10px #22d3ee); }
-    10% { opacity: 1; filter: drop-shadow(0 0 20px #22d3ee); }
-    90% { opacity: 1; filter: drop-shadow(0 0 20px #22d3ee); }
-    100% { top: 110%; opacity: 0; filter: drop-shadow(0 0 10px #22d3ee); }
-  }
-  @keyframes bracket-pulse {
-    0%, 100% { opacity: 0.3; transform: scale(0.95); border-color: #334155; }
-    50% { opacity: 1; transform: scale(1); border-color: #22d3ee; }
-  }
-`;
+// --- STILI CSS SPOSTATI IN index.css ---
+import { FRAMER_PHYSICS } from '../framerConfig';
 
 // --- CONFIGURAZIONE PROFILI PEC ---
 const PROFILE_CONFIG: any = {
@@ -272,19 +202,20 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
     window.dispatchEvent(new CustomEvent('set-island-context', { detail: 'detail' }));
 
     const handleGlobalScroll = () => {
-      // Usiamo una gestione unificata che va bene per window e per i container che "bubblano" con capture
-      let scrollTop = 0;
-      if (typeof window !== 'undefined') {
-        scrollTop = window.scrollY || document.documentElement.scrollTop;
-      }
+      requestAnimationFrame(() => {
+        let scrollTop = 0;
+        if (typeof window !== 'undefined') {
+          scrollTop = window.scrollY || document.documentElement.scrollTop;
+        }
 
-      if (scrollTop > 300 && !isQuickActionsActiveRef.current) {
-        isQuickActionsActiveRef.current = true;
-        setQuickActions(true);
-      } else if (scrollTop <= 200 && isQuickActionsActiveRef.current) {
-        isQuickActionsActiveRef.current = false;
-        setQuickActions(false);
-      }
+        if (scrollTop > 300 && !isQuickActionsActiveRef.current) {
+          isQuickActionsActiveRef.current = true;
+          setQuickActions(true);
+        } else if (scrollTop <= 200 && isQuickActionsActiveRef.current) {
+          isQuickActionsActiveRef.current = false;
+          setQuickActions(false);
+        }
+      });
     };
 
     window.addEventListener('scroll', handleGlobalScroll, true);
@@ -298,13 +229,15 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
 
   const handleContainerScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const scrollTop = e.currentTarget.scrollTop;
-    if (scrollTop > 300 && !isQuickActionsActiveRef.current) {
-      isQuickActionsActiveRef.current = true;
-      setQuickActions(true);
-    } else if (scrollTop <= 200 && isQuickActionsActiveRef.current) {
-      isQuickActionsActiveRef.current = false;
-      setQuickActions(false);
-    }
+    requestAnimationFrame(() => {
+      if (scrollTop > 300 && !isQuickActionsActiveRef.current) {
+        isQuickActionsActiveRef.current = true;
+        setQuickActions(true);
+      } else if (scrollTop <= 200 && isQuickActionsActiveRef.current) {
+        isQuickActionsActiveRef.current = false;
+        setQuickActions(false);
+      }
+    });
   };
 
   // 2. Eventi Custom della Dynamic Island
@@ -469,27 +402,38 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
   }, [batchNotification]);
 
   // --- GLOBAL SHORTCUTS (ESC & CTRL+S) ---
+  const shortcutStateRef = useRef({
+    showSplit, isQRModalOpen, showReport, isAiTfrModalOpen, activeTickerModal, isExplainerOpen, onUpdateData, monthlyInputs
+  });
+
+  useEffect(() => {
+    shortcutStateRef.current = {
+      showSplit, isQRModalOpen, showReport, isAiTfrModalOpen, activeTickerModal, isExplainerOpen, onUpdateData, monthlyInputs
+    };
+  }, [showSplit, isQRModalOpen, showReport, isAiTfrModalOpen, activeTickerModal, isExplainerOpen, onUpdateData, monthlyInputs]);
+
   useEffect(() => {
     const handleGlobalShortcuts = (e: KeyboardEvent) => {
+      const state = shortcutStateRef.current;
       // ESC per chiudere i modali
       if (e.key === 'Escape') {
-        if (showSplit) setShowSplit(false);
-        if (isQRModalOpen) setIsQRModalOpen(false);
-        if (showReport) setShowReport(false);
-        if (isAiTfrModalOpen) setIsAiTfrModalOpen(false);
-        if (activeTickerModal) setActiveTickerModal(null);
-        if (isExplainerOpen) setIsExplainerOpen(false);
+        if (state.showSplit) setShowSplit(false);
+        if (state.isQRModalOpen) setIsQRModalOpen(false);
+        if (state.showReport) setShowReport(false);
+        if (state.isAiTfrModalOpen) setIsAiTfrModalOpen(false);
+        if (state.activeTickerModal) setActiveTickerModal(null);
+        if (state.isExplainerOpen) setIsExplainerOpen(false);
       }
       // CTRL+S o CMD+S per forzare sync visivo
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault();
-        onUpdateData(monthlyInputs);
+        state.onUpdateData(state.monthlyInputs);
         setBatchNotification({ type: 'success', msg: 'Dati sincronizzati e salvati correttamente.' });
       }
     };
     window.addEventListener('keydown', handleGlobalShortcuts);
     return () => window.removeEventListener('keydown', handleGlobalShortcuts);
-  }, [showSplit, isQRModalOpen, showReport, isAiTfrModalOpen, activeTickerModal, isExplainerOpen, onUpdateData, monthlyInputs]);
+  }, []); // <-- Dependencies vuoto: l'ascoltatore è persistente e previene il memory leak.
 
 
   // --- FUNZIONE CHE RICEVE I DATI DAL TELEFONO (ANTI-SOVRASCRITTURA DEFINITIVA FIXATA) ---
@@ -720,7 +664,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
           aiResult = parsed;
 
           // 📡 SPIA DIAGNOSTICA: Stampa nella console cosa ha capito l'IA
-          console.log(`🤖 DATI ESTRATTI DA ${file.name}:`, aiResult);
+        // Dati estratti e pronti per l'inserimento
 
         } catch (e) {
           console.error(`❌ Il server ha fallito sul file ${file.name}. Risposta:`, responseText);
@@ -2099,7 +2043,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
       </AnimatePresence>
 
       {/* STYLE GLOBALE */}
-      <style>{GLOBAL_STYLES}</style>
+      {/* STILI GLOBALI SPOSTATI IN INDEX.CSS */}
 
       <MovingGrid />
       <div className="relative z-50 pt-20 px-6 pb-2"> {/* AUMENTATO IL PADDING TOP A 20 PER L'ISLAND */}
@@ -2107,7 +2051,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
         <motion.div
           initial={{ y: -50, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
-          transition={{ type: "spring", stiffness: 300, damping: 30 }}
+          transition={FRAMER_PHYSICS.smooth}
           className="glass-panel max-w-[1800px] mx-auto rounded-[2rem] p-4 flex justify-between items-center gap-6"
         >
           <div className="flex items-center gap-6 shrink-0">
@@ -2492,15 +2436,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
                 ) : (
                   <>
                     {/* ✨ FIX DEFINITIVO: Animazione fluida che si attiva SOLO in hover! */}
-                    <style>{`
-                        @keyframes scanIconFloat {
-                          0%, 100% { transform: translateY(0); }
-                          50% { transform: translateY(-4px); }
-                        }
-                        .group:hover .scan-icon-animate {
-                          animation: scanIconFloat 1.2s ease-in-out infinite;
-                        }
-                      `}</style>
+                    {/* Animazione scanIconFloat centralizzata in index.css */}
 
                     <div className="scan-icon-animate transition-transform">
                       <ScanLine className="w-5 h-5 transition-colors duration-300 text-slate-500 dark:text-slate-300 group-hover:text-cyan-400" />
@@ -2673,11 +2609,35 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
                       <Bot className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 text-white opacity-5 pointer-events-none" />
 
                       {isExplaining ? (
-                        <div className="flex flex-col items-center justify-center h-full gap-6 text-slate-400 dark:text-slate-200">
-                          <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 2, ease: "linear" }}>
-                            <Loader2 className="w-12 h-12 text-fuchsia-500" />
-                          </motion.div>
-                          <p className="text-lg font-bold text-white">Scansione e interpretazione in corso...</p>
+                        <div className="space-y-6 animate-pulse">
+                          {/* Skeleton dell'intestazione */}
+                          <div className="flex items-center gap-4">
+                            <div className="w-12 h-12 bg-slate-800 rounded-xl"></div>
+                            <div className="space-y-2">
+                              <div className="h-4 w-32 bg-slate-800 rounded-md"></div>
+                              <div className="h-3 w-20 bg-slate-800/60 rounded-md"></div>
+                            </div>
+                          </div>
+                          
+                          {/* Skeleton del corpo report */}
+                          <div className="space-y-4 pt-4">
+                            <div className="h-3 w-full bg-slate-800/80 rounded-full"></div>
+                            <div className="h-3 w-[90%] bg-slate-800/60 rounded-full"></div>
+                            <div className="h-3 w-[95%] bg-slate-800/80 rounded-full"></div>
+                            <div className="h-3 w-[85%] bg-slate-800/40 rounded-full"></div>
+                          </div>
+
+                          <div className="pt-8 space-y-4">
+                             <div className="h-20 w-full bg-slate-800/40 rounded-2xl border border-slate-800"></div>
+                             <div className="h-20 w-full bg-slate-800/40 rounded-2xl border border-slate-800"></div>
+                          </div>
+
+                          <div className="flex justify-center pt-6">
+                            <div className="flex flex-col items-center gap-2">
+                              <Loader2 className="w-6 h-6 animate-spin text-fuchsia-500 opacity-50" />
+                              <span className="text-[10px] font-black uppercase tracking-tighter text-slate-500">AI sta scrivendo il report...</span>
+                            </div>
+                          </div>
                         </div>
                       ) : (
                         <div className="relative z-10 pb-12 pr-4">
@@ -2967,7 +2927,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
             <motion.div
               initial={{ scale: 0.8, y: 50 }}
               animate={{ scale: showSupernova ? 1.05 : 1, y: 0 }}
-              transition={{ type: "spring", stiffness: 300, damping: 30 }}
+              transition={FRAMER_PHYSICS.smooth}
               className={`p-8 sm:p-12 rounded-[2.5rem] flex flex-col items-center max-w-sm w-full relative overflow-hidden border transition-all duration-500
                 ${showSupernova ? 'bg-emerald-950 border-emerald-500 shadow-[0_0_150px_rgba(16,185,129,0.8)]' : 'bg-slate-900 border-slate-700 shadow-[0_0_120px_rgba(217,70,239,0.15)]'}`}
             >
@@ -3039,7 +2999,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
         >
           <motion.div
             initial={{ scale: 0.9, y: 30 }} animate={{ scale: 1, y: 0 }}
-            transition={{ type: "spring", stiffness: 300, damping: 30 }}
+            transition={FRAMER_PHYSICS.smooth}
             className="p-10 rounded-[3rem] flex flex-col items-center relative overflow-hidden bg-slate-900 border border-cyan-500/20 shadow-[0_0_80px_rgba(6,182,212,0.15)]"
           >
             {/* Luce di fondo ciano */}
@@ -3098,7 +3058,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
             initial={{ opacity: 0, x: 100, scale: 0.9 }}
             animate={{ opacity: 1, x: 0, scale: 1 }}
             exit={{ opacity: 0, x: 100, scale: 0.9 }}
-            transition={{ type: "spring", stiffness: 300, damping: 30 }}
+            transition={FRAMER_PHYSICS.smooth}
             className="fixed bottom-8 right-8 z-[250] flex flex-col gap-2"
           >
             <div className={`relative flex items-start gap-3 p-4 pr-12 w-80 rounded-2xl shadow-2xl backdrop-blur-2xl border border-white/10 overflow-hidden
@@ -3146,13 +3106,14 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
         )}
         {/* MODALE QR CODE SCANNER */}
         <QRScannerModal
-          key="qr-scanner-modal" // <--- AGGIUNGI QUESTA RIGA! È LA CHIAVE MAGICA!
+          key="qr-scanner-modal"
           isOpen={isQRModalOpen}
           onClose={() => setIsQRModalOpen(false)}
           onScanSuccess={handleQRData}
           company={worker.profilo || 'RFI'}
           workerName={`${worker.cognome} ${worker.nome}`}
-          customColumns={getCustomColumnsForAI()}
+          eliorType={worker.eliorType} // <--- AGGIUNGI QUESTA!
+        // RIMOSSA LA RIGA customColumns CHE FACEVA ESPLODERE IL QR!
         />
         <IstatDashboardModal
           isOpen={isIstatModalOpen}
@@ -3171,7 +3132,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
                 initial={{ opacity: 0, scale: 0.9, y: 30 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.9, y: 30 }}
-                transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                transition={FRAMER_PHYSICS.smooth}
                 className="relative w-full max-w-md bg-slate-900 rounded-[2.5rem] shadow-[0_0_80px_rgba(99,102,241,0.2)] border border-slate-700 overflow-hidden"
                 onClick={(e) => e.stopPropagation()}
               >
@@ -3187,10 +3148,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
                 </div>
 
                 <div className="px-8 pb-8 space-y-5 relative z-10">
-                  <style>{`
-                  .hide-arrows::-webkit-outer-spin-button, .hide-arrows::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-                  .hide-arrows { -moz-appearance: textfield; }
-                `}</style>
+                  {/* Classe hide-arrows centralizzata in index.css */}
 
                   <div className="space-y-2">
                     <label className="text-[10px] font-bold text-slate-500 dark:text-slate-300 uppercase tracking-widest pl-1">Importo Trovato</label>
@@ -3235,7 +3193,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              transition={{ type: "spring", stiffness: 300, damping: 30 }}
+              transition={FRAMER_PHYSICS.smooth}
               // Ingrandito da max-w-sm a max-w-lg per far respirare il testo
               className="relative w-full max-w-lg bg-slate-900 rounded-[2rem] shadow-[0_0_60px_rgba(79,70,229,0.3)] border border-slate-700 overflow-hidden"
               onClick={(e) => e.stopPropagation()}

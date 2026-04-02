@@ -3,6 +3,7 @@ import { Camera, Loader2, CheckCircle2, X, FileText, Image as ImageIcon, Smartph
 import { supabase } from '../supabaseClient';
 import { motion, AnimatePresence } from 'framer-motion';
 import Tesseract from 'tesseract.js'; // ✨ IMPORTANTE: Il motore OCR per leggere i mesi
+import { useIsland } from '../IslandContext';
 
 // Struttura dati per la Fascicolazione Intelligente
 type DocumentFolder = {
@@ -53,6 +54,7 @@ const guessTitleFromText = (text: string) => {
 };
 
 const MobileUploadPage = ({ sessionId }: { sessionId: string }) => {
+    const { showNotification } = useIsland();
     const searchParams = new URLSearchParams(window.location.search);
     const company = searchParams.get('company') || 'Azienda';
     const workerName = searchParams.get('name') || 'Lavoratore';
@@ -192,7 +194,7 @@ const MobileUploadPage = ({ sessionId }: { sessionId: string }) => {
 
             if (isOnboarding && newFiles.length > 1) {
                 newFiles = [newFiles[0]];
-                alert("Per l'autocompilazione basta inquadrare la prima pagina del documento.");
+                showNotification("Solo una pagina", "Per l'autocompilazione basta inquadrare la prima pagina del documento.", "warning");
             }
 
             setDocuments(prev => {
@@ -316,7 +318,7 @@ const MobileUploadPage = ({ sessionId }: { sessionId: string }) => {
                     let msg = err.message;
                     if (msg.includes('502') || msg.includes('504')) msg = "Timeout Netlify (>10 sec). Riduci la risoluzione.";
                     if (msg.includes('413')) msg = "Il fascicolo è troppo pesante.";
-                    alert(`❌ ERRORE SUL FASCICOLO ${i + 1}:\n${msg}`);
+                    showNotification(`Errore fascicolo ${i + 1}`, msg, "error", 6000);
                 }
                 await new Promise(r => setTimeout(r, 1200));
             }
@@ -332,13 +334,13 @@ const MobileUploadPage = ({ sessionId }: { sessionId: string }) => {
             const msg = error.message || "Errore di connessione o file troppo pesante";
             await supabase.from('scan_sessions').update({ status: 'error', data: msg }).eq('id', sessionId);
             setDocuments([]); setUploadStatus('idle');
-            alert(`❌ ERRORE CRITICO SISTEMA:\n${msg}`);
+            showNotification("Errore di Sistema", msg, "error", 6000);
         }
     };
 
     if (uploadStatus === 'success') {
         return (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-[9999] bg-emerald-950/95 backdrop-blur-2xl flex items-center justify-center flex-col text-white p-6 text-center">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-9999 bg-emerald-950/95 backdrop-blur-2xl flex items-center justify-center flex-col text-white p-6 text-center">
                 <motion.div initial={{ scale: 0 }} animate={{ scale: 1, rotate: 360 }} transition={{ type: "spring", damping: 15 }} className="mb-6 relative">
                     <div className="absolute inset-0 bg-emerald-500 blur-2xl opacity-40 rounded-full"></div>
                     <CheckCircle2 className="w-24 h-24 text-emerald-400 relative z-10 drop-shadow-[0_0_15px_rgba(52,211,153,0.8)]" strokeWidth={2} />
@@ -490,7 +492,7 @@ const MobileUploadPage = ({ sessionId }: { sessionId: string }) => {
                     <div className="flex flex-col gap-3">
                         {documents.length > 0 && (
                             <button onClick={handleUploadAll} className={`w-full py-4 rounded-2xl text-white font-black flex items-center justify-center gap-3 transition-all active:scale-95 border text-xs uppercase tracking-[0.2em] shadow-[0_10px_30px_rgba(79,70,229,0.3)]
-                                ${isOnboarding ? 'bg-gradient-to-r from-teal-600 to-emerald-600 border-teal-500 text-white' : 'bg-gradient-to-r from-indigo-600 to-blue-600 border-indigo-500 text-white'}`}>
+                                ${isOnboarding ? 'bg-linear-to-r from-teal-600 to-emerald-600 border-teal-500 text-white' : 'bg-linear-to-r from-indigo-600 to-blue-600 border-indigo-500 text-white'}`}>
                                 <Zap className="w-5 h-5" fill="currentColor" />
                                 {isOnboarding ? 'Estrai Dati AI' : `Invia ${documents.length} Fascicoli al Server`}
                             </button>

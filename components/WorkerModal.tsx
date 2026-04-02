@@ -9,6 +9,8 @@ import {
 import QRCode from 'react-qr-code';
 import { v4 as uuidv4 } from 'uuid';
 import { supabase } from '../supabaseClient';
+import { useIsland } from '../IslandContext';
+import { FRAMER_PHYSICS } from '../framerConfig';
 interface WorkerModalProps {
     isOpen: boolean;
     onClose: () => void;
@@ -184,6 +186,9 @@ const OPTIONS = [
 ];
 
 const WorkerModal: React.FC<WorkerModalProps> = ({ isOpen, onClose, onConfirm, initialData, mode }) => {
+    // Isola Dinamica
+    const { showNotification } = useIsland();
+
     // 1. Aggiornato stato con profiloProfessionale
     const [formData, setFormData] = useState<{
         nome: string;
@@ -288,7 +293,7 @@ const WorkerModal: React.FC<WorkerModalProps> = ({ isOpen, onClose, onConfirm, i
             compileDataFromAI(data);
         } catch (error) {
             console.error(error);
-            alert("Errore durante la lettura del documento. Compila manualmente.");
+            showNotification("Errore di Lettura", "Documento illeggibile o timeout server. Compila manualmente.", "error", 5000);
         } finally {
             setIsScanning(false);
             if (e.target) e.target.value = '';
@@ -488,7 +493,7 @@ const WorkerModal: React.FC<WorkerModalProps> = ({ isOpen, onClose, onConfirm, i
                             initial={{ opacity: 0, scale: 0.9, y: 120, rotateX: 10 }}
                             animate={{ opacity: 1, scale: 1, y: 0, rotateX: 0 }}
                             exit={{ opacity: 0, scale: 0.9, y: 80, rotateX: 5 }}
-                            transition={{ type: "spring", stiffness: 250, damping: 25, mass: 1.2 }}
+                            transition={FRAMER_PHYSICS.heavyBounce}
                             className="relative w-full max-w-[700px] bg-white/90 dark:bg-slate-900/90 backdrop-blur-2xl rounded-[3.5rem] overflow-hidden border-2 border-white/60 dark:border-slate-700 transition-colors duration-500"
                             style={{
                                 // Usiamo l'operatore document.documentElement per verificare se siamo dark mode e togliere l'inset shadow bianco
@@ -669,29 +674,37 @@ const WorkerModal: React.FC<WorkerModalProps> = ({ isOpen, onClose, onConfirm, i
                                                 {focusedField === field && <motion.span layoutId="activeDot" className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: shellTheme.color }} />}
                                             </label>
                                             <div className="relative group">
-                                                <div
-                                                    className={`absolute inset-y-0 left-0 pl-5 flex items-center pointer-events-none transition-colors duration-300 ${focusedField === field ? '' : 'text-slate-400'}`}
-                                                    style={{ color: focusedField === field ? shellTheme.color : undefined }}
-                                                >
-                                                    <motion.div animate={{ scale: focusedField === field ? 1.2 : 1 }} transition={{ type: "spring", stiffness: 300 }}>
-                                                        <AlignLeft className="w-6 h-6" />
-                                                    </motion.div>
-                                                </div>
-                                                <input
-                                                    ref={field === 'nome' ? nomeRef : cognomeRef}
-                                                    type="text"
-                                                    value={(formData as any)[field]}
-                                                    onChange={e => setFormData({ ...formData, [field]: e.target.value })}
-                                                    onKeyDown={(e) => handleInputNavigation(e, field)}
-                                                    onFocus={() => setFocusedField(field)}
-                                                    onBlur={() => setFocusedField(null)}
-                                                    className="w-full pl-14 pr-6 py-5 rounded-2xl bg-white/70 dark:bg-slate-900/60 border-2 border-slate-200/80 dark:border-slate-700 outline-none transition-all duration-300 font-bold text-lg text-slate-700 dark:text-white dark:placeholder-slate-500 focus:bg-white/90 dark:focus:bg-slate-800 focus:border-transparent focus:ring-4 backdrop-blur-md shadow-sm"
-                                                    style={{
-                                                        boxShadow: focusedField === field ? `0 0 0 4px ${shellTheme.color}20, 0 8px 25px -5px ${shellTheme.color}30` : '',
-                                                        borderColor: focusedField === field ? shellTheme.color : ''
-                                                    }}
-                                                    placeholder={`Inserisci ${field}...`}
-                                                />
+                                                {isScanning ? (
+                                                    <div className="w-full h-[68px] rounded-2xl bg-slate-200/50 dark:bg-slate-800/50 animate-pulse border-2 border-transparent relative overflow-hidden">
+                                                        <div className="absolute inset-0 -translate-x-full animate-[shimmer_2s_infinite] bg-gradient-to-r from-transparent via-white/40 dark:via-white/5 to-transparent"></div>
+                                                    </div>
+                                                ) : (
+                                                    <>
+                                                        <div
+                                                            className={`absolute inset-y-0 left-0 pl-5 flex items-center pointer-events-none transition-colors duration-300 ${focusedField === field ? '' : 'text-slate-400'}`}
+                                                            style={{ color: focusedField === field ? shellTheme.color : undefined }}
+                                                        >
+                                                            <motion.div animate={{ scale: focusedField === field ? 1.2 : 1 }} transition={FRAMER_PHYSICS.smooth}>
+                                                                <AlignLeft className="w-6 h-6" />
+                                                            </motion.div>
+                                                        </div>
+                                                        <input
+                                                            ref={field === 'nome' ? nomeRef : cognomeRef}
+                                                            type="text"
+                                                            value={(formData as any)[field]}
+                                                            onChange={e => setFormData({ ...formData, [field]: e.target.value })}
+                                                            onKeyDown={(e) => handleInputNavigation(e, field)}
+                                                            onFocus={() => setFocusedField(field)}
+                                                            onBlur={() => setFocusedField(null)}
+                                                            className="w-full pl-14 pr-6 py-5 rounded-2xl bg-white/70 dark:bg-slate-900/60 border-2 border-slate-200/80 dark:border-slate-700 outline-none transition-all duration-300 font-bold text-lg text-slate-700 dark:text-white dark:placeholder-slate-500 focus:bg-white/90 dark:focus:bg-slate-800 focus:border-transparent focus:ring-4 backdrop-blur-md shadow-sm"
+                                                            style={{
+                                                                boxShadow: focusedField === field ? `0 0 0 4px ${shellTheme.color}20, 0 8px 25px -5px ${shellTheme.color}30` : '',
+                                                                borderColor: focusedField === field ? shellTheme.color : ''
+                                                            }}
+                                                            placeholder={`Inserisci ${field}...`}
+                                                        />
+                                                    </>
+                                                )}
                                             </div>
                                         </div>
                                     ))}
@@ -706,26 +719,34 @@ const WorkerModal: React.FC<WorkerModalProps> = ({ isOpen, onClose, onConfirm, i
                                             {focusedField === 'ruolo' && <motion.span layoutId="activeDot" className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: shellTheme.color }} />}
                                         </label>
                                         <div className="relative group">
-                                            <div className={`absolute inset-y-0 left-0 pl-5 flex items-center pointer-events-none transition-colors duration-300 ${focusedField === 'ruolo' ? '' : 'text-slate-400'}`} style={{ color: focusedField === 'ruolo' ? shellTheme.color : '' }}>
-                                                <motion.div animate={{ scale: focusedField === 'ruolo' ? 1.2 : 1 }} transition={{ type: "spring", stiffness: 300 }}>
-                                                    <Briefcase className="w-6 h-6" />
-                                                </motion.div>
-                                            </div>
-                                            <input
-                                                ref={ruoloRef}
-                                                type="text"
-                                                value={formData.ruolo}
-                                                onChange={e => setFormData({ ...formData, ruolo: e.target.value })}
-                                                onKeyDown={(e) => handleInputNavigation(e, 'ruolo')}
-                                                onFocus={() => setFocusedField('ruolo')}
-                                                onBlur={() => setFocusedField(null)}
-                                                className="w-full pl-14 pr-6 py-5 rounded-2xl bg-white/70 border-2 border-slate-200/80 outline-none transition-all duration-300 font-bold text-lg text-slate-700 focus:bg-white/90 focus:border-transparent focus:ring-4 backdrop-blur-md shadow-sm"
-                                                style={{
-                                                    boxShadow: focusedField === 'ruolo' ? `0 0 0 4px ${shellTheme.color}20, 0 8px 25px -5px ${shellTheme.color}30` : '',
-                                                    borderColor: focusedField === 'ruolo' ? shellTheme.color : ''
-                                                }}
-                                                placeholder="Es. Macchinista..."
-                                            />
+                                            {isScanning ? (
+                                                <div className="w-full h-[68px] rounded-2xl bg-slate-200/50 dark:bg-slate-800/50 animate-pulse border-2 border-transparent relative overflow-hidden">
+                                                    <div className="absolute inset-0 -translate-x-full animate-[shimmer_2s_infinite] bg-gradient-to-r from-transparent via-white/40 dark:via-white/5 to-transparent"></div>
+                                                </div>
+                                            ) : (
+                                                <>
+                                                    <div className={`absolute inset-y-0 left-0 pl-5 flex items-center pointer-events-none transition-colors duration-300 ${focusedField === 'ruolo' ? '' : 'text-slate-400'}`} style={{ color: focusedField === 'ruolo' ? shellTheme.color : '' }}>
+                                                        <motion.div animate={{ scale: focusedField === 'ruolo' ? 1.2 : 1 }} transition={FRAMER_PHYSICS.smooth}>
+                                                            <Briefcase className="w-6 h-6" />
+                                                        </motion.div>
+                                                    </div>
+                                                    <input
+                                                        ref={ruoloRef}
+                                                        type="text"
+                                                        value={formData.ruolo}
+                                                        onChange={e => setFormData({ ...formData, ruolo: e.target.value })}
+                                                        onKeyDown={(e) => handleInputNavigation(e, 'ruolo')}
+                                                        onFocus={() => setFocusedField('ruolo')}
+                                                        onBlur={() => setFocusedField(null)}
+                                                        className="w-full pl-14 pr-6 py-5 rounded-2xl bg-white/70 dark:bg-slate-900/60 border-2 border-slate-200/80 dark:border-slate-700 outline-none transition-all duration-300 font-bold text-lg text-slate-700 dark:text-white focus:bg-white/90 dark:focus:bg-slate-800 focus:border-transparent focus:ring-4 backdrop-blur-md shadow-sm"
+                                                        style={{
+                                                            boxShadow: focusedField === 'ruolo' ? `0 0 0 4px ${shellTheme.color}20, 0 8px 25px -5px ${shellTheme.color}30` : '',
+                                                            borderColor: focusedField === 'ruolo' ? shellTheme.color : ''
+                                                        }}
+                                                        placeholder="Es. Macchinista..."
+                                                    />
+                                                </>
+                                            )}
                                         </div>
                                     </div>
 
@@ -736,26 +757,34 @@ const WorkerModal: React.FC<WorkerModalProps> = ({ isOpen, onClose, onConfirm, i
                                             {focusedField === 'profiloProfessionale' && <motion.span layoutId="activeDot" className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: shellTheme.color }} />}
                                         </label>
                                         <div className="relative group">
-                                            <div className={`absolute inset-y-0 left-0 pl-5 flex items-center pointer-events-none transition-colors duration-300 ${focusedField === 'profiloProfessionale' ? '' : 'text-slate-400'}`} style={{ color: focusedField === 'profiloProfessionale' ? shellTheme.color : '' }}>
-                                                <motion.div animate={{ scale: focusedField === 'profiloProfessionale' ? 1.2 : 1 }} transition={{ type: "spring", stiffness: 300 }}>
-                                                    <BadgeCheck className="w-6 h-6" />
-                                                </motion.div>
-                                            </div>
-                                            <input
-                                                ref={profRef}
-                                                type="text"
-                                                value={formData.profiloProfessionale}
-                                                onChange={e => setFormData({ ...formData, profiloProfessionale: e.target.value })}
-                                                onKeyDown={(e) => handleInputNavigation(e, 'profiloProfessionale')}
-                                                onFocus={() => setFocusedField('profiloProfessionale')}
-                                                onBlur={() => setFocusedField(null)}
-                                                className="w-full pl-14 pr-6 py-5 rounded-2xl bg-white/70 border-2 border-slate-200/80 outline-none transition-all duration-300 font-bold text-lg text-slate-700 focus:bg-white/90 focus:border-transparent focus:ring-4 backdrop-blur-md shadow-sm"
-                                                style={{
-                                                    boxShadow: focusedField === 'profiloProfessionale' ? `0 0 0 4px ${shellTheme.color}20, 0 8px 25px -5px ${shellTheme.color}30` : '',
-                                                    borderColor: focusedField === 'profiloProfessionale' ? shellTheme.color : ''
-                                                }}
-                                                placeholder="Es. Livello B..."
-                                            />
+                                            {isScanning ? (
+                                                <div className="w-full h-[68px] rounded-2xl bg-slate-200/50 dark:bg-slate-800/50 animate-pulse border-2 border-transparent relative overflow-hidden">
+                                                    <div className="absolute inset-0 -translate-x-full animate-[shimmer_2s_infinite] bg-gradient-to-r from-transparent via-white/40 dark:via-white/5 to-transparent"></div>
+                                                </div>
+                                            ) : (
+                                                <>
+                                                    <div className={`absolute inset-y-0 left-0 pl-5 flex items-center pointer-events-none transition-colors duration-300 ${focusedField === 'profiloProfessionale' ? '' : 'text-slate-400'}`} style={{ color: focusedField === 'profiloProfessionale' ? shellTheme.color : '' }}>
+                                                        <motion.div animate={{ scale: focusedField === 'profiloProfessionale' ? 1.2 : 1 }} transition={FRAMER_PHYSICS.smooth}>
+                                                            <BadgeCheck className="w-6 h-6" />
+                                                        </motion.div>
+                                                    </div>
+                                                    <input
+                                                        ref={profRef}
+                                                        type="text"
+                                                        value={formData.profiloProfessionale}
+                                                        onChange={e => setFormData({ ...formData, profiloProfessionale: e.target.value })}
+                                                        onKeyDown={(e) => handleInputNavigation(e, 'profiloProfessionale')}
+                                                        onFocus={() => setFocusedField('profiloProfessionale')}
+                                                        onBlur={() => setFocusedField(null)}
+                                                        className="w-full pl-14 pr-6 py-5 rounded-2xl bg-white/70 dark:bg-slate-900/60 border-2 border-slate-200/80 dark:border-slate-700 outline-none transition-all duration-300 font-bold text-lg text-slate-700 dark:text-white dark:placeholder-slate-500 focus:bg-white/90 dark:focus:bg-slate-800 focus:border-transparent focus:ring-4 backdrop-blur-md shadow-sm"
+                                                        style={{
+                                                            boxShadow: focusedField === 'profiloProfessionale' ? `0 0 0 4px ${shellTheme.color}20, 0 8px 25px -5px ${shellTheme.color}30` : '',
+                                                            borderColor: focusedField === 'profiloProfessionale' ? shellTheme.color : ''
+                                                        }}
+                                                        placeholder="Es. Livello B..."
+                                                    />
+                                                </>
+                                            )}
                                         </div>
                                     </div>
                                 </div>

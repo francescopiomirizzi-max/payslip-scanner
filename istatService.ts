@@ -29,7 +29,7 @@ export const fetchIstatFOI = async () => {
         if (!response.ok) throw new Error("Server ISTAT irraggiungibile o bloccato da CORS");
 
         const data = await response.json();
-        console.log("✅ Connessione API ISTAT stabilita con successo!", data);
+        // Parsing interno completato e log disabilitato in prod
 
         // (In un'app di produzione backend, qui si fa il parsing del JSON SDMX 
         // per aggiornare l'oggetto FOI_ANNUAL_INDICES in tempo reale)

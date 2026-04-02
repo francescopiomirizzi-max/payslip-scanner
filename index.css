@@ -34,27 +34,20 @@
   }
 }
 
-/* --- ANIMAZIONI GLOBALI AGGIUNTIVE --- */
-/* (Queste servono se Tailwind non le ha caricate dal config, ma è una sicurezza in più) */
+/* ========================================
+   ANIMAZIONI GLOBALI CENTRALIZZATE
+   (Tutte le @keyframes dell'app)
+   ======================================== */
+
+/* --- BLOB (Sfondo con bolle organiche) --- */
 @keyframes blob {
   0% { transform: translate(0px, 0px) scale(1); }
   33% { transform: translate(30px, -50px) scale(1.1); }
   66% { transform: translate(-20px, 20px) scale(0.9); }
   100% { transform: translate(0px, 0px) scale(1); }
 }
-
-@keyframes shimmer {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
-}
-
-/* Classi di utilità per le animazioni se non vengono lette dal config */
 .animate-blob {
   animation: blob 7s infinite;
-}
-.animate-shimmer {
-  background-size: 200% auto;
-  animation: shimmer 2s linear infinite;
 }
 .animation-delay-2000 {
   animation-delay: 2s;
@@ -63,7 +56,85 @@
   animation-delay: 4s;
 }
 
-/* STILI STAMPA (Per far funzionare bene i PDF) */
+/* --- SHIMMER (Effetto caricamento skeleton) --- */
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+.animate-shimmer {
+  background-size: 200% auto;
+  animation: shimmer 2s linear infinite;
+}
+
+/* --- AURORA (Gradiente animato) --- */
+@keyframes aurora {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+.animate-aurora {
+  background-size: 200% 200%;
+  animation: aurora 3s ease infinite;
+}
+
+/* --- WIDE FLOAT (Correnti fluide Dashboard) --- */
+@keyframes wide-float {
+  0% { transform: translate(0, 0) scale(1); }
+  25% { transform: translate(10%, 15%) scale(1.2); }
+  50% { transform: translate(-5%, 20%) scale(0.9); }
+  75% { transform: translate(-15%, -5%) scale(1.1); }
+  100% { transform: translate(0, 0) scale(1); }
+}
+.animate-wide-float { animation: wide-float 15s infinite ease-in-out; }
+.animate-wide-float-fast { animation: wide-float 10s infinite ease-in-out reverse; }
+.animate-wide-float-slow { animation: wide-float 20s infinite ease-in-out; }
+
+/* --- SCAN ICON FLOAT (Hover icona Scan AI) --- */
+@keyframes scanIconFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+.group:hover .scan-icon-animate {
+  animation: scanIconFloat 1.2s ease-in-out infinite;
+}
+
+/* --- SCANNER LASER (Scansione singola Ciano) --- */
+@keyframes single-scan-laser {
+  0% { top: -10%; opacity: 0; filter: drop-shadow(0 0 10px #22d3ee); }
+  10% { opacity: 1; filter: drop-shadow(0 0 20px #22d3ee); }
+  90% { opacity: 1; filter: drop-shadow(0 0 20px #22d3ee); }
+  100% { top: 110%; opacity: 0; filter: drop-shadow(0 0 10px #22d3ee); }
+}
+@keyframes bracket-pulse {
+  0%, 100% { opacity: 0.3; transform: scale(0.95); border-color: #334155; }
+  50% { opacity: 1; transform: scale(1); border-color: #22d3ee; }
+}
+
+/* ========================================
+   UTILITY GLOBALI
+   ======================================== */
+
+/* Nasconde scrollbar mantenendo scroll attivo */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Rimozione spinner dai campi numerici */
+.hide-arrows::-webkit-outer-spin-button,
+.hide-arrows::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.hide-arrows {
+  -moz-appearance: textfield;
+}
+
+/* ========================================
+   STAMPA
+   ======================================== */
 @media print {
   @page { margin: 0; }
   body { margin: 1.6cm; }

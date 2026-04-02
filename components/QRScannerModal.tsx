@@ -16,12 +16,13 @@ interface QRScannerModalProps {
     onScanSuccess: (data: any) => void;
     company?: string;
     workerName?: string;
+    eliorType?: string; // <--- AGGIUNTA QUESTA!
     customColumns?: any[];
     scanMode?: 'ai' | 'archive'; // Prop passata dal bottone PC
 }
 
 const QRScannerModal: React.FC<QRScannerModalProps> = ({
-    isOpen, onClose, onScanSuccess, company = 'RFI', workerName = 'Lavoratore', customColumns, scanMode = 'ai'
+    isOpen, onClose, onScanSuccess, company = 'RFI', workerName = 'Lavoratore', eliorType, customColumns, scanMode = 'ai' // <--- AGGIUNTO eliorType
 }) => {
     const { startUpload, updateUploadProgress, finishUpload } = useIsland();
     const hasStartedUpload = useRef(false);
@@ -285,9 +286,10 @@ const QRScannerModal: React.FC<QRScannerModalProps> = ({
 
     if (!isOpen) return null;
 
-    const colsParam = customColumns && customColumns.length > 0 ? `&cols=${encodeURIComponent(JSON.stringify(customColumns))}` : '';
+    const eliorParam = eliorType ? `&eliorType=${encodeURIComponent(eliorType)}` : '';
+
     // L'URL dinamico in base alla pillola
-    const qrUrl = `${window.location.origin}/?mobile=true&session=${sessionId}&company=${encodeURIComponent(company)}&name=${encodeURIComponent(workerName)}${colsParam}&type=${localScanMode}`;
+    const qrUrl = `${window.location.origin}/?mobile=true&session=${sessionId}&company=${encodeURIComponent(company)}&name=${encodeURIComponent(workerName)}${eliorParam}&type=${localScanMode}`;
 
     const appleTransition = { type: "spring", damping: 25, stiffness: 200 };
     const isVisuallyHidden = status === 'processing' || status === 'file_done' || status === 'all_done';

@@ -203,10 +203,17 @@ const FloatingCalculator = ({ onClose }: { onClose: () => void }) => {
     const handleClear = () => setDisplay('');
 
     const handleEqual = () => {
-        if (!display) return; // Evita l'errore "undefined" se il display è vuoto
+        if (!display) return;
         try {
-            const result = eval(display.replace(/,/g, '.'));
-            setDisplay(result !== undefined ? String(result) : '');
+            // Parser matematico sicuro per prevenire RCE/XSS
+            const sanitized = display.replace(/,/g, '.').replace(/[^0-9+\-*/.]/g, '');
+            if (!sanitized) {
+                setDisplay('');
+                return;
+            }
+            // Essendo limitato ai soli caratteri matematici, il costruttore Function è blindato
+            const result = new Function('return ' + sanitized)();
+            setDisplay(result !== undefined && !isNaN(result) ? String(result) : '');
         } catch {
             setDisplay('Errore');
             setTimeout(() => setDisplay(''), 1000);
@@ -396,6 +403,8 @@ const ChangePasswordModal = ({ isOpen, onClose }: { isOpen: boolean; onClose: ()
 
     if (!isOpen) return null;
 
+    const { showNotification } = useIsland();
+
     const handleSave = () => {
         if (newPass.length < 4) {
             setError("La password deve avere almeno 4 caratteri.");
@@ -406,7 +415,7 @@ const ChangePasswordModal = ({ isOpen, onClose }: { isOpen: boolean; onClose: ()
             return;
         }
         localStorage.setItem('app_password', newPass); // SALVA NEL BROWSER
-        alert("Password aggiornata con successo! Usala al prossimo accesso.");
+        showNotification("Sicurezza", "Password aggiornata con successo! Usala al prossimo accesso.", "success", 5000);
         onClose();
     };
 
@@ -1386,7 +1395,7 @@ const App: React.FC = () => {
     // --- GESTIONE DATI DA MOBILE ---
     // Funzione chiamata quando il QR Scanner riceve dati dal telefono
     const handleMobileScanSuccess = (data: any) => {
-        console.log("DATI RICEVUTI DA MOBILE:", data);
+        // Dati ricevuti dal telefono, triggerati in background
 
         // 1. Apri Modale Edit/Create con i dati precompilati
         // (Qui potresti voler creare logica più complessa, es. aprire un modale di conferma)
@@ -1409,18 +1418,7 @@ const App: React.FC = () => {
             <div className="fixed inset-0 -z-10 overflow-hidden bg-slate-50 dark:bg-[#020617] transition-colors duration-500">
 
                 {/* Definizione Animazione Custom "Wide Move" per garantire il movimento visibile */}
-                <style>{`
-               @keyframes wide-float {
-                 0% { transform: translate(0, 0) scale(1); }
-                 25% { transform: translate(10%, 15%) scale(1.2); }
-                 50% { transform: translate(-5%, 20%) scale(0.9); }
-                 75% { transform: translate(-15%, -5%) scale(1.1); }
-                 100% { transform: translate(0, 0) scale(1); }
-               }
-               .animate-wide-float { animation: wide-float 15s infinite ease-in-out; }
-               .animate-wide-float-fast { animation: wide-float 10s infinite ease-in-out reverse; }
-               .animate-wide-float-slow { animation: wide-float 20s infinite ease-in-out; }
-             `}</style>
+                {/* Animazioni wide-float centralizzate in index.css */}
 
                 {/* --- LE CORRENTI (Colori: Blu Royal, Ciano Elettrico, Verde Acqua) --- */}
 
