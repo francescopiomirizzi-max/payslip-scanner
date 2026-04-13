@@ -1032,10 +1032,12 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
       if (!isNaN(y)) {
         if (!yearlyRaw[y]) yearlyRaw[y] = { totVar: 0, ggLav: 0 };
         const gg = parseLocalFloat(row.daysWorked);
+        
+        let sum = 0;
+        indennitaCols.forEach(c => sum += parseLocalFloat(row[c.id]));
+        yearlyRaw[y].totVar += sum;
+        
         if (gg > 0) {
-          let sum = 0;
-          indennitaCols.forEach(c => sum += parseLocalFloat(row[c.id]));
-          yearlyRaw[y].totVar += sum;
           yearlyRaw[y].ggLav += gg;
         }
       }

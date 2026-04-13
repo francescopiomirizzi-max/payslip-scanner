@@ -1,7 +1,0 @@
-refactor(perizia): implement dynamic legal storytelling and fix memory leak
-
-- Refactored 'RelazioneModal' to generate synchronous Legal Storytelling for UI and Word export.
-- Implemented dynamic N-1 calculation for practical examples, dynamically selecting the most recent valid year.
-- Added a robust 'White List' economic code filter to prevent miscalculation from system fields/timestamps.
-- Removed hardcoded signatures and 'Annotazioni' for a cleaner judicial layout.
-- FIXED (CRITICAL): Resolved infinite re-render and memory leak between App and WorkerDetailPage using useCallback and deep comparison (JSON.stringify) in dependency arrays.

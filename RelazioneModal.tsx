@@ -82,15 +82,15 @@ const generaEsempioDinamico = (worker: any, startClaimYear: number, tettoGiorni:
                 
                 if (ggLavMese > 0) {
                     ggLavPrec += ggLavMese;
-                    
-                    validCodes.forEach((cod: string) => {
-                        const rawVal = mm[cod];
-                        if (rawVal) {
-                            const parsed = parseLocalFloat(rawVal);
-                            if (!isNaN(parsed) && parsed !== 0) totVariabiliPrec += parsed;
-                        }
-                    });
                 }
+                
+                validCodes.forEach((cod: string) => {
+                    const rawVal = mm[cod];
+                    if (rawVal) {
+                        const parsed = parseLocalFloat(rawVal);
+                        if (!isNaN(parsed) && parsed !== 0) totVariabiliPrec += parsed;
+                    }
+                });
             });
 
             if (ggLavPrec > 0 && totVariabiliPrec > 0) {
@@ -403,12 +403,13 @@ export const RelazioneModal = ({ isOpen, onClose, worker, totals, includeExFest 
             
             const ggLavMese = parseLocalFloat(m.daysWorked);
             
+            let totMese = 0;
+            codiciArray.forEach(cod => {
+                totMese += m[cod] ? parseLocalFloat(m[cod]) : 0;
+            });
+            datiAnnuali[anno].totVoci += totMese;
+            
             if (ggLavMese > 0) {
-                let totMese = 0;
-                codiciArray.forEach(cod => {
-                    totMese += m[cod] ? parseLocalFloat(m[cod]) : 0;
-                });
-                datiAnnuali[anno].totVoci += totMese;
                 datiAnnuali[anno].ggLav += ggLavMese;
             }
             
