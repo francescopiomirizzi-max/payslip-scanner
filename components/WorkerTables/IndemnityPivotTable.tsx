@@ -89,7 +89,10 @@ const IndemnityPivotTable: React.FC<IndemnityPivotTableProps> = ({
 
           const months = safeData.filter(d => d.year === year);
           // USIAMO parseLocalFloat ANCHE QUI per leggere gli importi corretti
-          const yearSum = months.reduce((acc, month) => acc + parseLocalFloat(month[def.id]), 0);
+          const yearSum = months.reduce((acc, month) => {
+             const ggLav = parseLocalFloat(month.daysWorked);
+             return ggLav > 0 ? acc + parseLocalFloat(month[def.id]) : acc;
+          }, 0);
 
           if (viewMode === 'average') {
             yearValues[year] = yearSum / yearlyDaysWorked[year];

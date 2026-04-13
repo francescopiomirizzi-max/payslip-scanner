@@ -905,11 +905,15 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
       let totGiorniLavoratiAnno = 0;
 
       monthsInYear.forEach(m => {
-        let totMese = 0;
-        indennitaCols.forEach(col => { totMese += parseLocalFloat(m[col.id]); });
+        const ggLav = parseLocalFloat(m.daysWorked);
+        
+        if (ggLav > 0) {
+          let totMese = 0;
+          indennitaCols.forEach(col => { totMese += parseLocalFloat(m[col.id]); });
 
-        totIndennitaAnno += totMese;
-        totGiorniLavoratiAnno += parseLocalFloat(m.daysWorked);
+          totIndennitaAnno += totMese;
+          totGiorniLavoratiAnno += ggLav;
+        }
       });
 
       // Calcolo media giornaliera dell'anno

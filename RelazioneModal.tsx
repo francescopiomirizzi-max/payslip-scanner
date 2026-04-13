@@ -4,6 +4,7 @@ import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 import { motion } from 'framer-motion';
 import { YEARS, AnnoDati, getColumnsByProfile } from './types';
+import { parseLocalFloat } from './utils/formatters';
 
 // --- HELPER DI FORMATTAZIONE SICURA ---
 const fmt = (val: any) => {
@@ -77,15 +78,19 @@ const generaEsempioDinamico = (worker: any, startClaimYear: number, tettoGiorni:
             let ggLavPrec = 0;
 
             datiAnnoPrec.forEach((mm: any) => {
-                ggLavPrec += Number(mm.daysWorked) || 0;
+                const ggLavMese = parseLocalFloat(mm.daysWorked);
                 
-                validCodes.forEach((cod: string) => {
-                    const rawVal = mm[cod];
-                    if (rawVal) {
-                        const parsed = parseFloat(String(rawVal).replace(',', '.'));
-                        if (!isNaN(parsed)) totVariabiliPrec += parsed;
-                    }
-                });
+                if (ggLavMese > 0) {
+                    ggLavPrec += ggLavMese;
+                    
+                    validCodes.forEach((cod: string) => {
+                        const rawVal = mm[cod];
+                        if (rawVal) {
+                            const parsed = parseLocalFloat(rawVal);
+                            if (!isNaN(parsed) && parsed !== 0) totVariabiliPrec += parsed;
+                        }
+                    });
+                }
             });
 
             if (ggLavPrec > 0 && totVariabiliPrec > 0) {
@@ -375,19 +380,13 @@ export const RelazioneModal = ({ isOpen, onClose, worker, totals, includeExFest 
         const tettoGiorni = includeExFest ? 32 : 28;
 
         // 1. Estrazione codici dinamici (dinamica e sicura)
-        const codiciTrovati = new Set<string>();
+        const specificColumns = getColumnsByProfile(worker?.profilo, worker?.eliorType);
+        const codiciArray = specificColumns
+            .map((c: any) => c.id)
+            .filter((id: string) => !['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'coeffPercepito', 'coeffTicket', 'note', 'arretrati', '3B70', '3B71'].includes(id))
+            .sort();
+
         const mesi = worker?.anni || [];
-        mesi.forEach((m: AnnoDati) => {
-            if (m.codes && typeof m.codes === 'object') {
-                Object.keys(m.codes).forEach(c => {
-                    // Ignora esplicitamente i codici della premialità per non creare le colonne in Excel
-                    if (c !== '3B70' && c !== '3B71') {
-                        codiciTrovati.add(c);
-                    }
-                });
-            }
-        });
-        const codiciArray = Array.from(codiciTrovati).sort();
 
         // 2. Ordinamento temporale
         const mesiOrdinati = [...mesi].sort((a: AnnoDati, b: AnnoDati) => {
@@ -401,11 +400,21 @@ export const RelazioneModal = ({ isOpen, onClose, worker, totals, includeExFest 
         mesiOrdinati.forEach((m: AnnoDati) => {
             const anno = Number(m.year);
             if (!datiAnnuali[anno]) datiAnnuali[anno] = { totVoci: 0, ggLav: 0, ferieGodute: 0 };
-            let totMese = 0;
-            codiciArray.forEach(cod => { totMese += m.codes && m.codes[cod] ? Number(m.codes[cod]) : 0; });
-            datiAnnuali[anno].totVoci += totMese;
-            datiAnnuali[anno].ggLav += (Number(m.daysWorked) || 0);
-            if (anno >= startClaimYear) datiAnnuali[anno].ferieGodute += (Number(m.daysVacation) || 0);
+            
+            const ggLavMese = parseLocalFloat(m.daysWorked);
+            
+            if (ggLavMese > 0) {
+                let totMese = 0;
+                codiciArray.forEach(cod => {
+                    totMese += m[cod] ? parseLocalFloat(m[cod]) : 0;
+                });
+                datiAnnuali[anno].totVoci += totMese;
+                datiAnnuali[anno].ggLav += ggLavMese;
+            }
+            
+            if (anno >= startClaimYear) {
+                datiAnnuali[anno].ferieGodute += parseLocalFloat(m.daysVacation);
+            }
         });
 
         // --- MAPPA COLONNE ---
@@ -572,13 +581,13 @@ export const RelazioneModal = ({ isOpen, onClose, worker, totals, includeExFest 
 
                 sheet.getCell(currentRow, 1).value = Number(m.year);
                 sheet.getCell(currentRow, 2).value = m.month;
-                sheet.getCell(currentRow, 3).value = Number(m.daysWorked) || 0;
-                sheet.getCell(currentRow, 4).value = Number(m.daysVacation) || 0;
+                sheet.getCell(currentRow, 3).value = parseLocalFloat(m.daysWorked);
+                sheet.getCell(currentRow, 4).value = parseLocalFloat(m.daysVacation);
 
-                sheet.getCell(currentRow, 5).value = Number(m.ticketRate) || 0;
+                sheet.getCell(currentRow, 5).value = parseLocalFloat(m.ticket);
                 sheet.getCell(currentRow, 5).numFmt = numEuroContabile;
 
-                sheet.getCell(currentRow, 6).value = Number(m.arretrati) || 0;
+                sheet.getCell(currentRow, 6).value = parseLocalFloat(m.arretrati);
                 sheet.getCell(currentRow, 6).numFmt = numEuroContabile;
 
                 const cellNote = sheet.getCell(currentRow, 7);
@@ -586,7 +595,7 @@ export const RelazioneModal = ({ isOpen, onClose, worker, totals, includeExFest 
                 cellNote.alignment = { wrapText: true, vertical: 'middle' };
 
                 codiciArray.forEach((cod, idx) => {
-                    const val = m.codes && m.codes[cod] ? Number(m.codes[cod]) : 0;
+                    const val = m[cod] ? parseLocalFloat(m[cod]) : 0;
                     const cell = sheet.getCell(currentRow, 8 + idx);
                     cell.value = val;
                     cell.numFmt = numEuroContabile;
