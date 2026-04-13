@@ -160,11 +160,10 @@ const AnnualCalculationTable: React.FC<AnnualCalculationTableProps> = ({
       if (!yearlyRawStats[y]) yearlyRawStats[y] = { totVar: 0, ggLav: 0 };
 
       const gg = parseLocalFloat(row.daysWorked); // <--- USO PARSER UNIFICATO
-      if (gg > 0) {
-        const indennitaMese = calculateMonthIndemnity(row);
-        yearlyRawStats[y].totVar += indennitaMese;
-        yearlyRawStats[y].ggLav += gg;
-      }
+      const indennitaMese = calculateMonthIndemnity(row);
+      
+      yearlyRawStats[y].totVar += indennitaMese;
+      yearlyRawStats[y].ggLav += gg;
     });
 
     const yearlyAverages: Record<number, number> = {};

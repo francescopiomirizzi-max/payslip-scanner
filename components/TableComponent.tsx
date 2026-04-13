@@ -266,18 +266,17 @@ const TableComponent: React.FC<TableComponentProps> = ({ worker, onBack, onEdit,
 
       // USIAMO parseLocalFloat QUI
       const ggLav = parseLocalFloat(row.daysWorked);
-      if (ggLav > 0) {
-        let monthlyVoci = 0;
-        profileColumns.forEach(col => {
-          // Aggiunti '3B70', '3B71' per escluderli dal report e dal PDF
-          if (!['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'coeffPercepito', 'coeffTicket', 'note', 'arretrati', '3B70', '3B71'].includes(col.id)) {
-            // USIAMO parseLocalFloat QUI
-            monthlyVoci += parseLocalFloat(row[col.id]);
-          }
-        });
-        yearlyRawStats[y].totVar += monthlyVoci;
-        yearlyRawStats[y].ggLav += ggLav;
-      }
+      
+      let monthlyVoci = 0;
+      profileColumns.forEach(col => {
+        // Aggiunti '3B70', '3B71' per escluderli dal report e dal PDF
+        if (!['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'coeffPercepito', 'coeffTicket', 'note', 'arretrati', '3B70', '3B71'].includes(col.id)) {
+          // USIAMO parseLocalFloat QUI
+          monthlyVoci += parseLocalFloat(row[col.id]);
+        }
+      });
+      yearlyRawStats[y].totVar += monthlyVoci;
+      yearlyRawStats[y].ggLav += ggLav;
     });
 
     const yearlyAverages: Record<number, number> = {};

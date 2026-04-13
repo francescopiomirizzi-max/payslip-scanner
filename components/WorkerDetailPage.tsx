@@ -1859,12 +1859,10 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
       if (!yearlyRawStats[y]) yearlyRawStats[y] = { totVar: 0, ggLav: 0 };
       const ggLav = parseFloatSafe(row.daysWorked);
 
-      if (ggLav > 0) {
-        let sommaIndennitaRow = 0;
-        indennitaCols.forEach(c => { sommaIndennitaRow += parseFloatSafe(row[c.id]); });
-        yearlyRawStats[y].totVar += sommaIndennitaRow;
-        yearlyRawStats[y].ggLav += ggLav;
-      }
+      let sommaIndennitaRow = 0;
+      indennitaCols.forEach(c => { sommaIndennitaRow += parseFloatSafe(row[c.id]); });
+      yearlyRawStats[y].totVar += sommaIndennitaRow;
+      yearlyRawStats[y].ggLav += ggLav;
     });
 
     const yearlyAverages: Record<number, number> = {};
