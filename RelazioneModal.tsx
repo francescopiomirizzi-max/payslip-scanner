@@ -3,7 +3,7 @@ import { X, Printer, Copy, CheckCircle, PenTool, FileText, FileSpreadsheet } fro
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 import { motion } from 'framer-motion';
-import { YEARS, AnnoDati } from './types';
+import { YEARS, AnnoDati, getColumnsByProfile } from './types';
 
 // --- HELPER DI FORMATTAZIONE SICURA ---
 const fmt = (val: any) => {
@@ -12,8 +12,137 @@ const fmt = (val: any) => {
     return num.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
+// --- HELPER CENTRALIZZATI PER SINCRONIA UI/WORD ---
+const generaVociRaggruppate = (worker: any) => {
+    let testo = "";
+    let html = "";
+    
+    if (worker?.profilo === 'ELIOR') {
+        if (worker?.eliorType === 'magazzino') {
+            testo = "- Lavoro Notturno e Domenicale\n- Straordinari e Maggiorazioni (18%, 35%)\n- Indennità specifiche di logistica (Indennità Cella e Sottosuolo)\n- Funzioni Diverse e 26/MI Retribuzione";
+            html = `<li>Lav. Nott. (1130) e Lav. Domen. (1131)</li>
+                <li>Straord. 18% (2018), Straord. 35% (2035) e Magg. 35% (2235)</li>
+                <li>Funz. Diverse (4133), Ind. Cella (2313) e Ind. Sottosuolo (4275)</li>
+                <li>26/MI Retrib. (4285)</li>`;
+        } else {
+            testo = "- Indennità specifiche della Ristorazione a Bordo (Ind. Cassa, Lav. Notturno/Domenicale)\n- Diaria Scorta e Riserva Presenza\n- Straordinari e Maggiorazioni (18%, 20%, 35%)";
+            html = `<li>Ind. Cassa (1126), Lav. Nott. (1130) e Lav. Domen. (1131)</li>
+                <li>Str. 18% (2018), Str. 20% (2020), Str. 35% (2035) e Magg. 35% (2235)</li>
+                <li>Funz. Diverse (4133), RFR < 8h (4254), Pernottamento (4255) e Pernottazione (4256)</li>
+                <li>Ass. Res. No RS (4300), Ass. Res. RS (4305) e F. Sede RFR (4301)</li>
+                <li>Diaria Scorta (4320), Riserva Pres. (4345), Flex Oraria (4325) e Flex Res. (4330)</li>
+                <li>26/MI Retrib. (5655)</li>`;
+        }
+    } else if (worker?.profilo === 'REKEEP') {
+        testo = "- Indennità Turni Non Cadenzati e Pernottamento\n- Indennità Sussidiaria e Residenza\n- Lavoro Domenicale e Notturno\n- Maggiorazioni e Straordinari legati all'appalto";
+        html = `<li>Ind. Domenicale (I1037C) e Lav. Notturno (I1040C)</li>
+            <li>Turni Non Cad. (I215FC) e Ind. Pernott. (I225FC)</li>
+            <li>Ass. Residenza (I232FC) e Ind. Sussidiaria (I1182C)</li>
+            <li>Fest. Non God. (D2200)</li>
+            <li>Straord. 18% (S1800C) e Maggioraz. 35% (M3500C)</li>`;
+    } else if (worker?.profilo === 'RFI' || !worker?.profilo || worker?.profilo === 'ND') {
+        testo = "- Indennità legate ai turni (Lavoro Notturno, Festivo, Straordinari)\n- Indennità di funzione e disagio (Chiamata, Reperibilità, Linea, Condotta)\n- Trasferte esenti e indennità accessorie ricorrenti previste dal CCNL Mobilità/RFI";
+        html = `<li>Straord. Diurno (0152) e Ind. Notturno (0421)</li>
+            <li>Comp. Cantiere Notte (0423) e Festivo Notturno (0457)</li>
+            <li>Ind. Chiamata (0470), Ind. Reperibilità (0482) e Ind. Disp. Chiamata (0496)</li>
+            <li>Ind. Linea < 10h (0687) e Trasferta (0AA1)</li>
+            <li>Ind. Orario Spezz. (0576) e Rep. Festive/Riposo (0584)</li>
+            <li>Str. Feriale Diurno (0919), Str. Fest/Notturno (0920), Str. Diurno Rep. (0932), Str. Fest/Not Rep. (0933), Str. Diurno Disp. (0995) e Str. Fest/Not Disp. (0996)</li>`;
+    } else {
+        testo = `- Voci a carattere continuativo previste dal modello aziendale applicato (${worker?.profilo})`;
+        html = `<li>Tutte le voci a carattere continuativo e ricorrente previste dal modello aziendale applicato (${worker?.profilo}).</li>`;
+    }
+    
+    return { testo, html };
+};
+
+const generaEsempioDinamico = (worker: any, startClaimYear: number, tettoGiorni: number) => {
+    let testo = "A titolo di esempio, illustriamo il calcolo generico utilizzato: sommiamo le voci variabili dell'anno precedente, dividiamo per i giorni lavorati ottenendo la media giornaliera, e la moltiplichiamo per i giorni di ferie goduti.";
+    let html = "<p>A titolo di esempio, illustriamo il calcolo generico utilizzato:</p><ul><li><b>Passo A:</b> Sommiamo tutto il valore delle voci variabili percepite nell'anno di riferimento (N-1).</li><li><b>Passo B:</b> Dividiamo questa somma per i giorni effettivi di lavoro svolti in quell'anno (Media).</li><li><b>Passo C:</b> Moltiplichiamo la Media per i giorni di ferie goduti.</li></ul>";
+
+    if (worker?.anni && Array.isArray(worker.anni)) {
+        const validCodes = getColumnsByProfile(worker.profilo, worker.eliorType)
+            .map((c: any) => c.id)
+            .filter((id: string) => !['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'coeffPercepito', 'coeffTicket', 'note', 'arretrati', '3B70', '3B71'].includes(id));
+
+        const anniOrdinati = [...worker.anni].sort((a, b) => Number(b.year) - Number(a.year));
+        
+        for (const m of anniOrdinati) {
+            const annoCorrente = Number(m.year);
+            if (annoCorrente <= startClaimYear || Number(m.daysVacation) === 0) continue;
+            
+            const annoPrec = annoCorrente - 1;
+            const datiAnnoPrec = worker.anni.filter((a: any) => Number(a.year) === annoPrec);
+            let totVariabiliPrec = 0;
+            let ggLavPrec = 0;
+
+            datiAnnoPrec.forEach((mm: any) => {
+                ggLavPrec += Number(mm.daysWorked) || 0;
+                
+                validCodes.forEach((cod: string) => {
+                    const rawVal = mm[cod];
+                    if (rawVal) {
+                        const parsed = parseFloat(String(rawVal).replace(',', '.'));
+                        if (!isNaN(parsed)) totVariabiliPrec += parsed;
+                    }
+                });
+            });
+
+            if (ggLavPrec > 0 && totVariabiliPrec > 0) {
+                const mediaGiornaliera = totVariabiliPrec / ggLavPrec;
+
+                const datiAnnoCorrente = worker.anni.filter((a: any) => Number(a.year) === annoCorrente);
+                let totFerieCorrente = 0;
+                datiAnnoCorrente.forEach((mm: any) => totFerieCorrente += Number(mm.daysVacation) || 0);
+
+                const ferieUsate = Math.min(totFerieCorrente, tettoGiorni);
+                const lordoEsempio = mediaGiornaliera * ferieUsate;
+
+                testo = `A titolo illustrativo, riportiamo il calcolo matematico applicato esattamente per l'anno ${annoCorrente} dei conteggi allegati:\n- Passo A (Totale Voci): Nell'anno di riferimento (${annoPrec}), il lavoratore ha percepito indennità variabili ricorrenti per un totale di € ${fmt(totVariabiliPrec)}.\n- Passo B (Media Giornaliera): Dividendo tale somma per i giorni effettivamente lavorati nel ${annoPrec} (${ggLavPrec} gg), si ottiene una media giornaliera pari a € ${fmt(mediaGiornaliera)}.\n- Passo C (Moltiplicazione): Nell'anno ${annoCorrente}, il lavoratore ha fruito di ${ferieUsate} giorni di ferie validi ai fini del calcolo (entro il tetto legale applicato). Moltiplicando la media di € ${fmt(mediaGiornaliera)} per i ${ferieUsate} giorni, si certifica una differenza lorda maturata pari a € ${fmt(lordoEsempio)} per quel singolo anno.`;
+                
+                html = `
+                <p>A titolo illustrativo, riportiamo il calcolo matematico applicato esattamente per l'anno <b>${annoCorrente}</b> dei conteggi allegati:</p>
+                <ul>
+                    <li><b>Passo A (Totale Voci):</b> Nell'anno di riferimento (<b>${annoPrec}</b>), il lavoratore ha percepito indennità variabili ricorrenti per un totale di <b>€ ${fmt(totVariabiliPrec)}</b>.</li>
+                    <li><b>Passo B (Media Giornaliera):</b> Dividendo tale somma per i giorni effettivamente lavorati nel ${annoPrec} (<b>${ggLavPrec} gg</b>), si ottiene una media giornaliera pari a <b>€ ${fmt(mediaGiornaliera)}</b>.</li>
+                    <li><b>Passo C (Moltiplicazione):</b> Nell'anno <b>${annoCorrente}</b>, il lavoratore ha fruito di <b>${ferieUsate}</b> giorni di ferie validi ai fini del calcolo (entro il tetto legale applicato). Moltiplicando la media di € ${fmt(mediaGiornaliera)} per i ${ferieUsate} giorni, si certifica una differenza lorda maturata pari a <b>€ ${fmt(lordoEsempio)}</b> per quel singolo anno.</li>
+                </ul>`;
+                
+                break;
+            }
+        }
+    }
+    return { testo, html };
+};
+
+const generaSpiegazioneRisultato = (includeTickets: boolean, showPercepito: boolean) => {
+    let testo = "";
+    let html = "";
+    
+    if (!showPercepito && !includeTickets) {
+        testo = "Applicando la formula mese per mese, abbiamo calcolato la differenza retributiva lorda maturata dal lavoratore.\n\nPoiché non vi sono indennità già erogate da dedurre, né buoni pasto da integrare, il totale richiesto corrisponde interamente ed esclusivamente al LORDO maturato e non corrisposto dall'Azienda.";
+        html = "<p>Poiché non vi sono indennità già erogate dall'azienda da dedurre, né buoni pasto da integrare, il totale richiesto corrisponde interamente ed esclusivamente al <b>LORDO maturato e non corrisposto</b>.</p>";
+    } else {
+        testo = "Applicando la formula mese per mese, abbiamo ricavato il Lordo totale maturato. \n";
+        html = "<ul>";
+        
+        if (showPercepito) {
+            testo += "Da questa cifra abbiamo sottratto con precisione quanto l'azienda aveva già versato a titolo di 'indennità feriale' base, in modo da evitare qualsiasi duplicazione (voce 'Già Percepito').\n";
+            html += "<li>Dal lordo totale maturato, abbiamo sottratto con precisione matematica quanto l'azienda aveva già versato a titolo di 'indennità feriale' base (voce 'Già Percepito'), evitando così qualsiasi duplicazione di calcolo.</li>";
+        }
+        if (includeTickets) {
+            testo += "Infine, abbiamo aggiunto il valore economico dei Buoni Pasto (Ticket) non consegnati durante i giorni di ferie fruite.\n";
+            html += "<li>Infine, abbiamo sommato il valore economico dei Buoni Pasto (Ticket Restaurant) maturati ma non consegnati per le giornate di ferie godute.</li>";
+        }
+        
+        testo += "\nIl risultato finale rappresenta l'esatto credito NETTO da liquidare a favore del lavoratore.";
+        html += "</ul><p>Il risultato finale espone pertanto l'esatto credito <b>NETTO da liquidare</b>.</p>";
+    }
+    return { testo, html };
+};
+// --- FINE HELPER CENTRALIZZATI ---
+
 const generaRelazioneTestuale = (worker: any, totali: any, includeExFest: boolean, includeTickets: boolean, startClaimYear: number, showPercepito: boolean) => {
-    const oggi = new Date().toLocaleDateString('it-IT');
     const tettoGiorni = includeExFest ? 32 : 28;
 
     // --- PROTEZIONE DATI ---
@@ -35,128 +164,45 @@ const generaRelazioneTestuale = (worker: any, totali: any, includeExFest: boolea
     const inizioPeriodo = startClaimYear; // Ora comanda l'interfaccia, non si tira più a indovinare!
     const finePeriodo = anniAttivi[anniAttivi.length - 1];
 
-    // --- ESTRAZIONE NOTE ---
-    let sezioneNote = "";
-    if (worker?.anni && Array.isArray(worker.anni)) {
-        const noteTrovate = worker.anni
-            .filter((r: AnnoDati) => r.note && r.note.trim() !== "")
-            .filter((r: AnnoDati) => Number(r.year) >= inizioPeriodo)
-            .sort((a: AnnoDati, b: AnnoDati) => (a.year || 0) - (b.year || 0));
-
-        if (noteTrovate.length > 0) {
-            sezioneNote = "\nEVENTI RILEVANTI E ANNOTAZIONI:\n";
-            noteTrovate.forEach((r: AnnoDati) => {
-                const cleanNote = r.note?.replace(/[\[\]]/g, '') || '';
-                sezioneNote += `- ${r.month} ${r.year}: ${cleanNote}\n`;
-            });
-            sezioneNote += "--------------------------------------------------\n";
-        }
-    }
-
-    // --- INTEGRAZIONE TESTO LEGALE ---
-    let elencoVoci = "";
-    if (worker?.profilo === 'RFI' || !worker?.profilo || worker?.profilo === 'ND') {
-        elencoVoci = `
-VOCI RETRIBUTIVE VARIABILI INCLUSE NEL CALCOLO:
-L'analisi ha isolato le voci a carattere continuativo e ricorrente (Art. 64 CCNL), tra cui:
-
-1. LAVORO NOTTURNO E FESTIVO:
-   - Indennità Lavoro Notturno (Cod. 0421, 1130)
-   - Festivo Notturno (Cod. 0457) [Alta Incidenza]
-   - Compenso Cantiere Notte (Cod. 0423)
-   - Straordinari Vari (Cod. 0919, 0920, 0932, 0933, 0995, 0996)
-
-2. INDENNITÀ DI FUNZIONE E DISAGIO:
-   - Indennità di Chiamata/Disponibilità (Cod. 0470, 0496)
-   - Compenso per Reperibilità (Cod. 0482, 0584)
-   - Indennità di Linea e Manutenzione (Cod. 0687, 0686)
-   - Indennità Orario Spezzato (Cod. 0576)
-   - Trasferta Esente (Cod. 0AA1)
-
-${includeTickets ? `
-3. RISTORO PASTI:
-   - Ticket Restaurant / Buoni Pasto (Quota Esente)` : ''}
-
-NOTA BENE:
-Sono state TASSATIVAMENTE ESCLUSE dal calcolo della media tutte le voci "Una Tantum", i rimborsi spese a piè di lista, i premi annuali non ricorrenti, la malattia, gli arretrati anni precedenti e le voci di Welfare aziendale.`;
-    } else if (worker?.profilo === 'REKEEP') {
-        elencoVoci = `
-VOCI INCLUSE (Appalto Multiservizi/FS):
-- Indennità Turni Non Cadenzati (Cod. I215FC)
-- Indennità Sussidiaria (Cod. I1182C)
-- Lavoro Domenicale e Notturno (Cod. I1037C, I1040C)
-- Maggiorazioni e Straordinari (Cod. S1800C, M3500C)`;
-    } else if (worker?.profilo === 'ELIOR') {
-        elencoVoci = "VOCI INCLUSE:\nIndennità specifiche della Ristorazione a Bordo (Diaria Scorta, Ind. Cassa, Lavoro Domenicale/Notturno).";
-    } else {
-        // AZIENDA CUSTOM DAL COMPANY BUILDER
-        elencoVoci = `
-VOCI RETRIBUTIVE VARIABILI INCLUSE NEL CALCOLO:
-L'analisi ha isolato le voci a carattere continuativo previste dal modello personalizzato "${worker?.profilo}".
-Sono state escluse le voci una tantum, rimborsi spese e indennità non legate allo svolgimento ordinario della prestazione.`;
-    }
-
-    const dettagliMetodologia = `
-METODOLOGIA DI CALCOLO PERITALE (Rif. Cass. Sez. Lav. 23/6/2022 n. 20216):
-Il presente prospetto determina la "Retribuzione Globale di Fatto" spettante durante le ferie, superando il concetto di retribuzione base.
-
-CRITERI ADOTTATI:
-1. PRINCIPIO DI ONNICOMPRENSIVITÀ: Inclusione di tutte le indennità collegate agli inconvenienti intrinseci alle mansioni (es. notte, turni) o alla status professionale.
-2. CRITERIO DEL DIVISORE REALE: La media giornaliera è ottenuta dividendo la somma delle competenze variabili per le GIORNATE EFFETTIVAMENTE LAVORATE nel mese/anno, e non per divisori convenzionali (26 o 30), garantendo la massima precisione contabile.
-3. TETTO MASSIMO DI LEGGE: Il ricalcolo è applicato sui giorni di ferie fruiti entro il limite del periodo minimo legale di ${tettoGiorni} giorni (Art. 36 Cost. e Dir. 2003/88/CE).
-
-4. APPLICAZIONE DEL CRITERIO DELLA MEDIA STORICA (ANNO PRECEDENTE):
-Al fine di rispettare il principio di comparabilità della retribuzione feriale con quella ordinaria, e in aderenza alla prassi contabile per la determinazione della "retribuzione media globale di fatto", i calcoli sono stati eseguiti applicando un criterio storico.
-
-Nello specifico, il valore giornaliero delle voci variabili da riconoscere per i giorni di ferie goduti nell'anno N è stato determinato sulla base della media delle competenze variabili maturate dal lavoratore nell'anno precedente (N-1).
-Questo metodo garantisce che la retribuzione feriale non sia influenzata dalla casualità del mese di fruizione, ma rifletta l'effettiva capacità reddituale media del dipendente, depurando il calcolo da picchi o flessioni momentanee.
-
-PROCEDIMENTO ANALITICO:
-- Estrapolazione OCR dei dati da cedolini paga originali.
-- Separazione netta tra voci ricorrenti (utili) e voci straordinarie (escluse).
-- Calcolo differenziale: [Media Giornaliera Storica] x [Giorni Ferie] - [Quanto già erogato].
-`;
+    // Utilizzo helpers centralizzati
+    const voci = generaVociRaggruppate(worker);
+    const esempio = generaEsempioDinamico(worker, startClaimYear, tettoGiorni);
+    const spiegazione = generaSpiegazioneRisultato(includeTickets, showPercepito);
 
     return `
-RELAZIONE TECNICA DI RICALCOLO CONTABILE - ${worker?.profilo || 'ND'}
-OGGETTO: Integrazione Indennità Feriale (Mancata Retribuzione Variabile)
-PERIODO DI ANALISI: ${inizioPeriodo} - ${finePeriodo}
-
-DATI DEL RICORRENTE
-Nominativo: ....... ${worker?.cognome || ''} ${worker?.nome || ''}
-Profilo: .......... ${worker?.profilo || 'ND'} - ${worker?.ruolo || 'Personale Operativo'}
+RELAZIONE TECNICA - SINTESI E METODOLOGIA
+Pratica di: ${worker?.cognome || ''} ${worker?.nome || ''}
+Profilo contrattuale: ${worker?.profilo || 'ND'}
+Periodo esaminato: Dal ${inizioPeriodo} al ${finePeriodo}
 
 --------------------------------------------------
 
-PREMESSA GIURIDICA
-La presente perizia tecnica ha lo scopo di quantificare le differenze retributive maturate a titolo di "Retribuzione Feriale", in applicazione della giurisprudenza della Corte di Giustizia UE e della Corte di Cassazione, che sanciscono il diritto del lavoratore a percepire, durante le ferie, la retribuzione ordinaria comprensiva delle voci variabili medie.
+1. LA PREMESSA: PERCHÉ CHIEDIAMO QUESTE SOMME
+La legge europea (Direttiva 2003/88/CE) e la Suprema Corte di Cassazione (Sentenza n. 20216/2022) stabiliscono un principio fondamentale: quando un lavoratore va in ferie, ha il diritto di riposarsi senza subire alcuna penalizzazione economica.
+Durante l'anno, il lavoratore percepisce regolarmente indennità per disagi, turni notturni, festivi e altre voci legate al proprio lavoro. Se l'azienda smette di erogare queste indennità proprio durante le ferie, il lavoratore subisce una perdita economica ingiusta. Questa relazione serve a calcolare e richiedere l'esatta restituzione di queste somme.
 
-${dettagliMetodologia}
+2. LE VOCI ANALIZZATE (Rif. Allegato "Tabella 2 - Riepilogo Voci Variabili")
+Per calcolare quanto spetta al lavoratore, abbiamo analizzato minuziosamente i cedolini paga. Come illustrato nella "Tabella 2", abbiamo isolato solo le "voci ricorrenti", escludendo tassativamente rimborsi spese, una tantum o arretrati non pertinenti.
+Nello specifico del profilo lavorativo in questione, abbiamo tenuto conto di:
+${voci.testo}
 
-${elencoVoci}
+3. IL METODO DI CALCOLO (Rif. Allegato "Tabella 1 - Calcolo Differenze per Anno")
+Per garantire una precisione matematica inattaccabile, l'algoritmo utilizza il "Criterio della Media Storica".
+${esempio.testo}
 
-${sezioneNote}
+4. L'APPLICAZIONE MENSILE (Rif. Allegato "Tabella 3 - Dettaglio Mensile Analitico")
+Come dimostrato analiticamente nella "Tabella 3", abbiamo applicato il calcolo per ogni singolo mese in cui il lavoratore ha goduto delle ferie.
+${spiegazione.testo}
 
-RISULTANZE CONTABILI FINALI
-Dall'analisi dei cedolini paga prodotti, risulta il seguente credito a favore del lavoratore:
+5. CONCLUSIONI (Rif. Allegato "Prospetto Ufficiale di Ricalcolo / Riepilogo Somme Richieste")
+I risultati di tutte le tabelle analitiche di cui sopra confluiscono nel documento riassuntivo finale (il Prospetto Ufficiale), che certifica gli importi esatti qui sotto riportati.
 
+--------------------------------------------------
+RIEPILOGO FINALE DEGLI IMPORTI
 + DIFFERENZE LORDE MATURATE: .......... € ${fmt(lordoVal)}
-  (Calcolate su indennità fisse e variabili ricorrenti)
-${showPercepito ? `
-- IMPORTO GIÀ PERCEPITO: .............. € ${fmt(percepitoVal)}
-  (A titolo di indennità feriale base o acconti)` : ''}
-${includeTickets ? `
-+ CREDITO BUONI PASTO: ................ € ${fmt(ticketVal)}
-  (Ticket maturati durante le ferie e non goduti)` : ''}
-
+${showPercepito ? `- IMPORTO GIÀ PERCEPITO IN BUSTA: ..... € ${fmt(percepitoVal)}\n` : ''}${includeTickets ? `+ CREDITO BUONI PASTO NON EROGATI: .... € ${fmt(ticketVal)}\n` : ''}==================================================
+TOTALE CREDITO ${(!showPercepito && !includeTickets) ? 'LORDO' : 'NETTO'} SPETTANTE: ..... € ${fmt(nettoVal)}
 ==================================================
-  TOTALE CREDITO LORDO SPETTANTE: ..... € ${fmt(nettoVal)}
-==================================================
-
-Si rilascia il presente conteggio per gli usi consentiti dalla legge.
-
-Luogo e Data: Foggia, ${oggi}
-Firma del Tecnico: __________________________
 `;
 };
 
@@ -178,31 +224,11 @@ export const RelazioneModal = ({ isOpen, onClose, worker, totals, includeExFest 
     }
 
     // ... (Mantieni tutto il codice HTML per la stampa e il render JSX invariato) ...
-    // Prepariamo l'HTML per le note (per la stampa)
-    let noteSectionHTML = '';
-    if (worker?.anni && Array.isArray(worker.anni)) {
-        const noteRowsHTML = worker.anni
-            .filter((r: AnnoDati) => r.note && r.note.trim() !== "")
-            .sort((a: AnnoDati, b: AnnoDati) => (a.year || 0) - (b.year || 0))
-            .map((r: AnnoDati) => `<tr><td style="padding:4px; border-bottom:1px solid #eee;"><b>${r.month} ${r.year}</b></td><td style="padding:4px; border-bottom:1px solid #eee;">${r.note}</td></tr>`)
-            .join('');
-
-        if (noteRowsHTML) {
-            noteSectionHTML = `<div style="margin-top: 20px; padding: 15px; background: #fffbe6; border: 1px solid #ffe58f; border-radius: 5px;">
-              <h3 style="margin-top:0; font-size:14px; color:#876800;">ANNOTAZIONI ED EVENTI</h3>
-              <table style="width:100%; font-size:12px; border-collapse:collapse;">${noteRowsHTML}</table>
-            </div>`;
-        }
-    }
+    // Prepariamo l'HTML per le note (per la stampa) - RIMOSSO SU RICHIESTA BUSINESS
 
     const handleStampa = () => {
         const printWindow = window.open('', '_blank');
         if (printWindow) {
-            // Estraiamo il testo puro senza la sezione note per evitare doppioni
-            // Visto che "sezioneNote" era definita sopra, "tagliamo" il testo usando un marcatore
-            const testoSenzaNote = testoCompleto.split('EVENTI RILEVANTI E ANNOTAZIONI:')[0]
-                + testoCompleto.split('--------------------------------------------------\n').pop();
-
             printWindow.document.write(`
         <html>
           <head>
@@ -213,8 +239,6 @@ export const RelazioneModal = ({ isOpen, onClose, worker, totals, includeExFest 
               .header h2 { margin: 0; color: #1e293b; text-transform: uppercase; letter-spacing: 1px; font-size: 18px; }
               .sub-header { font-size: 14px; color: #666; margin-top: 5px; font-weight: bold; }
               pre { white-space: pre-wrap; font-family: 'Courier New', Courier, monospace; font-size: 13px; background: #f8fafc; padding: 20px; border-radius: 8px; border: 1px solid #e2e8f0; }
-              .footer { margin-top: 50px; border-top: 2px solid #e2e8f0; padding-top: 20px; display: flex; justify-content: space-between; font-size: 12px; }
-              .signature-line { margin-top: 40px; border-top: 1px solid #000; width: 200px; }
               @media print { body { padding: 20px; } .no-print { display: none; } pre { border: none; padding: 0; } }
             </style>
           </head>
@@ -224,17 +248,7 @@ export const RelazioneModal = ({ isOpen, onClose, worker, totals, includeExFest 
               <div class="sub-header">CONTRATTO DI RIFERIMENTO: ${worker?.profilo || 'ND'}</div>
             </div>
             
-            <pre>${testoSenzaNote}</pre>
-            
-            ${noteSectionHTML}
-
-            <div class="footer">
-              <div>Data: ${new Date().toLocaleDateString('it-IT')}</div>
-              <div style="text-align: center;">
-                <p>Firma del Tecnico</p>
-                <div class="signature-line"></div>
-              </div>
-            </div>
+            <pre>${testoCompleto}</pre>
           </body>
         </html>
       `);
@@ -260,240 +274,87 @@ export const RelazioneModal = ({ isOpen, onClose, worker, totals, includeExFest 
         const inizioPeriodo = startClaimYear;
         const finePeriodo = anniAttivi[anniAttivi.length - 1];
 
-        const fmt = (val: any) => Number(val).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        // --- 2. Utilizzo Helpers Centralizzati per HTML Word ---
+        const voci = generaVociRaggruppate(worker);
+        const esempio = generaEsempioDinamico(worker, startClaimYear, tettoGiorni);
+        const spiegazione = generaSpiegazioneRisultato(includeTickets, showPercepito);
 
-        // --- 2. Costruzione Tabella Note ---
-        let noteWordHTML = '';
-        if (worker?.anni && Array.isArray(worker.anni)) {
-            const noteRows = worker.anni
-                .filter((r: AnnoDati) => r.note && r.note.trim() !== "")
-                .sort((a: AnnoDati, b: AnnoDati) => (a.year || 0) - (b.year || 0))
-                .map((r: AnnoDati) => `
-                    <tr>
-                        <td style="border: 1px solid #000; padding: 8px; width: 25%; font-weight: bold; vertical-align: top; background-color: #f9f9f9;">${r.month} ${r.year}</td>
-                        <td style="border: 1px solid #000; padding: 8px; text-align: justify; vertical-align: top;">${r.note}</td>
-                    </tr>
-                `).join('');
-
-            if (noteRows) {
-                noteWordHTML = `
-                    <br clear="all" style="page-break-before:always" />
-                    <p style="font-size: 14pt; text-align: center; font-weight: bold; text-transform: uppercase; margin-bottom: 20pt;">Annotazioni ed Eventi Rilevanti</p>
-                    <table style="width: 100%; border-collapse: collapse; font-size: 11pt; border: 1px solid #000; margin-bottom: 20pt;">
-                        ${noteRows}
-                    </table>
-                `;
-            }
-        }
-
-        // --- 3. Voci Variabili Dinamiche con Elenchi Puntati Veri ---
-        let vociHTML = '';
-        if (worker?.profilo === 'RFI' || !worker?.profilo || worker?.profilo === 'ND') {
-            vociHTML = `
-                <p><b>VOCI RETRIBUTIVE VARIABILI INCLUSE NEL CALCOLO:</b><br>
-                L'analisi ha isolato le voci a carattere continuativo e ricorrente (Art. 64 CCNL), tra cui:</p>
-                
-                <ul style="margin-top: 5pt; margin-bottom: 15pt; padding-left: 30pt;">
-                    <li style="margin-bottom: 5pt; text-align: justify;"><b>LAVORO NOTTURNO E FESTIVO:</b> Indennità Lavoro Notturno (Cod. 0421, 1130), Festivo Notturno (Cod. 0457) [Alta Incidenza], Compenso Cantiere Notte (Cod. 0423), Straordinari Vari (Cod. 0919, 0920, 0932, 0933, 0995, 0996).</li>
-                    <li style="margin-bottom: 5pt; text-align: justify;"><b>INDENNITÀ DI FUNZIONE E DISAGIO:</b> Indennità di Chiamata/Disponibilità (Cod. 0470, 0496), Compenso per Reperibilità (Cod. 0482, 0584), Indennità di Linea e Manutenzione (Cod. 0687, 0686), Indennità Orario Spezzato (Cod. 0576), Trasferta Esente (Cod. 0AA1).</li>
-                    ${includeTickets ? `<li style="margin-bottom: 5pt; text-align: justify;"><b>RISTORO PASTI:</b> Ticket Restaurant / Buoni Pasto (Quota Esente).</li>` : ''}
-                </ul>
-                
-                <p><b>NOTA BENE:</b> Sono state TASSATIVAMENTE ESCLUSE dal calcolo della media tutte le voci "Una Tantum", i rimborsi spese a piè di lista, i premi annuali non ricorrenti, la malattia, gli arretrati anni precedenti e le voci di Welfare aziendale.</p>
-            `;
-        } else if (worker?.profilo === 'REKEEP') {
-            vociHTML = `
-                <p><b>VOCI INCLUSE (Appalto Multiservizi/FS):</b></p>
-                <ul style="margin-top: 5pt; margin-bottom: 15pt; padding-left: 30pt;">
-                    <li>Indennità Turni Non Cadenzati (Cod. I215FC)</li>
-                    <li>Indennità Sussidiaria (Cod. I1182C)</li>
-                    <li>Lavoro Domenicale e Notturno (Cod. I1037C, I1040C)</li>
-                    <li>Maggiorazioni e Straordinari (Cod. S1800C, M3500C)</li>
-                </ul>
-            `;
-        } else if (worker?.profilo === 'ELIOR') {
-            vociHTML = `<p><b>VOCI INCLUSE:</b> Indennità specifiche della Ristorazione a Bordo (Diaria Scorta, Ind. Cassa, Lavoro Domenicale/Notturno).</p>`;
-        } else {
-            // AZIENDA CUSTOM DAL COMPANY BUILDER
-            vociHTML = `
-                <p><b>VOCI RETRIBUTIVE VARIABILI INCLUSE NEL CALCOLO:</b><br>
-                L'analisi ha isolato le voci a carattere continuativo previste dal modello personalizzato <b>${worker?.profilo}</b>.</p>
-                <p>Sono state escluse le voci una tantum, rimborsi spese e indennità non legate allo svolgimento ordinario della prestazione.</p>
-            `;
-        }
-
-        // --- 4. STRUTTURA XML WORD IMPAGINATA IN STILE ATTO ---
+        // --- 3. STRUTTURA XML WORD IMPAGINATA IN STILE ATTO ---
         const wordHtml = `
             <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
             <head>
                 <meta charset='utf-8'>
                 <title>Relazione Tecnica</title>
                 <style>
-                    @page {
-                        size: 21cm 29.7cm; /* Formato A4 */
-                        margin: 3cm 2.5cm 3cm 2.5cm; /* Margini più generosi da Atto */
-                        mso-page-orientation: portrait;
-                    }
-                    body {
-                        font-family: 'Times New Roman', Times, serif;
-                        font-size: 12pt;
-                        color: #000000;
-                        line-height: 1.5;
-                    }
-                    p {
-                        margin-top: 0;
-                        margin-bottom: 12pt;
-                        text-align: justify;
-                    }
-                    h2 {
-                        text-align: center;
-                        font-size: 15pt;
-                        font-weight: bold;
-                        text-transform: uppercase;
-                        margin-bottom: 5pt;
-                    }
-                    .subtitle {
-                        text-align: center;
-                        font-size: 12pt;
-                        font-weight: bold;
-                        margin-bottom: 30pt;
-                        border-bottom: 1px solid #000;
-                        padding-bottom: 10pt;
-                    }
-                    .section-title {
-                        font-weight: bold;
-                        text-transform: uppercase;
-                        margin-top: 20pt;
-                        margin-bottom: 10pt;
-                        font-size: 12pt;
-                    }
-                    ul, ol {
-                        margin-top: 5pt;
-                        margin-bottom: 15pt;
-                        padding-left: 30pt;
-                        text-align: justify;
-                    }
-                    li {
-                        margin-bottom: 5pt;
-                    }
-                    table {
-                        width: 100%;
-                        border-collapse: collapse;
-                    }
-                    .info-table td {
-                        padding: 4pt 0;
-                        vertical-align: top;
-                    }
-                    .info-label {
-                        width: 120pt;
-                        font-weight: bold;
-                    }
-                    .hr-line {
-                        border-bottom: 1px solid #000;
-                        margin: 20pt 0;
-                    }
+                    @page { size: 21cm 29.7cm; margin: 3cm 2.5cm 3cm 2.5cm; mso-page-orientation: portrait; }
+                    body { font-family: 'Times New Roman', Times, serif; font-size: 12pt; color: #000000; line-height: 1.5; }
+                    p { margin-top: 0; margin-bottom: 12pt; text-align: justify; }
+                    h2 { text-align: center; font-size: 15pt; font-weight: bold; text-transform: uppercase; margin-bottom: 5pt; }
+                    .subtitle { text-align: center; font-size: 12pt; font-weight: bold; margin-bottom: 30pt; border-bottom: 1px solid #000; padding-bottom: 10pt; }
+                    .section-title { font-weight: bold; text-transform: uppercase; margin-top: 20pt; margin-bottom: 10pt; font-size: 12pt; color: #1e293b; border-bottom: 1px solid #ccc; padding-bottom: 3px; }
+                    ul { margin-top: 5pt; margin-bottom: 15pt; padding-left: 30pt; text-align: justify; }
+                    li { margin-bottom: 5pt; text-align: justify; }
+                    table { width: 100%; border-collapse: collapse; }
                 </style>
             </head>
             <body>
-                <h2>Prospetto Analitico Differenze Retributive</h2>
+                <h2>RELAZIONE TECNICA DESCRITTIVA - SINTESI E METODOLOGIA</h2>
                 <div class="subtitle">CONTRATTO DI RIFERIMENTO: ${worker?.profilo || 'ND'}</div>
                 
-                <p style="text-align: center; font-weight: bold; font-size: 13pt;">
-                    RELAZIONE TECNICA DI RICALCOLO CONTABILE<br>
-                    <span style="font-weight: normal; font-size: 12pt;">OGGETTO: Integrazione Indennità Feriale (Mancata Retribuzione Variabile)</span><br>
-                    PERIODO DI ANALISI: ${inizioPeriodo} - ${finePeriodo}
-                </p>
-                
-                <p class="section-title">DATI DEL RICORRENTE</p>
-                <table class="info-table">
-    <tr><td class="info-label">Nominativo:</td><td>${worker?.cognome || ''} ${worker?.nome || ''}</td></tr>
-    <tr><td class="info-label">Profilo:</td><td>${worker?.profilo || 'ND'} - ${worker?.ruolo || 'Personale Operativo'}</td></tr>
-</table>
+                <table style="width: 100%; margin-bottom: 20px; border: 1px solid #000; padding: 10px;">
+                    <tr><td style="width: 150px; font-weight: bold;">Pratica di:</td><td>${worker?.cognome || ''} ${worker?.nome || ''}</td></tr>
+                    <tr><td style="font-weight: bold;">Periodo Esaminato:</td><td>Dal ${inizioPeriodo} al ${finePeriodo}</td></tr>
+                </table>
 
-                <div class="hr-line"></div>
+                <p class="section-title">1. LA PREMESSA: PERCHÉ CHIEDIAMO QUESTE SOMME</p>
+                <p>La legge europea (Direttiva 2003/88/CE) e la Suprema Corte di Cassazione (Sentenza n. 20216/2022) stabiliscono un principio fondamentale: quando un lavoratore va in ferie, ha il diritto di riposarsi senza subire alcuna penalizzazione economica rispetto al normale svolgimento dell'attività lavorativa.</p>
+                <p>Durante l'anno, il lavoratore in esame percepisce regolarmente indennità connesse a disagi, turni notturni, festivi e altre voci legate al proprio profilo. La mancata erogazione di tali indennità in costanza di ferie determina un'evidente sperequazione economica, oggetto della presente richiesta di integrazione.</p>
 
-                <p class="section-title">PREMESSA GIURIDICA</p>
-                <p>La presente perizia tecnica ha lo scopo di quantificare le differenze retributive maturate a titolo di "Retribuzione Feriale", in applicazione della giurisprudenza della Corte di Giustizia UE e della Corte di Cassazione, che sanciscono il diritto del lavoratore a percepire, durante le ferie, la retribuzione ordinaria comprensiva delle voci variabili medie.</p>
+                <p class="section-title">2. LE VOCI ANALIZZATE (Rif. Allegato "Tabella 2 - Riepilogo Voci Variabili")</p>
+                <p>Per quantificare il credito, sono stati esaminati minuziosamente i cedolini paga forniti. Come dettagliato nella "Tabella 2" dei conteggi, sono state isolate esclusivamente le "voci ricorrenti e continuative", escludendo tassativamente rimborsi spese, elargizioni una tantum o arretrati non pertinenti.</p>
+                <p>Nello specifico del profilo lavorativo, sono state computate le seguenti indennità:</p>
+                <ul>${voci.html}</ul>
 
-                <p class="section-title">METODOLOGIA DI CALCOLO PERITALE (Rif. Cass. Sez. Lav. 23/6/2022 n. 20216)</p>
-                <p>Il presente prospetto determina la "Retribuzione Globale di Fatto" spettante durante le ferie, superando il concetto di retribuzione base.</p>
+                <p class="section-title">3. IL METODO DI CALCOLO (Rif. Allegato "Tabella 1 - Calcolo Differenze")</p>
+                <p>A garanzia di inattaccabilità contabile, il sistema ha applicato il <b>"Criterio della Media Storica"</b> (Rif. Cass. 20216/2022). Il valore di una giornata feriale è stato calcolato estraendo la media matematica dell'anno solare precedente.</p>
+                ${esempio.html}
 
-                <p><b>CRITERI ADOTTATI:</b></p>
-                <ol>
-                    <li><b>PRINCIPIO DI ONNICOMPRENSIVITÀ:</b> Inclusione di tutte le indennità collegate agli inconvenienti intrinseci alle mansioni (es. notte, turni) o allo status professionale.</li>
-                    <li><b>CRITERIO DEL DIVISORE REALE:</b> La media giornaliera è ottenuta dividendo la somma delle competenze variabili per le GIORNATE EFFETTIVAMENTE LAVORATE nel mese/anno, e non per divisori convenzionali (es. 26 o 30), garantendo la massima precisione contabile.</li>
-                    <li><b>TETTO MASSIMO DI LEGGE:</b> Il ricalcolo è applicato sui giorni di ferie fruiti entro il limite del periodo minimo legale di ${tettoGiorni} giorni (Art. 36 Cost. e Dir. 2003/88/CE).</li>
-                    <li><b>APPLICAZIONE DEL CRITERIO DELLA MEDIA STORICA (ANNO PRECEDENTE):</b><br>
-                    Al fine di rispettare il principio di comparabilità della retribuzione feriale con quella ordinaria, e in aderenza alla prassi contabile per la determinazione della "retribuzione media globale di fatto", i calcoli sono stati eseguiti applicando un criterio storico.<br><br>
-                    Nello specifico, il valore giornaliero delle voci variabili da riconoscere per i giorni di ferie goduti nell'anno N è stato determinato sulla base della media delle competenze variabili maturate dal lavoratore nell'anno precedente (N-1).<br>
-                    Questo metodo garantisce che la retribuzione feriale non sia influenzata dalla casualità del mese di fruizione, ma rifletta l'effettiva capacità reddituale media del dipendente, depurando il calcolo da picchi o flessioni momentanee.</li>
-                </ol>
+                <p class="section-title">4. L'APPLICAZIONE MENSILE (Rif. Allegato "Tabella 3 - Dettaglio Analitico")</p>
+                <p>Come documentato analiticamente nella "Tabella 3", il procedimento è stato reiterato per ogni singolo mese in cui il dipendente ha fruito di ferie.</p>
+                ${spiegazione.html}
 
-                <p><b>PROCEDIMENTO ANALITICO:</b></p>
-                <ul>
-                    <li>Estrapolazione OCR dei dati da cedolini paga originali.</li>
-                    <li>Separazione netta tra voci ricorrenti (utili) e voci straordinarie (escluse).</li>
-                    <li>Calcolo differenziale: <i>[Media Giornaliera Storica] moltiplicata per [Giorni Ferie] dedotto [Quanto già erogato]</i>.</li>
-                </ul>
-
-                ${vociHTML}
+                <p class="section-title">5. CONCLUSIONI (Rif. Allegato "Prospetto Ufficiale di Ricalcolo")</p>
+                <p>Le risultanze delle elaborazioni analitiche di cui sopra convergono nel documento conclusivo denominato "Riepilogo Somme Richieste", che certifica senza ombra di dubbio gli importi esatti riportati nello specchietto sottostante.</p>
 
                 <br clear="all" style="page-break-before:always" />
 
-                <p class="section-title" style="text-align: center; font-size: 14pt; margin-top: 40pt;">RISULTANZE CONTABILI FINALI</p>
-                <p style="text-align: center; margin-bottom: 20pt;">Dall'analisi dei cedolini paga prodotti, risulta il seguente credito a favore del lavoratore:</p>
-
+                <p class="section-title" style="text-align: center; font-size: 14pt; margin-top: 40pt;">RIEPILOGO DEGLI IMPORTI</p>
+                
                 <table style="width: 80%; margin: 0 auto; border: 2px solid #000; padding: 10pt;">
                     <tr>
-                        <td style="padding: 15pt; width: 70%;">
-                            <b>+ DIFFERENZE LORDE MATURATE:</b><br>
-                            <i style="font-size: 10pt; color: #555;">(Calcolate su indennità fisse e variabili ricorrenti)</i>
-                        </td>
-                        <td style="text-align: right; vertical-align: middle; padding: 15pt; font-weight: bold; font-size: 13pt;">€ ${fmt(lordoVal)}</td>
+                        <td style="padding: 15pt; width: 70%;"><b>+ DIFFERENZE LORDE MATURATE:</b></td>
+                        <td style="text-align: right; padding: 15pt; font-weight: bold; font-size: 13pt;">€ ${fmt(lordoVal)}</td>
                     </tr>
                     ${showPercepito ? `
                     <tr>
-                        <td style="padding: 15pt; border-top: 1px solid #ccc;">
-                            <b>- IMPORTO GIÀ PERCEPITO:</b><br>
-                            <i style="font-size: 10pt; color: #555;">(A titolo di indennità feriale base o acconti)</i>
-                        </td>
-                        <td style="text-align: right; vertical-align: middle; padding: 15pt; font-weight: bold; font-size: 13pt;">€ ${fmt(percepitoVal)}</td>
+                        <td style="padding: 15pt; border-top: 1px solid #ccc;"><b>- IMPORTO GIÀ PERCEPITO IN BUSTA:</b></td>
+                        <td style="text-align: right; padding: 15pt; font-weight: bold; font-size: 13pt;">€ ${fmt(percepitoVal)}</td>
                     </tr>` : ''}
                     ${includeTickets ? `
                     <tr>
-                        <td style="padding: 15pt; border-top: 1px solid #ccc;">
-                            <b>+ CREDITO BUONI PASTO:</b><br>
-                            <i style="font-size: 10pt; color: #555;">(Ticket maturati durante le ferie e non goduti)</i>
-                        </td>
-                        <td style="text-align: right; vertical-align: middle; padding: 15pt; font-weight: bold; font-size: 13pt;">€ ${fmt(ticketVal)}</td>
+                        <td style="padding: 15pt; border-top: 1px solid #ccc;"><b>+ CREDITO BUONI PASTO NON EROGATI:</b></td>
+                        <td style="text-align: right; padding: 15pt; font-weight: bold; font-size: 13pt;">€ ${fmt(ticketVal)}</td>
                     </tr>` : ''}
                     <tr>
                         <td style="padding: 15pt; border-top: 2px solid #000; background-color: #f2f2f2;">
-                            <b style="font-size: 14pt;">TOTALE CREDITO LORDO SPETTANTE:</b>
+                            <b style="font-size: 14pt;">TOTALE CREDITO ${(!showPercepito && !includeTickets) ? 'LORDO' : 'NETTO'} SPETTANTE:</b>
                         </td>
-                        <td style="text-align: right; vertical-align: middle; padding: 15pt; border-top: 2px solid #000; background-color: #f2f2f2; font-weight: bold; font-size: 14pt;">
+                        <td style="text-align: right; padding: 15pt; border-top: 2px solid #000; background-color: #f2f2f2; font-weight: bold; font-size: 14pt;">
                             € ${fmt(nettoVal)}
                         </td>
                     </tr>
                 </table>
 
-                <p style="margin-top: 30pt; text-align: center; font-style: italic;">Si rilascia il presente conteggio per gli usi consentiti dalla legge.</p>
-
-                <table style="width: 100%; border: none; margin-top: 50pt;">
-                    <tr>
-                        <td style="text-align: left; border: none; vertical-align: bottom; font-size: 12pt;">
-                            Foggia, lì ${new Date().toLocaleDateString('it-IT')}
-                        </td>
-                        <td style="text-align: right; border: none; vertical-align: bottom; font-size: 12pt;">
-                            <p style="margin: 0; text-align: center; width: 200pt; float: right;">
-                                Il Tecnico Incaricato<br><br><br>
-                                ___________________________
-                            </p>
-                        </td>
-                    </tr>
-                </table>
-
-                ${noteWordHTML}
             </body>
             </html>
         `;
@@ -508,6 +369,7 @@ export const RelazioneModal = ({ isOpen, onClose, worker, totals, includeExFest 
         document.body.removeChild(link);
         URL.revokeObjectURL(url);
     };
+
     const handleExportExcel = async () => {
         const nominativo = `${worker?.cognome || ''} ${worker?.nome || ''}`.trim();
         const tettoGiorni = includeExFest ? 32 : 28;
@@ -928,4 +790,4 @@ export const RelazioneModal = ({ isOpen, onClose, worker, totals, includeExFest 
             </motion.div>
         </motion.div>
     );
-};  
+};

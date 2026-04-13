@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
     Search,
     Plus,
@@ -752,12 +752,12 @@ const App: React.FC = () => {
         } else {
             const currentEditingWorker = workers.find(w => w.id === editingWorkerId);
             const updatedWorker = { ...currentEditingWorker, ...data } as any;
-            
+
             setWorkers(workers.map(w => w.id === editingWorkerId ? updatedWorker : w));
-            
+
             // Sincronizza il selectedWorker (la scheda aperta) se stiamo modificando proprio quello
             setSelectedWorker(prev => (prev && prev.id === editingWorkerId ? updatedWorker : prev));
-            
+
             addToast("Modifiche salvate con successo.", "success");
         }
         setIsModalOpen(false);
@@ -775,26 +775,31 @@ const App: React.FC = () => {
         }
     };
 
-    const handleUpdateWorkerData = (updatedAnni: AnnoDati[]) => {
-        setWorkers(prevWorkers => {
-            if (!selectedWorker) return prevWorkers;
-            return prevWorkers.map(w =>
-                w.id === selectedWorker.id ? { ...w, anni: updatedAnni } : w
-            );
-        });
+    const selectedWorkerId = selectedWorker?.id;
+
+    const handleUpdateWorkerData = useCallback((updatedAnni: AnnoDati[]) => {
+        if (!selectedWorkerId) return;
+        setWorkers(prevWorkers => 
+            prevWorkers.map(w =>
+                w.id === selectedWorkerId ? { ...w, anni: updatedAnni } : w
+            )
+        );
         setSelectedWorker(prevSelected =>
             prevSelected ? { ...prevSelected, anni: updatedAnni } : null
         );
-    };
+    }, [selectedWorkerId]);
 
-    const handleUpdateStatus = (status: string) => {
-        if (!selectedWorker) return;
-        const updatedWorkers = workers.map(w =>
-            w.id === selectedWorker.id ? { ...w, status: status as any } : w
+    const handleUpdateStatus = useCallback((status: string) => {
+        if (!selectedWorkerId) return;
+        setWorkers(prevWorkers => 
+            prevWorkers.map(w =>
+                w.id === selectedWorkerId ? { ...w, status: status as any } : w
+            )
         );
-        setWorkers(updatedWorkers);
-        setSelectedWorker({ ...selectedWorker, status: status as any });
-    };
+        setSelectedWorker(prevSelected =>
+            prevSelected ? { ...prevSelected, status: status as any } : null
+        );
+    }, [selectedWorkerId]);
 
     const getEditingWorkerData = () => editingWorkerId ? workers.find(w => w.id === editingWorkerId) : null;
     // --- HELPER: IMPORTATO DA UTILS ---

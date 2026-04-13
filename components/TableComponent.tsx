@@ -171,7 +171,7 @@ const handleDownloadPDF = (
   doc.text("Timbro e Firma Responsabile", 230, finalY, { align: 'center' });
   doc.line(200, finalY + 10, 260, finalY + 10);
 
-  doc.save(`Prospetto_${worker.cognome}_${worker.nome}.pdf`);
+  doc.save(`Riepilogo_somme_richieste_${worker.cognome}_${worker.nome}.pdf`);
 };
 
 // --- COMPONENTE PRINCIPALE ---
@@ -386,7 +386,19 @@ const TableComponent: React.FC<TableComponentProps> = ({ worker, onBack, onEdit,
   const endYear = tableData.length > 0 ? tableData[tableData.length - 1].anno : 2025;
 
   const handlePrint = () => {
+    // 1. Salviamo il titolo originale della scheda del browser
+    const originalTitle = document.title;
+
+    // 2. Cambiamo il titolo dinamicamente con il nome del lavoratore
+    document.title = `Riepilogo_somme_richieste_${worker.cognome}_${worker.nome}`;
+
+    // 3. Lanciamo il comando di stampa nativo del browser
     window.print();
+
+    // 4. Ripristiniamo il titolo originale dopo un istante (il tempo che il browser legga il nuovo nome)
+    setTimeout(() => {
+      document.title = originalTitle;
+    }, 500);
   };
 
   const handlePrintDiffida = () => {
@@ -740,87 +752,87 @@ Distinti saluti.
                 La tabella classica è vuota. Non ci sono mesi registrati. Inserisci i dati nel tab "Gestione Dati" per generare il prospetto generale.
               </p>
               <button onClick={onBack} className="px-8 py-3.5 bg-gradient-to-br from-indigo-500 to-blue-600 text-white font-bold rounded-xl shadow-lg hover:-translate-y-0.5 active:scale-95 transition-all duration-300 ring-4 ring-indigo-500/20">
-                 Torna alla Dashboard
+                Torna alla Dashboard
               </button>
             </div>
           ) : (
-          <div className="bg-white text-black dark:text-black border-2 border-black dark:border-slate-800 rounded-2xl overflow-hidden shadow-2xl">
+            <div className="bg-white text-black dark:text-black border-2 border-black dark:border-slate-800 rounded-2xl overflow-hidden shadow-2xl">
 
-            <div className="bg-gray-200 border-b border-black text-center py-6">
-              <div className="font-black text-2xl uppercase mb-2">
-                Incidenza degli elementi accessori ai fini del calcolo annuale della retribuzione feriale lavoratore:
+              <div className="bg-gray-200 border-b border-black text-center py-6">
+                <div className="font-black text-2xl uppercase mb-2">
+                  Incidenza degli elementi accessori ai fini del calcolo annuale della retribuzione feriale lavoratore:
+                </div>
+                <div className="text-lg font-normal normal-case print:text-base">
+                  <span className="font-bold mr-2">{worker.cognome} {worker.nome}</span> - Profilo: {worker.ruolo}
+                </div>
+                <div className="text-lg font-normal normal-case">
+                  Periodo interessato: dal 01-01-{startYear} al 31-12-{endYear}
+                </div>
               </div>
-              <div className="text-lg font-normal normal-case print:text-base">
-                <span className="font-bold mr-2">{worker.cognome} {worker.nome}</span> - Profilo: {worker.ruolo}
-              </div>
-              <div className="text-lg font-normal normal-case">
-                Periodo interessato: dal 01-01-{startYear} al 31-12-{endYear}
-              </div>
-            </div>
 
-            <table className="w-full border-collapse text-center">
-              <thead>
-                <tr className="bg-[#7EB6D3] bg-blue-header text-black h-12" style={{ backgroundColor: '#7EB6D3' }}>
-                  <th className="border border-black p-2 font-bold text-base align-middle">Anno</th>
-                  <th className="border border-black p-2 font-bold text-base align-middle">Totale Voci<br />Retributive<br />Accessorie</th>
-                  <th className="border border-black p-2 font-bold text-base align-middle">Divisore Annuo<br /><span className="text-sm font-normal">(media gg lav.)</span></th>
-                  <th className="border border-black p-2 font-bold text-base align-middle">Incidenza per<br />Giornate di<br />Ferie</th>
-                  <th className="border border-black p-2 font-bold text-base align-middle bg-yellow-50">
-                    Giornate di Ferie<br />
-                  </th>
-                  <th className="border border-black p-2 font-bold text-base align-middle">Incidenza<br />(Lordo)</th>
-
-                  {showPercepito && (
-                    <th className="border border-black p-2 font-bold text-base align-middle">INDENNITA'<br />PERCEPITA X<br />gg DI FERIE</th>
-                  )}
-
-                  <th className="border border-black p-2 font-black text-base align-middle">TOTALE<br />INDENNITA' DA<br />PERCEPIRE</th>
-
-                  {includeTickets && (
-                    <th className="border border-black p-2 font-bold text-base align-middle">CREDITO<br />TICKET<br />RESTAURANT</th>
-                  )}
-                </tr>
-              </thead>
-              <tbody>
-                {tableData.map((row) => (
-                  <tr key={row.anno} className="h-10 text-base">
-                    <td className="border border-black px-2 py-1 text-center bg-gray-100 font-bold">{row.anno}</td>
-                    <td className="border border-black px-2 py-1 text-right">{formatCurrency(row.totaleVoci)}</td>
-                    <td className="border border-black px-2 py-1 text-center">{formatNumber(row.divisore)}</td>
-                    <td className="border border-black px-2 py-1 text-right text-blue-800 font-medium">{formatCurrency(row.incidenzaGiornata)}</td>
-                    <td className="border border-black px-2 py-1 text-center font-bold bg-yellow-50">{formatNumber(row.giornateFerie)}</td>
-                    <td className="border border-black px-2 py-1 text-right font-medium">{formatCurrency(row.incidenzaTotale)}</td>
+              <table className="w-full border-collapse text-center">
+                <thead>
+                  <tr className="bg-[#7EB6D3] bg-blue-header text-black h-12" style={{ backgroundColor: '#7EB6D3' }}>
+                    <th className="border border-black p-2 font-bold text-base align-middle">Anno</th>
+                    <th className="border border-black p-2 font-bold text-base align-middle">Totale Voci<br />Retributive<br />Accessorie</th>
+                    <th className="border border-black p-2 font-bold text-base align-middle">Divisore Annuo<br /><span className="text-sm font-normal">(media gg lav.)</span></th>
+                    <th className="border border-black p-2 font-bold text-base align-middle">Medie competenze<br />sui valori dell'anno<br />godute</th>
+                    <th className="border border-black p-2 font-bold text-base align-middle bg-yellow-50">
+                      Giornate di Ferie<br />
+                    </th>
+                    <th className="border border-black p-2 font-bold text-base align-middle">Incidenza<br />(Lordo)</th>
 
                     {showPercepito && (
-                      <td className="border border-black px-2 py-1 text-right text-orange-600 font-medium">{formatCurrency(row.indennitaPercepita)}</td>
+                      <th className="border border-black p-2 font-bold text-base align-middle">INDENNITA'<br />PERCEPITA X<br />gg DI FERIE</th>
                     )}
 
-                    <td className="border border-black px-2 py-1 text-right font-black bg-yellow-100 bg-yellow-cell text-lg">{formatCurrency(row.totaleDaPercepire)}</td>
+                    <th className="border border-black p-2 font-black text-base align-middle">TOTALE<br />INDENNITA' DA<br />PERCEPIRE</th>
 
                     {includeTickets && (
-                      <td className="border border-black px-2 py-1 text-right text-green-700 font-medium">{formatCurrency(row.indennitaPasto)}</td>
+                      <th className="border border-black p-2 font-bold text-base align-middle">CREDITO<br />TICKET<br />RESTAURANT</th>
                     )}
                   </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr className="h-14 font-black text-lg">
-                  <td colSpan={5} className="border border-black bg-[#92D050] bg-green-total text-left px-6 align-middle uppercase" style={{ backgroundColor: '#92D050' }}>TOTALE DOVUTO</td>
-                  <td className="border border-black bg-[#92D050] bg-green-total text-right px-2 align-middle" style={{ backgroundColor: '#92D050' }}>{formatCurrency(totals.incidenzaTotale)}</td>
+                </thead>
+                <tbody>
+                  {tableData.map((row) => (
+                    <tr key={row.anno} className="h-10 text-base">
+                      <td className="border border-black px-2 py-1 text-center bg-gray-100 font-bold">{row.anno}</td>
+                      <td className="border border-black px-2 py-1 text-right">{formatCurrency(row.totaleVoci)}</td>
+                      <td className="border border-black px-2 py-1 text-center">{formatNumber(row.divisore)}</td>
+                      <td className="border border-black px-2 py-1 text-right text-blue-800 font-medium">{formatCurrency(row.incidenzaGiornata)}</td>
+                      <td className="border border-black px-2 py-1 text-center font-bold bg-yellow-50">{formatNumber(row.giornateFerie)}</td>
+                      <td className="border border-black px-2 py-1 text-right font-medium">{formatCurrency(row.incidenzaTotale)}</td>
 
-                  {showPercepito && (
-                    <td className="border border-black bg-[#92D050] bg-green-total text-right px-2 align-middle text-orange-800" style={{ backgroundColor: '#92D050' }}>{formatCurrency(totals.indennitaPercepita)}</td>
-                  )}
+                      {showPercepito && (
+                        <td className="border border-black px-2 py-1 text-right text-orange-600 font-medium">{formatCurrency(row.indennitaPercepita)}</td>
+                      )}
 
-                  <td className="border border-black bg-[#FF5050] bg-red-total text-right px-2 align-middle text-white text-xl" style={{ backgroundColor: '#FF5050', color: 'white' }}>{formatCurrency(totals.totaleDaPercepire)}</td>
+                      <td className="border border-black px-2 py-1 text-right font-black bg-yellow-100 bg-yellow-cell text-lg">{formatCurrency(row.totaleDaPercepire)}</td>
 
-                  {includeTickets && (
-                    <td className="border border-black bg-[#92D050] bg-green-total text-right px-2 align-middle text-green-900" style={{ backgroundColor: '#92D050' }}>{formatCurrency(totals.indennitaPasto)}</td>
-                  )}
-                </tr>
-              </tfoot>
-            </table>
-          </div>
+                      {includeTickets && (
+                        <td className="border border-black px-2 py-1 text-right text-green-700 font-medium">{formatCurrency(row.indennitaPasto)}</td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="h-14 font-black text-lg">
+                    <td colSpan={5} className="border border-black bg-[#92D050] bg-green-total text-left px-6 align-middle uppercase" style={{ backgroundColor: '#92D050' }}>TOTALE DOVUTO</td>
+                    <td className="border border-black bg-[#92D050] bg-green-total text-right px-2 align-middle" style={{ backgroundColor: '#92D050' }}>{formatCurrency(totals.incidenzaTotale)}</td>
+
+                    {showPercepito && (
+                      <td className="border border-black bg-[#92D050] bg-green-total text-right px-2 align-middle text-orange-800" style={{ backgroundColor: '#92D050' }}>{formatCurrency(totals.indennitaPercepita)}</td>
+                    )}
+
+                    <td className="border border-black bg-[#FF5050] bg-red-total text-right px-2 align-middle text-white text-xl" style={{ backgroundColor: '#FF5050', color: 'white' }}>{formatCurrency(totals.totaleDaPercepire)}</td>
+
+                    {includeTickets && (
+                      <td className="border border-black bg-[#92D050] bg-green-total text-right px-2 align-middle text-green-900" style={{ backgroundColor: '#92D050' }}>{formatCurrency(totals.indennitaPasto)}</td>
+                    )}
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
           )}
         </div>
       </div>

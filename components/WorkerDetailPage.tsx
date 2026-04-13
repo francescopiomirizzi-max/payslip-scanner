@@ -123,10 +123,11 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
 
 
   // DYNAMIC SYNC: Lo stato locale comanda, il Parent riceve aggiornamenti in automatico
-  const lastSyncRef = useRef<AnnoDati[]>(monthlyInputs);
+  const lastSyncRef = useRef<string>(JSON.stringify(monthlyInputs));
   useEffect(() => {
-    if (monthlyInputs !== lastSyncRef.current) {
-      lastSyncRef.current = monthlyInputs;
+    const currentStr = JSON.stringify(monthlyInputs);
+    if (currentStr !== lastSyncRef.current) {
+      lastSyncRef.current = currentStr;
       onUpdateData(monthlyInputs);
     }
   }, [monthlyInputs, onUpdateData]);
@@ -664,7 +665,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
           aiResult = parsed;
 
           // 📡 SPIA DIAGNOSTICA: Stampa nella console cosa ha capito l'IA
-        // Dati estratti e pronti per l'inserimento
+          // Dati estratti e pronti per l'inserimento
 
         } catch (e) {
           console.error(`❌ Il server ha fallito sul file ${file.name}. Risposta:`, responseText);
@@ -1191,19 +1192,49 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
 
     // --- TABELLA 1 ---
     doc.setFontSize(12); doc.setTextColor(23, 37, 84); doc.setFont('helvetica', 'bold');
-    doc.text("1. CALCOLO DIFFERENZE PER ANNO (Applicazione Sent. Cass. 20216/2022)", 14, currentY);
+    doc.text("1. CALCOLO DIFFERENZE PER ANNO", 14, currentY);
+
+    // 🔥 FIX 1: DINAMIZZIAMO LE INTESTAZIONI DELLA TABELLA
+    const table1Head = ['ANNO', 'TOT. VARIABILI', 'GG LAV.', 'MEDIA UTILIZZATA', 'GG FERIE / TOT'];
+    if (includeTickets) {
+      table1Head.push('DIFF. LORDA', 'TICKET', 'NETTO DOVUTO');
+    } else {
+      table1Head.push('DOVUTO'); // Se non ci sono i ticket, usiamo solo una colonna finale
+    }
+
+    // 🔥 FIX 2: SBIANCHIAMO L'ANNO DI RIFERIMENTO (LA PRIMA RIGA) E ADATTIAMO LE COLONNE
+    const table1Body = yearlyRows.map((row, index) => {
+      // L'anno di riferimento è per forza il primo in alto nella tabella (indice 0)
+      const isReferenceYear = index === 0;
+
+      if (isReferenceYear) {
+        // Sbianchiamo la media, le ferie e i conteggi economici mettendo il trattino "-"
+        return includeTickets
+          ? [row[0], row[1], row[2], '-', '-', '-', '-', '-']
+          : [row[0], row[1], row[2], '-', '-', '-'];
+      }
+
+      // Anni successivi (calcoli attivi)
+      if (includeTickets) {
+        return row;
+      } else {
+        // Rimuoviamo Diff Lorda e Ticket, teniamo solo il Netto finale (che ora si chiama Dovuto)
+        return [row[0], row[1], row[2], row[3], row[4], row[7]];
+      }
+    });
 
     autoTable(doc, {
       startY: currentY + 5,
-      head: [['ANNO', 'TOT. VARIABILI', 'GG LAV.', 'MEDIA UTILIZZATA', 'GG FERIE / TOT', 'DIFF. LORDA', 'TICKET', 'NETTO DOVUTO']],
-      body: yearlyRows,
+      head: [table1Head],
+      body: table1Body,
       theme: 'grid',
       styles: { fontSize: 9, cellPadding: 3, textColor: 50, lineColor: [200, 200, 200], lineWidth: 0.1 },
       headStyles: { fillColor: [241, 245, 249], textColor: [23, 37, 84], fontStyle: 'bold', halign: 'center' },
       columnStyles: {
         0: { fontStyle: 'bold', halign: 'center', fillColor: [248, 250, 252] },
         3: { fontStyle: 'bold', textColor: [180, 83, 9] },
-        7: { fontStyle: 'bold', halign: 'right', fillColor: [220, 252, 231], textColor: [21, 128, 61] }
+        // Colora sempre di verde l'ultima colonna a destra
+        [table1Head.length - 1]: { fontStyle: 'bold', halign: 'right', fillColor: [220, 252, 231], textColor: [21, 128, 61] }
       },
       bodyStyles: { halign: 'right' },
       didDrawPage: drawHeaderFooter,
@@ -1226,38 +1257,62 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
     doc.text("2. RIEPILOGO VOCI VARIABILI DELLA RETRIBUZIONE", 14, currentY);
 
     const pivotHead = ['CODICE E VOCE', ...yearsToPrint.map(String), 'TOTALE'];
+
+    // 🔥 FIX 1: Contatori per la riga dei totali finali
+    const yearlyTotals = new Array(yearsToPrint.length).fill(0);
+    let grandPivotTotal = 0;
+
     const pivotBody = Object.keys(pivotData).sort().map(key => {
       let rowTotal = 0;
       const shortKey = key.length > 25 ? key.substring(0, 23) + '..' : key;
       const row = [shortKey];
 
-      yearsToPrint.forEach(yearVal => {
+      yearsToPrint.forEach((yearVal, index) => {
         const year = Number(yearVal);
         const val = pivotData[key][year] || 0;
+
         rowTotal += val;
+        yearlyTotals[index] += val; // Accumuliamo il totale per questa colonna (anno)
+
         row.push(fmt(val));
       });
+
+      grandPivotTotal += rowTotal; // Accumuliamo il totale generale di tutta la tabella
       row.push(fmt(rowTotal));
+
       return row;
     });
+
+    // 🔥 FIX 2: Costruiamo e aggiungiamo la riga finale dei totali
+    const totalsRow = ['TOTALE COMPLESSIVO'];
+    yearlyTotals.forEach(val => totalsRow.push(fmt(val))); // Inseriamo i totali degli anni
+    totalsRow.push(fmt(grandPivotTotal)); // Inseriamo il super-totale finale a destra
+    pivotBody.push(totalsRow);
 
     autoTable(doc, {
       startY: currentY + 5,
       head: [pivotHead],
       body: pivotBody,
       theme: 'grid',
-      styles: { fontSize: 6.5, cellPadding: 1.5, textColor: 50 },
+      styles: { fontSize: 6, cellPadding: 1.5, textColor: 50 },
       headStyles: { fillColor: [234, 88, 12], textColor: 255, halign: 'center', valign: 'middle', fontStyle: 'bold' },
       bodyStyles: { halign: 'right', valign: 'middle' },
       columnStyles: { 0: { halign: 'left', fontStyle: 'bold', cellWidth: 40 } },
       didParseCell: function (data) {
+        // 🔥 FIX: Rimosso minCellWidth per far "respirare" la tabella dentro i margini del foglio A4
         if (data.column.index > 0) {
-          data.cell.styles.cellWidth = 'wrap';
-          data.cell.styles.minCellWidth = 14;
+          data.cell.styles.cellWidth = 'auto'; // Lasciamo decidere all'algoritmo
         }
+        // Colora l'ultima colonna a destra (Totale di ogni singola voce)
         if (data.section === 'body' && data.column.index === pivotHead.length - 1) {
           data.cell.styles.fontStyle = 'bold';
           data.cell.styles.fillColor = [245, 245, 245];
+        }
+        // Colora ed evidenzia l'ultimissima riga in basso (Totale Complessivo)
+        if (data.section === 'body' && data.row.index === pivotBody.length - 1) {
+          data.cell.styles.fontStyle = 'bold';
+          data.cell.styles.fillColor = [254, 235, 200];
+          data.cell.styles.textColor = [194, 65, 12];
         }
       },
       didDrawPage: drawHeaderFooter,
@@ -1265,8 +1320,11 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
     });
 
     // --- TABELLA 3 (DETTAGLIO MENSILE) ---
-    doc.addPage();
+    // 🔥 FIX: Manteniamo il foglio in ORIZZONTALE (Landscape) anche per i dettagli mensili!
+    doc.addPage('a4', 'landscape');
     currentY = 30;
+    drawHeaderFooter(null);
+
     doc.setFontSize(12); doc.setTextColor(23, 37, 84);
     doc.text("3. DETTAGLIO MENSILE ANALITICO", 14, currentY);
 
@@ -1275,7 +1333,6 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
       // @ts-ignore
       if (currentY > 160) { doc.addPage(); currentY = 30; }
 
-      // 🔥 FIX 2: AZZERIAMO IL CONTATORE FERIE MENSILE AD OGNI ANNO 🔥
       let monthlyFerieCounter = 0;
 
       let media = yearlyAverages[year - 1];
@@ -1293,7 +1350,15 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
       ];
       if (showPercepito) tableHead.push('GIA\' PERC.');
       if (includeTickets) tableHead.push('TICKET');
-      tableHead.push('NETTO');
+      if (showPercepito || includeTickets) tableHead.push('NETTO');
+
+      // 🔥 FIX 1: Prepariamo le "scatole" per accumulare i totali dell'anno
+      let sumGgLav = 0;
+      let sumGgFerie = 0;
+      let sumLordo = 0;
+      let sumPercepito = 0;
+      let sumTicket = 0;
+      let sumNetto = 0;
 
       const tableBody = yearRows.map(row => {
         const monthName = row.month ? row.month : (MONTH_NAMES[row.monthIndex] || '');
@@ -1319,17 +1384,42 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
 
         const rNetto = (rLordo - (showPercepito ? rPercepito : 0)) + rTicket;
 
+        // Accumuliamo i valori riga per riga nelle nostre "scatole"
+        sumGgLav += ggLav;
+        sumGgFerie += gu;
+        sumLordo += rLordo;
+        sumPercepito += rPercepito;
+        sumTicket += rTicket;
+        sumNetto += rNetto;
+
         rowData.push(ggLav > 0 ? String(ggLav) : '');
         rowData.push(gu !== vac ? `${fmtInt(gu)}*` : fmtInt(gu));
         rowData.push(fmt(rLordo));
 
         if (showPercepito) rowData.push(fmt(rPercepito));
         if (includeTickets) rowData.push(fmt(rTicket));
-
-        rowData.push(fmt(rNetto));
+        if (showPercepito || includeTickets) rowData.push(fmt(rNetto));
 
         return rowData;
       });
+
+      // 🔥 FIX 2: Costruiamo la Riga Totale (Usiamo "Tot." per non andare a capo)
+      const totalsRow = ['TOT.'];
+
+      // Mettiamo celle vuote per "saltare" le colonne delle indennità
+      indennitaCols.forEach(() => totalsRow.push(''));
+
+      // Inseriamo solo i totali di Giorni, Ferie e Valori Economici
+      totalsRow.push(sumGgLav > 0 ? String(sumGgLav) : '');
+      totalsRow.push(fmtInt(sumGgFerie));
+      totalsRow.push(fmt(sumLordo));
+
+      if (showPercepito) totalsRow.push(fmt(sumPercepito));
+      if (includeTickets) totalsRow.push(fmt(sumTicket));
+      if (showPercepito || includeTickets) totalsRow.push(fmt(sumNetto));
+
+      // Spingiamo la riga in fondo alla tabella
+      tableBody.push(totalsRow);
 
       autoTable(doc, {
         startY: currentY + 12,
@@ -1343,6 +1433,14 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
           0: { halign: 'left', fontStyle: 'bold', cellWidth: 12, fillColor: [241, 245, 249] },
           [tableHead.length - 1]: { fontStyle: 'bold', fillColor: [240, 253, 250], textColor: [21, 128, 61] }
         },
+        didParseCell: function (data) {
+          // 🔥 FIX 3: Colore sobrio ed istituzionale per i sub-totali mensili
+          if (data.section === 'body' && data.row.index === tableBody.length - 1) {
+            data.cell.styles.fontStyle = 'bold';
+            data.cell.styles.fillColor = [226, 232, 240]; // Un grigio-azzurro molto elegante (Slate-200)
+            data.cell.styles.textColor = [23, 37, 84]; // Testo blu scuro che richiama l'intestazione
+          }
+        },
         didDrawPage: drawHeaderFooter,
         margin: { top: 25, bottom: 15, left: 14, right: 14 }
       });
@@ -1350,19 +1448,27 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
       // @ts-ignore
       currentY = doc.lastAutoTable.finalY + 10;
     });
-
     // --- PAGINA 4: RIEPILOGO FINALE ---
-    doc.addPage();
+    // Ritorniamo in VERTICALE per la pagina di chiusura
+    doc.addPage('a4', 'landscape');
     drawHeaderFooter(null);
     currentY = 40;
 
     doc.setFontSize(16); doc.setTextColor(23, 37, 84); doc.setFont('helvetica', 'bold');
-    doc.text("RIEPILOGO FINALE DEI CREDITI", 105, currentY, { align: 'center' });
-    currentY += 20;
+    doc.text("RIEPILOGO FINALE", 105, currentY, { align: 'center' });
+    currentY += 15;
 
-    const printRow = (label: string, value: string, isTotal = false) => {
+    // 🔥 SPIEGAZIONE SEMPLICE
+    doc.setFontSize(11); doc.setTextColor(50, 50, 50); doc.setFont('helvetica', 'normal');
+    const spiegazione = `Sulla base dei dati analizzati nelle tabelle precedenti, il sistema ha calcolato le differenze retributive spettanti al lavoratore.`;
+
+    const splitSpiegazione = doc.splitTextToSize(spiegazione, 160);
+    doc.text(splitSpiegazione, 25, currentY);
+    currentY += (splitSpiegazione.length * 6) + 10;
+
+    const printRow = (label, value, isTotal = false) => {
       doc.setFontSize(isTotal ? 14 : 12);
-      if (isTotal) doc.setTextColor(22, 163, 74);
+      if (isTotal) doc.setTextColor(22, 163, 74); // Verde Vittoria per il totale
       else doc.setTextColor(50, 50, 50);
 
       doc.setFont('helvetica', isTotal ? 'bold' : 'normal');
@@ -1374,27 +1480,38 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
       currentY += 12;
     };
 
-    // 🔥 FIX 3: USIAMO I TOTALI PULITI CALCOLATI NELLA TABELLA 1 🔥
-    printRow("Totale Lordo Spettante", fmt(grandTotalLordo));
-
-    if (showPercepito) {
-      printRow("Totale Già Percepito (Voce Busta)", fmt(grandTotalPercepito));
-    }
-
-    if (includeTickets) {
-      printRow("Totale Buoni Pasto Maturati", fmt(grandTotalTicket));
-    }
-
-    currentY += 5;
+    // Calcoliamo il netto effettivo (se ci sono detrazioni/aggiunte)
     const veroNettoDaStampare = (grandTotalLordo - (showPercepito ? grandTotalPercepito : 0)) + (includeTickets ? grandTotalTicket : 0);
-    printRow("TOTALE NETTO DA LIQUIDARE", fmt(veroNettoDaStampare), true);
 
-    currentY += 20;
+    // 🔥 FIX NOMENCLATURA LEGALE: Chiamiamo le cose con il loro vero nome!
+    if (!showPercepito && !includeTickets) {
+      // Caso 1: Nessun calcolo extra. L'unico totale è il LORDO.
+      currentY += 10;
+      printRow("TOTALE LORDO SPETTANTE", fmt(grandTotalLordo), true);
+    } else {
+      // Caso 2: Ci sono detrazioni/ticket. Si parte dal Lordo e si arriva al Netto.
+      printRow("Totale Lordo Spettante", fmt(grandTotalLordo));
+
+      if (showPercepito) {
+        printRow("Totale Già Percepito (Voce Busta)", fmt(grandTotalPercepito));
+      }
+
+      if (includeTickets) {
+        printRow("Totale Buoni Pasto Maturati", fmt(grandTotalTicket));
+      }
+
+      currentY += 5;
+      printRow("TOTALE NETTO DA LIQUIDARE", fmt(veroNettoDaStampare), true);
+    }
+
+    // CHIUSURA FORMALE
+    currentY += 25;
     doc.setFontSize(9); doc.setTextColor(100); doc.setFont('helvetica', 'italic');
-    doc.text("Il presente conteggio ha valore di perizia tecnica di parte. I calcoli sono basati sui dati inseriti e sulla giurisprudenza corrente.", 105, currentY, { align: 'center', maxWidth: 150 });
+    const notaFinale = "Il presente conteggio ha valore di perizia tecnica di parte. I calcoli sono stati eseguiti algoritmicamente garantendo la massima precisione matematica basata sui dati forniti.";
+    doc.text(notaFinale, 105, currentY, { align: 'center', maxWidth: 150 });
 
     if (typeof doc.putTotalPages === 'function') { doc.putTotalPages(totalPagesExp); }
-    doc.save(`Scheda_Lavorazione_${worker.cognome}_${worker.nome}.pdf`);
+    doc.save(`Conteggi_${worker.cognome}_${worker.nome}.pdf`);
   };
   // --- MOTORE OCR (Invariato) ---
   const performOcr = async (crop: { x: number, y: number, w: number, h: number }) => {
@@ -2618,7 +2735,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
                               <div className="h-3 w-20 bg-slate-800/60 rounded-md"></div>
                             </div>
                           </div>
-                          
+
                           {/* Skeleton del corpo report */}
                           <div className="space-y-4 pt-4">
                             <div className="h-3 w-full bg-slate-800/80 rounded-full"></div>
@@ -2628,8 +2745,8 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
                           </div>
 
                           <div className="pt-8 space-y-4">
-                             <div className="h-20 w-full bg-slate-800/40 rounded-2xl border border-slate-800"></div>
-                             <div className="h-20 w-full bg-slate-800/40 rounded-2xl border border-slate-800"></div>
+                            <div className="h-20 w-full bg-slate-800/40 rounded-2xl border border-slate-800"></div>
+                            <div className="h-20 w-full bg-slate-800/40 rounded-2xl border border-slate-800"></div>
                           </div>
 
                           <div className="flex justify-center pt-6">
