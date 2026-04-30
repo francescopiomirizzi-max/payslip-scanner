@@ -219,18 +219,86 @@ Regole d'ingaggio: Rispondi in modo preciso, tecnico ma sintetico. Fornisci rife
     const handleInput = (val: string) => setDisplay(prev => prev + val);
     const handleClear = () => setDisplay('');
 
+    // 🛡️ PARSER MATEMATICO SICURO (Recursive Descent)
+    // Accetta SOLO numeri e operatori +, -, *, /
+    // Gestisce correttamente la precedenza degli operatori.
+    // Nessun eval(), nessun new Function(), zero rischio di code injection.
+    const safeCalculate = (expr: string): number => {
+        const sanitized = expr.replace(/,/g, '.').replace(/\s/g, '');
+
+        // Validazione rigorosa: solo cifre, punto decimale e operatori aritmetici
+        if (!/^[0-9+\-*/.]+$/.test(sanitized)) {
+            throw new Error('Caratteri non ammessi');
+        }
+
+        let pos = 0;
+
+        const peek = (): string => sanitized[pos] || '';
+        const consume = (): string => sanitized[pos++];
+
+        // Livello 3 (più alta precedenza): Numeri (inclusi decimali e negativi unari)
+        const parseNumber = (): number => {
+            let numStr = '';
+            // Gestione segno negativo unario (es. "-5" o "3*-2")
+            if (peek() === '-') {
+                numStr += consume();
+            }
+            if (!/[0-9.]/.test(peek())) throw new Error('Numero atteso');
+            while (/[0-9.]/.test(peek())) {
+                numStr += consume();
+            }
+            const num = parseFloat(numStr);
+            if (isNaN(num)) throw new Error('Numero non valido');
+            return num;
+        };
+
+        // Livello 2: Moltiplicazione e Divisione
+        const parseTerm = (): number => {
+            let result = parseNumber();
+            while (peek() === '*' || peek() === '/') {
+                const op = consume();
+                const right = parseNumber();
+                if (op === '*') result *= right;
+                else {
+                    if (right === 0) throw new Error('Divisione per zero');
+                    result /= right;
+                }
+            }
+            return result;
+        };
+
+        // Livello 1 (più bassa precedenza): Addizione e Sottrazione
+        const parseExpression = (): number => {
+            let result = parseTerm();
+            while (peek() === '+' || peek() === '-') {
+                const op = consume();
+                const right = parseTerm();
+                if (op === '+') result += right;
+                else result -= right;
+            }
+            return result;
+        };
+
+        const result = parseExpression();
+
+        // Se non abbiamo consumato tutta la stringa, l'espressione è malformata
+        if (pos < sanitized.length) throw new Error('Espressione non valida');
+
+        return result;
+    };
+
     const handleCalc = () => {
         if (!display) return;
         try {
             const operation = display;
-            const result = eval(display.replace(/,/g, '.'));
+            const result = safeCalculate(display);
 
-            // ✨ FIX: Intercettiamo i finti "successi" di JavaScript come Infinity o NaN (Not a Number)
+            // Intercettiamo Infinity o NaN
             if (!Number.isFinite(result) || Number.isNaN(result)) {
-                throw new Error("Calcolo impossibile"); // Questo fa saltare il codice direttamente nel catch!
+                throw new Error("Calcolo impossibile");
             }
 
-            const finalDisplay = result !== undefined ? String(result) : '';
+            const finalDisplay = String(result);
             setDisplay(finalDisplay);
 
             if (finalDisplay && finalDisplay !== 'Errore') {
