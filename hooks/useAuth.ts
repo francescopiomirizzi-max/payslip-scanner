@@ -18,9 +18,9 @@ export const useAuth = (setViewMode: (mode: 'home' | 'simple' | 'complex' | 'sta
             setIsLoading(false);
         });
 
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
             setIsAuthenticated(!!session);
-            if (session) {
+            if (event === 'SIGNED_IN') {
                 const now = new Date();
                 setTimeout(() => {
                     showNotification(

@@ -390,20 +390,8 @@ const StatsDashboard: React.FC<StatsDashboardProps> = ({ workers = [], onBack })
                                 <div className="text-6xl font-black text-white tracking-tighter flex items-baseline gap-4 drop-shadow-2xl">
                                     <AnimatedCounter value={stats.totalRevenue} currency />
 
-                                    {/* BADGE PERCENTUALE */}
-                                    <motion.div
-                                        initial={{ opacity: 0, x: -20 }}
-                                        animate={{ opacity: 1, x: 0 }}
-                                        transition={{ delay: 0.5, type: "spring" }}
-                                        className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 shadow-[0_0_15px_-3px_rgba(16,185,129,0.3)] backdrop-blur-md self-center transform -translate-y-2"
-                                    >
-                                        <div className="bg-emerald-500 rounded-full p-0.5 flex items-center justify-center">
-                                            <TrendingUp className="w-3 h-3 text-slate-900" strokeWidth={3} />
-                                        </div>
-                                        <span className="text-sm font-bold text-emerald-400">+14.5%</span>
-                                    </motion.div>
                                 </div>
-                                <p className="text-slate-500 text-sm mt-2 font-medium">Performance globale rispetto al mese precedente</p>
+                                <p className="text-slate-500 text-sm mt-2 font-medium">Credito stimato su {stats.totalWorkers} {stats.totalWorkers === 1 ? 'pratica' : 'pratiche'} gestite</p>
                             </div>
 
                             <div className="p-4 bg-white/5 rounded-2xl border border-white/10 backdrop-blur-md shadow-inner">

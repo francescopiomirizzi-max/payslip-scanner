@@ -337,15 +337,19 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
   return (
     <>
       <style>{scrollbarStyles}</style>
-      <motion.div variants={{ hidden: { opacity: 0, y: 30 }, show: { opacity: 1, y: 0 } }} className="relative w-full h-full [perspective:1500px]">
+      <motion.div variants={{ hidden: { opacity: 0, y: 30 }, show: { opacity: 1, y: 0 } }} className="relative w-full h-full" style={{ perspective: '1500px' }}>
         <motion.div
           animate={{ rotateY: isFlipped ? 180 : tilt.y, rotateX: isFlipped ? 0 : tilt.x }}
-          transition={{ type: "spring", stiffness: 400, damping: 35 }}
-          className="relative w-full h-full [transform-style:preserve-3d]"
+          transition={isFlipped
+            ? { rotateY: { type: "spring", stiffness: 260, damping: 45 }, rotateX: { type: "spring", stiffness: 260, damping: 45 } }
+            : { type: "spring", stiffness: 400, damping: 35 }
+          }
+          className="relative w-full h-full"
+          style={{ transformStyle: 'preserve-3d' }}
         >
 
           {/* LATO FRONTALE */}
-          <div className="w-full h-full [backface-visibility:hidden]">
+          <div className="w-full h-full" style={{ backfaceVisibility: 'hidden', willChange: 'transform' }}>
               <div ref={divRef} onMouseMove={handleMouseMove} onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave}
                 className="group relative w-full h-full bg-white/70 dark:bg-slate-800/80 backdrop-blur-2xl border border-white/60 dark:border-slate-600 rounded-[2.5rem] overflow-hidden shadow-xl transition-all duration-500 hover:shadow-2xl hover:-translate-y-2 hover:scale-[1.01]"
                 style={{ ...theme.shadowStyle, borderColor: opacity > 0 ? theme.rawColor.start : '' }}
@@ -353,7 +357,9 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
                 <div className="absolute inset-0 pointer-events-none z-0" style={{ backgroundImage: noiseBg, opacity: 0.4 }}></div>
                 <div className="pointer-events-none absolute -inset-px opacity-0 transition duration-300 z-10" style={{ opacity, background: `radial-gradient(600px circle at ${position.x}px ${position.y}px, ${theme.spotlight}, transparent 40%)` }} />
 
-                <div className="relative p-7 flex flex-col h-full z-20">
+                <div className="absolute left-0 top-10 bottom-10 w-[3px] rounded-full z-30 transition-colors duration-500" style={{ backgroundColor: statusConfig.dot, boxShadow: `0 0 10px 2px ${statusConfig.dot}50` }} />
+
+                <div className="relative p-7 flex flex-col h-full z-20 pl-8">
                   <div className="flex justify-between items-start mb-5 gap-2">
                     <div className="flex items-center gap-4 min-w-0">
                       <div className={`w-16 h-16 rounded-2xl flex items-center justify-center border shadow-sm transition-all duration-500 group-hover:rotate-3 group-hover:scale-110 shrink-0 ${theme.iconClasses}`}>
@@ -422,6 +428,37 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
                         </div>
                       </div>
                     </div>
+
+                    {worker.notes && worker.notes.trim() && (
+                      <p className="text-[10px] text-slate-400 dark:text-slate-500 italic leading-snug line-clamp-2 px-1 pt-1">
+                        "{worker.notes.trim()}"
+                      </p>
+                    )}
+
+                    {financialStats.netto > 0 && (
+                      <div className="grid grid-cols-2 gap-2 pt-1">
+                        <div className="px-3 py-2.5 rounded-2xl bg-emerald-50/70 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800/40 transition-all duration-300 hover:scale-[1.03] hover:shadow-md hover:shadow-emerald-500/10">
+                          <div className="flex items-center gap-1 mb-1">
+                            <Wallet className="w-2.5 h-2.5 text-emerald-500/80 dark:text-emerald-400/70" />
+                            <p className="text-[8px] font-black uppercase tracking-widest text-emerald-600/70 dark:text-emerald-400/60">Credito</p>
+                          </div>
+                          <p className="text-sm font-black text-emerald-700 dark:text-emerald-400 tabular-nums leading-none">
+                            {financialStats.netto.toLocaleString('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })}
+                          </p>
+                        </div>
+                        <div className="px-3 py-2.5 rounded-2xl bg-amber-50/70 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-800/40 transition-all duration-300 hover:scale-[1.03] hover:shadow-md hover:shadow-amber-500/10">
+                          <div className="flex items-center gap-1 mb-1">
+                            <Ticket className="w-2.5 h-2.5 text-amber-500/80 dark:text-amber-400/70" />
+                            <p className="text-[8px] font-black uppercase tracking-widest text-amber-600/70 dark:text-amber-400/60">Ticket</p>
+                          </div>
+                          <p className="text-sm font-black text-amber-700 dark:text-amber-400 tabular-nums leading-none">
+                            {financialStats.ticket > 0
+                              ? financialStats.ticket.toLocaleString('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })
+                              : '—'}
+                          </p>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <div className="mt-8 grid grid-cols-2 gap-3 relative z-30">
@@ -460,7 +497,7 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
           </div>
 
           {/* LATO POSTERIORE */}
-          <div className="absolute inset-0 w-full h-full [backface-visibility:hidden] [transform:rotateY(180deg)]">
+          <div className="absolute inset-0 w-full h-full" style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)', willChange: 'transform' }}>
               {/* LATO POSTERIORE */}
               <div className="w-full h-full backdrop-blur-3xl border border-white/60 dark:border-slate-700 rounded-[2.5rem] flex flex-col shadow-2xl relative overflow-hidden dark:!bg-slate-900 dark:!bg-none transition-colors duration-500" style={{ ...(document.documentElement.classList.contains('dark') ? {} : theme.backGradientStyle) }}>
 

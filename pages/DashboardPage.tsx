@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     Search,
@@ -19,6 +19,7 @@ import {
     ArrowUp as SortAsc,
     ArrowDown as SortDesc,
     ChevronDown,
+    Database,
 } from 'lucide-react';
 import WorkerCard from '../components/WorkerCard';
 import { AnimatedCounter } from '../components/ui/AnimatedCounter';
@@ -97,6 +98,18 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
     const [sortBy, setSortBy] = useState<SortKey>('cognome');
     const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
     const [showStatusFilters, setShowStatusFilters] = useState(false);
+    const [isDataMenuOpen, setIsDataMenuOpen] = useState(false);
+    const dataMenuRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        if (!isDataMenuOpen) return;
+        const handleOutside = (e: MouseEvent) => {
+            if (dataMenuRef.current && !dataMenuRef.current.contains(e.target as Node))
+                setIsDataMenuOpen(false);
+        };
+        document.addEventListener('mousedown', handleOutside);
+        return () => document.removeEventListener('mousedown', handleOutside);
+    }, [isDataMenuOpen]);
 
     const STATUS_ORDER: Record<string, number> = { chiusa: 0, inviata: 1, pronta: 2, trattativa: 3 };
 
@@ -185,26 +198,44 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                     </div>
 
                     {/* GRUPPO DATI */}
-                    <div className="flex gap-3">
+                    <div className="relative" ref={dataMenuRef}>
                         <button
-                            onClick={handleExportData}
+                            onClick={() => setIsDataMenuOpen(v => !v)}
                             className="group relative px-6 py-3 rounded-xl font-bold text-white shadow-[0_10px_30px_-10px_rgba(168,85,247,0.5)] hover:shadow-[0_20px_40px_-10px_rgba(168,85,247,0.7)] hover:-translate-y-1 active:scale-95 transition-all duration-300 border border-white/20 overflow-hidden flex gap-2 items-center"
                             style={{ backgroundImage: 'linear-gradient(to right, #8b5cf6, #d946ef)' }}
                         >
-                            <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500 rotate-12"></div>
-                            <Download className="w-5 h-5 transition-transform duration-500 group-hover:rotate-180" strokeWidth={2.5} />
-                            <span>Esporta JSON</span>
+                            <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500 rotate-12" />
+                            <Database className="w-5 h-5" strokeWidth={2.5} />
+                            <span>Dati</span>
+                            <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${isDataMenuOpen ? 'rotate-180' : ''}`} />
                         </button>
 
-                        <button
-                            onClick={() => fileInputRef.current?.click()}
-                            className="group relative px-6 py-3 rounded-xl font-bold text-white shadow-[0_10px_30px_-10px_rgba(59,130,246,0.5)] hover:shadow-[0_20px_40px_-10px_rgba(59,130,246,0.7)] hover:-translate-y-1 active:scale-95 transition-all duration-300 border border-white/20 overflow-hidden flex gap-2 items-center"
-                            style={{ backgroundImage: 'linear-gradient(to right, #3b82f6, #06b6d4)' }}
-                        >
-                            <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500 rotate-12"></div>
-                            <Upload className="w-5 h-5 transition-transform duration-500 group-hover:rotate-180" strokeWidth={2.5} />
-                            <span>Importa JSON</span>
-                        </button>
+                        <AnimatePresence>
+                            {isDataMenuOpen && (
+                                <motion.div
+                                    initial={{ opacity: 0, y: -8, scale: 0.95 }}
+                                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                                    exit={{ opacity: 0, y: -8, scale: 0.95 }}
+                                    transition={{ duration: 0.15 }}
+                                    className="absolute right-0 top-full mt-2 z-50 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl overflow-hidden min-w-[180px]"
+                                >
+                                    <button
+                                        onClick={() => { handleExportData(); setIsDataMenuOpen(false); }}
+                                        className="w-full flex items-center gap-3 px-4 py-3 text-sm font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                                    >
+                                        <Download className="w-4 h-4 text-violet-500" strokeWidth={2.5} />
+                                        Esporta JSON
+                                    </button>
+                                    <button
+                                        onClick={() => { fileInputRef.current?.click(); setIsDataMenuOpen(false); }}
+                                        className="w-full flex items-center gap-3 px-4 py-3 text-sm font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors border-t border-slate-100 dark:border-slate-800"
+                                    >
+                                        <Upload className="w-4 h-4 text-blue-500" strokeWidth={2.5} />
+                                        Importa JSON
+                                    </button>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
                         <input type="file" accept=".json" ref={fileInputRef} onChange={handleImportData} className="hidden" />
                     </div>
 
@@ -550,7 +581,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
 
                         {/* 1. LAVORATORI ESISTENTI */}
                         {sortedWorkers.map(w => (
-                            <motion.div key={w.id} variants={itemVariants} layout initial="hidden" animate="show" exit="exit">
+                            <motion.div key={w.id} variants={itemVariants} layout initial="hidden" animate="show" exit="exit" className="h-[420px]">
                                 <WorkerCard
                                     worker={w}
                                     onOpenSimple={handleOpenSimple}
@@ -569,7 +600,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                             variants={itemVariants}
                             layout
                             onClick={() => handleOpenModal('create')}
-                            className="group relative w-full h-full min-h-[300px] bg-white/40 dark:bg-slate-800/40 backdrop-blur-xl border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-[2.5rem] flex flex-col items-center justify-center cursor-pointer transition-all duration-500 hover:border-emerald-400 hover:bg-emerald-50/10 hover:shadow-[0_0_40px_-10px_rgba(16,185,129,0.3)] hover:-translate-y-2"
+                            className="group relative w-full h-[420px] bg-white/40 dark:bg-slate-800/40 backdrop-blur-xl border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-[2.5rem] flex flex-col items-center justify-center cursor-pointer transition-all duration-500 hover:border-emerald-400 hover:bg-emerald-50/10 hover:shadow-[0_0_40px_-10px_rgba(16,185,129,0.3)] hover:-translate-y-2"
                         >
                             <div className="relative">
                                 <div className="absolute inset-0 bg-emerald-400/20 rounded-full blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 animate-pulse"></div>

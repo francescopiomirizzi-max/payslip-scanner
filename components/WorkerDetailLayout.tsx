@@ -1,11 +1,11 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft, FileSpreadsheet, LayoutGrid, Calculator, TrendingUp,
   User, BadgeCheck, CalendarPlus, Wallet, Ticket, CalendarClock,
   Briefcase, Eye, X, Loader2, ScanLine, Send, Gavel,
   Handshake, CheckCircle2, AlertCircle, Search, ChevronDown,
-  QrCode, Download, Bot, Cpu, FileText, Save, CheckCircle, AlertTriangle, Archive,
+  QrCode, Download, Bot, Cpu, FileText, Save, CheckCircle, AlertTriangle, Archive, Zap,
 } from 'lucide-react';
 import { LineChart } from 'lucide-react';
 import SplitViewViewer from './SplitViewViewer';
@@ -191,6 +191,18 @@ const WorkerDetailLayout: React.FC<WorkerDetailLayoutProps> = ({
   children,
 }) => {
   const commandBarRef = useRef<HTMLDivElement>(null);
+  const [isActionsOpen, setIsActionsOpen] = useState(false);
+  const actionsMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isActionsOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (actionsMenuRef.current && !actionsMenuRef.current.contains(e.target as Node))
+        setIsActionsOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [isActionsOpen]);
 
   const TimelineStep = ({ step, label, icon: Icon, activeStatus }: any) => {
     const steps = ['analisi', 'pronta', 'inviata', 'trattativa', 'chiusa'];
@@ -334,27 +346,45 @@ const WorkerDetailLayout: React.FC<WorkerDetailLayoutProps> = ({
           </div>
 
           <div className="flex items-center gap-3 shrink-0">
-            {/* TASTO CALCOLO ISTAT */}
-            <button
-              onClick={onOpenIstat}
-              className="group relative px-6 py-2.5 rounded-xl font-bold text-white shadow-[0_0_15px_rgba(234,179,8,0.4)] hover:shadow-[0_0_25px_rgba(217,70,239,0.6)] hover:-translate-y-0.5 active:scale-95 transition-all duration-300 border border-white/20 overflow-hidden flex items-center gap-2"
-              style={{ background: 'linear-gradient(135deg, #eab308 0%, #d946ef 100%)' }}
-            >
-              <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500 rotate-12"></div>
-              <LineChart className="w-4 h-4 transition-transform duration-500 group-hover:-translate-y-1" strokeWidth={2.5} />
-              <span className="hidden lg:inline tracking-wide">Calcolo interessi (ISTAT)</span>
-            </button>
-
-            {/* TASTO PEC */}
-            <button
-              onClick={onSendPec}
-              className="group relative px-6 py-2.5 rounded-xl font-bold text-white shadow-lg hover:shadow-xl hover:-translate-y-0.5 active:scale-95 transition-all duration-300 border border-white/10 overflow-hidden flex items-center gap-2"
-              style={{ background: 'linear-gradient(90deg, #334155 0%, #475569 100%)' }}
-            >
-              <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500 rotate-12"></div>
-              <Send className="w-4 h-4 transition-transform duration-500 group-hover:-translate-y-1 group-hover:translate-x-1" strokeWidth={2.5} />
-              <span className="hidden lg:inline">PEC</span>
-            </button>
+            {/* DROPDOWN AZIONI (ISTAT + PEC) */}
+            <div className="relative" ref={actionsMenuRef}>
+              <button
+                onClick={() => setIsActionsOpen(v => !v)}
+                className="group relative px-5 py-2.5 rounded-xl font-bold text-white shadow-[0_0_15px_rgba(234,179,8,0.3)] hover:shadow-[0_0_25px_rgba(234,179,8,0.5)] hover:-translate-y-0.5 active:scale-95 transition-all duration-300 border border-white/20 overflow-hidden flex items-center gap-2"
+                style={{ background: 'linear-gradient(135deg, #eab308 0%, #d946ef 100%)' }}
+              >
+                <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500 rotate-12" />
+                <Zap className="w-4 h-4 relative z-10" strokeWidth={2.5} />
+                <span className="relative z-10 tracking-wide hidden lg:inline">Azioni</span>
+                <ChevronDown className={`w-3.5 h-3.5 relative z-10 transition-transform duration-200 ${isActionsOpen ? 'rotate-180' : ''}`} />
+              </button>
+              <AnimatePresence>
+                {isActionsOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -8, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -8, scale: 0.95 }}
+                    transition={{ duration: 0.15 }}
+                    className="absolute right-0 top-full mt-2 z-50 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl overflow-hidden min-w-[210px]"
+                  >
+                    <button
+                      onClick={() => { onOpenIstat(); setIsActionsOpen(false); }}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-sm font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                    >
+                      <LineChart className="w-4 h-4 text-amber-500" strokeWidth={2.5} />
+                      Calcolo interessi (ISTAT)
+                    </button>
+                    <button
+                      onClick={() => { onSendPec(); setIsActionsOpen(false); }}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-sm font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors border-t border-slate-100 dark:border-slate-800"
+                    >
+                      <Send className="w-4 h-4 text-fuchsia-500" strokeWidth={2.5} />
+                      Invia PEC
+                    </button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
 
             {/* TASTO DOWNLOAD */}
             <button
@@ -664,14 +694,16 @@ const WorkerDetailLayout: React.FC<WorkerDetailLayoutProps> = ({
             {/* TAB: INSERIMENTO MENSILE */}
             <button
               onClick={() => onSetActiveTab('input')}
-              className={`group relative px-6 py-3 rounded-xl font-bold text-sm transition-all duration-300 flex items-center gap-2 overflow-hidden border-2 shrink-0
+              className={`group relative px-6 py-3 rounded-xl font-bold text-sm transition-colors duration-200 flex items-center gap-2 overflow-hidden border-2 shrink-0
                   ${activeTab === 'input'
                   ? 'text-white shadow-lg shadow-blue-500/30 border-white/20'
                   : 'bg-white/40 dark:bg-slate-800/40 text-slate-600 dark:text-slate-400 dark:text-slate-200 border-transparent hover:bg-white dark:hover:bg-slate-800 hover:text-blue-500 dark:hover:text-cyan-400 hover:shadow-md'
                 }`}
-              style={activeTab === 'input' ? { backgroundImage: 'linear-gradient(135deg, #2563eb 0%, #06b6d4 100%)' } : {}}
             >
-              <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500 rotate-12"></div>
+              {activeTab === 'input' && (
+                <motion.div layoutId="active-tab-bg" className="absolute inset-0" style={{ backgroundImage: 'linear-gradient(135deg, #2563eb 0%, #06b6d4 100%)' }} transition={{ type: 'spring', stiffness: 380, damping: 40 }} />
+              )}
+              <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500 rotate-12" />
               <LayoutGrid className={`w-5 h-5 transition-transform duration-300 relative z-10 ${activeTab === 'input' ? 'rotate-0' : 'group-hover:rotate-90'}`} />
               <span className="relative z-10">Inserimento Mensile</span>
             </button>
@@ -679,14 +711,16 @@ const WorkerDetailLayout: React.FC<WorkerDetailLayoutProps> = ({
             {/* TAB: RIEPILOGO ANNUALE */}
             <button
               onClick={() => onSetActiveTab('calc')}
-              className={`group relative px-6 py-3 rounded-xl font-bold text-sm transition-all duration-300 flex items-center gap-2 overflow-hidden border-2 shrink-0
+              className={`group relative px-6 py-3 rounded-xl font-bold text-sm transition-colors duration-200 flex items-center gap-2 overflow-hidden border-2 shrink-0
                   ${activeTab === 'calc'
                   ? 'text-white shadow-lg shadow-emerald-500/30 border-white/20'
                   : 'bg-white/40 dark:bg-slate-800/40 text-slate-600 dark:text-slate-400 dark:text-slate-200 border-transparent hover:bg-white dark:hover:bg-slate-800 hover:text-emerald-500 dark:hover:text-emerald-400 hover:shadow-md'
                 }`}
-              style={activeTab === 'calc' ? { backgroundImage: 'linear-gradient(135deg, #10b981 0%, #14b8a6 100%)' } : {}}
             >
-              <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500 rotate-12"></div>
+              {activeTab === 'calc' && (
+                <motion.div layoutId="active-tab-bg" className="absolute inset-0" style={{ backgroundImage: 'linear-gradient(135deg, #10b981 0%, #14b8a6 100%)' }} transition={{ type: 'spring', stiffness: 380, damping: 40 }} />
+              )}
+              <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500 rotate-12" />
               <Calculator className={`w-5 h-5 transition-transform duration-300 relative z-10 ${activeTab === 'calc' ? 'rotate-0' : 'group-hover:rotate-12'}`} />
               <span className="relative z-10">Riepilogo Annuale</span>
             </button>
@@ -694,31 +728,35 @@ const WorkerDetailLayout: React.FC<WorkerDetailLayoutProps> = ({
             {/* TAB: ANALISI VOCI */}
             <button
               onClick={() => onSetActiveTab('pivot')}
-              className={`group relative px-6 py-3 rounded-xl font-bold text-sm transition-all duration-300 flex items-center gap-2 overflow-hidden border-2 shrink-0
+              className={`group relative px-6 py-3 rounded-xl font-bold text-sm transition-colors duration-200 flex items-center gap-2 overflow-hidden border-2 shrink-0
                   ${activeTab === 'pivot'
                   ? 'text-white shadow-lg shadow-amber-500/30 border-white/20'
                   : 'bg-white/40 dark:bg-slate-800/40 text-slate-600 dark:text-slate-400 dark:text-slate-200 border-transparent hover:bg-white dark:hover:bg-slate-800 hover:text-amber-500 dark:hover:text-amber-400 hover:shadow-md'
                 }`}
-              style={activeTab === 'pivot' ? { backgroundImage: 'linear-gradient(135deg, #f59e0b 0%, #fb923c 100%)' } : {}}
             >
-              <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500 rotate-12"></div>
+              {activeTab === 'pivot' && (
+                <motion.div layoutId="active-tab-bg" className="absolute inset-0" style={{ backgroundImage: 'linear-gradient(135deg, #f59e0b 0%, #fb923c 100%)' }} transition={{ type: 'spring', stiffness: 380, damping: 40 }} />
+              )}
+              <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500 rotate-12" />
               <TrendingUp className={`w-5 h-5 transition-transform duration-300 relative z-10 ${activeTab === 'pivot' ? 'rotate-0' : 'group-hover:-translate-y-1 group-hover:translate-x-1'}`} />
               <span className="relative z-10">Analisi Voci</span>
             </button>
 
-            <div className="w-px bg-slate-300 dark:bg-slate-700 mx-1"></div>
+            <div className="w-px bg-slate-300 dark:bg-slate-700 mx-1" />
 
             {/* TAB: PROSPETTO TFR */}
             <button
               onClick={() => onSetActiveTab('tfr')}
-              className={`group relative px-6 py-3 rounded-xl font-bold text-sm transition-all duration-300 flex items-center gap-2 overflow-hidden border-2 shrink-0
+              className={`group relative px-6 py-3 rounded-xl font-bold text-sm transition-colors duration-200 flex items-center gap-2 overflow-hidden border-2 shrink-0
                   ${activeTab === 'tfr'
                   ? 'text-white shadow-lg shadow-fuchsia-500/30 border-white/20'
                   : 'bg-white/40 dark:bg-slate-800/40 text-slate-600 dark:text-slate-400 dark:text-slate-200 border-transparent hover:bg-white dark:hover:bg-slate-800 hover:text-fuchsia-500 hover:shadow-md'
                 }`}
-              style={activeTab === 'tfr' ? { backgroundImage: 'linear-gradient(135deg, #d946ef 0%, #a855f7 100%)' } : {}}
             >
-              <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500 rotate-12"></div>
+              {activeTab === 'tfr' && (
+                <motion.div layoutId="active-tab-bg" className="absolute inset-0" style={{ backgroundImage: 'linear-gradient(135deg, #d946ef 0%, #a855f7 100%)' }} transition={{ type: 'spring', stiffness: 380, damping: 40 }} />
+              )}
+              <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500 rotate-12" />
               <Wallet className={`w-5 h-5 transition-transform duration-300 relative z-10 ${activeTab === 'tfr' ? 'rotate-0' : 'group-hover:-translate-y-1 group-hover:translate-x-1'}`} />
               <span className="relative z-10">Prospetto TFR</span>
             </button>

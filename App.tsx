@@ -147,14 +147,68 @@ const App: React.FC = () => {
     const itemVariants = { hidden: { opacity: 0, y: 30 }, show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 50, damping: 15 } }, exit: { opacity: 0, scale: 0.95, transition: { duration: 0.2 } } };
 
     // --- GESTIONE MOBILE SCAN ---
-    const handleMobileScanSuccess = (data: any) => {
+    const handleMobileScanSuccess = (_data: any) => {
         addToast("Busta Paga ricevuta dal telefono!", "success");
         triggerConfetti();
     };
 
     // --- MAIN RENDER LOGIC ---
     if (isMobileMode) return <MobileUploadPage sessionId={mobileSessionId} />;
-    if (isLoading || isWorkersLoading) return <div className="min-h-screen bg-slate-900 flex items-center justify-center"><div className="w-8 h-8 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin" /></div>;
+    if (isLoading || isWorkersLoading) return (
+        <div className="min-h-screen bg-white dark:bg-slate-900 font-sans px-6 py-10">
+            <div className="max-w-7xl mx-auto space-y-12">
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-6">
+                        <div className="w-32 h-32 rounded-full bg-slate-200 dark:bg-slate-800 animate-pulse" />
+                        <div className="space-y-3">
+                            <div className="h-12 w-44 bg-slate-200 dark:bg-slate-800 rounded-2xl animate-pulse" />
+                            <div className="h-4 w-32 bg-slate-200 dark:bg-slate-700 rounded-xl animate-pulse" />
+                        </div>
+                    </div>
+                    <div className="flex gap-3">
+                        {[140, 120, 160].map((w, i) => (
+                            <div key={i} className="h-12 bg-slate-200 dark:bg-slate-800 rounded-xl animate-pulse" style={{ width: w }} />
+                        ))}
+                    </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                    {[0, 1, 2].map(i => (
+                        <div key={i} className="h-56 bg-white dark:bg-slate-800/60 border border-slate-100 dark:border-slate-700/60 rounded-[2.5rem] animate-pulse p-8 flex flex-col justify-between">
+                            <div className="w-14 h-14 rounded-2xl bg-slate-100 dark:bg-slate-700/50" />
+                            <div className="space-y-3">
+                                <div className="h-3 w-28 rounded-lg bg-slate-100 dark:bg-slate-700/50" />
+                                <div className="h-14 w-36 rounded-2xl bg-slate-100 dark:bg-slate-700/50" />
+                            </div>
+                        </div>
+                    ))}
+                </div>
+                <div className="h-20 max-w-4xl mx-auto bg-white dark:bg-slate-800/60 rounded-[2.5rem] animate-pulse border border-slate-100 dark:border-slate-700/60" />
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                    {[0, 1, 2, 3, 4, 5].map(i => (
+                        <div key={i} className="h-80 bg-white dark:bg-slate-800/60 border border-slate-100 dark:border-slate-700/60 rounded-[2.5rem] animate-pulse p-7 flex flex-col gap-4">
+                            <div className="flex items-center gap-4">
+                                <div className="w-16 h-16 rounded-2xl bg-slate-100 dark:bg-slate-700/50 shrink-0" />
+                                <div className="flex-1 space-y-2">
+                                    <div className="h-4 w-20 rounded-lg bg-slate-100 dark:bg-slate-700/50" />
+                                    <div className="h-5 w-32 rounded-lg bg-slate-100 dark:bg-slate-700/50" />
+                                </div>
+                            </div>
+                            <div className="h-7 w-28 rounded-full bg-slate-100 dark:bg-slate-700/50" />
+                            <div className="flex gap-2">
+                                <div className="h-8 w-20 rounded-xl bg-slate-100 dark:bg-slate-700/50" />
+                                <div className="h-8 w-24 rounded-xl bg-slate-100 dark:bg-slate-700/50" />
+                            </div>
+                            <div className="h-3 w-full rounded-full bg-slate-100 dark:bg-slate-700/50 mt-auto" />
+                            <div className="grid grid-cols-2 gap-3">
+                                <div className="h-12 rounded-2xl bg-slate-100 dark:bg-slate-700/50" />
+                                <div className="h-12 rounded-2xl bg-slate-100 dark:bg-slate-700/50" />
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
     if (!isAuthenticated) return <LoginPage loginEmail={loginEmail} setLoginEmail={setLoginEmail} loginPassword={loginPassword} setLoginPassword={setLoginPassword} loginError={loginError} handleLogin={handleLogin} />;
 
     return (

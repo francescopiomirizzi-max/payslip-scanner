@@ -1,4 +1,5 @@
 import React from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import StatsDashboard from './StatsDashboard';
 import WorkerDetailPage from './WorkerDetailPage';
 import TableComponent from './TableComponent';
@@ -13,6 +14,7 @@ interface AppRouterProps {
     dashboardStats: DashboardStats;
     statsList: WorkerStatItem[];
     modalConfig: ModalConfig;
+    netCreditMap: Record<string | number, number>;
     searchQuery: string;
     setSearchQuery: (q: string) => void;
     activeFilter: string;
@@ -51,6 +53,7 @@ const AppRouter: React.FC<AppRouterProps> = ({
     dashboardStats,
     statsList,
     modalConfig,
+    netCreditMap,
     searchQuery,
     setSearchQuery,
     activeFilter,
@@ -81,34 +84,48 @@ const AppRouter: React.FC<AppRouterProps> = ({
     handleUpdateWorkerFields,
     handleBack
 }) => {
+    const pageAnim = {
+        initial: { opacity: 0, y: 18 },
+        animate: { opacity: 1, y: 0, transition: { duration: 0.32, ease: [0.25, 0.46, 0.45, 0.94] } },
+        exit:    { opacity: 0, y: -12, transition: { duration: 0.2, ease: 'easeIn' } },
+    };
+
     return (
         <>
-            {viewMode === 'stats' && <StatsDashboard workers={workers} onBack={handleBack} />}
+            <AnimatePresence mode="wait">
+                {viewMode === 'stats' && (
+                    <motion.div key="stats" {...pageAnim}>
+                        <StatsDashboard workers={workers} onBack={handleBack} />
+                    </motion.div>
+                )}
 
-            {viewMode === 'complex' && selectedWorker && (
-                <WorkerDetailPage
-                    key={selectedWorker.id}
-                    worker={selectedWorker}
-                    onUpdateData={handleUpdateWorkerData}
-                    onUpdateStatus={handleUpdateStatus}
-                    onUpdateWorkerFields={handleUpdateWorkerFields}
-                    onBack={handleBack}
-                    onOpenReport={() => handleOpenSimple(selectedWorker.id)}
-                />
-            )}
+                {viewMode === 'complex' && selectedWorker && (
+                    <motion.div key={`complex-${selectedWorker.id}`} {...pageAnim}>
+                        <WorkerDetailPage
+                            key={selectedWorker.id}
+                            worker={selectedWorker}
+                            onUpdateData={handleUpdateWorkerData}
+                            onUpdateStatus={handleUpdateStatus}
+                            onUpdateWorkerFields={handleUpdateWorkerFields}
+                            onBack={handleBack}
+                            onOpenReport={() => handleOpenSimple(selectedWorker.id)}
+                        />
+                    </motion.div>
+                )}
 
-            {viewMode === 'simple' && selectedWorker && (
-                <div className="min-h-screen bg-white">
-                    <TableComponent
-                        key={`report-${selectedWorker.id}`}
-                        worker={selectedWorker}
-                        onBack={() => setViewMode('home')}
-                        onEdit={() => setViewMode('complex')}
-                        startClaimYear={selectedWorker.startClaimYear ?? 2008}
-                        onUpdateWorkerFields={handleUpdateWorkerFields}
-                    />
-                </div>
-            )}
+                {viewMode === 'simple' && selectedWorker && (
+                    <motion.div key={`simple-${selectedWorker.id}`} {...pageAnim} className="min-h-screen bg-white">
+                        <TableComponent
+                            key={`report-${selectedWorker.id}`}
+                            worker={selectedWorker}
+                            onBack={() => setViewMode('home')}
+                            onEdit={() => setViewMode('complex')}
+                            startClaimYear={selectedWorker.startClaimYear ?? 2008}
+                            onUpdateWorkerFields={handleUpdateWorkerFields}
+                        />
+                    </motion.div>
+                )}
+            </AnimatePresence>
 
             <DashboardPage
                 viewMode={viewMode}
@@ -117,6 +134,7 @@ const AppRouter: React.FC<AppRouterProps> = ({
                 dashboardStats={dashboardStats}
                 statsList={statsList}
                 modalConfig={modalConfig}
+                netCreditMap={netCreditMap}
                 searchQuery={searchQuery}
                 setSearchQuery={setSearchQuery}
                 activeFilter={activeFilter}

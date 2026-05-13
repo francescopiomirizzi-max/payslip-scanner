@@ -1,5 +1,5 @@
-import React from 'react';
-import { motion } from 'framer-motion';
+import React, { useState, useEffect } from 'react';
+import { motion, useAnimate } from 'framer-motion';
 import { Lock, LogIn, Mail } from 'lucide-react';
 
 interface LoginPageProps {
@@ -12,6 +12,17 @@ interface LoginPageProps {
 }
 
 const LoginPage: React.FC<LoginPageProps> = ({ loginEmail, setLoginEmail, loginPassword, setLoginPassword, loginError, handleLogin }) => {
+    const [formScope, animateForm] = useAnimate();
+    const [btnError, setBtnError] = useState(false);
+
+    useEffect(() => {
+        if (!loginError) return;
+        animateForm(formScope.current, { x: [0, -14, 14, -14, 14, -7, 7, 0] }, { duration: 0.5 });
+        setBtnError(true);
+        const t = setTimeout(() => setBtnError(false), 1500);
+        return () => clearTimeout(t);
+    }, [loginError]);
+
     return (
         <div className="min-h-screen flex items-center justify-center relative overflow-hidden font-sans bg-slate-900">
             <div className="absolute inset-0 z-0 bg-slate-900">
@@ -49,6 +60,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ loginEmail, setLoginEmail, loginP
                     <p className="text-slate-400/80 text-sm font-medium tracking-wide">Inserisci le credenziali per accedere al sistema.</p>
                 </div>
 
+                <div ref={formScope}>
                 <form onSubmit={handleLogin} className="space-y-4">
                     <div className="relative group">
                         <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 group-focus-within:text-cyan-400 transition-colors" />
@@ -80,13 +92,19 @@ const LoginPage: React.FC<LoginPageProps> = ({ loginEmail, setLoginEmail, loginP
                         </motion.p>
                     )}
 
-                    <button
+                    <motion.button
                         type="submit"
-                        className="w-full bg-linear-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-black py-4 rounded-2xl shadow-[0_0_30px_rgba(6,182,212,0.3)] hover:shadow-[0_0_40px_rgba(6,182,212,0.5)] transition-all transform active:scale-95 flex items-center justify-center gap-3 uppercase tracking-wide text-sm mt-2"
+                        animate={btnError ? { backgroundColor: ['#dc2626', '#dc2626'] } : {}}
+                        className={`w-full text-white font-black py-4 rounded-2xl transition-all transform active:scale-95 flex items-center justify-center gap-3 uppercase tracking-wide text-sm mt-2 ${
+                            btnError
+                                ? 'bg-red-600 shadow-[0_0_30px_rgba(220,38,38,0.5)]'
+                                : 'bg-linear-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 shadow-[0_0_30px_rgba(6,182,212,0.3)] hover:shadow-[0_0_40px_rgba(6,182,212,0.5)]'
+                        }`}
                     >
-                        <LogIn className="w-5 h-5" /> Entra nel Sistema
-                    </button>
+                        <LogIn className="w-5 h-5" /> {btnError ? 'Credenziali errate' : 'Entra nel Sistema'}
+                    </motion.button>
                 </form>
+                </div>
 
                 <div className="mt-8 text-center">
                     <p className="text-[10px] text-slate-500/50 uppercase tracking-[0.3em] font-bold select-none">RailFlow v2.0 • Sistema Protetto</p>
