@@ -391,6 +391,7 @@ const WorkerDetailLayout: React.FC<WorkerDetailLayoutProps> = ({
             >
               <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500 rotate-12"></div>
               <Archive className="w-4 h-4 relative z-10 transition-transform duration-300 group-hover:scale-110" strokeWidth={2.5} />
+              <span className="relative z-10 text-sm">Archivio</span>
               {archiveCount > 0 && (
                 <span className={`relative z-10 text-xs font-black px-1.5 py-0.5 rounded-full min-w-[20px] text-center leading-none
                   ${activeTab === 'archive'

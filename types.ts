@@ -58,11 +58,15 @@ export interface Worker {
   eliorType?: 'viaggiante' | 'magazzino';
   notes?: string;
 
+  profiloProfessionale?: string;
+
   // Preferenze UI per-lavoratore (cloud-synced)
   startClaimYear?: number;
   includeExFest?: boolean;
   includeTickets?: boolean;
   reportShowPercepito?: boolean;
+
+  created_at?: string;
 }
 
 export interface ColumnDef {

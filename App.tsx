@@ -119,7 +119,7 @@ const App: React.FC = () => {
         };
     }, [isDarkMode, toggleTheme, setIsCompanyBuilderOpen, setIsSettingsOpen, handleLogout, handleOpenComplex, handleExportData]);
 
-    const { dashboardStats, statsList, modalConfig } = useDashboardStats(workers, refreshStats, activeStatsModal);
+    const { dashboardStats, statsList, modalConfig, netCreditMap } = useDashboardStats(workers, refreshStats, activeStatsModal);
 
     // --- STILI BOTTONI E ANIMAZIONI ---
     const getFilterStyle = (filterId: string, isActive: boolean) => {
@@ -160,7 +160,7 @@ const App: React.FC = () => {
     return (
         <div className="min-h-screen font-sans selection:bg-indigo-100 dark:selection:bg-indigo-900/50 relative overflow-hidden transition-colors duration-500">
             <HiddenClasses />
-            <DynamicIsland />
+            <DynamicIsland workers={workers} />
             <KeyboardShortcutsHint />
             <Background />
 
@@ -171,6 +171,7 @@ const App: React.FC = () => {
                 dashboardStats={dashboardStats}
                 statsList={statsList}
                 modalConfig={modalConfig}
+                netCreditMap={netCreditMap}
                 searchQuery={searchQuery}
                 setSearchQuery={setSearchQuery}
                 activeFilter={activeFilter}

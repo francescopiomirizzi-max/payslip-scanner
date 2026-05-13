@@ -532,7 +532,7 @@ const WorkerModal: React.FC<WorkerModalProps> = ({ isOpen, onClose, onConfirm, i
                                             </h2>
                                             <div className="flex items-center gap-2 mt-2">
                                                 <span className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest transition-colors">
-                                                    {mode === 'create' ? 'Inserimento Lavoratore' : `Matricola: ${initialData?.id}`}
+                                                    {mode === 'create' ? 'Inserimento Lavoratore' : 'Modifica Lavoratore'}
                                                 </span>
                                             </div>
                                         </div>

@@ -154,5 +154,30 @@ export const useDashboardStats = (
         };
     }, [activeStatsModal, dashboardStats]);
 
-    return { dashboardStats, statsList, modalConfig };
+    // Always-computed net credit map — used for dashboard sort regardless of modal state
+    const netCreditMap = useMemo<Record<string | number, number>>(() => {
+        return Object.fromEntries(
+            workers.map(worker => {
+                const safeAnni = (Array.isArray(worker.anni) ? worker.anni : []) as any[];
+                const allYears = Array.from(new Set(safeAnni.map((r: any) => Number(r.year))))
+                    .filter(y => !isNaN(y as number))
+                    .sort((a, b) => (a as number) - (b as number)) as number[];
+                const results = computeHolidayIndemnity({
+                    data: safeAnni,
+                    profilo: worker.profilo || 'RFI',
+                    eliorType: worker.eliorType,
+                    includeExFest: worker.includeExFest ?? false,
+                    includeTickets: worker.includeTickets ?? true,
+                    startClaimYear: worker.startClaimYear ?? 2008,
+                    years: allYears,
+                });
+                const net = results
+                    .filter(r => !r.isReferenceYear)
+                    .reduce((sum, r) => sum + (r.sumIndennitaSpettante - r.sumIndennitaPercepita), 0);
+                return [worker.id, net];
+            })
+        );
+    }, [workers]);
+
+    return { dashboardStats, statsList, modalConfig, netCreditMap };
 };

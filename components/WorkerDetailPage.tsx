@@ -237,6 +237,21 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
     }
   }, [startClaimYear, monthlyInputs]);
 
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent('island-worker-context', {
+      detail: {
+        nome: worker.nome,
+        cognome: worker.cognome,
+        profilo: worker.profilo,
+        eliorType: worker.eliorType ?? null,
+      }
+    }));
+    return () => {
+      window.dispatchEvent(new CustomEvent('island-worker-context', { detail: null }));
+      window.dispatchEvent(new CustomEvent('set-island-context', { detail: 'detail' }));
+    };
+  }, [worker.id]);
+
   const [showSplit, setShowSplit] = useState(false);
   const [payslipFiles, setPayslipFiles] = useState<string[]>([]);
   const [currentFileIndex, setCurrentFileIndex] = useState(0);
@@ -721,6 +736,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
             worker={worker}
             startClaimYear={startClaimYear}
             onDataChange={handleDataChange}
+            onUpdateWorkerFields={onUpdateWorkerFields}
           />
         </div>
       )}
@@ -729,6 +745,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
           workerId={String(worker.id)}
           workerProfilo={worker.profilo}
           workerEliorType={worker.eliorType}
+          workerName={`${worker.cognome} ${worker.nome}`}
           onCountChange={setArchiveCount}
         />
       )}

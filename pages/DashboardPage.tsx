@@ -33,6 +33,7 @@ interface DashboardPageProps {
     dashboardStats: DashboardStats;
     statsList: WorkerStatItem[];
     modalConfig: ModalConfig;
+    netCreditMap: Record<string | number, number>;
     searchQuery: string;
     setSearchQuery: (q: string) => void;
     activeFilter: string;
@@ -66,6 +67,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
     dashboardStats,
     statsList,
     modalConfig,
+    netCreditMap,
     searchQuery,
     setSearchQuery,
     activeFilter,
@@ -91,7 +93,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
     handleImportData,
     setViewMode
 }) => {
-    type SortKey = 'cognome' | 'credito' | 'status';
+    type SortKey = 'cognome' | 'credito' | 'status' | 'data';
     const [sortBy, setSortBy] = useState<SortKey>('cognome');
     const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
     const [showStatusFilters, setShowStatusFilters] = useState(false);
@@ -106,9 +108,8 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                 return sortDir === 'asc' ? cmp : -cmp;
             });
         } else if (sortBy === 'credito') {
-            const creditMap = Object.fromEntries(statsList.map(s => [s.id, s.potential]));
             list.sort((a, b) => {
-                const diff = (creditMap[a.id] ?? 0) - (creditMap[b.id] ?? 0);
+                const diff = (netCreditMap[a.id] ?? 0) - (netCreditMap[b.id] ?? 0);
                 return sortDir === 'asc' ? diff : -diff;
             });
         } else if (sortBy === 'status') {
@@ -117,9 +118,15 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                 const bO = STATUS_ORDER[b.status ?? ''] ?? 4;
                 return sortDir === 'asc' ? aO - bO : bO - aO;
             });
+        } else if (sortBy === 'data') {
+            list.sort((a, b) => {
+                const aT = a.created_at ? new Date(a.created_at).getTime() : 0;
+                const bT = b.created_at ? new Date(b.created_at).getTime() : 0;
+                return sortDir === 'asc' ? aT - bT : bT - aT;
+            });
         }
         return list;
-    }, [filteredWorkers, sortBy, sortDir, statsList]);
+    }, [filteredWorkers, sortBy, sortDir, netCreditMap]);
 
     const toggleSort = (key: SortKey) => {
         if (sortBy === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
@@ -186,7 +193,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                         >
                             <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500 rotate-12"></div>
                             <Download className="w-5 h-5 transition-transform duration-500 group-hover:rotate-180" strokeWidth={2.5} />
-                            <span>Backup</span>
+                            <span>Esporta JSON</span>
                         </button>
 
                         <button
@@ -196,7 +203,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                         >
                             <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500 rotate-12"></div>
                             <Upload className="w-5 h-5 transition-transform duration-500 group-hover:rotate-180" strokeWidth={2.5} />
-                            <span>Ripristina</span>
+                            <span>Importa JSON</span>
                         </button>
                         <input type="file" accept=".json" ref={fileInputRef} onChange={handleImportData} className="hidden" />
                     </div>
@@ -510,6 +517,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                         { key: 'cognome', label: 'Cognome' },
                         { key: 'credito', label: 'Credito' },
                         { key: 'status', label: 'Stato' },
+                        { key: 'data', label: 'Data inserimento' },
                     ] as { key: SortKey; label: string }[]).map(opt => {
                         const isActive = sortBy === opt.key;
                         const Icon = isActive ? (sortDir === 'asc' ? SortAsc : SortDesc) : ArrowUpDown;
@@ -669,7 +677,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
 
             <AnimatePresence>
                 {showScrollTop && (
-                    <motion.button initial={{ opacity: 0, y: 50, scale: 0.8 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 50, scale: 0.8 }} whileHover={{ scale: 1.1, boxShadow: "0 0 25px rgba(99, 102, 241, 0.6)" }} onClick={scrollToTop} className="fixed bottom-8 right-8 z-50 p-4 rounded-full bg-gradient-to-tr from-indigo-600 to-blue-500 text-white shadow-2xl border border-white/20 backdrop-blur-md flex items-center justify-center cursor-pointer">
+                    <motion.button initial={{ opacity: 0, y: 50, scale: 0.8 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 50, scale: 0.8 }} whileHover={{ scale: 1.1, boxShadow: "0 0 25px rgba(99, 102, 241, 0.6)" }} onClick={scrollToTop} className="fixed bottom-20 right-6 z-50 p-4 rounded-full bg-gradient-to-tr from-indigo-600 to-blue-500 text-white shadow-2xl border border-white/20 backdrop-blur-md flex items-center justify-center cursor-pointer">
                         <ArrowUp className="w-6 h-6" strokeWidth={3} />
                     </motion.button>
                 )}

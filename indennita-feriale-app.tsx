@@ -393,7 +393,7 @@ function DettaglioLavoratore({ lavoratore, onIndietro, onAggiorna, onElimina }) 
               </tbody>
               <tfoot className="bg-gray-100 font-bold">
                 <tr>
-                  <td colSpan={modalitaModifica ? "5" : "5"} className="px-4 py-3 text-right">
+                  <td colSpan={5} className="px-4 py-3 text-right">
                     TOTALE COMPLESSIVO
                   </td>
                   <td className="px-4 py-3 text-right text-green-700 text-lg">

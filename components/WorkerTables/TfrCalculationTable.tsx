@@ -14,13 +14,15 @@ interface TfrCalculationTableProps {
     worker: Worker;
     startClaimYear: number;
     onDataChange: (newData: AnnoDati[]) => void;
+    onUpdateWorkerFields?: (fields: Partial<Worker>) => void;
 }
 
 const TfrCalculationTable: React.FC<TfrCalculationTableProps> = ({
     data,
     worker,
     startClaimYear,
-    onDataChange
+    onDataChange,
+    onUpdateWorkerFields,
 }) => {
 
     const { showNotification } = useIsland();
@@ -77,31 +79,17 @@ const TfrCalculationTable: React.FC<TfrCalculationTableProps> = ({
         setEditingYear(null);
     };
 
-    // Salvataggio Punto Zero TFR nel Local Storage
     const handleSavePuntoZero = () => {
         if (!tfrAmount || !tfrYear) return;
+        const amount = parseFloat(tfrAmount.replace(',', '.'));
+        const year = parseInt(tfrYear);
+        if (isNaN(amount) || isNaN(year)) return;
 
-        const rawData = localStorage.getItem('workers_data');
-        if (rawData && worker) {
-            let workers = JSON.parse(rawData);
-            const amount = parseFloat(tfrAmount.replace(',', '.'));
-            const year = parseInt(tfrYear);
-
-            workers = workers.map((w: any) => {
-                if (w.id === worker.id) {
-                    return { ...w, tfr_pregresso: amount, tfr_pregresso_anno: year };
-                }
-                return w;
-            });
-
-            localStorage.setItem('workers_data', JSON.stringify(workers));
-
-            setLocalTfrPregresso(amount);
-            setLocalTfrAnno(year);
-            setIsModalOpen(false);
-
-            showNotification("Punto Zero TFR", `Base storica aggiornata a € ${formatCurrency(amount)}`, "success");
-        }
+        onUpdateWorkerFields?.({ tfr_pregresso: amount, tfr_pregresso_anno: year });
+        setLocalTfrPregresso(amount);
+        setLocalTfrAnno(year);
+        setIsModalOpen(false);
+        showNotification("Punto Zero TFR", `Base storica aggiornata a € ${formatCurrency(amount)}`, "success");
     };
 
     // Motore Stampa PDF

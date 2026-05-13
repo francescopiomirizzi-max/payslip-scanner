@@ -19,6 +19,7 @@ function dbToWorker(row: any): Worker {
         accentColor: row.accent_color ?? 'blue',
         avatarUrl: row.avatar_url ?? undefined,
         notes: row.notes ?? undefined,
+        profiloProfessionale: row.profilo_professionale ?? undefined,
         tfr_pregresso: row.tfr_pregresso ?? undefined,
         tfr_pregresso_anno: row.tfr_pregresso_anno ?? undefined,
         startClaimYear: row.start_claim_year ?? undefined,
@@ -26,6 +27,7 @@ function dbToWorker(row: any): Worker {
         includeTickets: row.include_tickets ?? undefined,
         reportShowPercepito: row.report_show_percepito ?? undefined,
         anni: row.anni ?? [],
+        created_at: row.created_at ?? undefined,
     };
 }
 
@@ -36,6 +38,7 @@ function workerToDb(worker: Worker, ownerId: string): object {
         nome: worker.nome,
         cognome: worker.cognome,
         ruolo: worker.ruolo,
+        profilo_professionale: worker.profiloProfessionale ?? null,
         profilo: worker.profilo,
         elior_type: worker.eliorType ?? null,
         status: worker.status ?? null,
@@ -319,7 +322,7 @@ export const useWorkers = (addToast: (message: string, type: 'success' | 'error'
         const payload: any = { version: '2.0', workers, settings: {} };
         for (let i = 0; i < localStorage.length; i++) {
             const key = localStorage.key(i);
-            if (key && (key.startsWith('tickets_') || key.startsWith('exFest_') || key.startsWith('startYear_'))) {
+            if (key && (key.startsWith('tickets_') || key.startsWith('exFest_') || key.startsWith('startYear_') || key.startsWith('report_exfest_') || key.startsWith('report_percepito_'))) {
                 payload.settings[key] = localStorage.getItem(key);
             }
         }

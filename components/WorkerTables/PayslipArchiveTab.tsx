@@ -3,14 +3,17 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     FileText, Trash2, ExternalLink, Archive, Loader2,
     AlertTriangle, Bot, CheckCircle2, ChevronDown, FolderOpen, Folder,
-    ShieldCheck,
+    ShieldCheck, Download,
 } from 'lucide-react';
+import { zip } from 'fflate';
 import { usePayslipArchive, PayslipRecord, VerifyLogEntry } from '../../hooks/usePayslipArchive';
+import { notifyIsland } from '../DynamicIsland';
 
 interface PayslipArchiveTabProps {
     workerId: string;
     workerProfilo: string;
     workerEliorType?: string;
+    workerName?: string;
     onCountChange?: (count: number) => void;
 }
 
@@ -43,8 +46,8 @@ const MONTH_COLOR: Record<string, string> = {
 const formatDate = (iso: string) =>
     new Date(iso).toLocaleDateString('it-IT', { day: '2-digit', month: 'short', year: 'numeric' });
 
-export default function PayslipArchiveTab({ workerId, workerProfilo, workerEliorType, onCountChange }: PayslipArchiveTabProps) {
-    const { getPayslipsByWorker, deletePayslip, getSignedUrl, updateExtractedData } = usePayslipArchive();
+export default function PayslipArchiveTab({ workerId, workerProfilo, workerEliorType, workerName, onCountChange }: PayslipArchiveTabProps) {
+    const { getPayslipsByWorker, deletePayslip, getSignedUrl, getSignedUrls, updateExtractedData } = usePayslipArchive();
 
     const [records, setRecords] = useState<PayslipRecord[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -54,6 +57,7 @@ export default function PayslipArchiveTab({ workerId, workerProfilo, workerElior
     const [reanalyzingId, setReanalyzingId] = useState<string | null>(null);
     const [reanalyzedId, setReanalyzedId] = useState<string | null>(null);
     const [reanalyzeErrorId, setReanalyzeErrorId] = useState<string | null>(null);
+    const [zipProgress, setZipProgress] = useState<{ done: number; total: number } | null>(null);
     // Track which year folders are open (most recent starts open)
     const [openYears, setOpenYears] = useState<Set<number>>(new Set());
 
@@ -117,7 +121,7 @@ export default function PayslipArchiveTab({ workerId, workerProfilo, workerElior
         setOpeningId(record.id);
         const url = await getSignedUrl(record.storage_path);
         setOpeningId(null);
-        if (url) window.open(url, '_blank');
+        if (url) window.open(url, '_blank', 'noopener,noreferrer');
     };
 
     const handleDelete = async (record: PayslipRecord) => {
@@ -185,6 +189,54 @@ export default function PayslipArchiveTab({ workerId, workerProfilo, workerElior
         }
     };
 
+    const handleDownloadAllZip = async () => {
+        if (zipProgress) return;
+        setZipProgress({ done: 0, total: records.length });
+
+        // 1 API call per tutti gli URL firmati invece di N chiamate
+        const urlMap = await getSignedUrls(records.map(r => r.storage_path));
+
+        const fileEntries: Record<string, Uint8Array> = {};
+        let done = 0;
+
+        await Promise.all(
+            records.map(async (record) => {
+                try {
+                    const url = urlMap[record.storage_path];
+                    if (!url) return;
+                    const res = await fetch(url);
+                    const buf = await res.arrayBuffer();
+                    const monthIdx = String((MONTH_ORDER[record.month.toUpperCase()] ?? 0) + 1).padStart(2, '0');
+                    const safeFilename = record.filename.replace(/[^a-zA-Z0-9._-]/g, '_');
+                    fileEntries[`${record.year}/${monthIdx}_${record.month.toUpperCase()}_${safeFilename}`] = new Uint8Array(buf);
+                } catch (e) {
+                    console.error('[ZIP] Errore scaricamento:', record.filename, e);
+                } finally {
+                    done++;
+                    setZipProgress({ done, total: records.length });
+                }
+            })
+        );
+
+        const safeName = (workerName ?? workerProfilo).replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_-]/g, '');
+        zip(fileEntries, { level: 0 }, (err, data) => {
+            setZipProgress(null);
+            if (err) {
+                console.error('[ZIP] Errore compressione:', err);
+                notifyIsland('Errore creazione ZIP', 'error');
+                return;
+            }
+            const blob = new Blob([data], { type: 'application/zip' });
+            const blobUrl = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = blobUrl;
+            a.download = `${safeName}_buste_paga.zip`;
+            a.click();
+            URL.revokeObjectURL(blobUrl);
+            notifyIsland(`ZIP pronto — ${records.length} buste scaricate`, 'success');
+        });
+    };
+
     // ── LOADING ────────────────────────────────────────────────────────────────
     if (isLoading) {
         return (
@@ -213,12 +265,36 @@ export default function PayslipArchiveTab({ workerId, workerProfilo, workerElior
     return (
         <div className="h-full overflow-auto custom-scrollbar p-4 space-y-3">
 
-            {/* Totale */}
-            <p className="text-xs font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500 px-1">
-                {records.length} busta{records.length !== 1 ? ' paga archiviate' : ' paga archiviata'}
-                {' · '}
-                {sortedYears.length} ann{sortedYears.length !== 1 ? 'i' : 'o'}
-            </p>
+            {/* Totale + Download ZIP */}
+            <div className="flex items-center justify-between px-1">
+                <p className="text-xs font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">
+                    {records.length} busta{records.length !== 1 ? ' paga archiviate' : ' paga archiviata'}
+                    {' · '}
+                    {sortedYears.length} ann{sortedYears.length !== 1 ? 'i' : 'o'}
+                </p>
+                <motion.button
+                    whileTap={{ scale: 0.93 }}
+                    onClick={handleDownloadAllZip}
+                    disabled={!!zipProgress}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold
+                        bg-cyan-500 hover:bg-cyan-600 active:bg-cyan-700
+                        text-white shadow-sm transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                    title="Scarica tutte le buste paga come ZIP suddiviso per anno"
+                >
+                    {zipProgress ? (
+                        <>
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            {zipProgress.done}/{zipProgress.total}
+                        </>
+                    ) : (
+                        <>
+                            <Download className="w-3.5 h-3.5" />
+                            Scarica ZIP
+                            <span className="opacity-70">· {records.length}</span>
+                        </>
+                    )}
+                </motion.button>
+            </div>
 
             {/* Banner statistiche verifiche AI */}
             {verifyStats.total > 0 && (

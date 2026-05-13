@@ -31,55 +31,38 @@ export function usePayslipArchive() {
         monthIndex: number,
         extractedData: any
     ): Promise<void> => {
-        console.log('[Archive] addPayslip chiamato per:', file.name, year, month);
-
         const { data: { user }, error: authError } = await supabase.auth.getUser();
-        if (authError) {
-            console.error('[Archive] Errore auth.getUser():', authError);
-            return;
-        }
-        if (!user) {
-            console.error('[Archive] Nessun utente autenticato — archivio saltato.');
-            return;
-        }
-        console.log('[Archive] Utente autenticato:', user.id);
+        if (authError || !user) return;
 
         const safeFilename = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
         const paddedMonth = String(monthIndex).padStart(2, '0');
         const storagePath = `${user.id}/${workerId}/${year}_${paddedMonth}_${safeFilename}`;
-        console.log('[Archive] Storage path:', storagePath);
 
         const { error: uploadError } = await supabase.storage
             .from(BUCKET)
             .upload(storagePath, file, { upsert: true });
 
         if (uploadError) {
-            console.error('[Archive] Upload Storage fallito:', uploadError);
+            console.error('[Archive] Upload fallito:', uploadError.message);
             return;
         }
-        console.log('[Archive] Upload Storage OK');
-
-        const payload = {
-            owner_id: user.id,
-            worker_id: workerId,
-            storage_path: storagePath,
-            filename: file.name,
-            year,
-            month,
-            extracted_data: extractedData,
-        };
-        console.log('[Archive] Insert payload:', payload);
 
         const { error: insertError } = await supabase
             .from('payslip_metadata')
-            .insert(payload);
+            .insert({
+                owner_id: user.id,
+                worker_id: workerId,
+                storage_path: storagePath,
+                filename: file.name,
+                year,
+                month,
+                extracted_data: extractedData,
+            });
 
         if (insertError) {
-            console.error('[Archive] Insert metadati fallito:', insertError);
+            console.error('[Archive] Insert metadati fallito:', insertError.message);
             await supabase.storage.from(BUCKET).remove([storagePath]);
-            return;
         }
-        console.log('[Archive] Insert metadati OK — busta paga archiviata.');
     };
 
     const getPayslipsByWorker = async (workerId: string): Promise<PayslipRecord[]> => {
@@ -119,10 +102,20 @@ export function usePayslipArchive() {
     const getSignedUrl = async (storagePath: string): Promise<string | null> => {
         const { data, error } = await supabase.storage
             .from(BUCKET)
-            .createSignedUrl(storagePath, 3600); // URL valido 1 ora
+            .createSignedUrl(storagePath, 3600);
 
         if (error || !data) return null;
         return data.signedUrl;
+    };
+
+    const getSignedUrls = async (storagePaths: string[]): Promise<Record<string, string>> => {
+        if (storagePaths.length === 0) return {};
+        const { data, error } = await supabase.storage
+            .from(BUCKET)
+            .createSignedUrls(storagePaths, 3600);
+
+        if (error || !data) return {};
+        return Object.fromEntries(data.filter(d => d.signedUrl).map(d => [d.path, d.signedUrl!]));
     };
 
     const addVerifyLog = async (id: string, entry: VerifyLogEntry): Promise<void> => {
@@ -148,5 +141,5 @@ export function usePayslipArchive() {
         if (error) console.error('[Archive] Update extracted_data fallito:', error);
     };
 
-    return { addPayslip, getPayslipsByWorker, deletePayslip, getSignedUrl, updateExtractedData, addVerifyLog };
+    return { addPayslip, getPayslipsByWorker, deletePayslip, getSignedUrl, getSignedUrls, updateExtractedData, addVerifyLog };
 }

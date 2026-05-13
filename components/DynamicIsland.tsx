@@ -41,7 +41,7 @@ const getIslandStyles = (mode: string, isExpanded: boolean, uploadState: any) =>
     }
 };
 
-const DynamicIsland = () => {
+const DynamicIsland = ({ workers = [] }: { workers?: { id: string | number; nome: string; cognome: string; profilo?: string; [key: string]: any }[] }) => {
     const {
         mode: globalMode,
         calcHistory,
@@ -78,6 +78,14 @@ const DynamicIsland = () => {
         const handleCtx = (e: any) => setIslandContext(e.detail);
         window.addEventListener('set-island-context', handleCtx);
         return () => window.removeEventListener('set-island-context', handleCtx);
+    }, []);
+
+    const [workerContext, setWorkerContext] = useState<{ nome: string; cognome: string; profilo: string; eliorType: string | null } | null>(null);
+
+    useEffect(() => {
+        const handleWorkerCtx = (e: any) => setWorkerContext(e.detail);
+        window.addEventListener('island-worker-context', handleWorkerCtx);
+        return () => window.removeEventListener('island-worker-context', handleWorkerCtx);
     }, []);
 
     const [localMode, setLocalMode] = useState<'idle' | 'calc' | 'ai' | 'notify' | 'menu' | 'dropzone' | 'ticker'>('idle');
@@ -166,19 +174,15 @@ const DynamicIsland = () => {
 
     useEffect(() => {
         if (mode === 'ai' && searchQuery.trim().length > 1) {
-            const rawData = localStorage.getItem('workers_data');
-            if (rawData) {
-                const workers = JSON.parse(rawData);
-                const query = searchQuery.toLowerCase();
-                const matches = workers.filter((w: any) =>
-                    w.nome.toLowerCase().includes(query) || w.cognome.toLowerCase().includes(query)
-                ).slice(0, 3);
-                setSearchResults(matches);
-            }
+            const query = searchQuery.toLowerCase();
+            const matches = workers.filter(w =>
+                w.nome.toLowerCase().includes(query) || w.cognome.toLowerCase().includes(query)
+            ).slice(0, 3);
+            setSearchResults(matches);
         } else {
             setSearchResults([]);
         }
-    }, [searchQuery, mode]);
+    }, [searchQuery, mode, workers]);
 
     const handleOpenWorker = (worker: any) => {
         showWorkerStats(worker);
@@ -196,7 +200,7 @@ const DynamicIsland = () => {
             const response = await fetch('/.netlify/functions/ask-ai', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ question: searchQuery })
+                body: JSON.stringify({ question: searchQuery, workerContext })
             });
             const data = await response.json();
             if (!response.ok) {
@@ -1065,7 +1069,7 @@ const DynamicIsland = () => {
                                 </motion.button>
 
                                 {/* 👇 NUOVO TASTO: EXPORT BACKUP 👇 */}
-                                <motion.button variants={{ hidden: { scale: 0, opacity: 0 }, show: { scale: 1, opacity: 1 } }} onClick={(e) => { e.stopPropagation(); window.dispatchEvent(new CustomEvent('island-export')); setMode('idle'); }} className="p-2.5 bg-slate-200 dark:bg-slate-800 hover:bg-purple-100 dark:hover:bg-purple-900/50 rounded-xl transition-all duration-200 hover:scale-105 text-purple-600 dark:text-purple-400" title="Esporta Backup Globale">
+                                <motion.button variants={{ hidden: { scale: 0, opacity: 0 }, show: { scale: 1, opacity: 1 } }} onClick={(e) => { e.stopPropagation(); window.dispatchEvent(new CustomEvent('island-export')); setMode('idle'); }} className="p-2.5 bg-slate-200 dark:bg-slate-800 hover:bg-purple-100 dark:hover:bg-purple-900/50 rounded-xl transition-all duration-200 hover:scale-105 text-purple-600 dark:text-purple-400" title="Esporta JSON (copia locale)">
                                     <DownloadCloud className="w-4 h-4" />
                                 </motion.button>
 
@@ -1141,6 +1145,20 @@ const DynamicIsland = () => {
                                 </div>
                             </div>
 
+                            {workerContext && (
+                                <div className="flex items-center gap-2 mb-2">
+                                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-fuchsia-500/10 dark:bg-fuchsia-500/15 border border-fuchsia-400/30 min-w-0">
+                                        <User size={10} className="text-fuchsia-400 shrink-0" />
+                                        <span className="text-[11px] text-fuchsia-400 font-bold truncate">
+                                            {workerContext.cognome} {workerContext.nome}
+                                        </span>
+                                    </div>
+                                    <span className="text-[10px] text-slate-400 dark:text-slate-500 shrink-0 font-medium">
+                                        {workerContext.profilo}{workerContext.eliorType ? ` · ${workerContext.eliorType}` : ''}
+                                    </span>
+                                </div>
+                            )}
+
                             <form onSubmit={handleAskGemini} className="relative z-10 group/input">
                                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-fuchsia-500/50 transition-colors group-focus-within/input:text-fuchsia-500" />
                                 <input
@@ -1149,7 +1167,7 @@ const DynamicIsland = () => {
                                     value={searchQuery}
                                     onChange={(e) => { setSearchQuery(e.target.value); setAiResponse(null); setHistoryIdx(-1); }}
                                     onKeyDown={handleAiInputKeyDown}
-                                    placeholder={aiHistory.length > 0 ? "Domanda, nome lavoratore… ↑ cronologia" : "Fai una domanda legale o cerca un lavoratore..."}
+                                    placeholder={workerContext ? `Domanda su ${workerContext.cognome} ${workerContext.nome}…` : aiHistory.length > 0 ? "Domanda, nome lavoratore… ↑ cronologia" : "Fai una domanda legale o cerca un lavoratore..."}
                                     className="w-full bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm border border-fuchsia-300/50 dark:border-fuchsia-500/30 rounded-xl py-3.5 pl-10 pr-10 text-slate-800 dark:text-white text-sm focus:outline-none focus:border-fuchsia-500 focus:ring-2 focus:ring-fuchsia-500/50 shadow-inner transition-all"
                                 />
                                 {/* ✨ FIX: Tasto "Svuota" animato che appare solo se c'è del testo */}

@@ -1,6 +1,6 @@
 # RailFlow — Roadmap Operativa
 
-> **Ultimo aggiornamento:** 11 Maggio 2026
+> **Ultimo aggiornamento:** 13 Maggio 2026
 > **Ordine di esecuzione:** 1 → 2 → 3 → 4 → 5
 
 ---
@@ -66,6 +66,12 @@ Assicurarsi che in Netlify siano presenti:
 - Schermata di benvenuto per nuovo utente (nessun lavoratore inserito)
 - Tooltip contestuali al primo utilizzo di OCR Sniper e "Spiega busta paga"
 - Progress indicator durante import batch PDF
+
+### Step 1.5 — Code splitting (bundle size)
+- Il bundle principale è ~2.5MB minificato (747KB gzipped) — Vite avvisa al build
+- Causa: tutta l'app è in un unico chunk
+- Fix: `dynamic import()` per le pagine pesanti (WorkerDetailPage, StatsDashboard, RelazioneModal)
+- Eventuale `build.rollupOptions.output.manualChunks` per separare vendor pesanti (framer-motion, html2canvas)
 
 **Stima: 2 sessioni · Rischio: Basso**
 
