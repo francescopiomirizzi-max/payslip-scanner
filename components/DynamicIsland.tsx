@@ -85,8 +85,14 @@ const DynamicIsland = () => {
 
     const mode = globalMode !== 'idle' ? globalMode : localMode;
 
+    // Keep a ref so stale-closure handlers can always read the current globalMode
+    const globalModeRef = useRef(globalMode);
+    useEffect(() => { globalModeRef.current = globalMode; }, [globalMode]);
+
     const setMode = (newMode: any) => {
-        if (globalMode !== 'idle') closeIsland();
+        // Never let a local-mode change kill an active upload
+        if (globalModeRef.current === 'uploading') return;
+        if (globalModeRef.current !== 'idle') closeIsland();
         setLocalMode(newMode);
     };
 
@@ -99,15 +105,25 @@ const DynamicIsland = () => {
     const [searchResults, setSearchResults] = useState<any[]>([]);
     const [isAiThinking, setIsAiThinking] = useState(false);
     const [aiResponse, setAiResponse] = useState<string | null>(null);
+    const [aiHistory, setAiHistory] = useState<Array<{ id: number; question: string; answer: string }>>([]);
+    const [historyIdx, setHistoryIdx] = useState(-1);
+
+    // pendingTickerRef: store a ticker value that arrived during upload so we can show it after upload ends
+    const pendingTickerRef = useRef<number | null>(null);
 
     useEffect(() => {
         const handleTickerUpdate = (e: any) => {
             const newValue = e.detail;
             setLiveTicker(newValue);
             if (newValue !== null && newValue > 0 && newValue !== prevTickerRef.current) {
-                setMode('ticker');
                 prevTickerRef.current = newValue;
-                setTimeout(() => { setMode((prev: any) => prev === 'ticker' ? 'idle' : prev); }, 4000);
+                if (globalModeRef.current === 'uploading') {
+                    // Stash for display after upload ends instead of stomping on upload UI
+                    pendingTickerRef.current = newValue;
+                    return;
+                }
+                setLocalMode('ticker');
+                setTimeout(() => { setLocalMode((prev: any) => prev === 'ticker' ? 'idle' : prev); }, 4000);
             } else if (newValue === null) {
                 prevTickerRef.current = null;
             }
@@ -175,30 +191,56 @@ const DynamicIsland = () => {
 
         setIsAiThinking(true);
         setAiResponse(null);
-        setSearchResults([]);
-
-        const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
-        const MODEL_NAME = "gemini-3.1-pro-preview";
-        const SYSTEM_PROMPT = `Sei un esperto Consulente del Lavoro e Avvocato Giuslavorista italiano di altissimo livello.
-Il tuo compito è assistere un collega nell'analisi di buste paga, calcolo di differenze retributive (Cassazione 20216/2022) e interpretazione dei CCNL.
-Regole d'ingaggio: Rispondi in modo preciso, tecnico ma sintetico. Fornisci riferimenti normativi. Ecco la domanda: `;
 
         try {
-            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${GEMINI_API_KEY}`, {
+            const response = await fetch('/.netlify/functions/ask-ai', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ contents: [{ parts: [{ text: SYSTEM_PROMPT + "\n\n" + searchQuery }] }] })
+                body: JSON.stringify({ question: searchQuery })
             });
             const data = await response.json();
-            if (data.candidates && data.candidates[0]) {
-                setAiResponse(data.candidates[0].content.parts[0].text);
+            if (!response.ok) {
+                setAiResponse(`⚠️ ${data.error || `Errore (${response.status})`}`);
+            } else if (data.answer) {
+                setAiResponse(data.answer);
+                setAiHistory(prev => [{ id: Date.now(), question: searchQuery, answer: data.answer }, ...prev].slice(0, 5));
             } else {
-                setAiResponse("Il Modello Neurale non ha restituito una risposta valida.");
+                setAiResponse("Il modello non ha restituito una risposta valida. Riprova.");
             }
         } catch (error) {
-            setAiResponse("Errore di connessione API. Verifica la tua connessione.");
+            setAiResponse("Errore di connessione. Controlla la rete.");
         }
         setIsAiThinking(false);
+    };
+
+    const handleResetAi = () => {
+        setAiResponse(null);
+        setSearchQuery('');
+        setHistoryIdx(-1);
+        setTimeout(() => inputRef.current?.focus(), 50);
+    };
+
+    const handleAiInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (aiHistory.length === 0) return;
+        if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            const next = Math.min(historyIdx + 1, aiHistory.length - 1);
+            setHistoryIdx(next);
+            setSearchQuery(aiHistory[next].question);
+            setAiResponse(aiHistory[next].answer);
+        } else if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            if (historyIdx > 0) {
+                const prev = historyIdx - 1;
+                setHistoryIdx(prev);
+                setSearchQuery(aiHistory[prev].question);
+                setAiResponse(aiHistory[prev].answer);
+            } else {
+                setHistoryIdx(-1);
+                setSearchQuery('');
+                setAiResponse(null);
+            }
+        }
     };
 
     const islandRef = useRef<HTMLDivElement>(null);
@@ -345,6 +387,18 @@ Regole d'ingaggio: Rispondi in modo preciso, tecnico ma sintetico. Fornisci rife
     useEffect(() => {
         if (mode === 'ai' && inputRef.current) setTimeout(() => inputRef.current?.focus(), 100);
     }, [mode]);
+
+    // Flush any ticker value that was stashed while upload was running
+    useEffect(() => {
+        if (globalMode !== 'idle') return;
+        if (pendingTickerRef.current !== null) {
+            const pending = pendingTickerRef.current;
+            pendingTickerRef.current = null;
+            setLiveTicker(pending);
+            setLocalMode('ticker');
+            setTimeout(() => { setLocalMode((prev: any) => prev === 'ticker' ? 'idle' : prev); }, 4000);
+        }
+    }, [globalMode]);
 
     const getGlowColor = () => {
         if (mode === 'dropzone') return 'rgba(217, 70, 239, 0.8)';
@@ -1093,8 +1147,9 @@ Regole d'ingaggio: Rispondi in modo preciso, tecnico ma sintetico. Fornisci rife
                                     ref={inputRef}
                                     type="text"
                                     value={searchQuery}
-                                    onChange={(e) => setSearchQuery(e.target.value)}
-                                    placeholder="Fai una domanda legale o calcola differenze..."
+                                    onChange={(e) => { setSearchQuery(e.target.value); setAiResponse(null); setHistoryIdx(-1); }}
+                                    onKeyDown={handleAiInputKeyDown}
+                                    placeholder={aiHistory.length > 0 ? "Domanda, nome lavoratore… ↑ cronologia" : "Fai una domanda legale o cerca un lavoratore..."}
                                     className="w-full bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm border border-fuchsia-300/50 dark:border-fuchsia-500/30 rounded-xl py-3.5 pl-10 pr-10 text-slate-800 dark:text-white text-sm focus:outline-none focus:border-fuchsia-500 focus:ring-2 focus:ring-fuchsia-500/50 shadow-inner transition-all"
                                 />
                                 {/* ✨ FIX: Tasto "Svuota" animato che appare solo se c'è del testo */}
@@ -1115,13 +1170,13 @@ Regole d'ingaggio: Rispondi in modo preciso, tecnico ma sintetico. Fornisci rife
                                 </AnimatePresence>
                             </form>
 
-                            {/* Risultati Lavoratori - Effetto a Cascata (Stagger) */}
-                            {searchResults.length > 0 && !isAiThinking && !aiResponse && (
+                            {/* Risultati Lavoratori — compatti se c'è anche una risposta AI */}
+                            {searchResults.length > 0 && !isAiThinking && (
                                 <motion.div
                                     initial="hidden"
                                     animate="visible"
                                     variants={{ visible: { transition: { staggerChildren: 0.05 } } }}
-                                    className="flex flex-col gap-2 mt-2 relative z-10"
+                                    className="flex flex-col gap-1.5 relative z-10"
                                 >
                                     <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1">Lavoratori in archivio</span>
                                     {searchResults.map(w => (
@@ -1129,15 +1184,16 @@ Regole d'ingaggio: Rispondi in modo preciso, tecnico ma sintetico. Fornisci rife
                                             key={w.id}
                                             variants={{ hidden: { opacity: 0, y: 10 }, visible: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 400, damping: 25 } } }}
                                             onClick={() => handleOpenWorker(w)}
-                                            className="flex items-center gap-3 p-3 bg-slate-50/80 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-700/80 rounded-xl border border-slate-200/50 dark:border-slate-700/50 transition-colors text-left group"
+                                            className={`flex items-center gap-2.5 bg-slate-50/80 dark:bg-slate-800/50 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-xl border border-slate-200/50 dark:border-slate-700/50 hover:border-indigo-300 dark:hover:border-indigo-600/50 transition-colors text-left group ${aiResponse ? 'px-3 py-2' : 'p-3'}`}
                                         >
-                                            <div className="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
-                                                <User size={14} />
+                                            <div className={`rounded-full bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform ${aiResponse ? 'w-6 h-6' : 'w-8 h-8'}`}>
+                                                <User size={aiResponse ? 11 : 14} />
                                             </div>
-                                            <div>
-                                                <h4 className="text-sm font-bold text-slate-800 dark:text-white group-hover:text-indigo-500 transition-colors">{w.cognome} {w.nome}</h4>
-                                                <p className="text-[10px] text-slate-500 uppercase">{w.profilo} • {w.ruolo}</p>
+                                            <div className="min-w-0">
+                                                <h4 className="text-sm font-bold text-slate-800 dark:text-white group-hover:text-indigo-500 transition-colors truncate">{w.cognome} {w.nome}</h4>
+                                                {!aiResponse && <p className="text-[10px] text-slate-500 uppercase">{w.profilo} • {w.ruolo}</p>}
                                             </div>
+                                            <ArrowRight size={12} className="ml-auto shrink-0 text-slate-300 group-hover:text-indigo-400 transition-colors" />
                                         </motion.button>
                                     ))}
                                 </motion.div>
@@ -1158,12 +1214,50 @@ Regole d'ingaggio: Rispondi in modo preciso, tecnico ma sintetico. Fornisci rife
                                         animate={{ opacity: 1, height: 'auto', y: 0 }}
                                         exit={{ opacity: 0, height: 0, y: -10 }}
                                         transition={{ type: "spring", damping: 25, stiffness: 300 }}
-                                        // ✨ FIX: Aggiunto max-h-[60vh] e overflow-y-auto per permettere lo scorrimento
-                                        className="bg-linear-to-br from-fuchsia-50/80 to-white/50 dark:from-fuchsia-950/30 dark:to-slate-900/50 border border-fuchsia-200/60 dark:border-fuchsia-500/20 p-4 rounded-xl relative z-10 backdrop-blur-md shadow-sm max-h-[60vh] overflow-y-auto custom-scrollbar pointer-events-auto"
+                                        className="flex flex-col gap-2 relative z-10"
                                     >
-                                        <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">
-                                            {aiResponse}
-                                        </p>
+                                        <div className="bg-linear-to-br from-fuchsia-50/80 to-white/50 dark:from-fuchsia-950/30 dark:to-slate-900/50 border border-fuchsia-200/60 dark:border-fuchsia-500/20 p-4 rounded-xl backdrop-blur-md shadow-sm max-h-[50vh] overflow-y-auto custom-scrollbar pointer-events-auto">
+                                            <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">
+                                                {aiResponse}
+                                            </p>
+                                        </div>
+                                        <button
+                                            onClick={handleResetAi}
+                                            className="self-start flex items-center gap-1.5 text-[10px] font-bold text-fuchsia-500 hover:text-fuchsia-700 dark:hover:text-fuchsia-300 uppercase tracking-widest transition-colors py-1 px-2 rounded-lg hover:bg-fuchsia-50 dark:hover:bg-fuchsia-950/30"
+                                        >
+                                            <ArrowLeft size={11} /> Nuova domanda
+                                        </button>
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
+
+                            {/* CRONOLOGIA DOMANDE AI */}
+                            <AnimatePresence>
+                                {!aiResponse && !isAiThinking && searchQuery.length === 0 && aiHistory.length > 0 && (
+                                    <motion.div
+                                        key="ai-history"
+                                        initial={{ opacity: 0, height: 0 }}
+                                        animate={{ opacity: 1, height: 'auto' }}
+                                        exit={{ opacity: 0, height: 0 }}
+                                        className="flex flex-col gap-1.5 relative z-10 overflow-hidden"
+                                    >
+                                        <div className="flex items-center justify-between mb-0.5">
+                                            <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Domande recenti · ↑↓</span>
+                                            <button onClick={() => setAiHistory([])} className="text-[9px] text-slate-400 hover:text-red-400 transition-colors flex items-center gap-1"><Trash2 size={9} /> Svuota</button>
+                                        </div>
+                                        {aiHistory.map((item, i) => (
+                                            <motion.button
+                                                key={item.id}
+                                                initial={{ opacity: 0, x: -10 }}
+                                                animate={{ opacity: 1, x: 0 }}
+                                                transition={{ delay: i * 0.04 }}
+                                                onClick={() => { setSearchQuery(item.question); setAiResponse(item.answer); setHistoryIdx(i); }}
+                                                className="flex items-start gap-2.5 p-2.5 bg-slate-50/80 dark:bg-slate-800/40 hover:bg-fuchsia-50 dark:hover:bg-fuchsia-950/20 rounded-xl border border-slate-200/50 dark:border-slate-700/50 hover:border-fuchsia-200 dark:hover:border-fuchsia-700/40 transition-all text-left group"
+                                            >
+                                                <Bot size={11} className="mt-0.5 shrink-0 text-fuchsia-400 group-hover:text-fuchsia-500 transition-colors" />
+                                                <span className="text-[11px] text-slate-600 dark:text-slate-300 leading-snug line-clamp-2 group-hover:text-fuchsia-700 dark:group-hover:text-fuchsia-300 transition-colors">{item.question}</span>
+                                            </motion.button>
+                                        ))}
                                     </motion.div>
                                 )}
                             </AnimatePresence>

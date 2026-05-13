@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     Search,
@@ -14,7 +14,11 @@ import {
     ChevronRight,
     BarChart3,
     RotateCcw,
-    SearchX
+    SearchX,
+    ArrowUpDown,
+    ArrowUp as SortAsc,
+    ArrowDown as SortDesc,
+    ChevronDown,
 } from 'lucide-react';
 import WorkerCard from '../components/WorkerCard';
 import { AnimatedCounter } from '../components/ui/AnimatedCounter';
@@ -33,6 +37,8 @@ interface DashboardPageProps {
     setSearchQuery: (q: string) => void;
     activeFilter: string;
     setActiveFilter: (f: string) => void;
+    activeStatusFilter: string;
+    setActiveStatusFilter: (f: string) => void;
     customFilters: string[];
     activeStatsModal: 'net' | 'ticket' | null;
     setActiveStatsModal: (modal: 'net' | 'ticket' | null) => void;
@@ -41,11 +47,12 @@ interface DashboardPageProps {
     containerVariants: any;
     itemVariants: any;
     getFilterStyle: (filterId: string, isActive: boolean) => string;
-    handleOpenSimple: (id: number) => void;
-    handleOpenComplex: (id: number) => void;
-    openEditModal: (e: React.MouseEvent, id: number) => void;
-    handleDeleteWorker: (id: number) => void;
+    handleOpenSimple: (id: string) => void;
+    handleOpenComplex: (id: string) => void;
+    openEditModal: (e: React.MouseEvent, id: string) => void;
+    handleDeleteWorker: (id: string) => void;
     handleOpenModal: (mode: 'create' | 'edit') => void;
+    updateWorkerById: (id: string, fields: any) => void;
     fileInputRef: React.RefObject<HTMLInputElement>;
     handleExportData: () => void;
     handleImportData: (e: React.ChangeEvent<HTMLInputElement>) => void;
@@ -63,6 +70,8 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
     setSearchQuery,
     activeFilter,
     setActiveFilter,
+    activeStatusFilter,
+    setActiveStatusFilter,
     customFilters,
     activeStatsModal,
     setActiveStatsModal,
@@ -76,11 +85,47 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
     openEditModal,
     handleDeleteWorker,
     handleOpenModal,
+    updateWorkerById,
     fileInputRef,
     handleExportData,
     handleImportData,
     setViewMode
 }) => {
+    type SortKey = 'cognome' | 'credito' | 'status';
+    const [sortBy, setSortBy] = useState<SortKey>('cognome');
+    const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+    const [showStatusFilters, setShowStatusFilters] = useState(false);
+
+    const STATUS_ORDER: Record<string, number> = { chiusa: 0, inviata: 1, pronta: 2, trattativa: 3 };
+
+    const sortedWorkers = useMemo(() => {
+        const list = [...filteredWorkers];
+        if (sortBy === 'cognome') {
+            list.sort((a, b) => {
+                const cmp = a.cognome.localeCompare(b.cognome, 'it');
+                return sortDir === 'asc' ? cmp : -cmp;
+            });
+        } else if (sortBy === 'credito') {
+            const creditMap = Object.fromEntries(statsList.map(s => [s.id, s.potential]));
+            list.sort((a, b) => {
+                const diff = (creditMap[a.id] ?? 0) - (creditMap[b.id] ?? 0);
+                return sortDir === 'asc' ? diff : -diff;
+            });
+        } else if (sortBy === 'status') {
+            list.sort((a, b) => {
+                const aO = STATUS_ORDER[a.status ?? ''] ?? 4;
+                const bO = STATUS_ORDER[b.status ?? ''] ?? 4;
+                return sortDir === 'asc' ? aO - bO : bO - aO;
+            });
+        }
+        return list;
+    }, [filteredWorkers, sortBy, sortDir, statsList]);
+
+    const toggleSort = (key: SortKey) => {
+        if (sortBy === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+        else { setSortBy(key); setSortDir('asc'); }
+    };
+
     return (
         <div className="relative max-w-7xl mx-auto px-6 py-10" style={{ display: viewMode === 'home' ? 'block' : 'none' }}>
             {/* HEADER */}
@@ -240,7 +285,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                         </div>
                         <div>
                             <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2 group-hover:text-emerald-600 transition-colors duration-300">Credito Stimato Totale</p>
-                            <p className="text-6xl font-black tracking-tighter transition-all duration-500 bg-clip-text text-slate-700 dark:text-slate-300 group-hover:text-transparent transform group-hover:scale-105 origin-left" style={{ backgroundImage: 'linear-gradient(135deg, #059669 0%, #34d399 100%)', WebkitBackgroundClip: 'text' }}>
+                            <p className="text-5xl font-black tracking-tighter transition-all duration-500 bg-clip-text text-slate-700 dark:text-slate-300 group-hover:text-transparent transform group-hover:scale-105 origin-left overflow-hidden" style={{ backgroundImage: 'linear-gradient(135deg, #059669 0%, #34d399 100%)', WebkitBackgroundClip: 'text' }}>
                                 {dashboardStats.totalNet > 0 ? <AnimatedCounter value={dashboardStats.totalNet} isCurrency /> : '-'}
                             </p>
                             <div className="flex items-center gap-2 mt-3 opacity-60 group-hover:opacity-100 transition-opacity">
@@ -271,7 +316,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                         </div>
                         <div>
                             <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2 group-hover:text-amber-600 transition-colors duration-300">Valore Ticket</p>
-                            <p className="text-6xl font-black tracking-tighter transition-all duration-500 bg-clip-text text-slate-700 dark:text-slate-300 group-hover:text-transparent transform group-hover:scale-105 origin-left" style={{ backgroundImage: 'linear-gradient(135deg, #d97706 0%, #fbbf24 100%)', WebkitBackgroundClip: 'text' }}>
+                            <p className="text-5xl font-black tracking-tighter transition-all duration-500 bg-clip-text text-slate-700 dark:text-slate-300 group-hover:text-transparent transform group-hover:scale-105 origin-left overflow-hidden" style={{ backgroundImage: 'linear-gradient(135deg, #d97706 0%, #fbbf24 100%)', WebkitBackgroundClip: 'text' }}>
                                 {dashboardStats.totalTicket > 0 ? <AnimatedCounter value={dashboardStats.totalTicket} isCurrency /> : '-'}
                             </p>
                             <div className="flex items-center gap-2 mt-3 opacity-60 group-hover:opacity-100 transition-opacity">
@@ -334,28 +379,104 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                     </div>
                 </div>
 
-                {/* 2. SMART FILTERS (PILLOLE NEON DINAMICHE) */}
-                <div className="flex justify-center mt-6 gap-3 flex-wrap">
-                    {['ALL', 'RFI', 'ELIOR', 'REKEEP', ...customFilters].map((filterId) => {
-                        const isActive = activeFilter === filterId;
-                        const label = filterId === 'ALL' ? 'Tutti' : filterId;
+                {/* 2. SMART FILTERS — AZIENDA + STATO A SCOMPARSA */}
+                {(() => {
+                    const STATUS_OPTIONS = [
+                        { id: 'ALL',        label: 'Tutti',          dot: null,      cls: 'bg-indigo-600 text-white border-indigo-500' },
+                        { id: 'analisi',    label: 'Da Analizzare',  dot: '#94a3b8', cls: 'bg-slate-600 text-white border-slate-500',   count: workers.filter(w => !w.status || w.status === 'aperta' || w.status === 'in_corso').length },
+                        { id: 'pronta',     label: 'Pronta',         dot: '#f59e0b', cls: 'bg-amber-500 text-white border-amber-400',    count: workers.filter(w => w.status === 'pronta').length },
+                        { id: 'trattativa', label: 'In Trattativa',  dot: '#f43f5e', cls: 'bg-rose-500 text-white border-rose-400',      count: workers.filter(w => w.status === 'trattativa').length },
+                        { id: 'inviata',    label: 'PEC Inviata',    dot: '#a855f7', cls: 'bg-purple-500 text-white border-purple-400',  count: workers.filter(w => w.status === 'inviata').length },
+                        { id: 'chiusa',     label: 'Conclusa',       dot: '#10b981', cls: 'bg-emerald-500 text-white border-emerald-400', count: workers.filter(w => w.status === 'chiusa').length },
+                    ];
+                    const hasStatusFilter = activeStatusFilter !== 'ALL';
+                    const activeOpt = STATUS_OPTIONS.find(o => o.id === activeStatusFilter)!;
+                    const inactivePill = 'bg-white/40 dark:bg-slate-800/40 border border-slate-200/60 dark:border-slate-700/50 text-slate-500 dark:text-slate-400 hover:bg-white/70 dark:hover:bg-slate-700/60';
 
-                        return (
-                            <button
-                                key={filterId}
-                                onClick={() => setActiveFilter(filterId)}
-                                className={`px-6 py-2 rounded-2xl font-black text-xs uppercase tracking-widest transition-all duration-300 backdrop-blur-md flex items-center gap-2 ${getFilterStyle(filterId, isActive)}`}
-                            >
-                                {label}
-                                {filterId !== 'ALL' && (
-                                    <span className="opacity-70 font-mono text-[10px]">
-                                        ({workers.filter(w => w.profilo === filterId).length})
-                                    </span>
+                    return (
+                        <div className="mt-6 space-y-3">
+                            {/* RIGA PRINCIPALE: AZIENDE + TOGGLE STATO */}
+                            <div className="flex justify-center gap-3 flex-wrap items-center">
+                                {['ALL', 'RFI', 'ELIOR', 'REKEEP', ...customFilters].map((filterId) => {
+                                    const isActive = activeFilter === filterId;
+                                    return (
+                                        <button
+                                            key={filterId}
+                                            onClick={() => setActiveFilter(filterId)}
+                                            className={`px-6 py-2 rounded-2xl font-black text-xs uppercase tracking-widest transition-all duration-300 backdrop-blur-md flex items-center gap-2 ${getFilterStyle(filterId, isActive)}`}
+                                        >
+                                            {filterId === 'ALL' ? 'Tutti' : filterId}
+                                            {filterId !== 'ALL' && (
+                                                <span className="opacity-70 font-mono text-[10px]">
+                                                    ({workers.filter(w => w.profilo === filterId).length})
+                                                </span>
+                                            )}
+                                        </button>
+                                    );
+                                })}
+
+                                <span className="w-px h-4 bg-slate-200 dark:bg-slate-700 mx-1" />
+
+                                {/* PILL TOGGLE STATO */}
+                                <button
+                                    onClick={() => setShowStatusFilters(v => !v)}
+                                    className={`px-4 py-2 rounded-2xl font-black text-xs uppercase tracking-widest transition-all duration-300 backdrop-blur-md flex items-center gap-2 border ${
+                                        hasStatusFilter
+                                            ? `${activeOpt.cls} shadow-md`
+                                            : showStatusFilters
+                                                ? 'bg-slate-100 dark:bg-slate-700 border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200'
+                                                : 'bg-white/50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-white/80 dark:hover:bg-slate-700/60'
+                                    }`}
+                                >
+                                    {hasStatusFilter && activeOpt.dot && (
+                                        <span className="w-2 h-2 rounded-full bg-white/80 shrink-0" />
+                                    )}
+                                    {hasStatusFilter ? activeOpt.label : 'Stato'}
+                                    <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${showStatusFilters ? 'rotate-180' : ''}`} />
+                                </button>
+                            </div>
+
+                            {/* RIGA STATUS (a scomparsa con animazione) */}
+                            <AnimatePresence>
+                                {showStatusFilters && (
+                                    <motion.div
+                                        initial={{ opacity: 0, height: 0 }}
+                                        animate={{ opacity: 1, height: 'auto' }}
+                                        exit={{ opacity: 0, height: 0 }}
+                                        transition={{ duration: 0.22, ease: 'easeInOut' }}
+                                        className="overflow-hidden"
+                                    >
+                                        <div className="flex justify-center gap-2 flex-wrap pt-1">
+                                            {STATUS_OPTIONS.map(opt => {
+                                                const isActive = activeStatusFilter === opt.id;
+                                                return (
+                                                    <button
+                                                        key={opt.id}
+                                                        onClick={() => {
+                                                            setActiveStatusFilter(opt.id);
+                                                            if (opt.id !== 'ALL') setShowStatusFilters(false);
+                                                        }}
+                                                        className={`px-4 py-1.5 rounded-xl font-bold text-[10px] uppercase tracking-widest transition-all duration-200 backdrop-blur-md flex items-center gap-1.5 border ${isActive ? opt.cls : inactivePill}`}
+                                                    >
+                                                        {opt.dot && (
+                                                            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isActive ? 'bg-white' : 'bg-slate-400'}`} />
+                                                        )}
+                                                        {opt.label}
+                                                        {'count' in opt && (
+                                                            <span className={`font-mono text-[9px] ${isActive ? 'opacity-80' : 'opacity-50'}`}>
+                                                                ({opt.count})
+                                                            </span>
+                                                        )}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    </motion.div>
                                 )}
-                            </button>
-                        );
-                    })}
-                </div>
+                            </AnimatePresence>
+                        </div>
+                    );
+                })()}
             </div>
             {/* --- 3. NO RESULTS STATE (MESSAGGIO VUOTO) --- */}
             <AnimatePresence>
@@ -379,8 +500,39 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                 )}
             </AnimatePresence>
 
-            {/* --- 4. WORKERS GRID (CORRETTA) --- */}
+            {/* --- 4. WORKERS GRID --- */}
             {(!searchQuery || filteredWorkers.length > 0) && (
+                <>
+                {/* SORT BAR */}
+                <div className="flex items-center gap-2 mb-6 flex-wrap">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mr-1">Ordina:</span>
+                    {([
+                        { key: 'cognome', label: 'Cognome' },
+                        { key: 'credito', label: 'Credito' },
+                        { key: 'status', label: 'Stato' },
+                    ] as { key: SortKey; label: string }[]).map(opt => {
+                        const isActive = sortBy === opt.key;
+                        const Icon = isActive ? (sortDir === 'asc' ? SortAsc : SortDesc) : ArrowUpDown;
+                        return (
+                            <button
+                                key={opt.key}
+                                onClick={() => toggleSort(opt.key)}
+                                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all duration-200 backdrop-blur-md border ${
+                                    isActive
+                                        ? 'bg-indigo-600 text-white border-indigo-500 shadow-md shadow-indigo-500/30'
+                                        : 'bg-white/50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:bg-white/80 dark:hover:bg-slate-700/60'
+                                }`}
+                            >
+                                <Icon className="w-3 h-3" />
+                                {opt.label}
+                            </button>
+                        );
+                    })}
+                    <span className="ml-auto text-[10px] font-medium text-slate-400 dark:text-slate-500">
+                        {filteredWorkers.length} {filteredWorkers.length === 1 ? 'pratica' : 'pratiche'}
+                    </span>
+                </div>
+
                 <motion.div
                     className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 pb-20"
                     variants={containerVariants}
@@ -389,14 +541,16 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                     <AnimatePresence mode='popLayout'>
 
                         {/* 1. LAVORATORI ESISTENTI */}
-                        {filteredWorkers.map(w => (
+                        {sortedWorkers.map(w => (
                             <motion.div key={w.id} variants={itemVariants} layout initial="hidden" animate="show" exit="exit">
                                 <WorkerCard
                                     worker={w}
                                     onOpenSimple={handleOpenSimple}
                                     onOpenComplex={handleOpenComplex}
-                                    onEdit={(e) => openEditModal(e, w.id)} // <--- Assicurati che sia w.id
+                                    onEdit={(e) => openEditModal(e, w.id)}
                                     onDelete={() => handleDeleteWorker(w.id)}
+                                    onStatusChange={(id, status) => updateWorkerById(id, { status: status === '' ? undefined : status })}
+                                    onNotesChange={(id, notes) => updateWorkerById(id, { notes })}
                                 />
                             </motion.div>
                         ))}
@@ -419,6 +573,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                         </motion.div>
                     </AnimatePresence>
                 </motion.div>
+                </>
             )}
 
             {/* MODALE STATISTICHE (CORRETTA E SICURA) */}

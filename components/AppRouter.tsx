@@ -3,7 +3,7 @@ import StatsDashboard from './StatsDashboard';
 import WorkerDetailPage from './WorkerDetailPage';
 import TableComponent from './TableComponent';
 import DashboardPage from '../pages/DashboardPage';
-import { Worker } from '../types';
+import { Worker, AnnoDati } from '../types';
 import { DashboardStats, WorkerStatItem, ModalConfig } from '../hooks/useDashboardStats';
 
 interface AppRouterProps {
@@ -17,6 +17,8 @@ interface AppRouterProps {
     setSearchQuery: (q: string) => void;
     activeFilter: string;
     setActiveFilter: (f: string) => void;
+    activeStatusFilter: string;
+    setActiveStatusFilter: (f: string) => void;
     customFilters: string[];
     activeStatsModal: 'net' | 'ticket' | null;
     setActiveStatsModal: (modal: 'net' | 'ticket' | null) => void;
@@ -25,18 +27,20 @@ interface AppRouterProps {
     containerVariants: any;
     itemVariants: any;
     getFilterStyle: (filterId: string, isActive: boolean) => string;
-    handleOpenSimple: (id: number) => void;
-    handleOpenComplex: (id: number) => void;
-    openEditModal: (e: React.MouseEvent, id: number) => void;
-    handleDeleteWorker: (id: number) => void;
+    handleOpenSimple: (id: string) => void;
+    handleOpenComplex: (id: string) => void;
+    openEditModal: (e: React.MouseEvent, id: string) => void;
+    handleDeleteWorker: (id: string) => void;
     handleOpenModal: (mode: 'create' | 'edit') => void;
+    updateWorkerById: (id: string, fields: any) => void;
     fileInputRef: React.RefObject<HTMLInputElement>;
     handleExportData: () => void;
     handleImportData: (e: React.ChangeEvent<HTMLInputElement>) => void;
     setViewMode: (mode: 'home' | 'simple' | 'complex' | 'stats') => void;
     selectedWorker: Worker | null;
-    handleUpdateWorkerData: (id: number, data: any) => void;
-    handleUpdateStatus: (id: number, status: string) => void;
+    handleUpdateWorkerData: (data: AnnoDati[]) => void;
+    handleUpdateStatus: (status: string) => void;
+    handleUpdateWorkerFields: (fields: any) => void;
     handleBack: () => void;
 }
 
@@ -51,6 +55,8 @@ const AppRouter: React.FC<AppRouterProps> = ({
     setSearchQuery,
     activeFilter,
     setActiveFilter,
+    activeStatusFilter,
+    setActiveStatusFilter,
     customFilters,
     activeStatsModal,
     setActiveStatsModal,
@@ -64,6 +70,7 @@ const AppRouter: React.FC<AppRouterProps> = ({
     openEditModal,
     handleDeleteWorker,
     handleOpenModal,
+    updateWorkerById,
     fileInputRef,
     handleExportData,
     handleImportData,
@@ -71,6 +78,7 @@ const AppRouter: React.FC<AppRouterProps> = ({
     selectedWorker,
     handleUpdateWorkerData,
     handleUpdateStatus,
+    handleUpdateWorkerFields,
     handleBack
 }) => {
     return (
@@ -78,24 +86,25 @@ const AppRouter: React.FC<AppRouterProps> = ({
             {viewMode === 'stats' && <StatsDashboard workers={workers} onBack={handleBack} />}
 
             {viewMode === 'complex' && selectedWorker && (
-                <WorkerDetailPage 
-                    key={selectedWorker.id} 
-                    worker={selectedWorker} 
-                    onUpdateData={handleUpdateWorkerData} 
-                    onUpdateStatus={handleUpdateStatus} 
-                    onBack={handleBack} 
-                    onOpenReport={() => handleOpenSimple(selectedWorker.id)} 
+                <WorkerDetailPage
+                    key={selectedWorker.id}
+                    worker={selectedWorker}
+                    onUpdateData={handleUpdateWorkerData}
+                    onUpdateStatus={handleUpdateStatus}
+                    onUpdateWorkerFields={handleUpdateWorkerFields}
+                    onBack={handleBack}
+                    onOpenReport={() => handleOpenSimple(selectedWorker.id)}
                 />
             )}
 
             {viewMode === 'simple' && selectedWorker && (
                 <div className="min-h-screen bg-white">
-                    <TableComponent 
-                        key={`report-${selectedWorker.id}`} 
-                        worker={selectedWorker} 
-                        onBack={() => setViewMode('home')} 
-                        onEdit={() => setViewMode('complex')} 
-                        startClaimYear={Number(localStorage.getItem(`startYear_${selectedWorker.id}`)) || 2008} 
+                    <TableComponent
+                        key={`report-${selectedWorker.id}`}
+                        worker={selectedWorker}
+                        onBack={() => setViewMode('home')}
+                        onEdit={() => setViewMode('complex')}
+                        startClaimYear={Number(localStorage.getItem(`startYear_${selectedWorker.id}`)) || 2008}
                     />
                 </div>
             )}
@@ -111,6 +120,8 @@ const AppRouter: React.FC<AppRouterProps> = ({
                 setSearchQuery={setSearchQuery}
                 activeFilter={activeFilter}
                 setActiveFilter={setActiveFilter}
+                activeStatusFilter={activeStatusFilter}
+                setActiveStatusFilter={setActiveStatusFilter}
                 customFilters={customFilters}
                 activeStatsModal={activeStatsModal}
                 setActiveStatsModal={setActiveStatsModal}
@@ -124,6 +135,7 @@ const AppRouter: React.FC<AppRouterProps> = ({
                 openEditModal={openEditModal}
                 handleDeleteWorker={handleDeleteWorker}
                 handleOpenModal={handleOpenModal}
+                updateWorkerById={updateWorkerById}
                 fileInputRef={fileInputRef}
                 handleExportData={handleExportData}
                 handleImportData={handleImportData}

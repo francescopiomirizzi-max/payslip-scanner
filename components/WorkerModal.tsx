@@ -218,7 +218,7 @@ const WorkerModal: React.FC<WorkerModalProps> = ({ isOpen, onClose, onConfirm, i
                         sub: 'Modello Custom'
                     }));
                     setDynamicOptions([...OPTIONS, ...customOpts]);
-                } catch (e) { }
+                } catch (e) { console.error('WorkerModal: errore parsing customCompanies (options)', e); }
             }
         }
     }, [isOpen]);
@@ -258,7 +258,7 @@ const WorkerModal: React.FC<WorkerModalProps> = ({ isOpen, onClose, onConfirm, i
                 try {
                     const parsed = JSON.parse(saved);
                     validCompanies = [...validCompanies, ...Object.keys(parsed)];
-                } catch (e) { }
+                } catch (e) { console.error('WorkerModal: errore parsing customCompanies (validation)', e); }
             }
 
             // 2. Normalizza il nome letto dall'AI (tutto maiuscolo)
@@ -336,7 +336,7 @@ const WorkerModal: React.FC<WorkerModalProps> = ({ isOpen, onClose, onConfirm, i
                     return; // Fermiamo il ciclo
                 }
             }
-        } catch (e) { }
+        } catch (e) { console.error('WorkerModal: errore polling Supabase per autocompilazione AI', e); }
 
         // Se non ha ancora finito, riprova tra 1 secondo
         if (pollingRef.current) setTimeout(() => pollSupabase(sessionId), 1000);

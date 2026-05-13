@@ -1,12 +1,13 @@
 import { useMemo } from 'react';
 import { Wallet, Ticket } from 'lucide-react';
-import { Worker, getColumnsByProfile } from '../types';
+import { Worker } from '../types';
 import { parseLocalFloat } from '../utils/formatters';
+import { computeHolidayIndemnity } from '../utils/calculationEngine';
 
 type StatsModalType = 'net' | 'ticket' | null;
 
 export interface WorkerStatItem {
-    id: number;
+    id: string;
     fullName: string;
     role: string;
     profilo: string;
@@ -53,71 +54,25 @@ export const useDashboardStats = (
             const storedStart = localStorage.getItem(`startYear_${worker.id}`);
             const startClaimYear = storedStart ? parseInt(storedStart) : 2008;
 
-            const TETTO_FERIE = includeExFest ? 32 : 28;
             const safeAnni = (Array.isArray(worker.anni) ? worker.anni : []) as any[];
+            const allYears = Array.from(new Set(safeAnni.map((r: any) => Number(r.year)))).filter(y => !isNaN(y as number)).sort((a, b) => (a as number) - (b as number)) as number[];
 
-            const indCols = getColumnsByProfile(worker.profilo || 'RFI', worker.eliorType).filter(c =>
-                !['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'coeffPercepito', 'coeffTicket', 'note', 'arretrati'].includes(c.id)
-            );
-
-            const yearlyRaw: Record<number, { totVar: number; ggLav: number }> = {};
-            safeAnni.forEach((row: any) => {
-                const y = Number(row.year);
-                if (!yearlyRaw[y]) yearlyRaw[y] = { totVar: 0, ggLav: 0 };
-                const gg = parseLocalFloat(row.daysWorked);
-                if (gg > 0) {
-                    let sum = 0;
-                    indCols.forEach(c => sum += parseLocalFloat(row[c.id]));
-                    yearlyRaw[y].totVar += sum;
-                    yearlyRaw[y].ggLav += gg;
-                }
-            });
-
-            const yearlyAverages: Record<number, number> = {};
-            Object.keys(yearlyRaw).forEach(k => {
-                const y = Number(k);
-                yearlyAverages[y] = yearlyRaw[y].ggLav > 0 ? yearlyRaw[y].totVar / yearlyRaw[y].ggLav : 0;
+            const yearResults = computeHolidayIndemnity({
+                data: safeAnni,
+                profilo: worker.profilo || 'RFI',
+                eliorType: worker.eliorType,
+                includeExFest,
+                includeTickets,
+                startClaimYear,
+                years: allYears,
             });
 
             let wNetto = 0;
             let wTicket = 0;
-
-            const uniqueYears = Array.from(new Set(safeAnni.map((r: any) => Number(r.year)))).sort((a, b) => a - b);
-
-            uniqueYears.forEach((yearVal) => {
-                const year = Number(yearVal);
-                if (year < startClaimYear) return;
-
-                let ferieCumulateAnno = 0;
-                let media = yearlyAverages[year - 1];
-                if (media === undefined || media === 0) media = yearlyAverages[year] || 0;
-
-                const monthsInYear = safeAnni
-                    .filter((r: any) => Number(r.year) === year)
-                    .sort((a: any, b: any) => a.monthIndex - b.monthIndex);
-
-                monthsInYear.forEach((row: any) => {
-                    const vacDays = parseLocalFloat(row.daysVacation);
-                    const cTicket = parseLocalFloat(row.coeffTicket);
-                    const cPercepito = parseLocalFloat(row.coeffPercepito);
-
-                    const spazio = Math.max(0, TETTO_FERIE - ferieCumulateAnno);
-                    const ggUtili = Math.min(vacDays, spazio);
-                    ferieCumulateAnno += vacDays;
-
-                    if (ggUtili > 0) {
-                        const lordo = ggUtili * media;
-                        const percepito = ggUtili * cPercepito;
-                        const ticketVal = ggUtili * cTicket;
-
-                        if (includeTickets) {
-                            wTicket += ticketVal;
-                            wNetto += (lordo - percepito) + ticketVal;
-                        } else {
-                            wNetto += (lordo - percepito);
-                        }
-                    }
-                });
+            yearResults.forEach(r => {
+                if (r.isReferenceYear) return;
+                wNetto += r.sumNetto;
+                wTicket += r.sumBuoniPasto;
             });
 
             return {
@@ -139,74 +94,30 @@ export const useDashboardStats = (
             const storedStart = localStorage.getItem(`startYear_${worker.id}`);
             const startClaimYear = storedStart ? parseInt(storedStart) : 2008;
 
-            const TETTO_FERIE = includeExFest ? 32 : 28;
             const safeAnni = (Array.isArray(worker.anni) ? worker.anni : []) as any[];
+            const allYears = Array.from(new Set(safeAnni.map((r: any) => Number(r.year)))).filter(y => !isNaN(y as number)).sort((a, b) => (a as number) - (b as number)) as number[];
 
-            const indCols = getColumnsByProfile(worker.profilo || 'RFI', worker.eliorType).filter(c =>
-                !['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'coeffPercepito', 'coeffTicket', 'note', 'arretrati'].includes(c.id)
-            );
-
-            const yearlyRaw: Record<number, { totVar: number; ggLav: number }> = {};
-            safeAnni.forEach((row: any) => {
-                const y = Number(row.year);
-                if (!yearlyRaw[y]) yearlyRaw[y] = { totVar: 0, ggLav: 0 };
-                const gg = parseLocalFloat(row.daysWorked);
-                if (gg > 0) {
-                    let sum = 0;
-                    indCols.forEach(c => sum += parseLocalFloat(row[c.id]));
-                    yearlyRaw[y].totVar += sum;
-                    yearlyRaw[y].ggLav += gg;
-                }
-            });
-
-            const yearlyAverages: Record<number, number> = {};
-            Object.keys(yearlyRaw).forEach(k => {
-                const y = Number(k);
-                yearlyAverages[y] = yearlyRaw[y].ggLav > 0 ? yearlyRaw[y].totVar / yearlyRaw[y].ggLav : 0;
+            // Run engine with tickets enabled to get potential; actual netto uses real includeTickets
+            const yearResultsFull = computeHolidayIndemnity({
+                data: safeAnni,
+                profilo: worker.profilo || 'RFI',
+                eliorType: worker.eliorType,
+                includeExFest,
+                includeTickets: true,
+                startClaimYear,
+                years: allYears,
             });
 
             let wNetto = 0;
             let wTicketLiq = 0;
             let wTicketPotenziale = 0;
 
-            const uniqueYears = Array.from(new Set(safeAnni.map((r: any) => Number(r.year)))).sort((a, b) => a - b);
-
-            uniqueYears.forEach((yearVal) => {
-                const year = Number(yearVal);
-                if (year < startClaimYear) return;
-
-                let ferieCumulateAnno = 0;
-                let media = yearlyAverages[year - 1];
-                if (media === undefined || media === 0) media = yearlyAverages[year] || 0;
-
-                const monthsInYear = safeAnni
-                    .filter((r: any) => Number(r.year) === year)
-                    .sort((a: any, b: any) => a.monthIndex - b.monthIndex);
-
-                monthsInYear.forEach((row: any) => {
-                    const vacDays = parseLocalFloat(row.daysVacation);
-                    const cTicket = parseLocalFloat(row.coeffTicket);
-                    const cPercepito = parseLocalFloat(row.coeffPercepito);
-
-                    const spazio = Math.max(0, TETTO_FERIE - ferieCumulateAnno);
-                    const ggUtili = Math.min(vacDays, spazio);
-                    ferieCumulateAnno += vacDays;
-
-                    if (ggUtili > 0) {
-                        const lordo = ggUtili * media;
-                        const percepito = ggUtili * cPercepito;
-                        const ticketVal = ggUtili * cTicket;
-
-                        wTicketPotenziale += ticketVal;
-
-                        if (includeTickets) {
-                            wTicketLiq += ticketVal;
-                            wNetto += (lordo - percepito) + ticketVal;
-                        } else {
-                            wNetto += (lordo - percepito);
-                        }
-                    }
-                });
+            yearResultsFull.forEach(r => {
+                if (r.isReferenceYear) return;
+                wTicketPotenziale += r.sumBuoniPasto;
+                const ticketForNetto = includeTickets ? r.sumBuoniPasto : 0;
+                wNetto += (r.sumIndennitaSpettante - r.sumIndennitaPercepita) + ticketForNetto;
+                if (includeTickets) wTicketLiq += r.sumBuoniPasto;
             });
 
             const amount = activeStatsModal === 'net' ? wNetto : wTicketLiq;

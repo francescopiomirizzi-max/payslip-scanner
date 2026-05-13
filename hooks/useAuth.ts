@@ -1,60 +1,63 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useIsland } from '../IslandContext';
 import { getFormattedDate, getFormattedTime } from '../utils/formatters';
+import { supabase } from '../supabaseClient';
 
-/**
- * Hook per gestire autenticazione, login/logout e notifica di benvenuto.
- * Riceve setViewMode come callback per resettare la vista al logout.
- */
 export const useAuth = (setViewMode: (mode: 'home' | 'simple' | 'complex' | 'stats') => void) => {
-    const [isAuthenticated, setIsAuthenticated] = useState(() => {
-        return localStorage.getItem('is_logged_in') === 'true';
-    });
-
+    const [isAuthenticated, setIsAuthenticated] = useState(false);
+    const [isLoading, setIsLoading] = useState(true);
+    const [loginEmail, setLoginEmail] = useState('');
     const [loginPassword, setLoginPassword] = useState('');
     const [loginError, setLoginError] = useState(false);
 
     const { showNotification } = useIsland();
 
-    // Effetto saluto iniziale
     useEffect(() => {
-        if (isAuthenticated) {
-            const now = new Date();
-            const dataFormattata = getFormattedDate(now);
-            const oraFormattata = getFormattedTime(now);
+        supabase.auth.getSession().then(({ data: { session } }) => {
+            setIsAuthenticated(!!session);
+            setIsLoading(false);
+        });
 
-            setTimeout(() => {
-                showNotification(
-                    `Bentornato!`,
-                    `Oggi è ${dataFormattata} • Ore ${oraFormattata}`,
-                    'info',
-                    5000
-                );
-            }, 1000);
-        }
-    }, [isAuthenticated, showNotification]);
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+            setIsAuthenticated(!!session);
+            if (session) {
+                const now = new Date();
+                setTimeout(() => {
+                    showNotification(
+                        'Bentornato!',
+                        `Oggi è ${getFormattedDate(now)} • Ore ${getFormattedTime(now)}`,
+                        'info',
+                        5000
+                    );
+                }, 1000);
+            }
+        });
 
-    const handleLogin = useCallback((e: React.FormEvent) => {
+        return () => subscription.unsubscribe();
+    }, [showNotification]);
+
+    const handleLogin = useCallback(async (e: React.FormEvent) => {
         e.preventDefault();
-        const storedPassword = localStorage.getItem('app_password') || 'admin123';
-        if (loginPassword === storedPassword) {
-            setIsAuthenticated(true);
-            localStorage.setItem('is_logged_in', 'true');
-            setLoginError(false);
-        } else {
+        const { error } = await supabase.auth.signInWithPassword({
+            email: loginEmail,
+            password: loginPassword,
+        });
+        if (error) {
             setLoginError(true);
             setTimeout(() => setLoginError(false), 2000);
         }
-    }, [loginPassword]);
+    }, [loginEmail, loginPassword]);
 
-    const handleLogout = useCallback(() => {
-        setIsAuthenticated(false);
-        localStorage.removeItem('is_logged_in');
+    const handleLogout = useCallback(async () => {
+        await supabase.auth.signOut();
         setViewMode('home');
     }, [setViewMode]);
 
     return {
         isAuthenticated,
+        isLoading,
+        loginEmail,
+        setLoginEmail,
         loginPassword,
         setLoginPassword,
         loginError,

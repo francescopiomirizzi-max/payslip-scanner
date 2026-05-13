@@ -1,13 +1,13 @@
-import React, { useMemo, useState, useRef } from 'react';
+import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { Worker, getColumnsByProfile } from '../types';
-import { parseLocalFloat } from '../utils/formatters';
+import { parseLocalFloat, getProfiloBadgeLabel } from '../utils/formatters';
+import { computeHolidayIndemnity } from '../utils/calculationEngine';
 import { motion } from 'framer-motion';
-import { Tilt } from 'react-tilt';
 import {
   UserCircle, Trash2, Edit, FileSpreadsheet, LayoutGrid, CalendarRange,
   TrainFront, Briefcase, RotateCw, ArrowLeft, CheckCircle2, AlertCircle,
   Send, FileBarChart, Clock, Wallet, Ticket, Layers, CreditCard, Activity,
-  TrendingUp, Ban, CalendarClock
+  TrendingUp, Ban, CalendarClock, ChevronDown
 } from 'lucide-react';
 
 // --- STILI CSS ---
@@ -122,19 +122,44 @@ const BackChart = ({ worker, theme, startYear }: { worker: Worker, theme: any, s
   );
 };
 
+const STATUS_PICKER_OPTIONS = [
+  { value: '', label: 'Da Analizzare', dot: '#94a3b8' },
+  { value: 'pronta', label: 'Pronta', dot: '#f59e0b' },
+  { value: 'trattativa', label: 'In Trattativa', dot: '#f43f5e' },
+  { value: 'inviata', label: 'PEC Inviata', dot: '#a855f7' },
+  { value: 'chiusa', label: 'Conclusa', dot: '#10b981' },
+] as const;
+
 interface WorkerCardProps {
   worker: Worker;
-  onOpenSimple: (id: number) => void;
-  onOpenComplex: (id: number) => void;
+  onOpenSimple: (id: string) => void;
+  onOpenComplex: (id: string) => void;
   onEdit: (e: React.MouseEvent) => void;
   onDelete: () => void;
+  onStatusChange?: (id: string, status: string) => void;
+  onNotesChange?: (id: string, notes: string) => void;
 }
 
-const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenComplex, onEdit, onDelete }) => {
+const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenComplex, onEdit, onDelete, onStatusChange, onNotesChange }) => {
   const [isFlipped, setIsFlipped] = useState(false);
+  const [isStatusOpen, setIsStatusOpen] = useState(false);
+  const [localNotes, setLocalNotes] = useState(worker.notes ?? '');
   const divRef = useRef<HTMLDivElement>(null);
+  const statusMenuRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [opacity, setOpacity] = useState(0);
+  const [tilt, setTilt] = useState({ x: 0, y: 0 });
+
+  useEffect(() => {
+    if (!isStatusOpen) return;
+    const onMouseDown = (e: MouseEvent) => {
+      if (statusMenuRef.current && !statusMenuRef.current.contains(e.target as Node)) {
+        setIsStatusOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onMouseDown);
+    return () => document.removeEventListener('mousedown', onMouseDown);
+  }, [isStatusOpen]);
 
   // --- STATI SINCRONIZZATI COL DETTAGLIO ---
   // 1. TICKET
@@ -156,10 +181,16 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!divRef.current) return;
     const rect = divRef.current.getBoundingClientRect();
-    setPosition({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    setPosition({ x, y });
+    setTilt({
+      x: -((y / rect.height) - 0.5) * 18,
+      y:  ((x / rect.width)  - 0.5) * 18,
+    });
   };
   const handleMouseEnter = () => setOpacity(1);
-  const handleMouseLeave = () => setOpacity(0);
+  const handleMouseLeave = () => { setOpacity(0); setTilt({ x: 0, y: 0 }); };
 
   const RoleIcon = useMemo(() => {
     const role = (worker.ruolo || '').toLowerCase();
@@ -211,88 +242,34 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
     };
   }, [worker.anni, startClaimYear]);
 
-  // --- 🔥 CALCOLO FINANZIARIO CORRETTO (FIX TYPESCRIPT) 🔥 ---
+  // --- CALCOLO FINANZIARIO — MOTORE UNIFICATO ---
   const financialStats = useMemo(() => {
-    const TETTO_FERIE = includeExFest ? 32 : 28;
+    const safeAnni = Array.isArray(worker.anni) ? worker.anni : [];
+    const allYears = (Array.from(new Set(safeAnni.map(d => Number(d.year)))) as number[])
+      .filter(y => !isNaN(y))
+      .sort((a, b) => a - b);
 
-    // Colonne da sommare
-    const indennitaCols = getColumnsByProfile(worker.profilo, worker.eliorType).filter(c =>
-      !['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'coeffPercepito', 'coeffTicket', 'note', 'arretrati'].includes(c.id)
-    );
-
-    const yearlyRaw: Record<string, { totVar: number; ggLav: number }> = {};
-
-    (worker.anni || []).forEach(row => {
-      const y = String(row.year);
-      if (!yearlyRaw[y]) yearlyRaw[y] = { totVar: 0, ggLav: 0 };
-
-      // Casting a 'any' per evitare errori di indice su row
-      const r = row as any;
-      const gg = parseLocalFloat(r.daysWorked);
-
-      if (gg > 0) {
-        let sum = 0;
-        indennitaCols.forEach(c => sum += parseLocalFloat(r[c.id]));
-        yearlyRaw[y].totVar += sum;
-        yearlyRaw[y].ggLav += gg;
-      }
+    const results = computeHolidayIndemnity({
+      data: safeAnni,
+      profilo: worker.profilo,
+      eliorType: worker.eliorType,
+      includeExFest,
+      includeTickets,
+      startClaimYear,
+      years: allYears,
     });
 
-    const yearlyAverages: Record<string, number> = {};
-    Object.keys(yearlyRaw).forEach(k => {
-      const t = yearlyRaw[k];
-      yearlyAverages[k] = t.ggLav > 0 ? t.totVar / t.ggLav : 0;
-    });
-
-    // 3. Calcolo Totali
     let totalLordo = 0;
     let totalTicket = 0;
     let totalPercepito = 0;
     let totalFerieUtili = 0;
 
-    // --- FIX TYPESCRIPT QUI SOTTO ---
-    // Usiamo (d: any) per leggere l'anno e 'as number[]' alla fine per forzare il tipo
-    const availableYears: number[] = Array.from(
-      new Set((worker.anni || []).map((d: any) => Number(d.year)))
-    ).sort((a: number, b: number) => a - b) as number[];
-
-    availableYears.forEach(yearNum => {
-      if (yearNum < startClaimYear) return;
-
-      const yearStr = String(yearNum);
-      const prevYearStr = String(yearNum - 1);
-
-      let ferieCumulateAnno = 0;
-
-      let mediaApplied = yearlyAverages[prevYearStr];
-      if (mediaApplied === undefined || mediaApplied === 0) {
-        mediaApplied = yearlyAverages[yearStr] || 0;
-      }
-
-      const months = (worker.anni || [])
-        .filter(d => Number(d.year) === yearNum)
-        .sort((a, b) => a.monthIndex - b.monthIndex);
-
-      months.forEach(row => {
-        const r = row as any; // Casting di sicurezza
-        const vacDays = parseLocalFloat(r.daysVacation);
-        const cTicket = parseLocalFloat(r.coeffTicket);
-        const cPercepito = parseLocalFloat(r.coeffPercepito);
-
-        const spazio = Math.max(0, TETTO_FERIE - ferieCumulateAnno);
-        const ggUtili = Math.min(vacDays, spazio);
-        ferieCumulateAnno += vacDays;
-
-        if (ggUtili > 0) {
-          totalLordo += (ggUtili * mediaApplied);
-          totalPercepito += (ggUtili * cPercepito);
-          totalFerieUtili += ggUtili;
-
-          if (includeTickets) {
-            totalTicket += (ggUtili * cTicket);
-          }
-        }
-      });
+    results.forEach(r => {
+      if (r.isReferenceYear) return;
+      totalLordo += r.sumIndennitaSpettante;
+      totalTicket += r.sumBuoniPasto;
+      totalPercepito += r.sumIndennitaPercepita;
+      totalFerieUtili += r.sumGiorniFerieUtili;
     });
 
     return {
@@ -361,11 +338,14 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
     <>
       <style>{scrollbarStyles}</style>
       <motion.div variants={{ hidden: { opacity: 0, y: 30 }, show: { opacity: 1, y: 0 } }} className="relative w-full h-full [perspective:1500px]">
-        <motion.div animate={{ rotateY: isFlipped ? 180 : 0 }} transition={{ type: "spring", stiffness: 350, damping: 30 }} className="relative w-full h-full [transform-style:preserve-3d]">
+        <motion.div
+          animate={{ rotateY: isFlipped ? 180 : tilt.y, rotateX: isFlipped ? 0 : tilt.x }}
+          transition={{ type: "spring", stiffness: 400, damping: 35 }}
+          className="relative w-full h-full [transform-style:preserve-3d]"
+        >
 
           {/* LATO FRONTALE */}
           <div className="w-full h-full [backface-visibility:hidden]">
-            <Tilt options={{ max: 10, scale: 1.02, speed: 1000, glare: true, "max-glare": 0.3 }} className="w-full h-full">
               <div ref={divRef} onMouseMove={handleMouseMove} onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave}
                 className="group relative w-full h-full bg-white/70 dark:bg-slate-800/80 backdrop-blur-2xl border border-white/60 dark:border-slate-600 rounded-[2.5rem] overflow-hidden shadow-xl transition-all duration-500 hover:shadow-2xl hover:-translate-y-2 hover:scale-[1.01]"
                 style={{ ...theme.shadowStyle, borderColor: opacity > 0 ? theme.rawColor.start : '' }}
@@ -382,7 +362,7 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
                       <div className="flex flex-col justify-center min-w-0">
                         <div className="flex items-center gap-2 mb-1">
                           <h3 className="text-lg font-bold text-slate-500 dark:text-slate-400 leading-none capitalize truncate">{worker.nome}</h3>
-                          <span className={`shrink-0 px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wide border shadow-sm backdrop-blur-md ${badgeStyles}`}>{worker.profilo}</span>
+                          <span className={`shrink-0 px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wide border shadow-sm backdrop-blur-md ${badgeStyles}`}>{getProfiloBadgeLabel(worker.profilo, worker.eliorType, true)}</span>
                         </div>
                         <h3 className="text-xl font-black text-slate-800 dark:text-white leading-none tracking-tight uppercase truncate">{worker.cognome}</h3>
                       </div>
@@ -395,10 +375,34 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
                   </div>
 
                   <div className="flex-1 space-y-4">
-                    <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full border shadow-sm w-fit backdrop-blur-md transition-colors ${statusConfig.color} dark:bg-opacity-20 dark:border-opacity-30`}>
-                      <span className="w-2 h-2 rounded-full shadow-[0_0_8px_currentColor]" style={{ backgroundColor: statusConfig.dot }}></span>
-                      <StatusIcon className="w-3.5 h-3.5" />
-                      <span className="text-[10px] font-bold uppercase tracking-wide">{statusConfig.label}</span>
+                    <div className="relative" ref={statusMenuRef}>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setIsStatusOpen(prev => !prev); }}
+                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border shadow-sm w-fit backdrop-blur-md transition-all hover:opacity-80 ${statusConfig.color} dark:bg-opacity-20 dark:border-opacity-30`}
+                      >
+                        <span className="w-2 h-2 rounded-full shadow-[0_0_8px_currentColor]" style={{ backgroundColor: statusConfig.dot }}></span>
+                        <StatusIcon className="w-3.5 h-3.5" />
+                        <span className="text-[10px] font-bold uppercase tracking-wide">{statusConfig.label}</span>
+                        <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${isStatusOpen ? 'rotate-180' : ''}`} />
+                      </button>
+                      {isStatusOpen && (
+                        <div className="absolute top-full left-0 mt-1.5 z-50 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-xl overflow-hidden min-w-[160px]">
+                          {STATUS_PICKER_OPTIONS.map(opt => {
+                            const isCurrent = worker.status === opt.value || (!worker.status && opt.value === '');
+                            return (
+                              <button
+                                key={opt.value}
+                                onClick={(e) => { e.stopPropagation(); onStatusChange?.(worker.id, opt.value); setIsStatusOpen(false); }}
+                                className={`w-full flex items-center gap-2.5 px-3.5 py-2.5 text-[11px] font-bold text-left transition-colors ${isCurrent ? 'bg-slate-50 dark:bg-slate-700/50' : 'hover:bg-slate-50 dark:hover:bg-slate-700/30'}`}
+                              >
+                                <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: opt.dot }} />
+                                <span className="text-slate-700 dark:text-slate-300 uppercase tracking-wide">{opt.label}</span>
+                                {isCurrent && <span className="ml-auto text-slate-400 text-[10px]">✓</span>}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                     <div className="flex flex-wrap items-center gap-2 mt-3">
                       <span className="px-3 py-1.5 rounded-xl bg-white/50 dark:bg-slate-900/60 border border-slate-200/60 dark:border-slate-700/50 text-[10px] font-bold text-slate-500 dark:text-slate-400 capitalize shadow-sm backdrop-blur-sm transition-colors">{worker.ruolo || 'N.D.'}</span>
@@ -453,12 +457,10 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
                 </div>
                 <Sparkline worker={worker} />
               </div>
-            </Tilt>
           </div>
 
           {/* LATO POSTERIORE */}
           <div className="absolute inset-0 w-full h-full [backface-visibility:hidden] [transform:rotateY(180deg)]">
-            <Tilt options={{ max: 10, scale: 1.02, speed: 1000, glare: true, "max-glare": 0.3 }} className="w-full h-full">
               {/* LATO POSTERIORE */}
               <div className="w-full h-full backdrop-blur-3xl border border-white/60 dark:border-slate-700 rounded-[2.5rem] flex flex-col shadow-2xl relative overflow-hidden dark:!bg-slate-900 dark:!bg-none transition-colors duration-500" style={{ ...(document.documentElement.classList.contains('dark') ? {} : theme.backGradientStyle) }}>
 
@@ -541,6 +543,19 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
                       </p>
                     </div>
                   </div>
+
+                  {/* NOTE PRATICA */}
+                  <div className="mt-3 pt-3 border-t border-slate-200/30 dark:border-slate-700/50">
+                    <textarea
+                      value={localNotes}
+                      onChange={e => setLocalNotes(e.target.value)}
+                      onBlur={() => onNotesChange?.(worker.id, localNotes)}
+                      onClick={e => e.stopPropagation()}
+                      placeholder="Note sulla pratica..."
+                      rows={2}
+                      className="w-full text-[10px] font-medium bg-transparent resize-none text-slate-500 dark:text-slate-400 placeholder:text-slate-300 dark:placeholder:text-slate-600 focus:outline-none focus:ring-0 leading-relaxed"
+                    />
+                  </div>
                 </div>
 
                 {/* Footer Fisso */}
@@ -561,7 +576,6 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
                 <div className="absolute bottom-[-20%] left-[-20%] w-40 h-40 rounded-full blur-[60px] opacity-20 dark:opacity-10 pointer-events-none transition-opacity" style={{ backgroundColor: theme.rawColor.start }}></div>
 
               </div>
-            </Tilt>
           </div>
 
         </motion.div>

@@ -41,7 +41,7 @@ export interface AnnoDati {
 }
 
 export interface Worker {
-  id: number;
+  id: string;
   nome: string;
   cognome: string;
   ruolo: string;
@@ -56,6 +56,7 @@ export interface Worker {
   tfr_pregresso_anno?: number;
 
   eliorType?: 'viaggiante' | 'magazzino';
+  notes?: string;
 }
 
 export interface ColumnDef {

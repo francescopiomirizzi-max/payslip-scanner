@@ -1,7 +1,8 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { useIsland } from '../IslandContext'; // 👈 ECCOLA QUI!
-import { Worker, AnnoDati, YEARS, getColumnsByProfile } from '../types';
+import { Worker, AnnoDati, getColumnsByProfile } from '../types';
 import { parseLocalFloat, formatCurrency, formatNumber, formatLongDate } from '../utils/formatters';
+import { computeHolidayIndemnity, EXCLUDED_INDEMNITY_COLS } from '../utils/calculationEngine';
 import {
   Printer,
   ArrowLeft,
@@ -27,6 +28,7 @@ import autoTable from 'jspdf-autotable';
 
 interface TableComponentProps {
   worker: Worker;
+  monthlyInputs?: AnnoDati[];
   onBack: () => void;
   onEdit: () => void;
   startClaimYear: number;
@@ -157,7 +159,6 @@ const handleDownloadPDF = (
     }
   });
 
-  // @ts-ignore
   let finalY = doc.lastAutoTable.finalY + 30;
   if (finalY > 170) { doc.addPage(); finalY = 40; }
 
@@ -175,7 +176,7 @@ const handleDownloadPDF = (
 };
 
 // --- COMPONENTE PRINCIPALE ---
-const TableComponent: React.FC<TableComponentProps> = ({ worker, onBack, onEdit, startClaimYear }) => {
+const TableComponent: React.FC<TableComponentProps> = ({ worker, monthlyInputs, onBack, onEdit, startClaimYear }) => {
 
   // ✨ BISTURI 1: QUICK ACTIONS CONTESTUALI (Radar Intelligente)
   const { setQuickActions } = useIsland();
@@ -250,116 +251,37 @@ const TableComponent: React.FC<TableComponentProps> = ({ worker, onBack, onEdit,
     localStorage.setItem(`report_percepito_${worker.id}`, JSON.stringify(showPercepito));
   }, [includeExFest, includeTickets, showPercepito, worker.id]);
 
-  // --- 1. LOGICA DATI CORRETTA E UNIFICATA ---
+  // --- 1. LOGICA DATI — MOTORE UNIFICATO ---
   const tableData = useMemo(() => {
-    const sortedYears = [...YEARS].sort((a: number, b: number) => a - b);
-    const TETTO_FERIE = includeExFest ? 32 : 28;
-    const profileColumns = getColumnsByProfile(worker.profilo, worker.eliorType);
+    const safeRows: AnnoDati[] = Array.isArray(monthlyInputs) ? monthlyInputs
+      : Array.isArray(worker.anni) ? worker.anni : [];
 
-    // STEP A: PRE-CALCOLO MEDIE ANNUALI
-    const yearlyRawStats: Record<number, { totVar: number; ggLav: number }> = {};
-    const safeRows = worker.anni || [];
+    const allYears = Array.from(new Set(safeRows.map(d => Number(d.year))))
+      .filter(y => !isNaN(y))
+      .sort((a, b) => a - b);
 
-    safeRows.forEach(row => {
-      const y = Number(row.year);
-      if (!yearlyRawStats[y]) yearlyRawStats[y] = { totVar: 0, ggLav: 0 };
-
-      // USIAMO parseLocalFloat QUI
-      const ggLav = parseLocalFloat(row.daysWorked);
-      
-      let monthlyVoci = 0;
-      profileColumns.forEach(col => {
-        // Aggiunti '3B70', '3B71' per escluderli dal report e dal PDF
-        if (!['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'coeffPercepito', 'coeffTicket', 'note', 'arretrati', '3B70', '3B71'].includes(col.id)) {
-          // USIAMO parseLocalFloat QUI
-          monthlyVoci += parseLocalFloat(row[col.id]);
-        }
-      });
-      yearlyRawStats[y].totVar += monthlyVoci;
-      yearlyRawStats[y].ggLav += ggLav;
-    });
-
-    const yearlyAverages: Record<number, number> = {};
-    Object.keys(yearlyRawStats).forEach(yStr => {
-      const y = Number(yStr);
-      const s = yearlyRawStats[y];
-      yearlyAverages[y] = s.ggLav > 0 ? s.totVar / s.ggLav : 0;
-    });
-
-    // STEP B: COSTRUZIONE RIGHE REPORT
-    let ferieCumulateCounter = 0;
-
-    return sortedYears.map(year => {
-      // 🔥🔥🔥 MODIFICA QUI: NASCONDI L'ANNO SE È PRECEDENTE ALL'INIZIO CAUSA 🔥🔥🔥
-      // Questo impedisce che la riga venga generata, stampata o finisca nel PDF
-      if (year < startClaimYear) return null;
-      // --- MODIFICA FONDAMENTALE: RIMOSSO IL FILTRO DELL'ANNO DI INIZIO ---
-      // Se vuoi che i totali coincidano con AnnualCalculationTable che mostra 4675,
-      // dobbiamo calcolare TUTTI gli anni presenti, senza esclusioni.
-      // if (year < startClaimYear) return null; <--- RIMOSSO
-
-      const yearRows = safeRows.filter(r => r.year === year).sort((a, b) => a.monthIndex - b.monthIndex);
-      if (yearRows.length === 0) return null;
-
-      // RESETTA IL CONTATORE FERIE OGNI ANNO (Coerenza con AnnualCalculationTable)
-      ferieCumulateCounter = 0;
-
-      // 2. RECUPERO MEDIA (Anno precedente o corrente)
-      let avgApplied = yearlyAverages[year - 1];
-      if (avgApplied === undefined || avgApplied === 0) {
-        avgApplied = yearlyAverages[year] || 0;
-      }
-
-      let yearlyDaysVacationUtili = 0;
-      let yearlyGrossAmount = 0;
-      let yearlyPercepitoVal = 0;
-      let yearlyTicketVal = 0;
-
-      let displayTotalVoci = yearlyRawStats[year]?.totVar || 0;
-      let displayTotalDaysWorked = yearlyRawStats[year]?.ggLav || 0;
-
-      yearRows.forEach(row => {
-        const gFerieReali = parseLocalFloat(row.daysVacation);
-
-        const prevTotal = ferieCumulateCounter;
-        ferieCumulateCounter += gFerieReali;
-
-        let gFerieUtili = 0;
-        const spazioRimanente = Math.max(0, TETTO_FERIE - prevTotal);
-        gFerieUtili = Math.min(gFerieReali, spazioRimanente);
-
-        if (gFerieUtili > 0) {
-          yearlyGrossAmount += (gFerieUtili * avgApplied);
-
-          const coeffPercepito = parseLocalFloat(row.coeffPercepito);
-          const coeffTicket = parseLocalFloat(row.coeffTicket);
-
-          yearlyPercepitoVal += (gFerieUtili * coeffPercepito);
-
-          if (includeTickets) {
-            yearlyTicketVal += (gFerieUtili * coeffTicket);
-          }
-
-          yearlyDaysVacationUtili += gFerieUtili;
-        }
-      });
-
-      const netAmount = (yearlyGrossAmount - yearlyPercepitoVal) + yearlyTicketVal;
-
-      return {
-        anno: year,
-        totaleVoci: displayTotalVoci,
-        divisore: displayTotalDaysWorked,
-        incidenzaGiornata: avgApplied,
-        giornateFerie: yearlyDaysVacationUtili,
-        incidenzaTotale: yearlyGrossAmount,
-        indennitaPercepita: yearlyPercepitoVal,
-        totaleDaPercepire: netAmount,
-        indennitaPasto: yearlyTicketVal
-      };
+    return computeHolidayIndemnity({
+      data: safeRows,
+      profilo: worker.profilo,
+      eliorType: worker.eliorType,
+      includeExFest,
+      includeTickets,
+      startClaimYear,
+      years: allYears,
     })
-      .filter(Boolean); // Rimuove i null (anni saltati)
-  }, [worker, includeExFest, includeTickets, startClaimYear]);
+      .filter(r => !r.isReferenceYear)
+      .map(r => ({
+        anno: r.year,
+        totaleVoci: r.sumIndennitaTotali,
+        divisore: r.sumGiorniLav,
+        incidenzaGiornata: r.avgApplied,
+        giornateFerie: r.sumGiorniFerieUtili,
+        incidenzaTotale: r.sumIndennitaSpettante,
+        indennitaPercepita: r.sumIndennitaPercepita,
+        totaleDaPercepire: r.sumNetto,
+        indennitaPasto: r.sumBuoniPasto,
+      }));
+  }, [worker, monthlyInputs, includeExFest, includeTickets, startClaimYear]);
   // --- CORREZIONE: ESCLUDERE ANNI RIFERIMENTO DAI TOTALI REPORT ---
   const totals = useMemo(() => {
     return tableData.reduce((acc, row) => {
@@ -429,17 +351,10 @@ const TableComponent: React.FC<TableComponentProps> = ({ worker, onBack, onEdit,
 
     doc.setFont("times", "normal");
 
-    let testoCodici = "";
-    if (worker.profilo === 'RFI' || !worker.profilo) {
-      testoCodici = "L'analisi ha evidenziato la mancata inclusione delle voci variabili ricorrenti, tra cui a titolo esemplificativo: Straordinario Diurno (0152), Notturno (0421), Chiamata (0470, 0496), Reperibilità (0482), Ind. Linea (0687), Trasferta (0AA1) e altre indennità accessorie contrattualmente previste.";
-    } else if (worker.profilo === 'REKEEP') {
-      testoCodici = "L'analisi ha evidenziato la mancata inclusione delle indennità specifiche di appalto (Turni non cadenzati, Ind. Sussidiaria, Maggiorazioni) previste dal CCNL Multiservizi/Ferroviario.";
-    } else if (worker.profilo === 'ELIOR') {
-      testoCodici = "L'analisi ha evidenziato la mancata inclusione delle indennità specifiche della Ristorazione a Bordo (Diaria Scorta, Ind. Cassa, Lavoro Domenicale/Notturno) previste dal CCNL di riferimento.";
-    } else {
-      // TESTO JOLLY PER LE AZIENDE CUSTOM (Es. ATM Milano)
-      testoCodici = `L'analisi ha evidenziato la mancata inclusione delle voci variabili ricorrenti e continuative previste dal modello aziendale applicato (${worker.profilo}), con l'esclusione delle sole voci una tantum e dei rimborsi spese.`;
-    }
+    const indennityCols = getColumnsByProfile(worker.profilo, worker.eliorType)
+      .filter(c => !EXCLUDED_INDEMNITY_COLS.includes(c.id));
+    const codiciBullets = indennityCols.map(c => `  • (${c.id}) ${c.label}`).join('\n');
+    const testoCodici = `L'analisi ha evidenziato la mancata inclusione delle seguenti voci retributive variabili ricorrenti:\n\n${codiciBullets}`;
 
     const bodyText = `
 Scrivo in nome e per conto del Sig. ${worker.nome} ${worker.cognome}, vostro dipendente, il quale mi ha conferito espresso mandato per la tutela dei suoi diritti patrimoniali.

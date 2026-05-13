@@ -340,6 +340,34 @@ export const handler: Handler = async (event, context) => {
     const cleanData = fileData.includes("base64,") ? fileData.split("base64,")[1] : fileData;
 
     // =========================================================================
+    // 🎯 MODALITÀ OCR SNIPER: estrae UN singolo valore numerico per una voce specifica
+    // =========================================================================
+    if (action === 'ocr') {
+      const { colLabel } = body;
+      if (!colLabel) throw new Error("Parametro colLabel mancante.");
+
+      const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash", generationConfig: { temperature: 0.0 } });
+      const prompt = `Sei un estrattore dati preciso specializzato in buste paga italiane.
+Analizza questo documento e restituisci SOLO il valore numerico per: "${colLabel}".
+REGOLE ASSOLUTE:
+- Rispondi con UN SOLO numero (es. 576.06 oppure 18 oppure 7.50).
+- Usa il PUNTO come separatore decimale, MAI la virgola.
+- Se il valore non è presente o è zero, restituisci esattamente: 0
+- NON aggiungere testo, simboli €, unità di misura, spiegazioni o markdown.`;
+
+      const result = await model.generateContent([
+        prompt,
+        { inlineData: { data: cleanData, mimeType: mimeType || "application/pdf" } }
+      ]);
+
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify({ value: result.response.text().trim() })
+      };
+    }
+
+    // =========================================================================
     // 🧠 NUOVA MODALITÀ: AUDITOR LEGALE (SPIEGAZIONE DISCORSIVA CON GEMINI 3.1 PRO)
     // =========================================================================
     if (action === 'explain') {

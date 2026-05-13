@@ -3,18 +3,28 @@
  */
 
 export const parseLocalFloat = (value: any): number => {
-  if (!value) return 0;
-  if (typeof value === 'number') return value;
+  if (value === null || value === undefined || value === '') return 0;
+  if (typeof value === 'number') {
+    if (!isFinite(value) || isNaN(value)) return 0;
+    return value;
+  }
 
   let cleanStr = value.toString().trim();
+  if (!cleanStr) return 0;
+
+  // Strip leading currency symbols and whitespace (e.g. "€ 1.234,56" → "1.234,56")
+  cleanStr = cleanStr.replace(/^[€$£\s]+/, '').trim();
+
   if (cleanStr.includes(',') && (!cleanStr.includes('.') || cleanStr.indexOf(',') > cleanStr.lastIndexOf('.'))) {
+    // Italian/EU format: "1.234,56" → "1234.56"
     cleanStr = cleanStr.replace(/\./g, '').replace(',', '.');
   } else {
+    // US format or plain: remove grouping commas
     cleanStr = cleanStr.replace(/,/g, '');
   }
 
   const num = parseFloat(cleanStr);
-  return isNaN(num) ? 0 : num;
+  return isNaN(num) || !isFinite(num) ? 0 : num;
 };
 
 // Alias per compatibilità
@@ -62,4 +72,14 @@ export const getFormattedTime = (date: Date = new Date()) => {
 
 export const formatLongDate = (date: Date = new Date()) => {
   return date.toLocaleDateString('it-IT', { year: 'numeric', month: 'long', day: 'numeric' });
+};
+
+export const getProfiloBadgeLabel = (profilo: string | undefined, eliorType?: 'viaggiante' | 'magazzino', short = false): string => {
+  if (!profilo) return '';
+  if (profilo === 'ELIOR') {
+    if (eliorType === 'viaggiante') return short ? 'ELIOR Viag.' : 'ELIOR Viaggiante';
+    if (eliorType === 'magazzino') return short ? 'ELIOR Mag.' : 'ELIOR Magazzino';
+    return 'ELIOR';
+  }
+  return profilo;
 };

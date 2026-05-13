@@ -1,17 +1,14 @@
 import React, { useMemo, useState } from 'react';
 import {
   AnnoDati,
-  YEARS,
-  MONTH_NAMES,
-  getColumnsByProfile,
   ProfiloAzienda
 } from '../../types';
 import {
   parseLocalFloat,
-  parseFloatSafe,
   formatCurrency,
   formatDay
 } from '../../utils/formatters';
+import { computeHolidayIndemnity } from '../../utils/calculationEngine';
 import {
   ChevronRight,
   ChevronDown,
@@ -133,150 +130,15 @@ const AnnualCalculationTable: React.FC<AnnualCalculationTableProps> = ({
     return firstVal || "";
   };
 
-  // Funzione interna per sommare le indennità del mese usando il parser corretto
-  const calculateMonthIndemnity = (monthRow: any) => {
-    if (!monthRow) return 0;
-    let sum = 0;
-    const specificColumns = getColumnsByProfile(profilo, eliorType);
-    specificColumns.forEach(col => {
-      // Escludiamo i campi tecnici e i premi di produttività (3B70, 3B71)
-      if (!['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'coeffPercepito', 'coeffTicket', 'note', 'arretrati', '3B70', '3B71'].includes(col.id)) {
-        sum += parseLocalFloat(monthRow[col.id]);
-      }
-    });
-    return sum;
-  };
-
-  // --- LOGICA DI CALCOLO UNIFICATA ---
-  const annualRows = useMemo(() => {
-    const safeData = Array.isArray(data) ? data : [];
-    const TETTO_FERIE = includeExFest ? 32 : 28;
-
-    // 1. PRE-CALCOLO MEDIE ANNUALI
-    const yearlyRawStats: Record<number, { totVar: number; ggLav: number }> = {};
-
-    safeData.forEach(row => {
-      const y = Number(row.year);
-      if (!yearlyRawStats[y]) yearlyRawStats[y] = { totVar: 0, ggLav: 0 };
-
-      const gg = parseLocalFloat(row.daysWorked); // <--- USO PARSER UNIFICATO
-      const indennitaMese = calculateMonthIndemnity(row);
-      
-      yearlyRawStats[y].totVar += indennitaMese;
-      yearlyRawStats[y].ggLav += gg;
-    });
-
-    const yearlyAverages: Record<number, number> = {};
-    Object.keys(yearlyRawStats).forEach(yStr => {
-      const y = Number(yStr);
-      const s = yearlyRawStats[y];
-      yearlyAverages[y] = s.ggLav > 0 ? s.totVar / s.ggLav : 0;
-    });
-
-    // 2. COSTRUZIONE RIGHE ANNUALI
-    const availableYears = Array.from(new Set(safeData.map(d => d.year)))
-      .filter(y => years.includes(y))
-      .sort((a, b) => a - b);
-
-    // FIX FONDAMENTALE: ferieCumulateCounter deve essere DENTRO il .map ma FUORI dal ciclo mesi
-    // In questo modo si resetta ogni anno (nuovo plafond ferie) ma si accumula mese per mese.
-
-    return availableYears.map(year => {
-      // RESET CONTATORE FERIE PER IL NUOVO ANNO
-      let ferieCumulateCounter = 0;
-
-      const months = safeData.filter(d => d.year === year).sort((a, b) => a.monthIndex - b.monthIndex);
-
-      // FLAG ANNO RIFERIMENTO
-      const isReferenceYear = year < startClaimYear;
-
-      // Recupero media da applicare (Anno prec o corrente)
-      let avgApplied = yearlyAverages[year - 1];
-      let isFallback = false;
-
-      if (avgApplied === undefined || avgApplied === 0) {
-        avgApplied = yearlyAverages[year] || 0;
-        isFallback = true;
-      }
-
-      // Totali per la riga dell'anno
-      let sumIndennitaTotali = yearlyRawStats[year]?.totVar || 0;
-      let sumGiorniLav = yearlyRawStats[year]?.ggLav || 0;
-      let sumGiorniFerieReali = 0;
-      let sumGiorniFerieUtili = 0;
-      let sumIndennitaSpettante = 0;
-      let sumIndennitaPercepita = 0;
-      let sumBuoniPasto = 0;
-      let sumNetto = 0;
-
-      const monthlyDetails = months.map(row => {
-        const indennitaMensile = calculateMonthIndemnity(row);
-        const giorniLav = parseLocalFloat(row.daysWorked);
-        const giorniFerieReali = parseLocalFloat(row.daysVacation);
-
-        const prevTotal = ferieCumulateCounter;
-        ferieCumulateCounter += giorniFerieReali;
-
-        // Calcolo giorni utili (fino al tetto)
-        let giorniUtili = 0;
-        const spazioRimanente = Math.max(0, TETTO_FERIE - prevTotal);
-        giorniUtili = Math.min(giorniFerieReali, spazioRimanente);
-
-        const rawPercepito = row['coeffPercepito'] || "";
-        const rawTicket = row['coeffTicket'] || "";
-        const valPercepito = parseLocalFloat(rawPercepito); // <--- USO PARSER UNIFICATO
-        const valTicket = parseLocalFloat(rawTicket);       // <--- USO PARSER UNIFICATO
-
-        // CALCOLO ECONOMICO
-        let indennitaSpettante = 0;
-        if (giorniUtili > 0) {
-          indennitaSpettante = giorniUtili * avgApplied;
-        }
-
-        const indennitaPercepita = giorniUtili * valPercepito;
-        const buoniPasto = includeTickets ? (giorniUtili * valTicket) : 0;
-        const netto = (indennitaSpettante - indennitaPercepita) + buoniPasto;
-
-        sumGiorniFerieReali += giorniFerieReali;
-        sumGiorniFerieUtili += giorniUtili;
-        sumIndennitaSpettante += indennitaSpettante;
-        sumIndennitaPercepita += indennitaPercepita;
-        sumBuoniPasto += buoniPasto;
-        sumNetto += netto;
-
-        return {
-          index: row.monthIndex,
-          name: MONTH_NAMES[row.monthIndex],
-          indennitaMensile,
-          giorniLav,
-          giorniFerieReali,
-          giorniUtili,
-          indennitaSpettante,
-          indennitaPercepita,
-          buoniPasto,
-          netto,
-          rawPercepito,
-          rawTicket
-        };
-      });
-
-      return {
-        year,
-        isReferenceYear,
-        sumIndennitaTotali,
-        sumGiorniLav,
-        sumGiorniFerieReali,
-        sumGiorniFerieUtili,
-        sumIndennitaSpettante,
-        sumIndennitaPercepita,
-        sumBuoniPasto,
-        sumNetto,
-        monthlyDetails,
-        avgApplied,
-        isFallback
-      };
-    });
-  }, [data, profilo, includeExFest, includeTickets, startClaimYear]);
+  const annualRows = useMemo(() => computeHolidayIndemnity({
+    data: Array.isArray(data) ? data : [],
+    profilo,
+    eliorType,
+    includeExFest,
+    includeTickets,
+    startClaimYear,
+    years,
+  }), [data, profilo, eliorType, includeExFest, includeTickets, startClaimYear, years]);
 
   // --- CORREZIONE: ESCLUDERE ANNI RIFERIMENTO DAL TOTALE ---
   const summary = useMemo(() => {
@@ -311,13 +173,10 @@ const AnnualCalculationTable: React.FC<AnnualCalculationTableProps> = ({
     setTimeout(() => setIsCopied(false), 2000);
   };
 
-  const hasActualData = useMemo(() => {
-    return data.some(d => 
-      parseLocalFloat(d.daysWorked) > 0 || 
-      parseLocalFloat(d.daysVacation) > 0 ||
-      calculateMonthIndemnity(d) > 0
-    );
-  }, [data, profilo]);
+  const hasActualData = useMemo(() =>
+    annualRows.some(r => r.sumGiorniLav > 0 || r.sumGiorniFerieReali > 0 || r.sumIndennitaTotali > 0),
+    [annualRows]
+  );
 
   if (!data || !hasActualData) {
     return (

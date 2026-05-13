@@ -18,6 +18,7 @@ import { Toast } from './components/ui/Toast';
 import { ConfirmModal } from './components/ui/ConfirmModal';
 import { ConfirmImportModal } from './components/ui/ConfirmImportModal';
 import { ChangePasswordModal } from './components/ui/ChangePasswordModal';
+import { KeyboardShortcutsHint } from './components/ui/KeyboardShortcutsHint';
 
 // Context & Hooks
 import { useIsland } from './IslandContext';
@@ -54,19 +55,19 @@ const App: React.FC = () => {
 
     // --- HOOKS CORI ---
     const {
-        workers, selectedWorker, viewMode, setViewMode,
+        workers, isWorkersLoading, selectedWorker, viewMode, setViewMode,
         filteredWorkers, refreshStats,
-        searchQuery, setSearchQuery, activeFilter, setActiveFilter, customFilters,
+        searchQuery, setSearchQuery, activeFilter, setActiveFilter, activeStatusFilter, setActiveStatusFilter, customFilters,
         isModalOpen, setIsModalOpen, modalMode, currentWorker,
         handleOpenModal, openEditModal, handleSaveWorker,
         workerToDelete, setWorkerToDelete, handleDeleteWorker, confirmDelete,
-        handleUpdateWorkerData, handleUpdateStatus,
+        handleUpdateWorkerData, handleUpdateStatus, handleUpdateWorkerFields, updateWorkerById,
         handleOpenSimple, handleOpenComplex, handleBack,
         fileInputRef, isImportModalOpen, setIsImportModalOpen, importPendingData, setImportPendingData,
         handleExportData, handleImportData, executeImport,
     } = useWorkers(addToast);
 
-    const { isAuthenticated, loginPassword, setLoginPassword, loginError, handleLogin, handleLogout } = useAuth(setViewMode);
+    const { isAuthenticated, isLoading, loginEmail, setLoginEmail, loginPassword, setLoginPassword, loginError, handleLogin, handleLogout } = useAuth(setViewMode);
     const { setQuickActions } = useIsland();
 
     // --- MODALI SETTINGS ---
@@ -153,12 +154,14 @@ const App: React.FC = () => {
 
     // --- MAIN RENDER LOGIC ---
     if (isMobileMode) return <MobileUploadPage sessionId={mobileSessionId} />;
-    if (!isAuthenticated) return <LoginPage loginPassword={loginPassword} setLoginPassword={setLoginPassword} loginError={loginError} handleLogin={handleLogin} />;
+    if (isLoading || isWorkersLoading) return <div className="min-h-screen bg-slate-900 flex items-center justify-center"><div className="w-8 h-8 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin" /></div>;
+    if (!isAuthenticated) return <LoginPage loginEmail={loginEmail} setLoginEmail={setLoginEmail} loginPassword={loginPassword} setLoginPassword={setLoginPassword} loginError={loginError} handleLogin={handleLogin} />;
 
     return (
         <div className="min-h-screen font-sans selection:bg-indigo-100 dark:selection:bg-indigo-900/50 relative overflow-hidden transition-colors duration-500">
             <HiddenClasses />
             <DynamicIsland />
+            <KeyboardShortcutsHint />
             <Background />
 
             <AppRouter
@@ -172,6 +175,8 @@ const App: React.FC = () => {
                 setSearchQuery={setSearchQuery}
                 activeFilter={activeFilter}
                 setActiveFilter={setActiveFilter}
+                activeStatusFilter={activeStatusFilter}
+                setActiveStatusFilter={setActiveStatusFilter}
                 customFilters={customFilters}
                 activeStatsModal={activeStatsModal}
                 setActiveStatsModal={setActiveStatsModal}
@@ -185,6 +190,7 @@ const App: React.FC = () => {
                 openEditModal={openEditModal}
                 handleDeleteWorker={handleDeleteWorker}
                 handleOpenModal={handleOpenModal}
+                updateWorkerById={updateWorkerById}
                 fileInputRef={fileInputRef}
                 handleExportData={handleExportData}
                 handleImportData={handleImportData}
@@ -192,6 +198,7 @@ const App: React.FC = () => {
                 selectedWorker={selectedWorker}
                 handleUpdateWorkerData={handleUpdateWorkerData}
                 handleUpdateStatus={handleUpdateStatus}
+                handleUpdateWorkerFields={handleUpdateWorkerFields}
                 handleBack={handleBack}
             />
 

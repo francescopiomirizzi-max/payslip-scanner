@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite';
+import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 
@@ -6,11 +6,10 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
-    host: '0.0.0.0', // Utile per evitare problemi di rete locale
-    // CONFIGURAZIONE PROXY PERFETTA PER IL TUO CASO
+    host: '0.0.0.0',
     proxy: {
       '/.netlify/functions': {
-        target: 'http://localhost:8888', // <--- ECCO LA CHIAVE: Punta alla 8888
+        target: 'http://localhost:8888',
         changeOrigin: true,
         secure: false,
       },
@@ -20,5 +19,9 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname, '.'),
     },
+  },
+  test: {
+    environment: 'node',
+    globals: true,
   },
 });

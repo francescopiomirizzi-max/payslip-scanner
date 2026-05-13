@@ -19,19 +19,8 @@ import {
 import { motion, useSpring, useMotionValue, AnimatePresence } from 'framer-motion';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { Worker, getColumnsByProfile, YEARS } from '../types';
-
-// --- HELPER PARSER ROBUSTO (INTEGRATO) ---
-const parseFloatSafe = (val: any) => {
-    if (!val) return 0;
-    if (typeof val === 'number') return val;
-    let str = val.toString();
-    if (str.includes(',')) {
-        str = str.replace(/\./g, '').replace(',', '.');
-    }
-    const num = parseFloat(str);
-    return isNaN(num) ? 0 : num;
-};
+import { Worker } from '../types';
+import { computeHolidayIndemnity } from '../utils/calculationEngine';
 
 // --- COMPONENTE NUMERO ANIMATO (TICKING) ---
 const AnimatedCounter = ({ value, currency = false }: { value: number, currency?: boolean }) => {
@@ -225,83 +214,23 @@ const StatsDashboard: React.FC<StatsDashboardProps> = ({ workers = [], onBack })
             const startClaimYear = storedStartYear ? parseInt(storedStartYear) : 2008;
 
             const safeAnni = (Array.isArray(w.anni) ? w.anni : []) as any[];
-            const TETTO_FERIE = includeExFest ? 32 : 28;
+            const allYears = Array.from(new Set(safeAnni.map((r: any) => Number(r.year))))
+                .filter(y => !isNaN(y as number))
+                .sort((a, b) => (a as number) - (b as number)) as number[];
 
-            const indennitaCols = getColumnsByProfile(w.profilo || 'RFI', w.eliorType).filter(c =>
-                !['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'coeffPercepito', 'coeffTicket', 'note', 'arretrati'].includes(c.id)
-            );
-
-            // A. PRE-CALCOLO MEDIE ANNUALI
-            const yearlyRaw: Record<number, { totVar: number; ggLav: number }> = {};
-            safeAnni.forEach((row: any) => {
-                const y = Number(row.year);
-                if (!yearlyRaw[y]) yearlyRaw[y] = { totVar: 0, ggLav: 0 };
-                const gg = parseFloatSafe(row.daysWorked);
-                if (gg > 0) {
-                    let sum = 0;
-                    indennitaCols.forEach(c => sum += parseFloatSafe(row[c.id]));
-                    yearlyRaw[y].totVar += sum;
-                    yearlyRaw[y].ggLav += gg;
-                }
+            const yearResults = computeHolidayIndemnity({
+                data: safeAnni,
+                profilo: w.profilo || 'RFI',
+                eliorType: w.eliorType,
+                includeExFest,
+                includeTickets,
+                startClaimYear,
+                years: allYears,
             });
 
-            const yearlyAverages: Record<number, number> = {};
-            Object.keys(yearlyRaw).forEach(k => {
-                const y = Number(k);
-                const t = yearlyRaw[y];
-                yearlyAverages[y] = t.ggLav > 0 ? t.totVar / t.ggLav : 0;
-            });
-
-            // B. CALCOLO TOTALE ANNO PER ANNO
-            let totalLordo = 0;
-            let totalPercepito = 0;
-            let totalTicket = 0;
-
-            const uniqueYears = Array.from(new Set(safeAnni.map((r: any) => Number(r.year)))).sort((a, b) => a - b);
-
-            uniqueYears.forEach((yearVal) => {
-                const y = Number(yearVal);
-
-                // --- FILTRO ANNO: SE L'ANNO E' PRECEDENTE ALLO START, SALTA ---
-                if (y < startClaimYear) return;
-
-                let ferieCumulateAnno = 0; // RESET FONDAMENTALE
-
-                // Fallback Logic: Media Prec o Corrente
-                let mediaApplied = yearlyAverages[y - 1];
-                if (mediaApplied === undefined || mediaApplied === 0) {
-                    mediaApplied = yearlyAverages[y] || 0;
-                }
-
-                const monthsInYear = safeAnni
-                    .filter((r: any) => Number(r.year) === y)
-                    .sort((a: any, b: any) => a.monthIndex - b.monthIndex);
-
-                monthsInYear.forEach((row: any) => {
-                    const vacDays = parseFloatSafe(row.daysVacation);
-                    const cTicket = parseFloatSafe(row.coeffTicket);
-                    const cPercepito = parseFloatSafe(row.coeffPercepito);
-
-                    // Tetto
-                    const spazio = Math.max(0, TETTO_FERIE - ferieCumulateAnno);
-                    const ggUtili = Math.min(vacDays, spazio);
-                    ferieCumulateAnno += vacDays;
-
-                    if (ggUtili > 0) {
-                        totalLordo += (ggUtili * mediaApplied);
-                        totalPercepito += (ggUtili * cPercepito);
-
-                        // Sommiamo i ticket SEMPRE nel potenziale, ma li usiamo dopo
-                        // Solo se includeTickets è true per il netto
-                        if (includeTickets) {
-                            totalTicket += (ggUtili * cTicket);
-                        }
-                    }
-                });
-            });
-
-            // Calcolo finale Netto
-            const grandTotalNetto = (totalLordo - totalPercepito) + totalTicket;
+            const grandTotalNetto = yearResults
+                .filter(r => !r.isReferenceYear)
+                .reduce((sum, r) => sum + r.sumNetto, 0);
 
             return {
                 ...w,

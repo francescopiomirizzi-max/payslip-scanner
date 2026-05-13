@@ -308,6 +308,8 @@ const MobileUploadPage = ({ sessionId }: { sessionId: string }) => {
 
                         const aiData = await response.json();
                         aiData._batchId = Date.now() + i;
+                        aiData.fileData = base64ToUpload;
+                        aiData.mimeType = mimeTypeToUpload;
                         cumulativeResults.push(aiData);
                         await supabase.from('scan_sessions').update({ status: 'completed', data: JSON.stringify(cumulativeResults) }).eq('id', sessionId);
                     }

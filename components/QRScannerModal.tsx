@@ -77,7 +77,7 @@ const QRScannerModal: React.FC<QRScannerModalProps> = ({
             osc.type = 'sine'; osc.frequency.setValueAtTime(880, ctx.currentTime);
             gain.gain.setValueAtTime(0.05, ctx.currentTime);
             osc.start(); osc.stop(ctx.currentTime + 0.1);
-        } catch (e) { }
+        } catch (e) { /* AudioContext non disponibile su questo browser — atteso */ }
     };
 
     const playFinalSuccessChime = () => {
@@ -89,7 +89,7 @@ const QRScannerModal: React.FC<QRScannerModalProps> = ({
             osc.frequency.exponentialRampToValueAtTime(1200, ctx.currentTime + 0.2);
             gain.gain.setValueAtTime(0.1, ctx.currentTime);
             osc.start(); osc.stop(ctx.currentTime + 0.2);
-        } catch (e) { }
+        } catch (e) { /* AudioContext non disponibile su questo browser — atteso */ }
     };
 
     const playErrorBuzz = () => {
@@ -101,7 +101,7 @@ const QRScannerModal: React.FC<QRScannerModalProps> = ({
             osc.frequency.exponentialRampToValueAtTime(100, ctx.currentTime + 0.3);
             gain.gain.setValueAtTime(0.1, ctx.currentTime);
             osc.start(); osc.stop(ctx.currentTime + 0.3);
-        } catch (e) { }
+        } catch (e) { /* AudioContext non disponibile su questo browser — atteso */ }
     };
 
     const triggerClose = async () => {
@@ -150,7 +150,7 @@ const QRScannerModal: React.FC<QRScannerModalProps> = ({
         let isPolling = true;
 
         const initDb = async () => {
-            try { await supabase.from('scan_sessions').insert([{ id: globalSessionId, status: 'waiting' }]); } catch (err) { }
+            try { await supabase.from('scan_sessions').insert([{ id: globalSessionId, status: 'waiting' }]); } catch (err) { console.error('QRScanner: errore insert scan_session', err); }
             startPolling();
         };
 
@@ -185,7 +185,7 @@ const QRScannerModal: React.FC<QRScannerModalProps> = ({
                                         const p = typeof data.data === 'string' ? JSON.parse(data.data) : data.data;
                                         if (p.total) totalFiles = p.total;
                                     }
-                                } catch (e) { }
+                                } catch (e) { console.error('QRScanner: errore parsing data.data (totalFiles)', e); }
                                 startUpload('mobile', totalFiles);
                             }, 500);
                         }
@@ -197,7 +197,7 @@ const QRScannerModal: React.FC<QRScannerModalProps> = ({
                                     setSyncProgress({ current: parsed.current, total: parsed.total });
                                     updateUploadProgress(parsed.current);
                                 }
-                            } catch (e) { }
+                            } catch (e) { console.error('QRScanner: errore parsing data.data (progress)', e); }
                         }
                     }
                     else if (data.status === 'completed' && data.data) {
@@ -269,7 +269,7 @@ const QRScannerModal: React.FC<QRScannerModalProps> = ({
                         }
                     }
                 }
-            } catch (e) { }
+            } catch (e) { console.error('QRScanner: errore polling loop', e); }
 
             if (isPolling) {
                 pollingTimer.current = setTimeout(startPolling, 400);

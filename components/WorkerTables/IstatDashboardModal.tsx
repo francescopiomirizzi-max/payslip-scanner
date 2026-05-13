@@ -213,8 +213,7 @@ const IstatDashboardModal: React.FC<IstatDashboardModalProps> = ({
 
         try {
             if ('showSaveFilePicker' in window) {
-                // @ts-ignore
-                const handle = await window.showSaveFilePicker({
+                const handle = await (window as any).showSaveFilePicker({
                     suggestedName: nomeFile,
                     types: [{ description: 'Documento PDF', accept: { 'application/pdf': ['.pdf'] } }],
                 });

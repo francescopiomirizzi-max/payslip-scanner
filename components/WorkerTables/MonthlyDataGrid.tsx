@@ -30,7 +30,9 @@ import {
   CheckCircle2,
   Undo2,
   Copy,
-  ClipboardPaste
+  ClipboardPaste,
+  ShieldCheck,
+  Loader2,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -162,6 +164,19 @@ const INDENNITA_DETAILS: Record<string, IndennitaDetail> = {
   },
 };
 
+export interface VerifyDiscrepancy {
+  field: string;
+  extracted: number;
+  suggested: number;
+  message: string;
+}
+
+export interface VerifyState {
+  status: 'loading' | 'success' | 'warning' | 'error';
+  discrepancies: VerifyDiscrepancy[];
+  errorMessage?: string;
+}
+
 interface MonthlyDataGridProps {
   data: AnnoDati[];
   onDataChange: (newData: AnnoDati[]) => void;
@@ -171,6 +186,12 @@ interface MonthlyDataGridProps {
   eliorType?: 'viaggiante' | 'magazzino';
   onCellFocus?: (rowIndex: number, colId: string) => void;
   years: number[];  // Range dinamico controllato dal parent
+  // Verifica AI: chiave `${year}-${monthIndex}` → storage_path
+  archiveEntries?: Record<string, string>;
+  verifyStates?: Record<string, VerifyState>;
+  onVerifyRequest?: (row: AnnoDati) => void;
+  onAcceptCorrection?: (year: number, monthIndex: number, field: string, value: number) => void;
+  onAcceptAllCorrections?: (year: number, monthIndex: number) => void;
 }
 
 // parseLocalFloat importato da formatters
@@ -188,7 +209,12 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
   profilo,
   eliorType,
   onCellFocus,
-  years
+  years,
+  archiveEntries = {},
+  verifyStates = {},
+  onVerifyRequest,
+  onAcceptCorrection,
+  onAcceptAllCorrections,
 }) => {
   const [selectedYear, setSelectedYear] = useState<number>(initialYear);
 
@@ -1157,6 +1183,12 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
                         const isDragStartCell = dragSelection.isDragging && rowIndex === dragSelection.startRow && colIndex === dragSelection.startColIdx;
                         const isCellActive = activeRowIndex === rowIndex && activeColId === col.id;
 
+                        // AI discrepancy for this cell
+                        const rowVerifyState = !isMonth && !isTotal ? verifyStates[`${selectedYear}-${rowIndex}`] : undefined;
+                        const cellDiscrepancy = rowVerifyState && rowVerifyState.status !== 'loading' && col.type !== 'formula'
+                          ? rowVerifyState.discrepancies.find(d => d.field === col.id)
+                          : undefined;
+
                         return (
                           <td
                             key={col.id}
@@ -1174,6 +1206,7 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
                                 ${isTotal ? 'bg-slate-50 dark:bg-slate-800/80 font-bold text-slate-800 dark:text-cyan-100 text-right pr-2' : ''}
                                 ${isVacation ? 'bg-amber-50/20' : ''}
                                 ${isVacationWarning ? 'ring-2 ring-inset ring-red-400/50' : ''}
+                                ${cellDiscrepancy && !isVacationWarning ? (rowVerifyState?.status === 'error' ? 'ring-2 ring-inset ring-red-400/50 dark:ring-red-500/50 bg-red-50/40 dark:bg-red-900/10' : 'ring-2 ring-inset ring-amber-400/60 dark:ring-amber-500/50 bg-amber-50/40 dark:bg-amber-900/10') : ''}
                                 ${isInDragRange && !isDragStartCell ? 'drag-target-cell' : ''}
                                 ${isSelectedCell && !dragSelection.isDragging ? 'bg-indigo-100/60 dark:bg-indigo-900/50 ring-1 ring-inset ring-indigo-400' : ''}
                                 hover:!z-[1000]
@@ -1202,8 +1235,8 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
 
                                   {hasAiWarning && (
                                     <div className={`
-                                      opacity-0 invisible group-hover/ai:opacity-100 group-hover/ai:visible transition-all duration-300 delay-500 
-                                      absolute left-full ml-2 ${rowIndex > 7 ? 'bottom-0' : 'top-0'} 
+                                      opacity-0 invisible group-hover/ai:opacity-100 group-hover/ai:visible transition-all duration-300 delay-500
+                                      absolute left-full ml-2 ${rowIndex > 7 ? 'bottom-0' : 'top-0'}
                                       w-48 p-2 bg-slate-900 text-white text-[10px] rounded shadow-xl z-[9999] whitespace-normal leading-tight border border-slate-700 pointer-events-none
                                     `}>
                                       <span className="font-bold text-red-400 block mb-1">Avviso AI:</span>
@@ -1211,8 +1244,98 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
                                     </div>
                                   )}
 
+                                  {/* Semaphore indicator for AI verification result */}
+                                  {(() => {
+                                    const vKey = `${selectedYear}-${rowIndex}`;
+                                    const vs = verifyStates[vKey];
+                                    if (!vs || vs.status === 'loading') return null;
+                                    const dotColor = vs.status === 'success'
+                                      ? 'bg-emerald-500'
+                                      : vs.status === 'warning'
+                                        ? 'bg-amber-400'
+                                        : 'bg-red-500';
+                                    return (
+                                      <div className="relative group/verify flex-shrink-0">
+                                        <div className={`w-2 h-2 rounded-full ${dotColor} ring-1 ring-white/50`} />
+                                        {(vs.discrepancies.length > 0 || vs.errorMessage) && (
+                                          <div className={`
+                                            opacity-0 invisible group-hover/verify:opacity-100 group-hover/verify:visible
+                                            transition-all duration-200 delay-300
+                                            absolute left-full ml-2 ${rowIndex > 7 ? 'bottom-0' : 'top-0'}
+                                            w-64 p-2.5 bg-slate-900 text-white text-[10px] rounded-lg shadow-2xl z-[9999]
+                                            border border-slate-700 pointer-events-none whitespace-normal leading-relaxed
+                                          `}>
+                                            <span className={`font-bold block mb-1.5 text-[10px] uppercase tracking-wider ${vs.status === 'error' ? 'text-red-400' : 'text-amber-400'}`}>
+                                              {vs.status === 'error' ? '⚠ Discrepanze trovate' : '⚡ Anomalie minori'}
+                                            </span>
+                                            {vs.errorMessage && (
+                                              <div className="text-red-300 border-t border-slate-700/60 pt-1 mt-1">{vs.errorMessage}</div>
+                                            )}
+                                            {vs.discrepancies.map((d, i) => (
+                                              <div key={i} className="border-t border-slate-700/60 pt-1 mt-1 first:border-0 first:pt-0 first:mt-0">{d.message}</div>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })()}
+
                                   <div className="text-xs font-bold uppercase tracking-wide truncate max-w-[70px]" title={note}>{MONTH_NAMES[rowIndex]}</div>
                                 </div>
+
+                                {/* Verify button — shown only when archive has a PDF for this row */}
+                                {(() => {
+                                  const vKey = `${selectedYear}-${rowIndex}`;
+                                  const hasArchive = !!archiveEntries[vKey];
+                                  const vs = verifyStates[vKey];
+                                  if (!hasArchive || !onVerifyRequest) return null;
+                                  const isLoading = vs?.status === 'loading';
+                                  const btnColor = !vs
+                                    ? 'text-slate-300 dark:text-slate-600 hover:text-violet-500 dark:hover:text-violet-400 hover:bg-violet-50 dark:hover:bg-slate-700'
+                                    : vs.status === 'success'
+                                      ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 hover:bg-emerald-100 dark:hover:bg-emerald-900/50'
+                                      : vs.status === 'warning'
+                                        ? 'text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30 hover:bg-amber-100 dark:hover:bg-amber-900/50'
+                                        : 'text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/30 hover:bg-red-100 dark:hover:bg-red-900/50';
+                                  return (
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); if (!isLoading) onVerifyRequest(currentRows[rowIndex] as AnnoDati); }}
+                                      tabIndex={-1}
+                                      title={
+                                        isLoading ? 'Verifica in corso…'
+                                          : vs?.status === 'success' ? 'Dati verificati ✓ — Riclicca per ri-verificare'
+                                            : vs?.status === 'warning' ? 'Anomalie minori rilevate — Riclicca per ri-verificare'
+                                              : vs?.status === 'error' ? 'Discrepanze trovate! — Riclicca per ri-verificare'
+                                                : 'Verifica dati con AI (confronta con il PDF archiviato)'
+                                      }
+                                      className={`p-1.5 rounded-lg transition-all focus:outline-none ${btnColor} ${isLoading ? 'cursor-wait' : ''}`}
+                                    >
+                                      {isLoading
+                                        ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                        : <ShieldCheck className="w-3.5 h-3.5" strokeWidth={vs ? 2.5 : 2} />
+                                      }
+                                    </button>
+                                  );
+                                })()}
+
+                                {/* "Accetta tutto" — visible when there are actionable discrepancies */}
+                                {(() => {
+                                  const vKey = `${selectedYear}-${rowIndex}`;
+                                  const vs = verifyStates[vKey];
+                                  if (!vs || vs.status === 'loading' || vs.discrepancies.length === 0 || !onAcceptAllCorrections) return null;
+                                  return (
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); onAcceptAllCorrections(selectedYear, rowIndex); }}
+                                      tabIndex={-1}
+                                      title={`Accetta tutte le ${vs.discrepancies.length} correzioni AI`}
+                                      className="p-1.5 rounded-lg transition-all focus:outline-none text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/40 hover:bg-emerald-200 dark:hover:bg-emerald-900/60 ring-1 ring-emerald-300 dark:ring-emerald-700/50 flex items-center gap-0.5"
+                                    >
+                                      <CheckCircle2 className="w-3.5 h-3.5" strokeWidth={2.5} />
+                                      <span className="text-[9px] font-bold leading-none">{vs.discrepancies.length}</span>
+                                    </button>
+                                  );
+                                })()}
+
                                 <button onClick={() => openNoteModal(rowIndex, note)} tabIndex={-1} className={`p-1.5 rounded-lg transition-all focus:outline-none ${note ? 'text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/40 hover:bg-amber-200 dark:hover:bg-amber-900/60 ring-1 ring-amber-300 dark:ring-amber-700/50' : 'text-slate-300 dark:text-slate-600 hover:text-indigo-500 dark:hover:text-cyan-400 hover:bg-indigo-50 dark:hover:bg-slate-700'}`}><MessageSquareText className="w-3.5 h-3.5" strokeWidth={note ? 2.5 : 2} /></button>
                               </div>
                             ) : isTotal ? (
@@ -1287,6 +1410,39 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
                                       </div>
                                     </div>
                                   </>
+                                )}
+
+                                {/* AI discrepancy indicator + tooltip with accept button */}
+                                {cellDiscrepancy && !dragSelection.isDragging && (
+                                  <div className="absolute top-0.5 right-1 z-20 group/disc">
+                                    <div className={`w-2 h-2 rounded-full cursor-help ${rowVerifyState?.status === 'error' ? 'bg-red-400 shadow-[0_0_4px_rgba(248,113,113,0.8)]' : 'bg-amber-400 shadow-[0_0_4px_rgba(251,191,36,0.8)]'}`} />
+                                    <div className={`
+                                      opacity-0 invisible group-hover/disc:opacity-100 group-hover/disc:visible
+                                      pointer-events-none group-hover/disc:pointer-events-auto
+                                      transition-all duration-200 delay-200
+                                      absolute ${rowIndex > 7 ? 'bottom-full mb-1' : 'top-full mt-1'} right-0
+                                      w-56 bg-slate-900 border border-slate-700 rounded-lg shadow-2xl z-[9999] overflow-hidden
+                                    `}>
+                                      <div className="px-3 py-2.5">
+                                        <div className="text-[9px] uppercase tracking-wider text-slate-400 mb-1">AI Suggerisce</div>
+                                        <div className="font-bold text-white tabular-nums text-sm">
+                                          {cellDiscrepancy.suggested.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                        </div>
+                                        <div className="text-[9px] text-slate-500 mt-0.5">estratto: {cellDiscrepancy.extracted.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                                        <div className="text-[9px] text-slate-400 mt-1.5 leading-tight border-t border-slate-700/60 pt-1.5">{cellDiscrepancy.message}</div>
+                                      </div>
+                                      <button
+                                        className="w-full px-3 py-1.5 bg-emerald-700 hover:bg-emerald-600 text-white text-[10px] font-bold flex items-center justify-center gap-1 transition-colors border-t border-emerald-800"
+                                        onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          onAcceptCorrection?.(selectedYear, rowIndex, col.id, cellDiscrepancy.suggested);
+                                        }}
+                                      >
+                                        <CheckCircle2 className="w-3 h-3" /> Accetta correzione
+                                      </button>
+                                    </div>
+                                  </div>
                                 )}
                               </div>
                             )}

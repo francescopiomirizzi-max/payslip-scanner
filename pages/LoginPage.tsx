@@ -1,15 +1,17 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Lock, LogIn } from 'lucide-react';
+import { Lock, LogIn, Mail } from 'lucide-react';
 
 interface LoginPageProps {
+    loginEmail: string;
+    setLoginEmail: (email: string) => void;
     loginPassword: string;
     setLoginPassword: (password: string) => void;
     loginError: boolean;
     handleLogin: (e: React.FormEvent) => void;
 }
 
-const LoginPage: React.FC<LoginPageProps> = ({ loginPassword, setLoginPassword, loginError, handleLogin }) => {
+const LoginPage: React.FC<LoginPageProps> = ({ loginEmail, setLoginEmail, loginPassword, setLoginPassword, loginError, handleLogin }) => {
     return (
         <div className="min-h-screen flex items-center justify-center relative overflow-hidden font-sans bg-slate-900">
             <div className="absolute inset-0 z-0 bg-slate-900">
@@ -47,26 +49,40 @@ const LoginPage: React.FC<LoginPageProps> = ({ loginPassword, setLoginPassword, 
                     <p className="text-slate-400/80 text-sm font-medium tracking-wide">Inserisci le credenziali per accedere al sistema.</p>
                 </div>
 
-                <form onSubmit={handleLogin} className="space-y-5">
+                <form onSubmit={handleLogin} className="space-y-4">
                     <div className="relative group">
+                        <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 group-focus-within:text-cyan-400 transition-colors" />
+                        <input
+                            type="email"
+                            value={loginEmail}
+                            onChange={(e) => setLoginEmail(e.target.value)}
+                            placeholder="Indirizzo Email"
+                            autoComplete="email"
+                            className={`w-full bg-black/30 border ${loginError ? 'border-red-500' : 'border-white/[0.08] group-hover:border-cyan-500/30'} rounded-2xl pl-11 pr-6 py-4 text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500/50 focus:ring-2 focus:ring-cyan-500/50 transition-all`}
+                        />
+                    </div>
+
+                    <div className="relative group">
+                        <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 group-focus-within:text-cyan-400 transition-colors" />
                         <input
                             type="password"
                             value={loginPassword}
                             onChange={(e) => setLoginPassword(e.target.value)}
-                            placeholder="Password di Sicurezza"
-                            className={`w-full bg-black/30 border ${loginError ? 'border-red-500' : 'border-white/[0.08] group-hover:border-cyan-500/30'} rounded-2xl px-6 py-4 text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500/50 focus:ring-2 focus:ring-cyan-500/50 transition-all font-bold tracking-widest text-center`}
+                            placeholder="Password"
+                            autoComplete="current-password"
+                            className={`w-full bg-black/30 border ${loginError ? 'border-red-500' : 'border-white/[0.08] group-hover:border-cyan-500/30'} rounded-2xl pl-11 pr-6 py-4 text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500/50 focus:ring-2 focus:ring-cyan-500/50 transition-all font-bold tracking-widest`}
                         />
                     </div>
 
                     {loginError && (
                         <motion.p initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="text-red-400 text-xs font-bold text-center bg-red-900/30 py-2 rounded-lg border border-red-500/30">
-                            ⛔ Password errata. Accesso negato.
+                            Credenziali non valide. Accesso negato.
                         </motion.p>
                     )}
 
                     <button
                         type="submit"
-                        className="w-full bg-linear-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-black py-4 rounded-2xl shadow-[0_0_30px_rgba(6,182,212,0.3)] hover:shadow-[0_0_40px_rgba(6,182,212,0.5)] transition-all transform active:scale-95 flex items-center justify-center gap-3 uppercase tracking-wide text-sm"
+                        className="w-full bg-linear-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-black py-4 rounded-2xl shadow-[0_0_30px_rgba(6,182,212,0.3)] hover:shadow-[0_0_40px_rgba(6,182,212,0.5)] transition-all transform active:scale-95 flex items-center justify-center gap-3 uppercase tracking-wide text-sm mt-2"
                     >
                         <LogIn className="w-5 h-5" /> Entra nel Sistema
                     </button>

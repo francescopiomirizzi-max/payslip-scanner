@@ -166,8 +166,7 @@ const TfrCalculationTable: React.FC<TfrCalculationTableProps> = ({
             margin: { left: 14, right: 14 }
         });
 
-        // @ts-ignore
-        currentY = doc.lastAutoTable.finalY + 18;
+        currentY = (doc as any).lastAutoTable.finalY + 18;
 
         if (tfrData.length > 0) {
             const totaleAssoluto = tfrData[tfrData.length - 1].fondoFinale;

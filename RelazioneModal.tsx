@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { X, Printer, Copy, CheckCircle, PenTool, FileText, FileSpreadsheet } from 'lucide-react';
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 import { motion } from 'framer-motion';
 import { YEARS, AnnoDati, getColumnsByProfile } from './types';
-import { parseLocalFloat } from './utils/formatters';
+import { parseLocalFloat, getProfiloBadgeLabel } from './utils/formatters';
+import { EXCLUDED_INDEMNITY_COLS } from './utils/calculationEngine';
 
 // --- HELPER DI FORMATTAZIONE SICURA ---
 const fmt = (val: any) => {
@@ -15,45 +16,12 @@ const fmt = (val: any) => {
 
 // --- HELPER CENTRALIZZATI PER SINCRONIA UI/WORD ---
 const generaVociRaggruppate = (worker: any) => {
-    let testo = "";
-    let html = "";
-    
-    if (worker?.profilo === 'ELIOR') {
-        if (worker?.eliorType === 'magazzino') {
-            testo = "- Lavoro Notturno e Domenicale\n- Straordinari e Maggiorazioni (18%, 35%)\n- Indennità specifiche di logistica (Indennità Cella e Sottosuolo)\n- Funzioni Diverse e 26/MI Retribuzione";
-            html = `<li>Lav. Nott. (1130) e Lav. Domen. (1131)</li>
-                <li>Straord. 18% (2018), Straord. 35% (2035) e Magg. 35% (2235)</li>
-                <li>Funz. Diverse (4133), Ind. Cella (2313) e Ind. Sottosuolo (4275)</li>
-                <li>26/MI Retrib. (4285)</li>`;
-        } else {
-            testo = "- Indennità specifiche della Ristorazione a Bordo (Ind. Cassa, Lav. Notturno/Domenicale)\n- Diaria Scorta e Riserva Presenza\n- Straordinari e Maggiorazioni (18%, 20%, 35%)";
-            html = `<li>Ind. Cassa (1126), Lav. Nott. (1130) e Lav. Domen. (1131)</li>
-                <li>Str. 18% (2018), Str. 20% (2020), Str. 35% (2035) e Magg. 35% (2235)</li>
-                <li>Funz. Diverse (4133), RFR < 8h (4254), Pernottamento (4255) e Pernottazione (4256)</li>
-                <li>Ass. Res. No RS (4300), Ass. Res. RS (4305) e F. Sede RFR (4301)</li>
-                <li>Diaria Scorta (4320), Riserva Pres. (4345), Flex Oraria (4325) e Flex Res. (4330)</li>
-                <li>26/MI Retrib. (5655)</li>`;
-        }
-    } else if (worker?.profilo === 'REKEEP') {
-        testo = "- Indennità Turni Non Cadenzati e Pernottamento\n- Indennità Sussidiaria e Residenza\n- Lavoro Domenicale e Notturno\n- Maggiorazioni e Straordinari legati all'appalto";
-        html = `<li>Ind. Domenicale (I1037C) e Lav. Notturno (I1040C)</li>
-            <li>Turni Non Cad. (I215FC) e Ind. Pernott. (I225FC)</li>
-            <li>Ass. Residenza (I232FC) e Ind. Sussidiaria (I1182C)</li>
-            <li>Fest. Non God. (D2200)</li>
-            <li>Straord. 18% (S1800C) e Maggioraz. 35% (M3500C)</li>`;
-    } else if (worker?.profilo === 'RFI' || !worker?.profilo || worker?.profilo === 'ND') {
-        testo = "- Indennità legate ai turni (Lavoro Notturno, Festivo, Straordinari)\n- Indennità di funzione e disagio (Chiamata, Reperibilità, Linea, Condotta)\n- Trasferte esenti e indennità accessorie ricorrenti previste dal CCNL Mobilità/RFI";
-        html = `<li>Straord. Diurno (0152) e Ind. Notturno (0421)</li>
-            <li>Comp. Cantiere Notte (0423) e Festivo Notturno (0457)</li>
-            <li>Ind. Chiamata (0470), Ind. Reperibilità (0482) e Ind. Disp. Chiamata (0496)</li>
-            <li>Ind. Linea < 10h (0687) e Trasferta (0AA1)</li>
-            <li>Ind. Orario Spezz. (0576) e Rep. Festive/Riposo (0584)</li>
-            <li>Str. Feriale Diurno (0919), Str. Fest/Notturno (0920), Str. Diurno Rep. (0932), Str. Fest/Not Rep. (0933), Str. Diurno Disp. (0995) e Str. Fest/Not Disp. (0996)</li>`;
-    } else {
-        testo = `- Voci a carattere continuativo previste dal modello aziendale applicato (${worker?.profilo})`;
-        html = `<li>Tutte le voci a carattere continuativo e ricorrente previste dal modello aziendale applicato (${worker?.profilo}).</li>`;
-    }
-    
+    const cols = getColumnsByProfile(worker?.profilo, worker?.eliorType)
+        .filter((c: any) => !EXCLUDED_INDEMNITY_COLS.includes(c.id));
+
+    const testo = cols.map((c: any) => `- (${c.id}) ${c.label}`).join('\n');
+    const html = cols.map((c: any) => `<li>(${c.id}) ${c.label}</li>`).join('\n                ');
+
     return { testo, html };
 };
 
@@ -66,12 +34,19 @@ const generaEsempioDinamico = (worker: any, startClaimYear: number, tettoGiorni:
             .map((c: any) => c.id)
             .filter((id: string) => !['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'coeffPercepito', 'coeffTicket', 'note', 'arretrati', '3B70', '3B71'].includes(id));
 
-        const anniOrdinati = [...worker.anni].sort((a, b) => Number(b.year) - Number(a.year));
-        
-        for (const m of anniOrdinati) {
-            const annoCorrente = Number(m.year);
-            if (annoCorrente <= startClaimYear || Number(m.daysVacation) === 0) continue;
-            
+        // Raccoglie tutti gli anni candidati (ordinati ASC) con i dati già calcolati
+        const tuttiGliAnni: number[] = Array.from(new Set(worker.anni.map((m: any) => Number(m.year)))).sort((a: number, b: number) => a - b) as number[];
+
+        type Candidato = { annoCorrente: number; annoPrec: number; totVariabiliPrec: number; ggLavPrec: number; ferieUsate: number; lordoEsempio: number; mediaGiornaliera: number };
+        const candidati: Candidato[] = [];
+
+        for (const annoCorrente of tuttiGliAnni) {
+            if (annoCorrente <= startClaimYear) continue;
+
+            const datiAnnoCorrente = worker.anni.filter((a: any) => Number(a.year) === annoCorrente);
+            const totFerieCorrente = datiAnnoCorrente.reduce((s: number, mm: any) => s + (Number(mm.daysVacation) || 0), 0);
+            if (totFerieCorrente === 0) continue;
+
             const annoPrec = annoCorrente - 1;
             const datiAnnoPrec = worker.anni.filter((a: any) => Number(a.year) === annoPrec);
             let totVariabiliPrec = 0;
@@ -79,11 +54,7 @@ const generaEsempioDinamico = (worker: any, startClaimYear: number, tettoGiorni:
 
             datiAnnoPrec.forEach((mm: any) => {
                 const ggLavMese = parseLocalFloat(mm.daysWorked);
-                
-                if (ggLavMese > 0) {
-                    ggLavPrec += ggLavMese;
-                }
-                
+                if (ggLavMese > 0) ggLavPrec += ggLavMese;
                 validCodes.forEach((cod: string) => {
                     const rawVal = mm[cod];
                     if (rawVal) {
@@ -95,26 +66,24 @@ const generaEsempioDinamico = (worker: any, startClaimYear: number, tettoGiorni:
 
             if (ggLavPrec > 0 && totVariabiliPrec > 0) {
                 const mediaGiornaliera = totVariabiliPrec / ggLavPrec;
-
-                const datiAnnoCorrente = worker.anni.filter((a: any) => Number(a.year) === annoCorrente);
-                let totFerieCorrente = 0;
-                datiAnnoCorrente.forEach((mm: any) => totFerieCorrente += Number(mm.daysVacation) || 0);
-
                 const ferieUsate = Math.min(totFerieCorrente, tettoGiorni);
-                const lordoEsempio = mediaGiornaliera * ferieUsate;
+                candidati.push({ annoCorrente, annoPrec, totVariabiliPrec, ggLavPrec, ferieUsate, lordoEsempio: mediaGiornaliera * ferieUsate, mediaGiornaliera });
+            }
+        }
 
-                testo = `A titolo illustrativo, riportiamo il calcolo matematico applicato esattamente per l'anno ${annoCorrente} dei conteggi allegati:\n- Passo A (Totale Voci): Nell'anno di riferimento (${annoPrec}), il lavoratore ha percepito indennità variabili ricorrenti per un totale di € ${fmt(totVariabiliPrec)}.\n- Passo B (Media Giornaliera): Dividendo tale somma per i giorni effettivamente lavorati nel ${annoPrec} (${ggLavPrec} gg), si ottiene una media giornaliera pari a € ${fmt(mediaGiornaliera)}.\n- Passo C (Moltiplicazione): Nell'anno ${annoCorrente}, il lavoratore ha fruito di ${ferieUsate} giorni di ferie validi ai fini del calcolo (entro il tetto legale applicato). Moltiplicando la media di € ${fmt(mediaGiornaliera)} per i ${ferieUsate} giorni, si certifica una differenza lorda maturata pari a € ${fmt(lordoEsempio)} per quel singolo anno.`;
-                
-                html = `
+        // Sceglie l'anno centrale del periodo — così ogni lavoratore ha un esempio diverso
+        if (candidati.length > 0) {
+            const { annoCorrente, annoPrec, totVariabiliPrec, ggLavPrec, ferieUsate, lordoEsempio, mediaGiornaliera } = candidati[Math.floor(candidati.length / 2)];
+
+            testo = `A titolo illustrativo, riportiamo il calcolo matematico applicato esattamente per l'anno ${annoCorrente} dei conteggi allegati:\n- Passo A (Totale Voci): Nell'anno di riferimento (${annoPrec}), il lavoratore ha percepito indennità variabili ricorrenti per un totale di € ${fmt(totVariabiliPrec)}.\n- Passo B (Media Giornaliera): Dividendo tale somma per i giorni effettivamente lavorati nel ${annoPrec} (${ggLavPrec} gg), si ottiene una media giornaliera pari a € ${fmt(mediaGiornaliera)}.\n- Passo C (Moltiplicazione): Nell'anno ${annoCorrente}, il lavoratore ha fruito di ${ferieUsate} giorni di ferie validi ai fini del calcolo (entro il tetto legale applicato). Moltiplicando la media di € ${fmt(mediaGiornaliera)} per i ${ferieUsate} giorni, si certifica una differenza lorda maturata pari a € ${fmt(lordoEsempio)} per quel singolo anno.`;
+
+            html = `
                 <p>A titolo illustrativo, riportiamo il calcolo matematico applicato esattamente per l'anno <b>${annoCorrente}</b> dei conteggi allegati:</p>
                 <ul>
                     <li><b>Passo A (Totale Voci):</b> Nell'anno di riferimento (<b>${annoPrec}</b>), il lavoratore ha percepito indennità variabili ricorrenti per un totale di <b>€ ${fmt(totVariabiliPrec)}</b>.</li>
                     <li><b>Passo B (Media Giornaliera):</b> Dividendo tale somma per i giorni effettivamente lavorati nel ${annoPrec} (<b>${ggLavPrec} gg</b>), si ottiene una media giornaliera pari a <b>€ ${fmt(mediaGiornaliera)}</b>.</li>
                     <li><b>Passo C (Moltiplicazione):</b> Nell'anno <b>${annoCorrente}</b>, il lavoratore ha fruito di <b>${ferieUsate}</b> giorni di ferie validi ai fini del calcolo (entro il tetto legale applicato). Moltiplicando la media di € ${fmt(mediaGiornaliera)} per i ${ferieUsate} giorni, si certifica una differenza lorda maturata pari a <b>€ ${fmt(lordoEsempio)}</b> per quel singolo anno.</li>
                 </ul>`;
-                
-                break;
-            }
         }
     }
     return { testo, html };
@@ -177,7 +146,7 @@ const generaRelazioneTestuale = (worker: any, totali: any, includeExFest: boolea
     return `
 RELAZIONE TECNICA - SINTESI E METODOLOGIA
 Pratica di: ${worker?.cognome || ''} ${worker?.nome || ''}
-Profilo contrattuale: ${worker?.profilo || 'ND'}
+Profilo contrattuale: ${getProfiloBadgeLabel(worker?.profilo, worker?.eliorType) || 'ND'}
 Periodo esaminato: Dal ${inizioPeriodo} al ${finePeriodo}
 
 --------------------------------------------------
@@ -233,33 +202,118 @@ export const RelazioneModal = ({ isOpen, onClose, worker, totals, includeExFest 
 
     const handleStampa = () => {
         const printWindow = window.open('', '_blank');
-        if (printWindow) {
-            printWindow.document.write(`
-        <html>
-          <head>
-            <title>Relazione Tecnica - ${worker?.cognome || ''}</title>
-            <style>
-              body { font-family: 'Helvetica', sans-serif; padding: 40px; line-height: 1.6; color: #1a1a1a; max-width: 800px; margin: 0 auto; }
-              .header { text-align: center; border-bottom: 3px solid #1e293b; margin-bottom: 30px; padding-bottom: 15px; }
-              .header h2 { margin: 0; color: #1e293b; text-transform: uppercase; letter-spacing: 1px; font-size: 18px; }
-              .sub-header { font-size: 14px; color: #666; margin-top: 5px; font-weight: bold; }
-              pre { white-space: pre-wrap; font-family: 'Courier New', Courier, monospace; font-size: 13px; background: #f8fafc; padding: 20px; border-radius: 8px; border: 1px solid #e2e8f0; }
-              @media print { body { padding: 20px; } .no-print { display: none; } pre { border: none; padding: 0; } }
-            </style>
-          </head>
-          <body>
-            <div class="header">
-              <h2>Prospetto Analitico Differenze Retributive</h2>
-              <div class="sub-header">CONTRATTO DI RIFERIMENTO: ${worker?.profilo || 'ND'}</div>
-            </div>
-            
-            <pre>${testoCompleto}</pre>
-          </body>
-        </html>
-      `);
-            printWindow.document.close();
-            printWindow.print();
-        }
+        if (!printWindow) return;
+
+        const tettoGiorni = includeExFest ? 32 : 28;
+        const gt = totals?.grandTotal || totals || {};
+        const lordoVal = gt.incidenzaTotale ?? gt.totalLordo ?? gt.grossClaim ?? 0;
+        const percepitoVal = gt.indennitaPercepita ?? gt.totalPercepito ?? 0;
+        const ticketVal = gt.indennitaPasto ?? gt.totalTicket ?? 0;
+        const nettoVal = (Number(lordoVal) - (showPercepito ? Number(percepitoVal) : 0)) + (includeTickets ? Number(ticketVal) : 0);
+
+        let anniAttivi = (worker?.anni || [])
+            .filter((a: AnnoDati) => Number(a.daysWorked) > 0 && Number(a.year) >= startClaimYear)
+            .map((a: AnnoDati) => Number(a.year))
+            .sort((a: number, b: number) => a - b);
+        anniAttivi = [...new Set(anniAttivi)];
+        if (anniAttivi.length === 0) anniAttivi = [startClaimYear, new Date().getFullYear()];
+        const inizioPeriodo = startClaimYear;
+        const finePeriodo = anniAttivi[anniAttivi.length - 1];
+
+        const voci = generaVociRaggruppate(worker);
+        const esempio = generaEsempioDinamico(worker, startClaimYear, tettoGiorni);
+        const spiegazione = generaSpiegazioneRisultato(includeTickets, showPercepito);
+
+        (printWindow.document as any).write(`
+            <html>
+            <head>
+                <meta charset="utf-8">
+                <title>Relazione Tecnica - ${worker?.cognome || ''}</title>
+                <style>
+                    @page { size: A4 portrait; margin: 2.5cm 2cm; }
+                    * { box-sizing: border-box; }
+                    body { font-family: 'Times New Roman', Times, serif; font-size: 12pt; color: #000; line-height: 1.5; }
+                    h2 { text-align: center; font-size: 15pt; font-weight: bold; text-transform: uppercase; margin: 0 0 5pt 0; }
+                    .subtitle { text-align: center; font-size: 12pt; font-weight: bold; margin-bottom: 20pt; border-bottom: 1px solid #000; padding-bottom: 8pt; }
+                    .info-table { width: 100%; border-collapse: collapse; margin-bottom: 20pt; border: 1px solid #000; }
+                    .info-table td { padding: 6pt 10pt; }
+                    .section { page-break-inside: avoid; margin-top: 16pt; margin-bottom: 10pt; }
+                    .section-title { font-weight: bold; text-transform: uppercase; font-size: 12pt; border-bottom: 1px solid #999; padding-bottom: 3pt; margin-bottom: 8pt; page-break-after: avoid; }
+                    p { margin: 0 0 10pt 0; text-align: justify; orphans: 3; widows: 3; }
+                    ul { margin: 4pt 0 12pt 0; padding-left: 24pt; }
+                    li { margin-bottom: 4pt; text-align: justify; orphans: 3; widows: 3; }
+                    .totali { page-break-before: always; padding-top: 20pt; }
+                    .totali-title { text-align: center; font-size: 14pt; font-weight: bold; text-transform: uppercase; margin-bottom: 20pt; }
+                    .totali-table { width: 80%; margin: 0 auto; border-collapse: collapse; border: 2px solid #000; }
+                    .totali-table td { padding: 12pt 15pt; }
+                    .totali-row-final td { border-top: 2px solid #000; background-color: #f2f2f2; }
+                </style>
+            </head>
+            <body>
+                <h2>Relazione Tecnica Descrittiva — Sintesi e Metodologia</h2>
+                <div class="subtitle">CONTRATTO DI RIFERIMENTO: ${getProfiloBadgeLabel(worker?.profilo, worker?.eliorType) || 'ND'}</div>
+
+                <table class="info-table">
+                    <tr><td style="width:130pt; font-weight:bold;">Pratica di:</td><td>${worker?.cognome || ''} ${worker?.nome || ''}</td></tr>
+                    <tr><td style="font-weight:bold;">Periodo Esaminato:</td><td>Dal ${inizioPeriodo} al ${finePeriodo}</td></tr>
+                </table>
+
+                <div class="section">
+                    <div class="section-title">1. La Premessa: Perché Chiediamo Queste Somme</div>
+                    <p>La legge europea (Direttiva 2003/88/CE) e la Suprema Corte di Cassazione (Sentenza n. 20216/2022) stabiliscono un principio fondamentale: quando un lavoratore va in ferie, ha il diritto di riposarsi senza subire alcuna penalizzazione economica rispetto al normale svolgimento dell'attività lavorativa.</p>
+                    <p>Durante l'anno, il lavoratore in esame percepisce regolarmente indennità connesse a disagi, turni notturni, festivi e altre voci legate al proprio profilo. La mancata erogazione di tali indennità in costanza di ferie determina un'evidente sperequazione economica, oggetto della presente richiesta di integrazione.</p>
+                </div>
+
+                <div class="section">
+                    <div class="section-title">2. Le Voci Analizzate (Rif. Allegato "Tabella 2 - Riepilogo Voci Variabili")</div>
+                    <p>Per quantificare il credito, sono stati esaminati minuziosamente i cedolini paga forniti. Come dettagliato nella "Tabella 2" dei conteggi, sono state isolate esclusivamente le "voci ricorrenti e continuative", escludendo tassativamente rimborsi spese, elargizioni una tantum o arretrati non pertinenti.</p>
+                    <p>Nello specifico del profilo lavorativo, sono state computate le seguenti indennità:</p>
+                    <ul>${voci.html}</ul>
+                </div>
+
+                <div class="section">
+                    <div class="section-title">3. Il Metodo di Calcolo (Rif. Allegato "Tabella 1 - Calcolo Differenze")</div>
+                    <p>A garanzia di inattaccabilità contabile, il sistema ha applicato il <b>"Criterio della Media Storica"</b> (Rif. Cass. 20216/2022). Il valore di una giornata feriale è stato calcolato estraendo la media matematica dell'anno solare precedente.</p>
+                    ${esempio.html}
+                </div>
+
+                <div class="section">
+                    <div class="section-title">4. L'Applicazione Mensile (Rif. Allegato "Tabella 3 - Dettaglio Analitico")</div>
+                    <p>Come documentato analiticamente nella "Tabella 3", il procedimento è stato reiterato per ogni singolo mese in cui il dipendente ha fruito di ferie.</p>
+                    ${spiegazione.html}
+                </div>
+
+                <div class="section">
+                    <div class="section-title">5. Conclusioni (Rif. Allegato "Prospetto Ufficiale di Ricalcolo")</div>
+                    <p>Le risultanze delle elaborazioni analitiche di cui sopra convergono nel documento conclusivo denominato "Riepilogo Somme Richieste", che certifica senza ombra di dubbio gli importi esatti riportati nello specchietto sottostante.</p>
+                </div>
+
+                <div class="totali">
+                    <div class="totali-title">Riepilogo degli Importi</div>
+                    <table class="totali-table">
+                        <tr>
+                            <td style="width:70%;"><b>+ DIFFERENZE LORDE MATURATE:</b></td>
+                            <td style="text-align:right; font-weight:bold; font-size:13pt;">€ ${fmt(lordoVal)}</td>
+                        </tr>
+                        ${showPercepito ? `<tr>
+                            <td style="border-top:1px solid #ccc;"><b>- IMPORTO GIÀ PERCEPITO IN BUSTA:</b></td>
+                            <td style="text-align:right; border-top:1px solid #ccc; font-weight:bold; font-size:13pt;">€ ${fmt(percepitoVal)}</td>
+                        </tr>` : ''}
+                        ${includeTickets ? `<tr>
+                            <td style="border-top:1px solid #ccc;"><b>+ CREDITO BUONI PASTO NON EROGATI:</b></td>
+                            <td style="text-align:right; border-top:1px solid #ccc; font-weight:bold; font-size:13pt;">€ ${fmt(ticketVal)}</td>
+                        </tr>` : ''}
+                        <tr class="totali-row-final">
+                            <td><b style="font-size:14pt;">TOTALE CREDITO ${(!showPercepito && !includeTickets) ? 'LORDO' : 'NETTO'} SPETTANTE:</b></td>
+                            <td style="text-align:right; font-weight:bold; font-size:14pt;">€ ${fmt(nettoVal)}</td>
+                        </tr>
+                    </table>
+                </div>
+            </body>
+            </html>
+        `);
+        printWindow.document.close();
+        printWindow.print();
     };
     const handleExportWord = () => {
         // --- 1. Ricalcolo Variabili ---
@@ -304,7 +358,7 @@ export const RelazioneModal = ({ isOpen, onClose, worker, totals, includeExFest 
             </head>
             <body>
                 <h2>RELAZIONE TECNICA DESCRITTIVA - SINTESI E METODOLOGIA</h2>
-                <div class="subtitle">CONTRATTO DI RIFERIMENTO: ${worker?.profilo || 'ND'}</div>
+                <div class="subtitle">CONTRATTO DI RIFERIMENTO: ${getProfiloBadgeLabel(worker?.profilo, worker?.eliorType) || 'ND'}</div>
                 
                 <table style="width: 100%; margin-bottom: 20px; border: 1px solid #000; padding: 10px;">
                     <tr><td style="width: 150px; font-weight: bold;">Pratica di:</td><td>${worker?.cognome || ''} ${worker?.nome || ''}</td></tr>
@@ -627,8 +681,6 @@ export const RelazioneModal = ({ isOpen, onClose, worker, totals, includeExFest 
         cellLabelTot.alignment = { horizontal: 'right', vertical: 'middle' };
 
         const cellTotLordo = sheet.getCell(rowTotali, endColRight);
-        // Usiamo SUBTOTAL invece di SUM per non sommare i totali doppi se Excel fa confusione con le righe raggruppate
-        const arrayRigheTotali = tuttiGliAnni.map((anno, index) => 5 + index + mesiOrdinati.filter(m => Number(m.year) < anno).length).join(',');
 
         if (tuttiGliAnni.length > 0) {
             cellTotLordo.value = { formula: `SUM(${colCreditoLetter}5:${colCreditoLetter}${currentRow - 1})/2` }; // Divide per 2 perché somma sia le righe nascoste che i subtotali
@@ -706,7 +758,7 @@ export const RelazioneModal = ({ isOpen, onClose, worker, totals, includeExFest 
                                 Relazione Tecnica Peritale
                             </h2>
                             <p className="text-[13px] text-slate-500 dark:text-slate-400 font-semibold tracking-wider mt-0.5 uppercase">
-                                {worker?.profilo || 'ND'} <span className="mx-2 text-slate-300 dark:text-slate-600">|</span> {worker?.cognome || ''} {worker?.nome || ''}
+                                {getProfiloBadgeLabel(worker?.profilo, worker?.eliorType) || 'ND'} <span className="mx-2 text-slate-300 dark:text-slate-600">|</span> {worker?.cognome || ''} {worker?.nome || ''}
                             </p>
                         </div>
                     </div>
