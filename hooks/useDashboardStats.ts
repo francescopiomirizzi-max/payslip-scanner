@@ -47,12 +47,9 @@ export const useDashboardStats = (
     // --- 1. TOTALI CARD DASHBOARD ---
     const dashboardStats = useMemo<DashboardStats>(() => {
         return workers.reduce((acc, worker) => {
-            const storedTicket = localStorage.getItem(`tickets_${worker.id}`);
-            const includeTickets = storedTicket !== null ? JSON.parse(storedTicket) : true;
-            const storedExFest = localStorage.getItem(`exFest_${worker.id}`);
-            const includeExFest = storedExFest !== null ? JSON.parse(storedExFest) : false;
-            const storedStart = localStorage.getItem(`startYear_${worker.id}`);
-            const startClaimYear = storedStart ? parseInt(storedStart) : 2008;
+            const includeTickets = worker.includeTickets ?? true;
+            const includeExFest = worker.includeExFest ?? false;
+            const startClaimYear = worker.startClaimYear ?? 2008;
 
             const safeAnni = (Array.isArray(worker.anni) ? worker.anni : []) as any[];
             const allYears = Array.from(new Set(safeAnni.map((r: any) => Number(r.year)))).filter(y => !isNaN(y as number)).sort((a, b) => (a as number) - (b as number)) as number[];
@@ -87,12 +84,9 @@ export const useDashboardStats = (
         if (!activeStatsModal) return [];
 
         return workers.map(worker => {
-            const storedTicket = localStorage.getItem(`tickets_${worker.id}`);
-            const includeTickets = storedTicket !== null ? JSON.parse(storedTicket) : true;
-            const storedExFest = localStorage.getItem(`exFest_${worker.id}`);
-            const includeExFest = storedExFest !== null ? JSON.parse(storedExFest) : false;
-            const storedStart = localStorage.getItem(`startYear_${worker.id}`);
-            const startClaimYear = storedStart ? parseInt(storedStart) : 2008;
+            const includeTickets = worker.includeTickets ?? true;
+            const includeExFest = worker.includeExFest ?? false;
+            const startClaimYear = worker.startClaimYear ?? 2008;
 
             const safeAnni = (Array.isArray(worker.anni) ? worker.anni : []) as any[];
             const allYears = Array.from(new Set(safeAnni.map((r: any) => Number(r.year)))).filter(y => !isNaN(y as number)).sort((a, b) => (a as number) - (b as number)) as number[];

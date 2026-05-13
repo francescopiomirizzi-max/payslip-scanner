@@ -104,7 +104,8 @@ const AppRouter: React.FC<AppRouterProps> = ({
                         worker={selectedWorker}
                         onBack={() => setViewMode('home')}
                         onEdit={() => setViewMode('complex')}
-                        startClaimYear={Number(localStorage.getItem(`startYear_${selectedWorker.id}`)) || 2008}
+                        startClaimYear={selectedWorker.startClaimYear ?? 2008}
+                        onUpdateWorkerFields={handleUpdateWorkerFields}
                     />
                 </div>
             )}

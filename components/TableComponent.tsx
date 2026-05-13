@@ -32,6 +32,7 @@ interface TableComponentProps {
   onBack: () => void;
   onEdit: () => void;
   startClaimYear: number;
+  onUpdateWorkerFields?: (fields: Partial<Worker>) => void;
 }
 
 // --- FUNZIONI UTILITY RIMOSSE ---
@@ -176,7 +177,7 @@ const handleDownloadPDF = (
 };
 
 // --- COMPONENTE PRINCIPALE ---
-const TableComponent: React.FC<TableComponentProps> = ({ worker, monthlyInputs, onBack, onEdit, startClaimYear }) => {
+const TableComponent: React.FC<TableComponentProps> = ({ worker, monthlyInputs, onBack, onEdit, startClaimYear, onUpdateWorkerFields }) => {
 
   // ✨ BISTURI 1: QUICK ACTIONS CONTESTUALI (Radar Intelligente)
   const { setQuickActions } = useIsland();
@@ -231,16 +232,19 @@ const TableComponent: React.FC<TableComponentProps> = ({ worker, monthlyInputs, 
   const [showInfoTetto, setShowInfoTetto] = useState(false);
   // --- STATI CON MEMORIA ---
   const [includeExFest, setIncludeExFest] = useState(() => {
+    if (worker.includeExFest !== undefined) return worker.includeExFest;
     const saved = localStorage.getItem(`report_exfest_${worker.id}`);
     return saved !== null ? JSON.parse(saved) : false;
   });
 
   const [includeTickets, setIncludeTickets] = useState(() => {
+    if (worker.includeTickets !== undefined) return worker.includeTickets;
     const saved = localStorage.getItem(`report_tickets_${worker.id}`);
     return saved !== null ? JSON.parse(saved) : true;
   });
 
   const [showPercepito, setShowPercepito] = useState(() => {
+    if (worker.reportShowPercepito !== undefined) return worker.reportShowPercepito;
     const saved = localStorage.getItem(`report_percepito_${worker.id}`);
     return saved !== null ? JSON.parse(saved) : true;
   });
@@ -249,7 +253,8 @@ const TableComponent: React.FC<TableComponentProps> = ({ worker, monthlyInputs, 
     localStorage.setItem(`report_exfest_${worker.id}`, JSON.stringify(includeExFest));
     localStorage.setItem(`report_tickets_${worker.id}`, JSON.stringify(includeTickets));
     localStorage.setItem(`report_percepito_${worker.id}`, JSON.stringify(showPercepito));
-  }, [includeExFest, includeTickets, showPercepito, worker.id]);
+    onUpdateWorkerFields?.({ includeExFest, includeTickets, reportShowPercepito: showPercepito });
+  }, [includeExFest, includeTickets, showPercepito]);
 
   // --- 1. LOGICA DATI — MOTORE UNIFICATO ---
   const tableData = useMemo(() => {

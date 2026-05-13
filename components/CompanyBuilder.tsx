@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useUserSettings } from '../hooks/useUserSettings';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     X, Building2, Plus, Lock, Trash2, Save, Database,
@@ -17,6 +18,7 @@ const SYSTEM_COMPANIES = ['RFI', 'ELIOR', 'REKEEP'];
 const CompanyBuilder: React.FC<CompanyBuilderProps> = ({ isOpen, onClose }) => {
     // ✨ GENERATORE ID INDISTRUTTIBILE (Funziona anche senza HTTPS)
     const generateUID = () => Date.now().toString(36) + Math.random().toString(36).substring(2);
+    const { customCompanies, setCustomCompanies } = useUserSettings();
     const [companies, setCompanies] = useState<Record<string, { columns: ColumnDef[] }>>({});
     const [activeCompany, setActiveCompany] = useState<string | null>(null);
     const [tempColumns, setTempColumns] = useState<any[]>([]);
@@ -49,19 +51,10 @@ const CompanyBuilder: React.FC<CompanyBuilderProps> = ({ isOpen, onClose }) => {
         setTimeout(() => setToast(prev => ({ ...prev, show: false })), 3000);
     };
 
-    // Caricamento dati iniziale
+    // Sincronizza lo stato locale con i dati cloud quando il modal si apre
     useEffect(() => {
-        if (isOpen) {
-            const saved = localStorage.getItem('customCompanies');
-            if (saved) {
-                try {
-                    setCompanies(JSON.parse(saved));
-                } catch (e) {
-                    console.error("Errore nel parsing del Database Aziende");
-                }
-            }
-        }
-    }, [isOpen]);
+        if (isOpen) setCompanies(customCompanies);
+    }, [isOpen, customCompanies]);
 
     const handleAddCompany = () => {
         const name = newCompanyName.trim().toUpperCase();
@@ -76,8 +69,7 @@ const CompanyBuilder: React.FC<CompanyBuilderProps> = ({ isOpen, onClose }) => {
         setActiveCompany(name);
         setTempColumns([]);
         setNewCompanyName('');
-        localStorage.setItem('customCompanies', JSON.stringify(newComps));
-        window.dispatchEvent(new Event('storage'));
+        void setCustomCompanies(newComps);
         showToast(`Modello ${name} inizializzato.`);
     };
 
@@ -86,8 +78,7 @@ const CompanyBuilder: React.FC<CompanyBuilderProps> = ({ isOpen, onClose }) => {
         delete newComps[name];
         setCompanies(newComps);
         if (activeCompany === name) setActiveCompany(null);
-        localStorage.setItem('customCompanies', JSON.stringify(newComps));
-        window.dispatchEvent(new Event('storage'));
+        void setCustomCompanies(newComps);
         showToast('Modello rimosso correttamente.', 'error');
     };
 
@@ -137,8 +128,7 @@ const CompanyBuilder: React.FC<CompanyBuilderProps> = ({ isOpen, onClose }) => {
 
         const newComps = { ...companies, [activeCompany]: { columns: cleanCols } };
         setCompanies(newComps);
-        localStorage.setItem('customCompanies', JSON.stringify(newComps));
-        window.dispatchEvent(new Event('storage'));
+        void setCustomCompanies(newComps);
         setHasUnsavedChanges(false);
         showToast('Configurazione salvata e motore AI aggiornato.');
     };

@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { ProfiloAzienda } from '../types';
+import { useUserSettings } from '../hooks/useUserSettings';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     X, User, Briefcase, Building2, Sparkles, Save,
@@ -199,6 +200,7 @@ const WorkerModal: React.FC<WorkerModalProps> = ({ isOpen, onClose, onConfirm, i
         eliorType?: 'viaggiante' | 'magazzino';
     }>({ nome: '', cognome: '', ruolo: '', profiloProfessionale: '', profilo: null, eliorType: 'viaggiante' });
 
+    const { customCompanies } = useUserSettings();
     const [focusedField, setFocusedField] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [isScanning, setIsScanning] = useState(false);
@@ -207,21 +209,13 @@ const WorkerModal: React.FC<WorkerModalProps> = ({ isOpen, onClose, onConfirm, i
     const [isCompanyExpanded, setIsCompanyExpanded] = useState(false);
 
     useEffect(() => {
-        if (isOpen) {
-            const saved = localStorage.getItem('customCompanies');
-            if (saved) {
-                try {
-                    const parsed = JSON.parse(saved);
-                    const customOpts = Object.keys(parsed).map(key => ({
-                        value: key,
-                        label: key,
-                        sub: 'Modello Custom'
-                    }));
-                    setDynamicOptions([...OPTIONS, ...customOpts]);
-                } catch (e) { console.error('WorkerModal: errore parsing customCompanies (options)', e); }
-            }
-        }
-    }, [isOpen]);
+        const customOpts = Object.keys(customCompanies).map(key => ({
+            value: key,
+            label: key,
+            sub: 'Modello Custom'
+        }));
+        setDynamicOptions([...OPTIONS, ...customOpts]);
+    }, [isOpen, customCompanies]);
     // --- NUOVI STATI PER QR CODE ---
     const [qrSessionId, setQrSessionId] = useState('');
     const [isQrActive, setIsQrActive] = useState(false);
@@ -252,14 +246,7 @@ const WorkerModal: React.FC<WorkerModalProps> = ({ isOpen, onClose, onConfirm, i
     const compileDataFromAI = (data: any) => {
         setFormData(prev => {
             // 1. Recupera dinamicamente tutte le aziende valide (Sistema + Custom)
-            let validCompanies = ['RFI', 'ELIOR', 'REKEEP'];
-            const saved = localStorage.getItem('customCompanies');
-            if (saved) {
-                try {
-                    const parsed = JSON.parse(saved);
-                    validCompanies = [...validCompanies, ...Object.keys(parsed)];
-                } catch (e) { console.error('WorkerModal: errore parsing customCompanies (validation)', e); }
-            }
+            const validCompanies = ['RFI', 'ELIOR', 'REKEEP', ...Object.keys(customCompanies)];
 
             // 2. Normalizza il nome letto dall'AI (tutto maiuscolo)
             const detectedCompany = data.azienda ? data.azienda.toUpperCase().trim() : '';

@@ -151,6 +151,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
   const [aiTfrYear, setAiTfrYear] = useState<string>('');
 
   const [startClaimYear, setStartClaimYear] = useState<number>(() => {
+    if (worker.startClaimYear !== undefined) return worker.startClaimYear;
     const saved = localStorage.getItem(`startYear_${worker.id}`);
     return saved ? parseInt(saved) : 2008;
   });
@@ -179,8 +180,8 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
       const anniCompilati = activeInputs.map((d: AnnoDati) => Number(d.year)).filter((y: number) => !isNaN(y));
       if (anniCompilati.length > 0) return Math.max(...anniCompilati);
     }
-    const savedStartYear = localStorage.getItem(`startYear_${worker.id}`);
-    const initialYear = savedStartYear ? parseInt(savedStartYear) : 2008;
+    const initialYear = worker.startClaimYear
+      ?? (localStorage.getItem(`startYear_${worker.id}`) ? parseInt(localStorage.getItem(`startYear_${worker.id}`)!) : 2008);
     return initialYear - 1;
   });
 
@@ -219,7 +220,8 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
 
   useEffect(() => {
     localStorage.setItem(`startYear_${worker.id}`, startClaimYear.toString());
-  }, [startClaimYear, worker.id]);
+    onUpdateWorkerFields({ startClaimYear });
+  }, [startClaimYear]);
 
   useEffect(() => {
     const prevYear = startClaimYear - 1;
@@ -277,11 +279,13 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
   const [isTimelineOpen, setIsTimelineOpen] = useState(false);
 
   const [includeExFest, setIncludeExFest] = useState(() => {
+    if (worker.includeExFest !== undefined) return worker.includeExFest;
     const saved = localStorage.getItem(`exFest_${worker.id}`);
     return saved !== null ? JSON.parse(saved) : false;
   });
 
   const [includeTickets, setIncludeTickets] = useState(() => {
+    if (worker.includeTickets !== undefined) return worker.includeTickets;
     const saved = localStorage.getItem(`tickets_${worker.id}`);
     return saved !== null ? JSON.parse(saved) : true;
   });
@@ -289,7 +293,8 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
   React.useEffect(() => {
     localStorage.setItem(`exFest_${worker.id}`, JSON.stringify(includeExFest));
     localStorage.setItem(`tickets_${worker.id}`, JSON.stringify(includeTickets));
-  }, [includeExFest, includeTickets, worker.id]);
+    onUpdateWorkerFields({ includeExFest, includeTickets });
+  }, [includeExFest, includeTickets]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -571,6 +576,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
         }}
         onEdit={() => setShowReport(false)}
         startClaimYear={startClaimYear}
+        onUpdateWorkerFields={onUpdateWorkerFields}
       />
     );
   }

@@ -21,6 +21,10 @@ function dbToWorker(row: any): Worker {
         notes: row.notes ?? undefined,
         tfr_pregresso: row.tfr_pregresso ?? undefined,
         tfr_pregresso_anno: row.tfr_pregresso_anno ?? undefined,
+        startClaimYear: row.start_claim_year ?? undefined,
+        includeExFest: row.include_ex_fest ?? undefined,
+        includeTickets: row.include_tickets ?? undefined,
+        reportShowPercepito: row.report_show_percepito ?? undefined,
         anni: row.anni ?? [],
     };
 }
@@ -40,6 +44,10 @@ function workerToDb(worker: Worker, ownerId: string): object {
         notes: worker.notes ?? null,
         tfr_pregresso: worker.tfr_pregresso ?? null,
         tfr_pregresso_anno: worker.tfr_pregresso_anno ?? null,
+        start_claim_year: worker.startClaimYear ?? null,
+        include_ex_fest: worker.includeExFest ?? null,
+        include_tickets: worker.includeTickets ?? null,
+        report_show_percepito: worker.reportShowPercepito ?? null,
         anni: worker.anni,
     };
 }
