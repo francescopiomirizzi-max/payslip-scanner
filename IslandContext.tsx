@@ -25,10 +25,12 @@ interface IslandContextType {
   closeIsland: () => void;
 
   // STATO CARICAMENTI E AZIONI
-  uploadState: { isUploading: boolean; isFinishing: boolean; isError: boolean; type: 'single' | 'batch' | 'mobile'; progress: number; total: number };
+  uploadState: { isUploading: boolean; isFinishing: boolean; isError: boolean; type: 'single' | 'batch' | 'mobile'; progress: number; total: number; minimized: boolean };
   startUpload: (type: 'single' | 'batch' | 'mobile', total: number) => void;
   updateUploadProgress: (progress: number) => void;
   finishUpload: (successCount: number, errorCount: number, type: 'single' | 'batch' | 'mobile', customError?: string) => void;
+  minimizeUpload: () => void;
+  restoreUpload: () => void;
 
   // ✨ FIX: AGGIUNTO IL COMANDO QUICK ACTIONS
   setQuickActions: (visible: boolean) => void;
@@ -43,7 +45,7 @@ export const IslandProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const [workerStats, setWorkerStats] = useState<any | null>(null);
   const [calcHistory, setCalcHistory] = useState<CalcHistoryItem[]>([]);
 
-  const [uploadState, setUploadState] = useState<{ isUploading: boolean; isFinishing: boolean; isError: boolean; type: 'single' | 'batch' | 'mobile'; progress: number; total: number }>({ isUploading: false, isFinishing: false, isError: false, type: 'batch', progress: 0, total: 0 });
+  const [uploadState, setUploadState] = useState<{ isUploading: boolean; isFinishing: boolean; isError: boolean; type: 'single' | 'batch' | 'mobile'; progress: number; total: number; minimized: boolean }>({ isUploading: false, isFinishing: false, isError: false, type: 'batch', progress: 0, total: 0, minimized: false });
 
   // ✨ FIX 2: FUNZIONI BASE RICOSTRUITE
   const closeIsland = useCallback(() => {
@@ -82,7 +84,7 @@ export const IslandProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
   // --- MOTORE DEI CARICAMENTI ---
   const startUpload = useCallback((type: 'single' | 'batch' | 'mobile', total: number) => {
-    setUploadState({ isUploading: true, isFinishing: false, isError: false, type, progress: 0, total });
+    setUploadState({ isUploading: true, isFinishing: false, isError: false, type, progress: 0, total, minimized: false });
     setMode('uploading');
   }, []);
 
@@ -90,13 +92,23 @@ export const IslandProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     setUploadState(prev => ({ ...prev, progress }));
   }, []);
 
+  // Background Job Drawer: minimizza/ripristina senza interrompere l'upload
+  const minimizeUpload = useCallback(() => {
+    setUploadState(prev => prev.isUploading ? { ...prev, minimized: true } : prev);
+  }, []);
+
+  const restoreUpload = useCallback(() => {
+    setUploadState(prev => ({ ...prev, minimized: false }));
+  }, []);
+
   const finishUpload = useCallback((successCount: number, errorCount: number, type: 'single' | 'batch' | 'mobile', customError?: string) => {
     const isError = successCount === 0;
 
-    setUploadState(prev => ({ ...prev, isFinishing: true, isError, progress: prev.total }));
+    // Restore implicito così il completion è visibile sull'isola principale (non sulla pill).
+    setUploadState(prev => ({ ...prev, isFinishing: true, isError, progress: prev.total, minimized: false }));
 
     setTimeout(() => {
-      setUploadState(prev => ({ ...prev, isUploading: false, isFinishing: false }));
+      setUploadState(prev => ({ ...prev, isUploading: false, isFinishing: false, minimized: false }));
       setMode('idle');
 
       let msg = '';
@@ -136,7 +148,8 @@ export const IslandProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       mode, notification, workerStats, calcHistory,
       showNotification, showWorkerStats, toggleCalcHistory, addCalcHistory, clearCalcHistory, closeIsland,
       uploadState, startUpload, updateUploadProgress, finishUpload,
-      setQuickActions // ✨ FIX: ORA VIENE ESPORTATA CORRETTAMENTE!
+      minimizeUpload, restoreUpload,
+      setQuickActions
     }}>
       {children}
     </IslandContext.Provider>

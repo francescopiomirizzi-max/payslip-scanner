@@ -14,7 +14,7 @@ const PROMPT_ANAGRAFICA = `
   2. "cognome": Il cognome del lavoratore.
   3. "ruolo": La qualifica o la mansione (es. "Macchinista", "Capotreno", "Cuoco", "Operatore", "Capo Impianto").
   4. "profiloProfessionale": Il livello di inquadramento, parametro o livello contrattuale (es. "Livello B", "Parametro 130", "Livello 4", "B1").
-  5. "azienda": Identifica l'azienda dalla testata o dal logo (es. "RFI", "ELIOR", "REKEEP"). Se trovi "Trenitalia" o "Ferrovie", scrivi "RFI".
+  5. "azienda": Identifica l'azienda dalla testata o dal logo (es. "RFI", "ELIOR", "CLEAN_SERVICE"). Se trovi "Trenitalia" o "Ferrovie", scrivi "RFI". Se trovi "Clean Service", "Clean Service SRL" o varianti, scrivi "CLEAN_SERVICE".
 
   Pulisci i testi (es. metti la prima lettera maiuscola per nome e cognome).
   

@@ -51,7 +51,7 @@ const generaRelazioneTestuale = (worker: any, totali: any, includeExFest: boolea
     }
 
     let noteContratto = "Il calcolo si basa sulle voci accessorie standard del contratto Ferroviario.";
-    if (worker?.profilo === 'REKEEP') noteContratto = "Il calcolo include le specifiche indennità di appalto previste dal CCNL Multiservizi/Ferroviario.";
+    if (worker?.profilo === 'CLEAN_SERVICE') noteContratto = "Il calcolo include le specifiche indennità di appalto previste dal CCNL Multiservizi (settore Ristorazione e Pulizie).";
     if (worker?.profilo === 'ELIOR') noteContratto = "Il calcolo considera le voci tipiche della Ristorazione a Bordo.";
 
     return `

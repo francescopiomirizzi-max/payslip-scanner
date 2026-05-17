@@ -5,7 +5,7 @@ import { triggerConfetti } from '../utils/confetti';
 import { supabase } from '../supabaseClient';
 import { migrateLocalToCloud } from '../utils/migrateFromLocalToCloud';
 
-const CARD_COLORS = ['blue', 'indigo', 'emerald', 'orange'];
+const CARD_COLORS = ['blue', 'emerald', 'orange', 'rose', 'violet', 'teal'];
 
 function dbToWorker(row: any): Worker {
     return {
@@ -63,7 +63,8 @@ export const useWorkers = (addToast: (message: string, type: 'success' | 'error'
     const [authInitialized, setAuthInitialized] = useState(false);
 
     const [selectedWorker, setSelectedWorker] = useState<Worker | null>(null);
-    const [viewMode, setViewMode] = useState<'home' | 'simple' | 'complex' | 'stats'>('home');
+    const [viewMode, setViewMode] = useState<'home' | 'simple' | 'complex' | 'stats' | 'archive'>('home');
+    const [archiveWorkerId, setArchiveWorkerId] = useState<string | null>(null);
 
     // --- STATO MODALE CRUD ---
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -188,6 +189,7 @@ export const useWorkers = (addToast: (message: string, type: 'success' | 'error'
     const matchesStatusFilter = (status: string | undefined, filter: string): boolean => {
         if (filter === 'ALL') return true;
         if (filter === 'analisi') return !status || status === 'aperta' || status === 'in_corso';
+        if (filter === 'in_corso') return status !== 'chiusa';
         return status === filter;
     };
 
@@ -216,6 +218,11 @@ export const useWorkers = (addToast: (message: string, type: 'success' | 'error'
         setSelectedWorker(null);
         setViewMode('home');
         setRefreshStats(prev => prev + 1);
+    };
+
+    const handleOpenArchive = (id: string) => {
+        setArchiveWorkerId(id);
+        setViewMode('archive');
     };
 
     // --- CRUD ---
@@ -457,6 +464,8 @@ export const useWorkers = (addToast: (message: string, type: 'success' | 'error'
         handleOpenSimple,
         handleOpenComplex,
         handleBack,
+        archiveWorkerId,
+        handleOpenArchive,
 
         // Import/Export
         fileInputRef,

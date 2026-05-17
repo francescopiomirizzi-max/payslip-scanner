@@ -4,11 +4,11 @@ import {
   YEARS,
   INDENNITA_RFI,
   INDENNITA_ELIOR,
-  INDENNITA_REKEEP,
+  INDENNITA_CLEAN_SERVICE,
   getColumnsByProfile,
   ProfiloAzienda
 } from '../../types';
-import { parseLocalFloat, formatCurrency, formatDay } from '../../utils/formatters';
+import { parseLocalFloat, formatCurrency, formatDay, getProfiloBadgeLabel } from '../../utils/formatters';
 import { Info, TrendingUp, DollarSign, FileSearch } from 'lucide-react';
 
 
@@ -152,7 +152,7 @@ const IndemnityPivotTable: React.FC<IndemnityPivotTableProps> = ({
 
   const customTheme = useMemo(() => {
     if (profilo === 'ELIOR') return { badge: 'text-orange-400 border-orange-600 bg-orange-900/30', header: 'text-orange-600' };
-    if (profilo === 'REKEEP') return { badge: 'text-emerald-400 border-emerald-600 bg-emerald-900/30', header: 'text-emerald-600' };
+    if (profilo === 'CLEAN_SERVICE') return { badge: 'text-emerald-400 border-emerald-600 bg-emerald-900/30', header: 'text-emerald-600' };
     if (profilo === 'RFI') return { badge: 'text-blue-400 border-blue-600 bg-blue-900/30', header: 'text-blue-700' };
 
     // AZIENDE CUSTOM (Palette dinamica sincronizzata)
@@ -204,7 +204,7 @@ const IndemnityPivotTable: React.FC<IndemnityPivotTableProps> = ({
         <div className="flex items-center gap-2">
           <span>RIEPILOGO VOCI VARIABILI</span>
           <span className={`px-2 py-0.5 rounded text-[10px] border border-slate-600 uppercase tracking-tighter ${badgeClass}`}>
-            {profilo}
+            {getProfiloBadgeLabel(profilo)}
           </span>
         </div>
 

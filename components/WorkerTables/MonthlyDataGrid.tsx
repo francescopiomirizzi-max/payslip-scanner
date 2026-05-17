@@ -494,7 +494,7 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
         }
       });
 
-      return rowData;
+      return rowData as AnnoDati;
     });
   }, [currentYearData, selectedYear, currentColumns]);
   // --- HELPER FORMULE ---
@@ -523,7 +523,7 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
     updatedRow = applyFormulas(updatedRow);
 
     const otherData = data.filter(d => !(d.year === selectedYear && d.monthIndex === monthIndex));
-    updateDataWithHistory([...otherData, updatedRow]);
+    updateDataWithHistory([...otherData, updatedRow as AnnoDati]);
   };
 
   const handleInputFocus = (e: React.FocusEvent<HTMLInputElement>, rowIndex: number, colId: string) => {
@@ -545,7 +545,7 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
       if (col.id !== 'month' && col.id !== 'note') (updatedRow as any)[col.id] = 0;
     });
     const otherData = data.filter(d => !(d.year === selectedYear && d.monthIndex === rowToClear));
-    updateDataWithHistory([...otherData, updatedRow]);
+    updateDataWithHistory([...otherData, updatedRow as AnnoDati]);
 
     setRowToClear(null); // Chiude il modale
     triggerUndoToast(`Dati di ${meseNome} azzerati.`); // ✨ ACCENDE IL TOAST!

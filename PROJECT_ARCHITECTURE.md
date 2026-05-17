@@ -1,7 +1,7 @@
 # RailFlow: Project Architecture & Developer Guide
 
 ## 📌 Project Overview
-**RailFlow** (precedentemente Payslip Scanner) è un'applicazione web avanzata e scalabile progettata per la gestione delle indennità feriali e delle statistiche sui lavoratori per diverse aziende (come RFI, Elior, Rekeep, ecc.). 
+**RailFlow** (precedentemente Payslip Scanner) è un'applicazione web avanzata e scalabile progettata per la gestione delle indennità feriali e delle statistiche sui lavoratori per diverse aziende (come RFI, Elior, Clean Service SRL, ecc.). 
 L'obiettivo del progetto è offrire uno strumento professionale, altamente reattivo e con un'estetica premium per il calcolo dinamico di indennità, la generazione di report, la gestione CRUD dei lavoratori e il monitoraggio statistico (dashboard).
 
 ---

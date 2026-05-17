@@ -16,7 +16,7 @@ export const YEARS = Array.from({ length: 19 }, (_, i) => 2007 + i);
 // --- MODIFICA CHIRURGICA 1: TIPO APERTO ---
 // Invece di limitare alle sole 3 aziende, lo apriamo a qualsiasi stringa, 
 // mantenendo i suggerimenti per le 3 principali.
-export type ProfiloAzienda = 'RFI' | 'ELIOR' | 'REKEEP' | string;
+export type ProfiloAzienda = 'RFI' | 'ELIOR' | 'CLEAN_SERVICE' | string;
 
 export interface AnnoDati {
   id?: string;
@@ -143,17 +143,31 @@ export const INDENNITA_ELIOR_MAGAZZINO: ColumnDef[] = [
   { id: '4285', label: '26/MI Retrib.', subLabel: '(4285)', width: 'min-w-[100px]' },
 ];
 
-// Colonne REKEEP (Invariato)
-export const INDENNITA_REKEEP: ColumnDef[] = [
-  { id: 'I1037C', label: 'Ind. Domenicale', subLabel: '(I1037C)', width: 'min-w-[110px]', type: 'currency' },
-  { id: 'I1040C', label: 'Lav. Notturno', subLabel: '(I1040C)', width: 'min-w-[110px]', type: 'currency' },
-  { id: 'I215FC', label: 'Turni Non Cad.', subLabel: '(I215FC)', width: 'min-w-[110px]', type: 'currency' },
-  { id: 'I225FC', label: 'Ind. Pernott.', subLabel: '(I225FC)', width: 'min-w-[110px]', type: 'currency' },
-  { id: 'I232FC', label: 'Ass. Residenza', subLabel: '(I232FC)', width: 'min-w-[110px]', type: 'currency' },
-  { id: 'I1182C', label: 'Ind. Sussidiaria', subLabel: '(I1182C)', width: 'min-w-[110px]', type: 'currency' },
-  { id: 'D2200', label: 'Fest. Non God.', subLabel: '(D2200)', width: 'min-w-[110px]', type: 'currency' },
-  { id: 'S1800C', label: 'Straord. 18%', subLabel: '(S1800C)', width: 'min-w-[110px]', type: 'currency' },
-  { id: 'M3500C', label: 'Maggioraz. 35%', subLabel: '(M3500C)', width: 'min-w-[110px]', type: 'currency' },
+// Colonne CLEAN SERVICE SRL (CCNL Multiservizi - Ristorazione e Pulizie)
+export const INDENNITA_CLEAN_SERVICE: ColumnDef[] = [
+  // Maggiorazioni Turni e Festività
+  { id: '8037', label: 'Lav. Notturno',    subLabel: '(8037)', width: 'min-w-[110px]', type: 'currency' },
+  { id: '8057', label: 'Turno Non Cad.',   subLabel: '(8057)', width: 'min-w-[110px]', type: 'currency' },
+  { id: '8029', label: 'Dom. > 2h',        subLabel: '(8029)', width: 'min-w-[110px]', type: 'currency' },
+  { id: '8019', label: 'Lav. Festivo 35%', subLabel: '(8019)', width: 'min-w-[110px]', type: 'currency' },
+  { id: '565',  label: 'Ore Fest. 35%',    subLabel: '(565)',  width: 'min-w-[110px]', type: 'currency' },
+  { id: '8032', label: 'Dom. Pasqua',      subLabel: '(8032)', width: 'min-w-[110px]', type: 'currency' },
+  { id: '442',  label: 'Fest. S.Pasqua',   subLabel: '(442)',  width: 'min-w-[110px]', type: 'currency' },
+  // Straordinario / Supplementare
+  { id: '8007', label: 'Straord. 18%',     subLabel: '(8007)', width: 'min-w-[110px]', type: 'currency' },
+  { id: '18',   label: 'Supplem. 18%',     subLabel: '(18)',   width: 'min-w-[110px]', type: 'currency' },
+  // Flessibilità Oraria
+  { id: '437',  label: 'Flex 13-24',       subLabel: '(437)',  width: 'min-w-[110px]', type: 'currency' },
+  { id: '440',  label: 'Flex 24-30',       subLabel: '(440)',  width: 'min-w-[110px]', type: 'currency' },
+  { id: '441',  label: 'Flex > 30',        subLabel: '(441)',  width: 'min-w-[110px]', type: 'currency' },
+  // Indennità Specifiche
+  { id: '820',  label: 'Ind. Presenza',    subLabel: '(820)',  width: 'min-w-[110px]', type: 'currency' },
+  { id: '739',  label: 'Ind. Disposiz.',   subLabel: '(739)',  width: 'min-w-[110px]', type: 'currency' },
+  { id: '380',  label: 'Treno in Giorn.',  subLabel: '(380)',  width: 'min-w-[110px]', type: 'currency' },
+  { id: '315',  label: 'Trasferta',        subLabel: '(315)',  width: 'min-w-[110px]', type: 'currency' },
+  { id: '392',  label: 'Trasf. Italia',    subLabel: '(392)',  width: 'min-w-[110px]', type: 'currency' },
+  { id: '8038', label: 'Pernottaz.',       subLabel: '(8038)', width: 'min-w-[110px]', type: 'currency' },
+  { id: '8053', label: 'Maneggio Den.',    subLabel: '(8053)', width: 'min-w-[110px]', type: 'currency' },
 ];
 
 // --- COLONNA ARRETRATI (Universale) ---
@@ -167,7 +181,7 @@ export const COLONNA_ARRETRATI: ColumnDef = {
 
 // --- MODIFICA CHIRURGICA 2: IL MOTORE DI FUSIONE ---
 // Questa funzione adesso cerca prima nei salvataggi locali. Se non trova l'azienda custom, 
-// usa i profili di sistema standard (RFI, ELIOR, REKEEP).
+// usa i profili di sistema standard (RFI, ELIOR, CLEAN_SERVICE).
 export const getColumnsByProfile = (profilo: ProfiloAzienda, eliorType?: 'viaggiante' | 'magazzino'): ColumnDef[] => {
   let specificColumns: ColumnDef[] = [];
 
@@ -192,8 +206,8 @@ export const getColumnsByProfile = (profilo: ProfiloAzienda, eliorType?: 'viaggi
       case 'ELIOR':
         specificColumns = eliorType === 'magazzino' ? INDENNITA_ELIOR_MAGAZZINO : INDENNITA_ELIOR;
         break;
-      case 'REKEEP':
-        specificColumns = INDENNITA_REKEEP;
+      case 'CLEAN_SERVICE':
+        specificColumns = INDENNITA_CLEAN_SERVICE;
         break;
       case 'RFI':
         specificColumns = INDENNITA_RFI;

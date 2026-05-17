@@ -6,7 +6,8 @@ import {
 import {
   parseLocalFloat,
   formatCurrency,
-  formatDay
+  formatDay,
+  getProfiloBadgeLabel
 } from '../../utils/formatters';
 import { computeHolidayIndemnity } from '../../utils/calculationEngine';
 import {
@@ -61,7 +62,7 @@ const AnnualCalculationTable: React.FC<AnnualCalculationTableProps> = ({
   const [interestRate, setInterestRate] = useState<string>("0");
   const badgeClass = useMemo(() => {
     if (profilo === 'ELIOR') return 'text-orange-400 border-orange-600 bg-orange-900/30';
-    if (profilo === 'REKEEP') return 'text-emerald-400 border-emerald-600 bg-emerald-900/30';
+    if (profilo === 'CLEAN_SERVICE') return 'text-emerald-400 border-emerald-600 bg-emerald-900/30';
     if (profilo === 'RFI') return 'text-blue-400 border-blue-600 bg-blue-900/30';
 
     // AZIENDE CUSTOM (Palette dinamica)
@@ -200,7 +201,7 @@ const AnnualCalculationTable: React.FC<AnnualCalculationTableProps> = ({
             <Calculator className="w-4 h-4 text-emerald-400" />
             <span>CALCOLO DIFFERENZE PER ANNO</span>
             <span className={`px-2 py-0.5 rounded text-[10px] font-bold tracking-widest border uppercase ${badgeClass}`}>
-              {profilo}
+              {getProfiloBadgeLabel(profilo)}
             </span>
           </div>
 

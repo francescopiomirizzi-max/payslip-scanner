@@ -62,7 +62,7 @@ const App: React.FC = () => {
         handleOpenModal, openEditModal, handleSaveWorker,
         workerToDelete, setWorkerToDelete, handleDeleteWorker, confirmDelete,
         handleUpdateWorkerData, handleUpdateStatus, handleUpdateWorkerFields, updateWorkerById,
-        handleOpenSimple, handleOpenComplex, handleBack,
+        handleOpenSimple, handleOpenComplex, handleBack, archiveWorkerId, handleOpenArchive,
         fileInputRef, isImportModalOpen, setIsImportModalOpen, importPendingData, setImportPendingData,
         handleExportData, handleImportData, executeImport,
     } = useWorkers(addToast);
@@ -89,7 +89,7 @@ const App: React.FC = () => {
 
     // --- DYNAMIC ISLAND SYNC ---
     useEffect(() => {
-        if (viewMode === 'home' || viewMode === 'stats') {
+        if (viewMode === 'home' || viewMode === 'stats' || viewMode === 'archive') {
             setQuickActions(false);
         }
     }, [viewMode, setQuickActions]);
@@ -101,6 +101,7 @@ const App: React.FC = () => {
         const handleLogoutEvent = () => handleLogout();
         const handleExportIsland = () => handleExportData();
         const handleOpenFromIsland = (e: any) => handleOpenComplex(e.detail);
+        const handleArchiveIsland = () => setViewMode('archive');
 
         window.addEventListener('island-theme', handleTheme);
         window.addEventListener('island-company', handleCompany);
@@ -108,6 +109,7 @@ const App: React.FC = () => {
         window.addEventListener('island-logout', handleLogoutEvent);
         window.addEventListener('island-open-worker', handleOpenFromIsland);
         window.addEventListener('island-export', handleExportIsland);
+        window.addEventListener('island-archive', handleArchiveIsland);
 
         return () => {
             window.removeEventListener('island-theme', handleTheme);
@@ -116,8 +118,9 @@ const App: React.FC = () => {
             window.removeEventListener('island-logout', handleLogoutEvent);
             window.removeEventListener('island-open-worker', handleOpenFromIsland);
             window.removeEventListener('island-export', handleExportIsland);
+            window.removeEventListener('island-archive', handleArchiveIsland);
         };
-    }, [isDarkMode, toggleTheme, setIsCompanyBuilderOpen, setIsSettingsOpen, handleLogout, handleOpenComplex, handleExportData]);
+    }, [isDarkMode, toggleTheme, setIsCompanyBuilderOpen, setIsSettingsOpen, handleLogout, handleOpenComplex, handleExportData, setViewMode]);
 
     const { dashboardStats, statsList, modalConfig, netCreditMap } = useDashboardStats(workers, refreshStats, activeStatsModal);
 
@@ -128,7 +131,7 @@ const App: React.FC = () => {
         if (filterId === 'ALL') return 'bg-slate-800 text-white shadow-lg shadow-slate-500/30 ring-2 ring-slate-400 scale-105 border-transparent';
         if (filterId === 'RFI') return 'bg-blue-600 text-white shadow-lg shadow-blue-500/40 ring-2 ring-blue-400 scale-105 border-transparent';
         if (filterId === 'ELIOR') return 'bg-orange-500 text-white shadow-lg shadow-orange-500/40 ring-2 ring-orange-300 scale-105 border-transparent';
-        if (filterId === 'REKEEP') return 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/40 ring-2 ring-emerald-300 scale-105 border-transparent';
+        if (filterId === 'CLEAN_SERVICE') return 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/40 ring-2 ring-emerald-300 scale-105 border-transparent';
 
         const customPalette = [
             'bg-fuchsia-500 text-white shadow-lg shadow-fuchsia-500/40 ring-2 ring-fuchsia-300 scale-105 border-transparent',
@@ -155,6 +158,8 @@ const App: React.FC = () => {
     // --- MAIN RENDER LOGIC ---
     if (isMobileMode) return <MobileUploadPage sessionId={mobileSessionId} />;
     if (isLoading || isWorkersLoading) return (
+        <>
+        <DynamicIsland workers={[]} />
         <div className="min-h-screen bg-white dark:bg-slate-900 font-sans px-6 py-10">
             <div className="max-w-7xl mx-auto space-y-12">
                 <div className="flex items-center justify-between">
@@ -208,6 +213,7 @@ const App: React.FC = () => {
                 </div>
             </div>
         </div>
+        </>
     );
     if (!isAuthenticated) return <LoginPage loginEmail={loginEmail} setLoginEmail={setLoginEmail} loginPassword={loginPassword} setLoginPassword={setLoginPassword} loginError={loginError} handleLogin={handleLogin} />;
 
@@ -255,6 +261,8 @@ const App: React.FC = () => {
                 handleUpdateStatus={handleUpdateStatus}
                 handleUpdateWorkerFields={handleUpdateWorkerFields}
                 handleBack={handleBack}
+                archiveWorkerId={archiveWorkerId}
+                handleOpenArchive={handleOpenArchive}
             />
 
             {/* MODALS AND TOASTS */}

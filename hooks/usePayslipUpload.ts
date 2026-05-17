@@ -62,7 +62,7 @@ export function usePayslipUpload({
         (c: any) => c.id !== 'month' && c.id !== 'total' && c.id !== 'note' && c.id !== 'arretrati'
       );
     }
-    if (['RFI', 'ELIOR', 'REKEEP'].includes(worker.profilo)) return null;
+    if (['RFI', 'ELIOR', 'CLEAN_SERVICE'].includes(worker.profilo)) return null;
     try {
       const saved = localStorage.getItem('customCompanies');
       if (saved) {
@@ -205,7 +205,7 @@ export function usePayslipUpload({
           const numValue = parseLocalFloat(value);
           if (!isNaN(numValue) && numValue !== 0) {
             const matchedCol = expectedColumns.find(c =>
-              code.toUpperCase().includes(c.id.toUpperCase())
+              code.toUpperCase() === c.id.toUpperCase()
             );
             if (matchedCol) {
               row[matchedCol.id] = numValue;
@@ -456,7 +456,7 @@ export function usePayslipUpload({
             const numValue = parseLocalFloat(value);
             if (!isNaN(numValue) && numValue !== 0) {
               const matchedCol = expectedColumns.find(c =>
-                code.toUpperCase().includes(c.id.toUpperCase())
+                code.toUpperCase() === c.id.toUpperCase()
               );
               if (matchedCol) {
                 row[matchedCol.id] = numValue;
@@ -519,6 +519,5 @@ export function usePayslipUpload({
     handleBatchUpload,
     handleFileUpload,
     handleQRData,
-    getCustomColumnsForAI,
   };
 }

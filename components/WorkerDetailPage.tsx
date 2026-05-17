@@ -18,7 +18,7 @@ import { Worker, AnnoDati, getColumnsByProfile, MONTH_NAMES } from '../types';
 const PROFILE_CONFIG: any = {
   RFI: { label: 'RFI', pec: 'ru.rfi@pec.rfi.it' },
   ELIOR: { label: 'ELIOR', pec: 'elior@legalmail.it' },
-  REKEEP: { label: 'REKEEP', pec: 'rekeep@pec.rekeep.it' }
+  CLEAN_SERVICE: { label: 'Clean Service', pec: '' }
 };
 
 interface WorkerDetailPageProps {
@@ -27,10 +27,9 @@ interface WorkerDetailPageProps {
   onUpdateStatus: (status: string) => void;
   onUpdateWorkerFields: (fields: Partial<Worker>) => void;
   onBack: () => void;
-  onOpenReport?: () => void;
 }
 
-const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateData, onUpdateStatus, onUpdateWorkerFields, onBack, onOpenReport }) => {
+const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateData, onUpdateStatus, onUpdateWorkerFields, onBack }) => {
   const [monthlyInputs, setMonthlyInputs] = useState<AnnoDati[]>(Array.isArray(worker?.anni) ? worker.anni : []);
 
   // DYNAMIC SYNC: Lo stato locale comanda, il Parent riceve aggiornamenti in automatico
@@ -74,7 +73,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
     setVerifyStates(prev => ({ ...prev, [vKey]: { status: 'loading', discrepancies: [] } }));
 
     // Build customColumns only for non-standard profiles (Company Builder)
-    const standardProfiles = new Set(['RFI', 'ELIOR', 'REKEEP']);
+    const standardProfiles = new Set(['RFI', 'ELIOR', 'CLEAN_SERVICE']);
     const standardFields = new Set(['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'arretrati', 'note']);
     const isCustomProfile = !standardProfiles.has((worker.profilo || '').toUpperCase());
     const customColumns = isCustomProfile
@@ -206,7 +205,6 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
     handleBatchUpload,
     handleFileUpload,
     handleQRData,
-    getCustomColumnsForAI,
   } = usePayslipUpload({
     worker,
     monthlyInputs,
@@ -290,7 +288,10 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
   const [isExplainerOpen, setIsExplainerOpen] = useState(false);
   const [isExplaining, setIsExplaining] = useState(false);
   const [explanationData, setExplanationData] = useState<string | null>(null);
-  const [legalStatus, setLegalStatus] = useState<'analisi' | 'pronta' | 'inviata' | 'trattativa' | 'chiusa'>(worker.status || 'analisi');
+  const validStatuses = ['analisi', 'pronta', 'inviata', 'trattativa', 'chiusa'] as const;
+  type LegalStatus = typeof validStatuses[number];
+  const initialStatus: LegalStatus = validStatuses.includes(worker.status as LegalStatus) ? (worker.status as LegalStatus) : 'analisi';
+  const [legalStatus, setLegalStatus] = useState<LegalStatus>(initialStatus);
   const [isTimelineOpen, setIsTimelineOpen] = useState(false);
 
   const [includeExFest, setIncludeExFest] = useState(() => {
@@ -316,7 +317,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
   const badgeStyles = useMemo(() => {
     if (!worker.profilo) return 'bg-slate-200/50 dark:bg-slate-700/50 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-600';
     if (worker.profilo === 'ELIOR') return 'bg-orange-50 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 border-orange-200 dark:border-orange-700/50';
-    if (worker.profilo === 'REKEEP') return 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-700/50';
+    if (worker.profilo === 'CLEAN_SERVICE') return 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-700/50';
     if (worker.profilo === 'RFI') return 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-cyan-400 border-blue-200 dark:border-blue-700/50';
     const customPalette = [
       'bg-fuchsia-50 dark:bg-fuchsia-900/30 text-fuchsia-600 dark:text-fuchsia-400 border-fuchsia-200 dark:border-fuchsia-700/50',
@@ -334,7 +335,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
   }, [worker.profilo]);
 
   const [isGlobalDragging, setIsGlobalDragging] = useState(false);
-  const [showSupernova, setShowSupernova] = useState(false);
+  const [showSupernova] = useState(false);
 
   // --- GLOBAL SHORTCUTS (ESC & CTRL+S) ---
   const shortcutStateRef = useRef({
@@ -613,7 +614,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
       isTimelineOpen={isTimelineOpen}
       onToggleTimeline={() => setIsTimelineOpen(!isTimelineOpen)}
       legalStatus={legalStatus}
-      onLegalStatusChange={setLegalStatus}
+      onLegalStatusChange={(s: string) => setLegalStatus(s as LegalStatus)}
       onUpdateStatus={onUpdateStatus}
       tickerItems={tickerItems}
       activeTickerModal={activeTickerModal}

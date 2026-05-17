@@ -139,7 +139,7 @@ export function printPayslipTables({
 
     let nomeCCNL = 'CCNL di Categoria';
     if (worker.profilo === 'RFI') nomeCCNL = 'CCNL Mobilità';
-    if (worker.profilo === 'REKEEP') nomeCCNL = 'CCNL Multiservizi';
+    if (worker.profilo === 'CLEAN_SERVICE') nomeCCNL = 'CCNL Multiservizi';
     if (worker.profilo === 'ELIOR') nomeCCNL = 'CCNL Ristorazione';
 
     const note = `Calcolo elaborato ai sensi Cass. n. 20216/2022 e Art. 64 ${nomeCCNL}. La media giornaliera è calcolata sul totale delle voci variabili diviso i giorni di effettiva presenza. Limite giorni indennizzabili: ${TETTO}.`;

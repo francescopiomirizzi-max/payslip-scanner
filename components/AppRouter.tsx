@@ -1,14 +1,17 @@
 import React from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, type HTMLMotionProps } from 'framer-motion';
 import StatsDashboard from './StatsDashboard';
 import WorkerDetailPage from './WorkerDetailPage';
 import TableComponent from './TableComponent';
 import DashboardPage from '../pages/DashboardPage';
+import ArchivePage from '../pages/ArchivePage';
 import { Worker, AnnoDati } from '../types';
 import { DashboardStats, WorkerStatItem, ModalConfig } from '../hooks/useDashboardStats';
 
+type ViewMode = 'home' | 'simple' | 'complex' | 'stats' | 'archive';
+
 interface AppRouterProps {
-    viewMode: 'home' | 'simple' | 'complex' | 'stats';
+    viewMode: ViewMode;
     workers: Worker[];
     filteredWorkers: Worker[];
     dashboardStats: DashboardStats;
@@ -38,12 +41,14 @@ interface AppRouterProps {
     fileInputRef: React.RefObject<HTMLInputElement>;
     handleExportData: () => void;
     handleImportData: (e: React.ChangeEvent<HTMLInputElement>) => void;
-    setViewMode: (mode: 'home' | 'simple' | 'complex' | 'stats') => void;
+    setViewMode: (mode: ViewMode) => void;
     selectedWorker: Worker | null;
     handleUpdateWorkerData: (data: AnnoDati[]) => void;
     handleUpdateStatus: (status: string) => void;
     handleUpdateWorkerFields: (fields: any) => void;
     handleBack: () => void;
+    archiveWorkerId?: string | null;
+    handleOpenArchive: (id: string) => void;
 }
 
 const AppRouter: React.FC<AppRouterProps> = ({
@@ -82,11 +87,13 @@ const AppRouter: React.FC<AppRouterProps> = ({
     handleUpdateWorkerData,
     handleUpdateStatus,
     handleUpdateWorkerFields,
-    handleBack
+    handleBack,
+    archiveWorkerId,
+    handleOpenArchive,
 }) => {
-    const pageAnim = {
+    const pageAnim: Pick<HTMLMotionProps<'div'>, 'initial' | 'animate' | 'exit'> = {
         initial: { opacity: 0, y: 18 },
-        animate: { opacity: 1, y: 0, transition: { duration: 0.32, ease: [0.25, 0.46, 0.45, 0.94] } },
+        animate: { opacity: 1, y: 0, transition: { duration: 0.32, ease: [0.25, 0.46, 0.45, 0.94] as any } },
         exit:    { opacity: 0, y: -12, transition: { duration: 0.2, ease: 'easeIn' } },
     };
 
@@ -99,6 +106,12 @@ const AppRouter: React.FC<AppRouterProps> = ({
                     </motion.div>
                 )}
 
+                {viewMode === 'archive' && (
+                    <motion.div key="archive" {...pageAnim} className="h-screen">
+                        <ArchivePage workers={workers} onBack={handleBack} initialWorkerId={archiveWorkerId ?? undefined} />
+                    </motion.div>
+                )}
+
                 {viewMode === 'complex' && selectedWorker && (
                     <motion.div key={`complex-${selectedWorker.id}`} {...pageAnim}>
                         <WorkerDetailPage
@@ -108,7 +121,6 @@ const AppRouter: React.FC<AppRouterProps> = ({
                             onUpdateStatus={handleUpdateStatus}
                             onUpdateWorkerFields={handleUpdateWorkerFields}
                             onBack={handleBack}
-                            onOpenReport={() => handleOpenSimple(selectedWorker.id)}
                         />
                     </motion.div>
                 )}
@@ -159,6 +171,7 @@ const AppRouter: React.FC<AppRouterProps> = ({
                 handleExportData={handleExportData}
                 handleImportData={handleImportData}
                 setViewMode={setViewMode}
+                onOpenArchive={handleOpenArchive}
             />
         </>
     );

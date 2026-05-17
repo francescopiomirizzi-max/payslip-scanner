@@ -20,7 +20,7 @@ const HiddenClasses = () => {
             <div className="to-indigo-500 to-indigo-600"></div>
             <div className="shadow-indigo-500/50 hover:border-indigo-400 group-hover:text-indigo-600"></div>
 
-            {/* EMERALD (Rekeep) */}
+            {/* EMERALD (Clean Service) */}
             <div className="bg-emerald-50 bg-emerald-100 bg-emerald-500 bg-emerald-600"></div>
             <div className="text-emerald-500 text-emerald-600 text-emerald-700"></div>
             <div className="border-emerald-100 border-emerald-200 border-emerald-300 border-emerald-400 border-emerald-500"></div>

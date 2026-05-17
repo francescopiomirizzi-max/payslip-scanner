@@ -291,7 +291,7 @@ const QRScannerModal: React.FC<QRScannerModalProps> = ({
     // L'URL dinamico in base alla pillola
     const qrUrl = `${window.location.origin}/?mobile=true&session=${sessionId}&company=${encodeURIComponent(company)}&name=${encodeURIComponent(workerName)}${eliorParam}&type=${localScanMode}`;
 
-    const appleTransition = { type: "spring", damping: 25, stiffness: 200 };
+    const appleTransition = { type: "spring" as const, damping: 25, stiffness: 200 };
     const isVisuallyHidden = status === 'processing' || status === 'file_done' || status === 'all_done';
 
     return (
@@ -397,7 +397,7 @@ const QRScannerModal: React.FC<QRScannerModalProps> = ({
                                             <motion.div
                                                 className={`absolute top-1 bottom-1 w-[calc(50%-4px)] rounded-[10px] shadow-sm transition-colors duration-300 ${localScanMode === 'ai' ? 'bg-indigo-600' : 'bg-cyan-600'}`}
                                                 animate={{ left: localScanMode === 'ai' ? '4px' : 'calc(50%)' }}
-                                                transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                                                transition={{ type: "spring" as const, stiffness: 400, damping: 30 }}
                                             />
                                             <button onClick={() => setLocalScanMode('ai')} className="flex-1 py-2.5 relative z-10 flex items-center justify-center gap-2">
                                                 <Sparkles className={`w-3.5 h-3.5 transition-colors ${localScanMode === 'ai' ? 'text-white' : 'text-slate-500'}`} />
@@ -463,7 +463,7 @@ const QRScannerModal: React.FC<QRScannerModalProps> = ({
                                     <motion.div key="azioni" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={appleTransition} className="flex flex-col items-center w-full gap-5 absolute inset-0">
                                         <div className="flex -space-x-3">
                                             {Array.from({ length: Math.min(scannedCount, 5) }).map((_, i) => (
-                                                <motion.div key={`file-${i}`} initial={{ opacity: 0, y: -20, x: -10 }} animate={{ opacity: 1, y: 0, x: 0 }} transition={{ type: "spring", damping: 15 }} className="w-11 h-14 bg-[#1c1c1e] border border-[#2c2c2e] rounded-[10px] flex items-center justify-center z-10 shadow-lg">
+                                                <motion.div key={`file-${i}`} initial={{ opacity: 0, y: -20, x: -10 }} animate={{ opacity: 1, y: 0, x: 0 }} transition={{ type: "spring" as const, damping: 15 }} className="w-11 h-14 bg-[#1c1c1e] border border-[#2c2c2e] rounded-[10px] flex items-center justify-center z-10 shadow-lg">
                                                     <FileText className={`w-4 h-4 ${localScanMode === 'ai' ? 'text-indigo-500' : 'text-cyan-500'}`} strokeWidth={2} />
                                                 </motion.div>
                                             ))}
@@ -475,7 +475,7 @@ const QRScannerModal: React.FC<QRScannerModalProps> = ({
                                         </div>
                                         {status !== 'all_done' && (
                                             <button onClick={triggerClose} className={`w-full py-4 bg-gradient-to-r text-white rounded-2xl font-bold text-sm tracking-wide shadow-lg transition-all active:scale-95 mt-auto ${localScanMode === 'ai' ? 'from-indigo-600 to-indigo-500 shadow-indigo-500/30' : 'from-cyan-600 to-cyan-500 shadow-cyan-500/30'}`}>
-                                                {status === 'all_done' ? 'Chiusura in corso...' : `Termina Sessione (${scannedCount})`}
+                                                {`Termina Sessione (${scannedCount})`}
                                             </button>
                                         )}
                                     </motion.div>

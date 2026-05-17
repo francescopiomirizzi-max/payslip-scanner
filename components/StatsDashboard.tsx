@@ -317,7 +317,7 @@ const StatsDashboard: React.FC<StatsDashboardProps> = ({ workers = [], onBack })
     };
 
     const containerVars = { show: { transition: { staggerChildren: 0.08 } } };
-    const itemVars = { hidden: { opacity: 0, y: 40, scale: 0.95 }, show: { opacity: 1, y: 0, scale: 1, transition: { type: "spring", stiffness: 40, damping: 10 } } };
+    const itemVars = { hidden: { opacity: 0, y: 40, scale: 0.95 }, show: { opacity: 1, y: 0, scale: 1, transition: { type: "spring" as const, stiffness: 40, damping: 10 } } };
 
     return (
         <div className="min-h-screen bg-[#020617] font-sans text-slate-200 pb-20 relative overflow-hidden selection:bg-indigo-500/30 selection:text-indigo-200">
@@ -451,7 +451,7 @@ const StatsDashboard: React.FC<StatsDashboardProps> = ({ workers = [], onBack })
                                 if (profile === 'ELIOR') {
                                     barColor = '#f97316';
                                     bgClass = 'bg-orange-500';
-                                } else if (profile === 'REKEEP') {
+                                } else if (profile === 'CLEAN_SERVICE') {
                                     barColor = '#10b981';
                                     bgClass = 'bg-emerald-500';
                                 } else if (profile !== 'RFI' && profile !== 'ALTRO') {

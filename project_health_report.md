@@ -115,7 +115,7 @@ graph LR
     A["getColumnsByProfile()"] --> B["RFI: 19 codici<br/>(0152..0996, 3B70, 3B71)"]
     A --> C["ELIOR Viaggiante: 18 codici<br/>(1126..5655)"]
     A --> D["ELIOR Magazzino: 8 codici<br/>(1130..4285)"]
-    A --> E["REKEEP: 10 codici<br/>(I1037C..M3500C)"]
+    A --> E["CLEAN_SERVICE: 19 codici<br/>(18, 442..8053) + ticket 311 standard"]
     A --> F["Custom: localStorage<br/>'customCompanies'"]
 ```
 
@@ -161,7 +161,7 @@ I seguenti helper garantiscono coerenza tra testo UI, Word e stampa:
 | **Micro-animazioni** | Framer Motion centralizzato in `framerConfig.ts` (5 preset) | ⭐⭐⭐⭐ |
 | **Responsive** | Grid responsive su Dashboard, tabelle con scroll sincronizzato | ⭐⭐⭐⭐ |
 | **Dynamic Island** | HUD persistente: calc, AI, upload, notifiche, quick actions | ⭐⭐⭐⭐⭐ |
-| **Palette Dinamica** | Hash-based per aziende custom, palette predefinite per RFI/ELIOR/REKEEP | ⭐⭐⭐⭐ |
+| **Palette Dinamica** | Hash-based per aziende custom, palette predefinite per RFI/ELIOR/CLEAN_SERVICE | ⭐⭐⭐⭐ |
 
 ### 4.2 Feedback Visivi Implementati
 

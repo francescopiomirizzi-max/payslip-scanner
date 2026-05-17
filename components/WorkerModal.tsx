@@ -4,7 +4,7 @@ import { useUserSettings } from '../hooks/useUserSettings';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     X, User, Briefcase, Building2, Sparkles, Save,
-    Check, Train, Coffee, Wrench, AlignLeft, ArrowRight,
+    Check, Train, Coffee, AlignLeft, ArrowRight,
     Fingerprint, BadgeCheck, Wand2, Loader2, UploadCloud, Smartphone, FileText, Cpu // <-- AGGIUNTE QUESTE
 } from 'lucide-react';
 import QRCode from 'react-qr-code';
@@ -169,21 +169,21 @@ const THEMES: any = {
         lightGlow: 'rgba(249, 115, 22, 0.5)',
         icon: Coffee
     },
-    REKEEP: {
+    CLEAN_SERVICE: {
         color: '#10b981',
         glow: '0 0 60px -15px rgba(16, 185, 129, 0.7)',
         gradient: 'from-emerald-500 via-teal-500 to-cyan-500',
         avatarBg: 'from-emerald-500 to-teal-500',
         avatarText: 'text-white',
         lightGlow: 'rgba(16, 185, 129, 0.5)',
-        icon: Wrench
+        icon: Sparkles
     }
 };
 
 const OPTIONS = [
     { value: 'RFI', label: 'RFI', sub: 'Infrastrutture' },
     { value: 'ELIOR', label: 'ELIOR', sub: 'Ristorazione' },
-    { value: 'REKEEP', label: 'REKEEP', sub: 'Manutenzione' },
+    { value: 'CLEAN_SERVICE', label: 'CLEAN SERVICE', sub: 'Multiservizi' },
 ];
 
 const WorkerModal: React.FC<WorkerModalProps> = ({ isOpen, onClose, onConfirm, initialData, mode }) => {
@@ -246,7 +246,7 @@ const WorkerModal: React.FC<WorkerModalProps> = ({ isOpen, onClose, onConfirm, i
     const compileDataFromAI = (data: any) => {
         setFormData(prev => {
             // 1. Recupera dinamicamente tutte le aziende valide (Sistema + Custom)
-            const validCompanies = ['RFI', 'ELIOR', 'REKEEP', ...Object.keys(customCompanies)];
+            const validCompanies = ['RFI', 'ELIOR', 'CLEAN_SERVICE', ...Object.keys(customCompanies)];
 
             // 2. Normalizza il nome letto dall'AI (tutto maiuscolo)
             const detectedCompany = data.azienda ? data.azienda.toUpperCase().trim() : '';
@@ -457,7 +457,7 @@ const WorkerModal: React.FC<WorkerModalProps> = ({ isOpen, onClose, onConfirm, i
         }
         return customThemes[Math.abs(hash) % customThemes.length];
     }, [formData.profilo]);
-    const shellTheme = mode === 'create' ? THEMES.REKEEP : activeTheme;
+    const shellTheme = mode === 'create' ? THEMES.CLEAN_SERVICE : activeTheme;
 
     if (!isOpen) return null;
 
@@ -801,7 +801,7 @@ const WorkerModal: React.FC<WorkerModalProps> = ({ isOpen, onClose, onConfirm, i
                                             {formData.profilo ? (
                                                 <>
                                                     <span className="w-2 h-2 rounded-full animate-pulse shadow-sm" style={{ background: activeTheme.color, boxShadow: `0 0 12px ${activeTheme.color}` }}></span>
-                                                    <span className="drop-shadow-sm">{formData.profilo} ATTIVO</span>
+                                                    <span className="drop-shadow-sm">{(formData.profilo || '').replace(/_/g, ' ')} ATTIVO</span>
                                                 </>
                                             ) : 'SELEZIONE RICHIESTA'}
                                         </motion.div>
@@ -838,7 +838,6 @@ const WorkerModal: React.FC<WorkerModalProps> = ({ isOpen, onClose, onConfirm, i
                         `}
                                                         style={{
                                                             boxShadow: isSelected ? style.glow : 'none',
-                                                            ring: (focusedField === 'grid' && isSelected) ? `3px solid ${style.color}` : 'none'
                                                         }}
                                                     >
                                                         {/* LIQUID CASCADE FILL + SHIMMER */}
@@ -849,7 +848,7 @@ const WorkerModal: React.FC<WorkerModalProps> = ({ isOpen, onClose, onConfirm, i
                                                                         initial={{ scaleX: 0, originX: 0 }}
                                                                         animate={{ scaleX: 1 }}
                                                                         exit={{ scaleX: 0, transition: { duration: 0.2 } }}
-                                                                        transition={{ type: "spring", stiffness: 120, damping: 20 }}
+                                                                        transition={{ type: "spring" as const, stiffness: 120, damping: 20 }}
                                                                         className={`absolute inset-0 z-0 bg-gradient-to-br ${style.gradient}`}
                                                                     />
                                                                     <motion.div
@@ -885,7 +884,7 @@ const WorkerModal: React.FC<WorkerModalProps> = ({ isOpen, onClose, onConfirm, i
                                                         {isSelected && (
                                                             <motion.div
                                                                 initial={{ scale: 0, rotate: -45 }} animate={{ scale: 1, rotate: 0 }}
-                                                                transition={{ type: "spring", stiffness: 300, damping: 15 }}
+                                                                transition={{ type: "spring" as const, stiffness: 300, damping: 15 }}
                                                                 className="absolute top-3 right-3 z-20 w-7 h-7 rounded-full bg-white text-white flex items-center justify-center shadow-[0_0_20px_rgba(255,255,255,0.6)] ring-2 ring-white/50"
                                                                 style={{ color: style.color }}
                                                             >
@@ -943,7 +942,7 @@ const WorkerModal: React.FC<WorkerModalProps> = ({ isOpen, onClose, onConfirm, i
                                                                             layoutId="eliorTypeToggle"
                                                                             className="absolute inset-0 bg-gradient-to-r from-orange-500 to-red-500 rounded-xl shadow-[0_0_15px_-3px_rgba(249,115,22,0.4)] border border-white/20"
                                                                             initial={false}
-                                                                            transition={{ type: "spring", stiffness: 300, damping: 25 }}
+                                                                            transition={{ type: "spring" as const, stiffness: 300, damping: 25 }}
                                                                         />
                                                                     )}
                                                                     <span className="relative z-10 flex items-center gap-2">

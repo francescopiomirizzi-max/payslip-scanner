@@ -25,7 +25,7 @@ export default {
     'shadow-indigo-500/30', 'shadow-indigo-500/40', 'shadow-indigo-500/50',
     'hover:border-indigo-400', 'hover:text-indigo-600', 'group-hover:text-indigo-600',
 
-    // EMERALD (Rekeep / Success)
+    // EMERALD (Clean Service / Success)
     'bg-emerald-50', 'bg-emerald-100', 'bg-emerald-500', 'bg-emerald-600',
     'text-emerald-400', 'text-emerald-500', 'text-emerald-600', 'text-emerald-700',
     'border-emerald-100', 'border-emerald-200', 'border-emerald-300', 'border-emerald-400', 'border-emerald-500',

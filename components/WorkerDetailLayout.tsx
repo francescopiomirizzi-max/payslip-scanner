@@ -324,7 +324,19 @@ const WorkerDetailLayout: React.FC<WorkerDetailLayoutProps> = ({
             {/* USER INFO */}
             <div className="flex items-center gap-5 border-l-2 border-slate-200/60 dark:border-slate-700/50 pl-8 h-20 transition-colors">
               <div className="w-14 h-14 rounded-2xl flex items-center justify-center shadow-xl text-white shadow-indigo-200 dark:shadow-indigo-900/40 ring-4 ring-white dark:ring-slate-800 shrink-0 transition-all"
-                style={{ background: `linear-gradient(135deg, ${worker.accentColor === 'indigo' ? '#6366f1' : worker.accentColor === 'emerald' ? '#10b981' : worker.accentColor === 'orange' ? '#f97316' : '#3b82f6'}, ${worker.accentColor === 'indigo' ? '#4f46e5' : worker.accentColor === 'emerald' ? '#059669' : worker.accentColor === 'orange' ? '#ea580c' : '#2563eb'})` }}>
+                style={{ background: (() => {
+                  const g: Record<string, [string, string]> = {
+                    indigo:  ['#6366f1', '#8b5cf6'],
+                    emerald: ['#10b981', '#14b8a6'],
+                    orange:  ['#f97316', '#ef4444'],
+                    blue:    ['#3b82f6', '#06b6d4'],
+                    rose:    ['#f43f5e', '#fb923c'],
+                    violet:  ['#8b5cf6', '#d946ef'],
+                    teal:    ['#14b8a6', '#06b6d4'],
+                  };
+                  const [s, e] = g[worker.accentColor ?? 'blue'] ?? g.blue;
+                  return `linear-gradient(135deg, ${s}, ${e})`;
+                })() }}>
                 <User className="w-7 h-7" strokeWidth={2} />
               </div>
               <div className="hidden md:block">
@@ -701,7 +713,7 @@ const WorkerDetailLayout: React.FC<WorkerDetailLayoutProps> = ({
                 }`}
             >
               {activeTab === 'input' && (
-                <motion.div layoutId="active-tab-bg" className="absolute inset-0" style={{ backgroundImage: 'linear-gradient(135deg, #2563eb 0%, #06b6d4 100%)' }} transition={{ type: 'spring', stiffness: 380, damping: 40 }} />
+                <motion.div layoutId="active-tab-bg" className="absolute inset-0" style={{ backgroundImage: 'linear-gradient(135deg, #2563eb 0%, #06b6d4 100%)' }} transition={{ type: 'spring' as const, stiffness: 380, damping: 40 }} />
               )}
               <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500 rotate-12" />
               <LayoutGrid className={`w-5 h-5 transition-transform duration-300 relative z-10 ${activeTab === 'input' ? 'rotate-0' : 'group-hover:rotate-90'}`} />
@@ -718,7 +730,7 @@ const WorkerDetailLayout: React.FC<WorkerDetailLayoutProps> = ({
                 }`}
             >
               {activeTab === 'calc' && (
-                <motion.div layoutId="active-tab-bg" className="absolute inset-0" style={{ backgroundImage: 'linear-gradient(135deg, #10b981 0%, #14b8a6 100%)' }} transition={{ type: 'spring', stiffness: 380, damping: 40 }} />
+                <motion.div layoutId="active-tab-bg" className="absolute inset-0" style={{ backgroundImage: 'linear-gradient(135deg, #10b981 0%, #14b8a6 100%)' }} transition={{ type: 'spring' as const, stiffness: 380, damping: 40 }} />
               )}
               <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500 rotate-12" />
               <Calculator className={`w-5 h-5 transition-transform duration-300 relative z-10 ${activeTab === 'calc' ? 'rotate-0' : 'group-hover:rotate-12'}`} />
@@ -735,7 +747,7 @@ const WorkerDetailLayout: React.FC<WorkerDetailLayoutProps> = ({
                 }`}
             >
               {activeTab === 'pivot' && (
-                <motion.div layoutId="active-tab-bg" className="absolute inset-0" style={{ backgroundImage: 'linear-gradient(135deg, #f59e0b 0%, #fb923c 100%)' }} transition={{ type: 'spring', stiffness: 380, damping: 40 }} />
+                <motion.div layoutId="active-tab-bg" className="absolute inset-0" style={{ backgroundImage: 'linear-gradient(135deg, #f59e0b 0%, #fb923c 100%)' }} transition={{ type: 'spring' as const, stiffness: 380, damping: 40 }} />
               )}
               <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500 rotate-12" />
               <TrendingUp className={`w-5 h-5 transition-transform duration-300 relative z-10 ${activeTab === 'pivot' ? 'rotate-0' : 'group-hover:-translate-y-1 group-hover:translate-x-1'}`} />
@@ -754,7 +766,7 @@ const WorkerDetailLayout: React.FC<WorkerDetailLayoutProps> = ({
                 }`}
             >
               {activeTab === 'tfr' && (
-                <motion.div layoutId="active-tab-bg" className="absolute inset-0" style={{ backgroundImage: 'linear-gradient(135deg, #d946ef 0%, #a855f7 100%)' }} transition={{ type: 'spring', stiffness: 380, damping: 40 }} />
+                <motion.div layoutId="active-tab-bg" className="absolute inset-0" style={{ backgroundImage: 'linear-gradient(135deg, #d946ef 0%, #a855f7 100%)' }} transition={{ type: 'spring' as const, stiffness: 380, damping: 40 }} />
               )}
               <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500 rotate-12" />
               <Wallet className={`w-5 h-5 transition-transform duration-300 relative z-10 ${activeTab === 'tfr' ? 'rotate-0' : 'group-hover:-translate-y-1 group-hover:translate-x-1'}`} />

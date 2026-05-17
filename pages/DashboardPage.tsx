@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, LayoutGroup } from 'framer-motion';
 import {
     Search,
     Plus,
@@ -20,6 +20,13 @@ import {
     ArrowDown as SortDesc,
     ChevronDown,
     Database,
+    MousePointer2,
+    Check,
+    Ban,
+    Trash2,
+    Archive,
+    CheckCircle2,
+    Activity,
 } from 'lucide-react';
 import WorkerCard from '../components/WorkerCard';
 import { AnimatedCounter } from '../components/ui/AnimatedCounter';
@@ -28,7 +35,7 @@ import { DashboardStats, WorkerStatItem, ModalConfig } from '../hooks/useDashboa
 import { COLOR_VARIANTS } from '../utils/colorVariants';
 
 interface DashboardPageProps {
-    viewMode: 'home' | 'simple' | 'complex' | 'stats';
+    viewMode: 'home' | 'simple' | 'complex' | 'stats' | 'archive';
     workers: Worker[];
     filteredWorkers: Worker[];
     dashboardStats: DashboardStats;
@@ -58,7 +65,8 @@ interface DashboardPageProps {
     fileInputRef: React.RefObject<HTMLInputElement>;
     handleExportData: () => void;
     handleImportData: (e: React.ChangeEvent<HTMLInputElement>) => void;
-    setViewMode: (mode: 'home' | 'simple' | 'complex' | 'stats') => void;
+    setViewMode: (mode: 'home' | 'simple' | 'complex' | 'stats' | 'archive') => void;
+    onOpenArchive: (id: string) => void;
 }
 
 const DashboardPage: React.FC<DashboardPageProps> = ({
@@ -92,7 +100,8 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
     fileInputRef,
     handleExportData,
     handleImportData,
-    setViewMode
+    setViewMode,
+    onOpenArchive,
 }) => {
     type SortKey = 'cognome' | 'credito' | 'status' | 'data';
     const [sortBy, setSortBy] = useState<SortKey>('cognome');
@@ -100,6 +109,10 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
     const [showStatusFilters, setShowStatusFilters] = useState(false);
     const [isDataMenuOpen, setIsDataMenuOpen] = useState(false);
     const dataMenuRef = useRef<HTMLDivElement>(null);
+
+    // --- SELEZIONE RAPIDA TICKET ---
+    const [isSelectionMode, setIsSelectionMode] = useState(false);
+    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
     useEffect(() => {
         if (!isDataMenuOpen) return;
@@ -146,10 +159,43 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
         else { setSortBy(key); setSortDir('asc'); }
     };
 
+    // --- HANDLER TICKET RAPIDO ---
+    const allTicketsOn = sortedWorkers.length > 0 && sortedWorkers.every(w => w.includeTickets !== false);
+
+    const toggleGlobalTickets = () => {
+        sortedWorkers.forEach(w => updateWorkerById(w.id, { includeTickets: !allTicketsOn }));
+    };
+
+    const toggleSelectWorker = (id: string) => {
+        setSelectedIds(prev => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id); else next.add(id);
+            return next;
+        });
+    };
+
+    const applyTicketsToSelection = (value: boolean) => {
+        selectedIds.forEach(id => updateWorkerById(id, { includeTickets: value }));
+        setSelectedIds(new Set());
+        setIsSelectionMode(false);
+    };
+
+    const deleteSelectedWorkers = () => {
+        if (!confirm(`Eliminare ${selectedIds.size} ${selectedIds.size === 1 ? 'pratica' : 'pratiche'} selezionate? L'operazione è irreversibile.`)) return;
+        selectedIds.forEach(id => handleDeleteWorker(id));
+        setSelectedIds(new Set());
+        setIsSelectionMode(false);
+    };
+
+    const exitSelectionMode = () => {
+        setSelectedIds(new Set());
+        setIsSelectionMode(false);
+    };
+
     return (
         <div className="relative max-w-7xl mx-auto px-6 py-10" style={{ display: viewMode === 'home' ? 'block' : 'none' }}>
             {/* HEADER */}
-            <div className="flex flex-col xl:flex-row justify-between items-center gap-8 mb-12">
+            <div className="flex flex-col xl:flex-row justify-between items-center gap-8 mb-8">
 
                 {/* SINISTRA: LOGO E TITOLO */}
                 <div className="flex items-center gap-6 w-full xl:w-auto">
@@ -184,8 +230,17 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                 {/* DESTRA: PULSANTI AZIONE */}
                 <div className="flex flex-wrap justify-center xl:justify-end gap-3 w-full xl:w-auto ml-auto">
 
-                    {/* GRUPPO STRUMENTI (Ora gestiti dalla Dynamic Island, resta solo Statistiche) */}
+                    {/* GRUPPO STRUMENTI */}
                     <div className="flex gap-3">
+                        <button
+                            onClick={() => setViewMode('archive')}
+                            className="group relative px-6 py-3 rounded-xl font-bold text-white shadow-[0_10px_30px_-10px_rgba(99,102,241,0.5)] hover:shadow-[0_20px_40px_-10px_rgba(99,102,241,0.7)] hover:-translate-y-1 active:scale-95 transition-all duration-300 border border-white/20 overflow-hidden flex gap-2 items-center"
+                            style={{ backgroundImage: 'linear-gradient(to right, #6366f1, #8b5cf6)' }}
+                        >
+                            <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500 rotate-12"></div>
+                            <Archive className="w-5 h-5 transition-transform duration-500 group-hover:-rotate-6" strokeWidth={2.5} />
+                            <span>Archivio</span>
+                        </button>
                         <button
                             onClick={() => setViewMode('stats')}
                             className="group relative px-6 py-3 rounded-xl font-bold text-white shadow-[0_10px_30px_-10px_rgba(79,70,229,0.5)] hover:shadow-[0_20px_40px_-10px_rgba(79,70,229,0.7)] hover:-translate-y-1 active:scale-95 transition-all duration-300 border border-white/20 overflow-hidden flex gap-2 items-center"
@@ -213,26 +268,54 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                         <AnimatePresence>
                             {isDataMenuOpen && (
                                 <motion.div
-                                    initial={{ opacity: 0, y: -8, scale: 0.95 }}
-                                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                                    exit={{ opacity: 0, y: -8, scale: 0.95 }}
-                                    transition={{ duration: 0.15 }}
-                                    className="absolute right-0 top-full mt-2 z-50 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl overflow-hidden min-w-[180px]"
+                                    initial={{ opacity: 0, scale: 0.88, y: -8 }}
+                                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                                    exit={{ opacity: 0, scale: 0.88, y: -8 }}
+                                    transition={{ type: 'spring', stiffness: 420, damping: 30 }}
+                                    style={{ transformOrigin: 'top right' }}
+                                    className="absolute right-0 top-full mt-2 z-50 w-56 bg-white/96 dark:bg-slate-900/95 backdrop-blur-2xl border border-slate-200/60 dark:border-slate-700/60 rounded-2xl shadow-2xl shadow-slate-900/20 overflow-hidden"
                                 >
-                                    <button
-                                        onClick={() => { handleExportData(); setIsDataMenuOpen(false); }}
-                                        className="w-full flex items-center gap-3 px-4 py-3 text-sm font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
-                                    >
-                                        <Download className="w-4 h-4 text-violet-500" strokeWidth={2.5} />
-                                        Esporta JSON
-                                    </button>
-                                    <button
-                                        onClick={() => { fileInputRef.current?.click(); setIsDataMenuOpen(false); }}
-                                        className="w-full flex items-center gap-3 px-4 py-3 text-sm font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors border-t border-slate-100 dark:border-slate-800"
-                                    >
-                                        <Upload className="w-4 h-4 text-blue-500" strokeWidth={2.5} />
-                                        Importa JSON
-                                    </button>
+                                    {/* Header */}
+                                    <div className="px-4 pt-3.5 pb-2.5 border-b border-slate-100 dark:border-slate-800">
+                                        <p className="text-[9px] font-black uppercase tracking-[0.15em] text-slate-400 dark:text-slate-500">Gestione dati</p>
+                                        <p className="text-[12px] font-black text-slate-700 dark:text-slate-200 mt-0.5">RailFlow</p>
+                                    </div>
+
+                                    {/* Voci */}
+                                    <div className="p-2 space-y-0.5">
+                                        {[
+                                            {
+                                                icon: <Download className="w-4 h-4 text-white" strokeWidth={2.5} />,
+                                                label: 'Esporta JSON',
+                                                iconBg: 'bg-violet-500',
+                                                hoverBg: 'hover:bg-violet-50 dark:hover:bg-violet-950/60',
+                                                hoverText: 'hover:text-violet-700 dark:hover:text-violet-300',
+                                                onClick: () => { handleExportData(); setIsDataMenuOpen(false); },
+                                            },
+                                            {
+                                                icon: <Upload className="w-4 h-4 text-white" strokeWidth={2.5} />,
+                                                label: 'Importa JSON',
+                                                iconBg: 'bg-sky-500',
+                                                hoverBg: 'hover:bg-sky-50 dark:hover:bg-sky-950/60',
+                                                hoverText: 'hover:text-sky-700 dark:hover:text-sky-300',
+                                                onClick: () => { fileInputRef.current?.click(); setIsDataMenuOpen(false); },
+                                            },
+                                        ].map((item, i) => (
+                                            <motion.button
+                                                key={i}
+                                                initial={{ opacity: 0, x: 6 }}
+                                                animate={{ opacity: 1, x: 0 }}
+                                                transition={{ delay: i * 0.04, type: 'spring', stiffness: 400, damping: 28 }}
+                                                onClick={item.onClick}
+                                                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all duration-150 group/item ${item.hoverBg}`}
+                                            >
+                                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 shadow-sm ${item.iconBg} transition-transform duration-200 group-hover/item:scale-110`}>
+                                                    {item.icon}
+                                                </div>
+                                                <span className={`text-[13px] font-bold text-slate-600 dark:text-slate-300 transition-colors ${item.hoverText}`}>{item.label}</span>
+                                            </motion.button>
+                                        ))}
+                                    </div>
                                 </motion.div>
                             )}
                         </AnimatePresence>
@@ -253,14 +336,16 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
             </div>
 
             {/* STATISTICHE HOME (GOD TIER FX RESTORED) */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-16 relative z-10">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-10 relative z-10">
 
                 {/* 1. CARD PRATICHE (NEON BLU - CON SFONDO E PING) */}
-                <div className="group relative h-full min-h-[220px] bg-white/60 dark:bg-slate-800/60 backdrop-blur-2xl border border-white/60 dark:border-slate-700/60 rounded-[2.5rem] overflow-hidden transition-all duration-500 hover:scale-[1.03] hover:-translate-y-1 hover:border-blue-400/50 hover:shadow-[0_20px_60px_-15px_rgba(59,130,246,0.5)] flex flex-col justify-between cursor-default">
+                <div className="isolate group relative h-full min-h-[220px] bg-white/60 dark:bg-slate-800/60 backdrop-blur-2xl border border-white/60 dark:border-slate-700/60 rounded-[2.5rem] overflow-hidden [clip-path:inset(0_round_2.5rem)] transition-[transform,box-shadow,border-color] duration-500 hover:scale-[1.03] hover:-translate-y-1 hover:border-blue-400/50 hover:shadow-[0_20px_60px_-15px_rgba(59,130,246,0.5)] flex flex-col justify-between cursor-default">
 
-                    {/* Sfondo Decorativo Animato */}
-                    <div className="absolute top-[-50%] right-[-50%] w-96 h-96 bg-blue-500/20 rounded-full blur-[100px] transition-all duration-700 opacity-50 group-hover:opacity-100 group-hover:scale-110"></div>
-                    <div className="absolute bottom-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-blue-500 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+                    {/* Sfondo Decorativo Animato — wrappato in inner clipper per containere il blur out-of-bounds */}
+                    <div className="absolute inset-0 overflow-hidden rounded-[2.5rem] pointer-events-none">
+                        <div className="absolute top-[-50%] right-[-50%] w-96 h-96 bg-blue-500/20 rounded-full blur-[100px] transition-[opacity,transform] duration-700 opacity-50 group-hover:opacity-100 group-hover:scale-110"></div>
+                        <div className="absolute bottom-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-blue-500 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+                    </div>
 
                     <div className="p-8 relative z-10">
                         <div className="flex justify-between items-start mb-6">
@@ -296,23 +381,24 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                             </div>
                             <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border backdrop-blur-md bg-emerald-50 dark:bg-emerald-900/30 border-emerald-200 dark:border-emerald-700/50 transition-colors">
                                 <div className="w-2 h-2 rounded-full bg-emerald-500 dark:bg-emerald-400 dark:shadow-[0_0_8px_currentColor]"></div>
-                                <span className="text-[11px] font-black text-emerald-800 dark:text-emerald-300 transition-colors">REKEEP</span>
-                                <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-500 transition-colors">{workers.filter(w => w.profilo === 'REKEEP').length}</span>
+                                <span className="text-[11px] font-black text-emerald-800 dark:text-emerald-300 transition-colors">CLEAN SERVICE</span>
+                                <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-500 transition-colors">{workers.filter(w => w.profilo === 'CLEAN_SERVICE').length}</span>
                             </div>
                         </div>
                     </div>
                 </div>
 
                 {/* 2. CARD NETTO (EMERALD - CON GRAFICO SVG) */}
-                <div onClick={() => setActiveStatsModal('net')} className="group relative h-full min-h-[220px] bg-white/70 dark:bg-slate-800/70 backdrop-blur-2xl border border-white/60 dark:border-slate-700/60 rounded-[2.5rem] overflow-hidden transition-all duration-500 hover:scale-[1.04] hover:-translate-y-1 hover:border-emerald-400/50 hover:shadow-[0_20px_60px_-15px_rgba(16,185,129,0.5)] cursor-pointer flex flex-col justify-between">
+                <div onClick={() => setActiveStatsModal('net')} className="isolate group relative h-full min-h-[220px] bg-white/70 dark:bg-slate-800/70 backdrop-blur-2xl border border-white/60 dark:border-slate-700/60 rounded-[2.5rem] overflow-hidden [clip-path:inset(0_round_2.5rem)] transition-[transform,box-shadow,border-color] duration-500 hover:scale-[1.04] hover:-translate-y-1 hover:border-emerald-400/50 hover:shadow-[0_20px_60px_-15px_rgba(16,185,129,0.5)] cursor-pointer flex flex-col justify-between">
 
-                    {/* Sfondo Decorativo */}
-                    <div className="absolute top-0 right-0 w-96 h-96 bg-emerald-500/10 rounded-full blur-[80px] transition-all duration-700 opacity-50 group-hover:opacity-100 group-hover:bg-emerald-500/20"></div>
+                    {/* Decorazioni — wrappate in inner clipper */}
+                    <div className="absolute inset-0 overflow-hidden rounded-[2.5rem] pointer-events-none">
+                        <div className="absolute top-0 right-0 w-96 h-96 bg-emerald-500/10 rounded-full blur-[80px] transition-[opacity,background-color] duration-700 opacity-50 group-hover:opacity-100 group-hover:bg-emerald-500/20"></div>
 
-                    {/* Grafico SVG Sfondo (RESTITUITO!) */}
-                    <svg className="absolute bottom-0 left-0 w-full h-40 text-emerald-500/5 group-hover:text-emerald-500/20 transition-all duration-700 ease-out translate-y-10 group-hover:translate-y-2" viewBox="0 0 100 40" preserveAspectRatio="none">
-                        <path d="M0 40 L0 30 Q10 15 20 25 T40 15 T60 20 T80 5 L100 0 L100 40 Z" fill="currentColor" />
-                    </svg>
+                        <svg className="absolute bottom-0 left-0 w-full h-40 text-emerald-500/5 group-hover:text-emerald-500/20 transition-[color,transform] duration-700 ease-out translate-y-10 group-hover:translate-y-2" viewBox="0 0 100 40" preserveAspectRatio="none">
+                            <path d="M0 40 L0 30 Q10 15 20 25 T40 15 T60 20 T80 5 L100 0 L100 40 Z" fill="currentColor" />
+                        </svg>
+                    </div>
 
                     <div className="p-8 relative z-10">
                         <div className="flex justify-between items-start mb-6">
@@ -335,14 +421,15 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                 </div>
 
                 {/* 3. CARD TICKET (AMBER - CON ICONA GIGANTE) */}
-                <div onClick={() => setActiveStatsModal('ticket')} className="group relative h-full min-h-[220px] bg-white/60 dark:bg-slate-800/60 backdrop-blur-2xl border border-white/60 dark:border-slate-700/60 rounded-[2.5rem] overflow-hidden transition-all duration-500 hover:scale-[1.02] hover:-translate-y-1 hover:border-amber-400/50 hover:shadow-[0_20px_60px_-15px_rgba(245,158,11,0.5)] cursor-pointer flex flex-col justify-between">
+                <div onClick={() => setActiveStatsModal('ticket')} className="isolate group relative h-full min-h-[220px] bg-white/60 dark:bg-slate-800/60 backdrop-blur-2xl border border-white/60 dark:border-slate-700/60 rounded-[2.5rem] overflow-hidden [clip-path:inset(0_round_2.5rem)] transition-[transform,box-shadow,border-color] duration-500 hover:scale-[1.02] hover:-translate-y-1 hover:border-amber-400/50 hover:shadow-[0_20px_60px_-15px_rgba(245,158,11,0.5)] cursor-pointer flex flex-col justify-between">
 
-                    {/* Sfondo Decorativo */}
-                    <div className="absolute bottom-[-20%] left-[-20%] w-80 h-80 bg-amber-500/10 rounded-full blur-[100px] transition-all duration-700 opacity-50 group-hover:opacity-100 group-hover:bg-amber-500/20"></div>
+                    {/* Decorazioni — wrappate in inner clipper */}
+                    <div className="absolute inset-0 overflow-hidden rounded-[2.5rem] pointer-events-none">
+                        <div className="absolute bottom-[-20%] left-[-20%] w-80 h-80 bg-amber-500/10 rounded-full blur-[100px] transition-[opacity,background-color] duration-700 opacity-50 group-hover:opacity-100 group-hover:bg-amber-500/20"></div>
 
-                    {/* Icona Gigante Sfondo (RESTITUITA!) */}
-                    <div className="absolute top-4 right-4 text-amber-500/0 group-hover:text-amber-500/10 transition-all duration-500 transform rotate-0 group-hover:rotate-12 scale-50 group-hover:scale-100 pointer-events-none">
-                        <Ticket className="w-40 h-40" strokeWidth={1.5} />
+                        <div className="absolute top-4 right-4 text-amber-500/0 group-hover:text-amber-500/10 transition-[color,transform] duration-500 rotate-0 group-hover:rotate-12 scale-50 group-hover:scale-100">
+                            <Ticket className="w-40 h-40" strokeWidth={1.5} />
+                        </div>
                     </div>
 
                     <div className="p-8 relative z-10">
@@ -366,7 +453,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                 </div>
             </div>
             {/* --- SEARCH COMMAND CENTER (HOVER ACTIVATION EDITION) --- */}
-            <div className="relative w-full max-w-4xl mx-auto mb-16 z-20">
+            <div className="relative w-full max-w-4xl mx-auto mb-10 z-20">
 
                 {/* 1. LA BARRA DI RICERCA (CAPSULA ATTIVA) */}
                 <div className="relative group cursor-text">
@@ -425,17 +512,22 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                         { id: 'pronta',     label: 'Pronta',         dot: '#f59e0b', cls: 'bg-amber-500 text-white border-amber-400',    count: workers.filter(w => w.status === 'pronta').length },
                         { id: 'trattativa', label: 'In Trattativa',  dot: '#f43f5e', cls: 'bg-rose-500 text-white border-rose-400',      count: workers.filter(w => w.status === 'trattativa').length },
                         { id: 'inviata',    label: 'PEC Inviata',    dot: '#a855f7', cls: 'bg-purple-500 text-white border-purple-400',  count: workers.filter(w => w.status === 'inviata').length },
-                        { id: 'chiusa',     label: 'Conclusa',       dot: '#10b981', cls: 'bg-emerald-500 text-white border-emerald-400', count: workers.filter(w => w.status === 'chiusa').length },
                     ];
+                    // Queste opzioni hanno chip dedicati nella toolbar — non appaiono nella lista espandibile
+                    const EXTRA_STATUS_OPTS: typeof STATUS_OPTIONS = [
+                        { id: 'in_corso', label: 'In Corso', dot: '#f59e0b', cls: 'bg-amber-500 text-white border-amber-400',    count: workers.filter(w => w.status !== 'chiusa').length },
+                        { id: 'chiusa',   label: 'Conclusa', dot: '#10b981', cls: 'bg-emerald-500 text-white border-emerald-400', count: workers.filter(w => w.status === 'chiusa').length },
+                    ];
+                    const ALL_STATUS_OPTS = [...STATUS_OPTIONS, ...EXTRA_STATUS_OPTS];
                     const hasStatusFilter = activeStatusFilter !== 'ALL';
-                    const activeOpt = STATUS_OPTIONS.find(o => o.id === activeStatusFilter)!;
+                    const activeOpt = ALL_STATUS_OPTS.find(o => o.id === activeStatusFilter) ?? STATUS_OPTIONS[0];
                     const inactivePill = 'bg-white/40 dark:bg-slate-800/40 border border-slate-200/60 dark:border-slate-700/50 text-slate-500 dark:text-slate-400 hover:bg-white/70 dark:hover:bg-slate-700/60';
 
                     return (
                         <div className="mt-6 space-y-3">
                             {/* RIGA PRINCIPALE: AZIENDE + TOGGLE STATO */}
                             <div className="flex justify-center gap-3 flex-wrap items-center">
-                                {['ALL', 'RFI', 'ELIOR', 'REKEEP', ...customFilters].map((filterId) => {
+                                {['ALL', 'RFI', 'ELIOR', 'CLEAN_SERVICE', ...customFilters].map((filterId) => {
                                     const isActive = activeFilter === filterId;
                                     return (
                                         <button
@@ -443,7 +535,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                                             onClick={() => setActiveFilter(filterId)}
                                             className={`px-6 py-2 rounded-2xl font-black text-xs uppercase tracking-widest transition-all duration-300 backdrop-blur-md flex items-center gap-2 ${getFilterStyle(filterId, isActive)}`}
                                         >
-                                            {filterId === 'ALL' ? 'Tutti' : filterId}
+                                            {filterId === 'ALL' ? 'Tutti' : filterId.replace(/_/g, ' ')}
                                             {filterId !== 'ALL' && (
                                                 <span className="opacity-70 font-mono text-[10px]">
                                                     ({workers.filter(w => w.profilo === filterId).length})
@@ -541,33 +633,102 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
             {/* --- 4. WORKERS GRID --- */}
             {(!searchQuery || filteredWorkers.length > 0) && (
                 <>
-                {/* SORT BAR */}
-                <div className="flex items-center gap-2 mb-6 flex-wrap">
-                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mr-1">Ordina:</span>
+                {/* CONTROL BAR — ordina + ticket + selezione in un'unica toolbar */}
+                <div className="flex items-center gap-2 mb-6 px-4 py-2.5 bg-white/50 dark:bg-slate-800/40 backdrop-blur-xl border border-slate-200/50 dark:border-slate-700/50 rounded-2xl flex-wrap">
+
+                    {/* Gruppo: Ordina — segmented control con indicatore scorrevole */}
+                    <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 shrink-0">Ordina</span>
+                    <LayoutGroup id="sort-control">
+                        <div className="flex items-center bg-slate-100/90 dark:bg-slate-800/90 rounded-xl p-0.5 gap-0 shrink-0">
+                            {([
+                                { key: 'cognome', label: 'Cognome', pill: 'bg-indigo-500 shadow-indigo-500/40' },
+                                { key: 'credito', label: 'Credito', pill: 'bg-emerald-500 shadow-emerald-500/40' },
+                                { key: 'status',  label: 'Stato',   pill: 'bg-amber-500 shadow-amber-500/40'   },
+                                { key: 'data',    label: 'Data',    pill: 'bg-sky-500 shadow-sky-500/40'       },
+                            ] as { key: SortKey; label: string; pill: string }[]).map(opt => {
+                                const isActive = sortBy === opt.key;
+                                const Icon = isActive ? (sortDir === 'asc' ? SortAsc : SortDesc) : ArrowUpDown;
+                                return (
+                                    <button
+                                        key={opt.key}
+                                        onClick={() => toggleSort(opt.key)}
+                                        className="relative flex items-center gap-1.5 px-3 py-1.5 rounded-[10px] text-[10px] font-black uppercase tracking-widest z-10 select-none"
+                                    >
+                                        {isActive && (
+                                            <motion.div
+                                                layoutId="sort-pill"
+                                                className={`absolute inset-0 rounded-[10px] shadow-md ${opt.pill}`}
+                                                transition={{ type: 'spring', stiffness: 500, damping: 38 }}
+                                            />
+                                        )}
+                                        <span className={`relative z-10 flex items-center gap-1.5 transition-colors duration-150 ${isActive ? 'text-white' : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'}`}>
+                                            <Icon className="w-3 h-3" />
+                                            {opt.label}
+                                        </span>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </LayoutGroup>
+
+                    <span className="w-px h-5 bg-slate-200 dark:bg-slate-700 mx-1 shrink-0" />
+
+                    {/* Gruppo: Filtro rapido stato */}
+                    <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mr-0.5 shrink-0">Filtra</span>
                     {([
-                        { key: 'cognome', label: 'Cognome' },
-                        { key: 'credito', label: 'Credito' },
-                        { key: 'status', label: 'Stato' },
-                        { key: 'data', label: 'Data inserimento' },
-                    ] as { key: SortKey; label: string }[]).map(opt => {
-                        const isActive = sortBy === opt.key;
-                        const Icon = isActive ? (sortDir === 'asc' ? SortAsc : SortDesc) : ArrowUpDown;
+                        { id: 'in_corso', label: 'In Corso', color: 'bg-amber-500 text-white border-amber-400 shadow-amber-500/30', dot: '#f59e0b' },
+                        { id: 'chiusa',   label: 'Concluse', color: 'bg-emerald-500 text-white border-emerald-400 shadow-emerald-500/30', dot: '#10b981' },
+                    ] as const).map(f => {
+                        const isActive = activeStatusFilter === f.id;
                         return (
                             <button
-                                key={opt.key}
-                                onClick={() => toggleSort(opt.key)}
-                                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all duration-200 backdrop-blur-md border ${
+                                key={f.id}
+                                onClick={() => setActiveStatusFilter(isActive ? 'ALL' : f.id)}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all duration-200 border ${
                                     isActive
-                                        ? 'bg-indigo-600 text-white border-indigo-500 shadow-md shadow-indigo-500/30'
-                                        : 'bg-white/50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:bg-white/80 dark:hover:bg-slate-700/60'
+                                        ? `${f.color} shadow-md`
+                                        : 'bg-white/60 dark:bg-slate-700/40 text-slate-500 dark:text-slate-400 border-slate-200/70 dark:border-slate-600/50 hover:bg-white dark:hover:bg-slate-700/70'
                                 }`}
                             >
-                                <Icon className="w-3 h-3" />
-                                {opt.label}
+                                <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: isActive ? 'white' : f.dot }} />
+                                {f.label}
                             </button>
                         );
                     })}
-                    <span className="ml-auto text-[10px] font-medium text-slate-400 dark:text-slate-500">
+
+                    <span className="w-px h-5 bg-slate-200 dark:bg-slate-700 mx-1 shrink-0" />
+
+                    {/* Gruppo: Ticket */}
+                    <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mr-0.5 shrink-0">Ticket</span>
+                    <button
+                        onClick={toggleGlobalTickets}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all duration-200 border ${
+                            allTicketsOn
+                                ? 'bg-amber-500 text-white border-amber-400 shadow-md shadow-amber-500/30'
+                                : 'bg-white/60 dark:bg-slate-700/40 text-slate-500 dark:text-slate-400 border-slate-200/70 dark:border-slate-600/50 hover:bg-white dark:hover:bg-slate-700/70'
+                        }`}
+                    >
+                        <Ticket className="w-3 h-3" />
+                        {allTicketsOn ? 'ON' : 'OFF'}
+                    </button>
+
+                    <span className="w-px h-5 bg-slate-200 dark:bg-slate-700 mx-1 shrink-0" />
+
+                    {/* Gruppo: Selezione */}
+                    <button
+                        onClick={() => isSelectionMode ? exitSelectionMode() : setIsSelectionMode(true)}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all duration-200 border ${
+                            isSelectionMode
+                                ? 'bg-indigo-600 text-white border-indigo-500 shadow-md shadow-indigo-500/30'
+                                : 'bg-white/60 dark:bg-slate-700/40 text-slate-500 dark:text-slate-400 border-slate-200/70 dark:border-slate-600/50 hover:bg-white dark:hover:bg-slate-700/70'
+                        }`}
+                    >
+                        <MousePointer2 className="w-3 h-3" />
+                        {isSelectionMode ? `${selectedIds.size} selezionate` : 'Seleziona'}
+                    </button>
+
+                    {/* Conteggio allineato a destra */}
+                    <span className="ml-auto text-[10px] font-bold text-slate-400 dark:text-slate-500 shrink-0">
                         {filteredWorkers.length} {filteredWorkers.length === 1 ? 'pratica' : 'pratiche'}
                     </span>
                 </div>
@@ -581,7 +742,25 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
 
                         {/* 1. LAVORATORI ESISTENTI */}
                         {sortedWorkers.map(w => (
-                            <motion.div key={w.id} variants={itemVariants} layout initial="hidden" animate="show" exit="exit" className="h-[420px]">
+                            <motion.div key={w.id} variants={itemVariants} layout initial="hidden" animate="show" exit="exit" className="relative h-[420px]">
+                                {isSelectionMode && (
+                                    <div
+                                        onClick={() => toggleSelectWorker(w.id)}
+                                        className={`absolute inset-0 z-40 rounded-[2.5rem] cursor-pointer transition-all duration-200 ${
+                                            selectedIds.has(w.id)
+                                                ? 'ring-2 ring-indigo-500 bg-indigo-500/10'
+                                                : 'ring-1 ring-slate-300/40 dark:ring-slate-600/40 hover:bg-indigo-500/5 hover:ring-indigo-400/40'
+                                        }`}
+                                    >
+                                        <div className={`absolute top-4 right-4 w-7 h-7 rounded-full border-2 flex items-center justify-center transition-all duration-200 shadow-md ${
+                                            selectedIds.has(w.id)
+                                                ? 'bg-indigo-600 border-indigo-600'
+                                                : 'bg-white/90 dark:bg-slate-800/90 border-slate-300 dark:border-slate-600'
+                                        }`}>
+                                            {selectedIds.has(w.id) && <Check className="w-4 h-4 text-white" strokeWidth={3} />}
+                                        </div>
+                                    </div>
+                                )}
                                 <WorkerCard
                                     worker={w}
                                     onOpenSimple={handleOpenSimple}
@@ -590,12 +769,13 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                                     onDelete={() => handleDeleteWorker(w.id)}
                                     onStatusChange={(id, status) => updateWorkerById(id, { status: status === '' ? undefined : status })}
                                     onNotesChange={(id, notes) => updateWorkerById(id, { notes })}
+                                    onOpenArchive={onOpenArchive}
                                 />
                             </motion.div>
                         ))}
 
                         {/*  2. CARD "AGGIUNGI NUOVO" (ALLA FINE) */}
-                        <motion.div
+                        {!isSelectionMode && <motion.div
                             key="add-new-card"
                             variants={itemVariants}
                             layout
@@ -609,11 +789,74 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                                 </div>
                             </div>
                             <span className="mt-6 font-black text-slate-400 uppercase tracking-widest text-sm transition-colors duration-300 group-hover:text-emerald-600">Crea Nuova Pratica</span>
-                        </motion.div>
+                        </motion.div>}
                     </AnimatePresence>
                 </motion.div>
                 </>
             )}
+
+            {/* FLOATING ACTION BAR - SELEZIONE TICKET */}
+            <AnimatePresence>
+                {isSelectionMode && (
+                    <motion.div
+                        initial={{ y: 80, opacity: 0 }}
+                        animate={{ y: 0, opacity: 1 }}
+                        exit={{ y: 80, opacity: 0 }}
+                        transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+                        className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-5 py-3.5 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-white/60 dark:border-slate-700 whitespace-nowrap"
+                    >
+                        <span className="text-[11px] font-black text-slate-700 dark:text-slate-300">
+                            {selectedIds.size} {selectedIds.size === 1 ? 'pratica' : 'pratiche'} selezionate
+                        </span>
+                        <div className="w-px h-4 bg-slate-200 dark:bg-slate-700" />
+                        <button
+                            onClick={() => setSelectedIds(new Set(sortedWorkers.map(w => w.id)))}
+                            className="text-[10px] font-black uppercase tracking-wide text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+                        >
+                            Tutte
+                        </button>
+                        <button
+                            onClick={() => setSelectedIds(new Set())}
+                            className="text-[10px] font-black uppercase tracking-wide text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
+                        >
+                            Nessuna
+                        </button>
+                        <div className="w-px h-4 bg-slate-200 dark:bg-slate-700" />
+                        <button
+                            onClick={() => applyTicketsToSelection(true)}
+                            disabled={selectedIds.size === 0}
+                            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-500 text-white text-[10px] font-black uppercase tracking-wide shadow-md shadow-amber-500/30 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-amber-600 transition-colors"
+                        >
+                            <Ticket className="w-3 h-3" />
+                            Tickets ON
+                        </button>
+                        <button
+                            onClick={() => applyTicketsToSelection(false)}
+                            disabled={selectedIds.size === 0}
+                            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-rose-500 text-white text-[10px] font-black uppercase tracking-wide shadow-md shadow-rose-500/30 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-rose-600 transition-colors"
+                        >
+                            <Ban className="w-3 h-3" />
+                            Tickets OFF
+                        </button>
+                        <div className="w-px h-4 bg-slate-200 dark:bg-slate-700" />
+                        <button
+                            onClick={deleteSelectedWorkers}
+                            disabled={selectedIds.size === 0}
+                            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-700 dark:bg-slate-800 text-white text-[10px] font-black uppercase tracking-wide shadow-md disabled:opacity-40 disabled:cursor-not-allowed hover:bg-red-600 transition-colors"
+                        >
+                            <Trash2 className="w-3 h-3" />
+                            Elimina
+                        </button>
+                        <div className="w-px h-4 bg-slate-200 dark:bg-slate-700" />
+                        <button
+                            onClick={exitSelectionMode}
+                            className="p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                        >
+                            <X className="w-4 h-4" />
+                        </button>
+                    </motion.div>
+                )}
+            </AnimatePresence>
 
             {/* MODALE STATISTICHE (CORRETTA E SICURA) */}
             <AnimatePresence>

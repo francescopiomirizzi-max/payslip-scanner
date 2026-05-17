@@ -168,6 +168,122 @@ const PROMPT_RFI = `
     }
   }
 `;
+// ==========================================
+// 2. PROMPT CLEAN SERVICE SRL (CCNL Multiservizi - Ristorazione e Pulizie)
+// ==========================================
+const PROMPT_CLEAN_SERVICE = `
+  Sei un estrattore dati deterministico specializzato in Buste Paga CLEAN SERVICE SRL (CCNL Multiservizi - settore Ristorazione e Pulizie).
+  Il tuo unico scopo è generare un JSON valido, preciso e impeccabile.
+  [REGOLE SUI NUMERI]: Ignora i punti delle migliaia (es. 1.000,50 diventa 1000.50). Usa sempre e solo il PUNTO (.) come separatore decimale. MAI la virgola nel JSON finale.
+  [REGOLE OCR]: I documenti scansionati possono contenere errori di lettura (es. "O" al posto di "0", "I" al posto di "1"). Usa le descrizioni testuali come conferma infallibile se il codice numerico risulta sporco o illeggibile.
+
+  ### 🔴 REGOLA FERREA #1 — ASTERISCHI NEI CODICI
+  Le voci Clean Service spesso vengono stampate con asterischi accanto al codice numerico (es. "8037 * *", "* 8037 *", "8037**", "8037 \\* \\*").
+  Gli asterischi sono SOLO marker di stampa/note a piè pagina, NON fanno parte del codice.
+  DEVI estrarre ESCLUSIVAMENTE la parte numerica del codice e ignorare ogni asterisco circostante.
+  Esempio: leggi "8037 * *" → il codice è "8037". Leggi "** 565" → il codice è "565". Leggi "311*" → il codice è "311".
+
+  ### 🔴 REGOLA FERREA #2 — MULTI-PAGINA (** SEGUE **)
+  Le buste paga Clean Service hanno spesso 2 o più pagine. Se in fondo a una pagina leggi la dicitura "** SEGUE **" (o varianti: "SEGUE", "** segue **", "Segue →"), significa che la busta paga continua sulla pagina successiva.
+  DEVI analizzare TUTTE le pagine dalla prima all'ultima PRIMA di produrre il JSON finale:
+  - Se lo STESSO codice numerico (es. 8037) compare in più pagine, SOMMA gli importi della colonna Competenze.
+  - Unifica "arretrati" sommando i contributi di ogni pagina.
+  - Concatena "eventNote" se trovi marker diversi su pagine diverse.
+  Chi si ferma alla prima pagina ignorando il "** SEGUE **" fallisce il task in modo irreversibile.
+
+  ### 🔴 REGOLA FERREA #3 — UNA TANTUM / ARRETRATI
+  Se la DESCRIZIONE testuale di una voce contiene le parole "UNA TANTUM" o "ARRETRATI" (case-insensitive, anche separate: "ARR. UNA TANTUM", "UNA TANTUM 2024", "ARRETRATI ANNI PREC."), DEVI:
+  1. NON inserire quell'importo nella mappa "codes" delle indennità (anche se il codice numerico coincide con uno dei codici Clean Service).
+  2. SOMMARE quell'importo nel campo "arretrati".
+  3. Aggiungere "[Arretrati/UnaTantum]" al campo "eventNote".
+  Questa regola PREVALE su tutte le mappature codici sotto: la descrizione testuale è la verità ultima.
+
+  ### 1. DATI BASE
+  - "month" (numero 1-12) e "year" (4 cifre): estraili dalla testata del cedolino (mese/anno di competenza).
+
+  ### 2. PRESENZE E FERIE
+  - "daysWorked" (Giorni Lavorati): cerca "Presenze", "Giorni Lavorati" o "GG INPS" nella sezione anagrafica/riepilogo in alto. Estrai il valore numerico.
+  - "daysVacation" (Ferie godute nel mese): cerca "Ferie godute", "Ferie", o codice 5000 / descrizione "FERIE GODUTE". Se il valore è espresso in ore (> 12), dividi per 8 e arrotonda a 2 decimali. Se non trovi nulla, restituisci 0.
+
+  ### 3. TICKET RESTAURANT
+  - Individua la voce con codice 311 (descrizione "TICKET"). Estrai il valore unitario (colonna "Valore Unitario" o "Base/Aliquota", NON la quantità) e mettilo in "ticketRate".
+  - Il codice 311 NON deve comparire nella mappa "codes" (è gestito esclusivamente come "ticketRate", come per RFI/Elior).
+  - Se il codice 311 è assente, "ticketRate" è 0.0.
+
+  ### 4. CODICI VARIABILI (MASTER LIST)
+  Cerca i seguenti codici in TUTTE le pagine, estraendo il valore ESCLUSIVAMENTE dalla colonna "Competenze" (importi positivi).
+  REGOLA D'ORO: Il JSON finale DEVE contenere TUTTE le chiavi elencate qui sotto in "codes". Se un codice non è presente nella busta paga, il suo valore DEVE essere 0.0. Non omettere mai nessuna chiave.
+  Ricorda di applicare la REGOLA FERREA #1 (asterischi) e #3 (UNA TANTUM/ARRETRATI) durante l'estrazione.
+
+  Maggiorazioni Turni e Festività:
+  - 8037 (INDENNITA' LAV. NOTTURNO)
+  - 8057 (IND. TURNO NON CADENZ.)
+  - 8029 (IND. LAV. DOMEN. > 2 h)
+  - 8019 (LAVORO FESTIVO 35%)
+  - 565  (ORE FEST. LAVORATE 35%)
+  - 8032 (IND. LAV. DOMEN. PASQUA > 2 h)
+  - 442  (FESTIVITA' S. PASQUA)
+
+  Lavoro Straordinario / Supplementare:
+  - 8007 (LAVORO STRAORDINARIO 18%)
+  - 18   (LAVORO SUPPLEM. 18%)
+
+  Indennità Flessibilità Oraria:
+  - 437  (IND. FLESS. > 13 < 24)
+  - 440  (IND. FLESS. > 13 > 24 < 30)
+  - 441  (IND. FLESS. > 13 > 30)
+
+  Indennità Specifiche (Trasferte, Presenza):
+  - 820  (IND. PRESENZA)
+  - 739  (IND. DISPOSIZIONE)
+  - 380  (IND. TRENO IN GIORNATA)
+  - 315  (IND. TRASFERTA)
+  - 392  (TRASFERTA ITALIA)
+  - 8038 (IND. DI PERNOTTAZIONE)
+  - 8053 (IND. MANEGGIO DENARO)
+
+  ### 5. ARRETRATI E NOTE
+  - "arretrati": somma SOLO gli importi POSITIVI delle voci la cui DESCRIZIONE contiene "UNA TANTUM", "ARRETRATI", "CONGUAGLIO", "ARR." (case-insensitive). IGNORA categoricamente la colonna Trattenute.
+  - "eventNote":
+    * Se rilevi codici di malattia/assenza (es. "MALATTIA", "INFORTUNIO", "CARENZA", indennità INPS), scrivi "[Malattia/Carenza]".
+    * Se rilevi "SCIOPERO" o "ORE SCIOPERO", aggiungi "[Sciopero]".
+    * Se hai applicato la REGOLA FERREA #3, aggiungi "[Arretrati/UnaTantum]".
+    * Più marker possono coesistere separati da " + " (es. "[Malattia/Carenza] + [Arretrati/UnaTantum]").
+    * Altrimenti lascia una stringa vuota "".
+
+  ### 6. AUDITOR AI
+  - "aiWarning":
+    * Se daysWorked > 31 → "Anomalia: Presenze > 31"
+    * Se daysWorked = 0 ma sono presenti importi variabili > 0 → "Nessuna anomalia (Conguaglio mese prec.)"
+    * In tutti gli altri casi → "Nessuna anomalia"
+
+  ### 7. TFR E FONDO PREGRESSO (⚠️ REGOLA CRITICA DEL MESE DI DICEMBRE E GRANDEZZA NUMERI ⚠️)
+  - "fondo_pregresso_31_12": cerca la sezione "TFR" / "Fondo TFR al 31/12 A.P." / "F.do TFR AP". Estrai il valore numerico (es. 2938.55). Se assente, 0.0.
+  - "imponibile_tfr_mensile": [DIVIETO ASSOLUTO] cerca il riquadro TFR SOLO se la busta paga è di DICEMBRE (Mese 12) o c'è scritto "Cessazione" / "Fine Rapporto". Estrai ESCLUSIVAMENTE il valore della riga "Imponibile" (cifra alta, di solito 15.000-35.000). È SEVERAMENTE VIETATO estrarre il valore della riga "Accantonamento" o "Quota" (cifra molto più bassa, ~1.500-2.000). Per tutti i mesi da Gennaio a Novembre, restituisci SEMPRE E TASSATIVAMENTE 0.0.
+
+  ### 8. 🚨 MODALITÀ CERTIFICAZIONE UNICA (CUD) 🚨
+  Se il documento NON è una busta paga ma riporta diciture come "CERTIFICAZIONE UNICA" o "CUD":
+  1. Imposta "isCUD": true.
+  2. Imposta "month": 12.
+  3. Cerca la sezione TFR e popola "imponibile_tfr_mensile" (imponibile annuale) e "fondo_pregresso_31_12" (maturato fino al 31/12 anno precedente).
+  4. Imposta tutti gli altri codici, giorni lavorati e ferie a 0.0.
+
+  ### 9. FORMATO DI OUTPUT STRICT (DIVIETO DI MARKDOWN)
+  Restituisci ESCLUSIVAMENTE un oggetto JSON crudo. È SEVERAMENTE VIETATO usare formattazioni markdown come \`\`\`json o \`\`\`.
+
+  Esempio di output perfetto:
+  {
+    "isCUD": false, "month": 5, "year": 2023, "daysWorked": 22.0, "daysVacation": 2.0, "ticketRate": 5.29, "arretrati": 128.40, "eventNote": "[Arretrati/UnaTantum]", "aiWarning": "Nessuna anomalia",
+    "fondo_pregresso_31_12": 1850.30, "imponibile_tfr_mensile": 0.0,
+    "codes": {
+      "8037": 145.20, "8057": 0.0, "8029": 0.0, "8019": 0.0, "565": 0.0, "8032": 0.0, "442": 0.0,
+      "8007": 88.50, "18": 0.0,
+      "437": 0.0, "440": 0.0, "441": 0.0,
+      "820": 25.00, "739": 0.0, "380": 0.0, "315": 0.0, "392": 0.0, "8038": 0.0, "8053": 0.0
+    }
+  }
+`;
+
 export const getEliorPrompt = (eliorType = 'viaggiante') => {
   const isMagazzino = eliorType === 'magazzino';
 
@@ -296,7 +412,7 @@ export const getEliorPrompt = (eliorType = 'viaggiante') => {
   `;
 }
 // ==========================================
-// 3. PROMPT DI EMERGENZA (UNIVERSALE)
+// 4. PROMPT DI EMERGENZA (UNIVERSALE)
 // ==========================================
 const PROMPT_GENERICO = `
   Sei un esperto contabile italiano. Questa è una busta paga di formato sconosciuto.
@@ -318,7 +434,8 @@ const PROMPT_GENERICO = `
 // LA CABINA DI REGIA
 // ==========================================
 const PROMPT_DIRECTORY: Record<string, string> = {
-  "RFI": PROMPT_RFI
+  "RFI": PROMPT_RFI,
+  "CLEAN_SERVICE": PROMPT_CLEAN_SERVICE
 };
 
 export const handler: Handler = async (event, context) => {

@@ -81,5 +81,5 @@ export const getProfiloBadgeLabel = (profilo: string | undefined, eliorType?: 'v
     if (eliorType === 'magazzino') return short ? 'ELIOR Mag.' : 'ELIOR Magazzino';
     return 'ELIOR';
   }
-  return profilo;
+  return profilo.replace(/_/g, ' ');
 };

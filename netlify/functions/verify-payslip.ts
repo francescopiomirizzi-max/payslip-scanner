@@ -68,6 +68,22 @@ In questo caso NON segnalare discrepanza su daysWorked.
 3E10, 3E16, Indennità INPS, codici che iniziano per 0K, 74.., 6INT, 3105. IGNORA la colonna Trattenute.
 `;
 
+  } else if (co === "CLEAN_SERVICE") {
+    companyRules = `
+### REGOLE DI CALCOLO AZIENDALI — CLEAN SERVICE SRL (CCNL Multiservizi)
+
+**Asterischi nei codici:** Le voci possono essere stampate con asterischi accanto al codice (es. "8037 * *", "** 565", "311*"). Estrai SOLO la parte numerica del codice. Gli asterischi sono marker di stampa, NON sono una discrepanza.
+
+**Multi-pagina ("** SEGUE **"):** Se in fondo a una pagina compare "** SEGUE **" (o varianti "SEGUE", "** segue **"), la busta paga continua nelle pagine successive. I codici che si ripetono tra pagine vanno SOMMATI. Non considerare discrepanza un importo che è la somma di più occorrenze sparse.
+
+**daysWorked:** Cerca "Presenze", "Giorni Lavorati" o "GG INPS" nel riquadro anagrafica/riepilogo in alto.
+**daysVacation:** Cerca "Ferie godute", "Ferie", o codice 5000 ("FERIE GODUTE"). Se il valore è > 12 sono ORE → dividi per 8 (es. 11.37 → 1.42). Se ≤ 12 sono già giorni.
+
+**ticket:** Codice 311 (descrizione "TICKET") → colonna "Valore Unitario" o "Base/Aliquota". IGNORA la colonna Quantità e i totali. Il codice 311 NON deve comparire nella mappa "codes" (è gestito solo come "ticketRate", come per RFI/Elior).
+
+**Arretrati (CLEAN SERVICE):** Somma SOLO importi positivi delle voci la cui DESCRIZIONE contiene "UNA TANTUM", "ARRETRATI", "CONGUAGLIO", "ARR." (case-insensitive). Queste voci NON devono comparire in "codes" anche se il loro codice numerico coincide con uno dei codici Clean Service (la descrizione testuale prevale sul codice). Se segnali una discrepanza su un codice "codes.NNNN", verifica prima che la voce nel PDF non sia in realtà un UNA TANTUM/ARRETRATO.
+`;
+
   } else {
     // Custom / generico
     const codeList = customColumns && customColumns.length > 0

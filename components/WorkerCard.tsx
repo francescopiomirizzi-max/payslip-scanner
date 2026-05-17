@@ -1,13 +1,14 @@
 import React, { useMemo, useState, useRef, useEffect } from 'react';
+import ReactDOM from 'react-dom';
 import { Worker, getColumnsByProfile } from '../types';
 import { parseLocalFloat, getProfiloBadgeLabel } from '../utils/formatters';
 import { computeHolidayIndemnity } from '../utils/calculationEngine';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   UserCircle, Trash2, Edit, FileSpreadsheet, LayoutGrid, CalendarRange,
   TrainFront, Briefcase, RotateCw, ArrowLeft, CheckCircle2, AlertCircle,
   Send, FileBarChart, Clock, Wallet, Ticket, Layers, CreditCard, Activity,
-  TrendingUp, Ban, CalendarClock, ChevronDown
+  TrendingUp, Ban, CalendarClock, ChevronDown, Archive, MoreHorizontal,
 } from 'lucide-react';
 
 // --- STILI CSS ---
@@ -55,7 +56,7 @@ const Sparkline = ({ worker }: { worker: Worker }) => {
   const lineD = `M ${points[0]} L ${points.join(' L ')}`;
 
   const accent = worker.accentColor || 'indigo';
-  const colorMap: any = { indigo: '#6366f1', emerald: '#10b981', orange: '#f97316', blue: '#3b82f6' };
+  const colorMap: any = { indigo: '#6366f1', emerald: '#10b981', orange: '#f97316', blue: '#3b82f6', rose: '#f43f5e', violet: '#8b5cf6', teal: '#14b8a6' };
   const hexColor = colorMap[accent] || '#3b82f6';
 
   return (
@@ -138,14 +139,19 @@ interface WorkerCardProps {
   onDelete: () => void;
   onStatusChange?: (id: string, status: string) => void;
   onNotesChange?: (id: string, notes: string) => void;
+  onOpenArchive?: (id: string) => void;
 }
 
-const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenComplex, onEdit, onDelete, onStatusChange, onNotesChange }) => {
+const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenComplex, onEdit, onDelete, onStatusChange, onNotesChange, onOpenArchive }) => {
   const [isFlipped, setIsFlipped] = useState(false);
   const [isStatusOpen, setIsStatusOpen] = useState(false);
+  const [isActionsOpen, setIsActionsOpen] = useState(false);
   const [localNotes, setLocalNotes] = useState(worker.notes ?? '');
   const divRef = useRef<HTMLDivElement>(null);
-  const statusMenuRef = useRef<HTMLDivElement>(null);
+  const statusBtnRef = useRef<HTMLButtonElement>(null);
+  const statusPortalRef = useRef<HTMLDivElement>(null);
+  const [statusPortalPos, setStatusPortalPos] = useState<{ top: number; left: number } | null>(null);
+  const actionsMenuRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [opacity, setOpacity] = useState(0);
   const [tilt, setTilt] = useState({ x: 0, y: 0 });
@@ -153,7 +159,8 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
   useEffect(() => {
     if (!isStatusOpen) return;
     const onMouseDown = (e: MouseEvent) => {
-      if (statusMenuRef.current && !statusMenuRef.current.contains(e.target as Node)) {
+      const t = e.target as Node;
+      if (!statusBtnRef.current?.contains(t) && !statusPortalRef.current?.contains(t)) {
         setIsStatusOpen(false);
       }
     };
@@ -161,22 +168,35 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
     return () => document.removeEventListener('mousedown', onMouseDown);
   }, [isStatusOpen]);
 
+  useEffect(() => {
+    if (!isActionsOpen) return;
+    const onMouseDown = (e: MouseEvent) => {
+      if (actionsMenuRef.current && !actionsMenuRef.current.contains(e.target as Node)) {
+        setIsActionsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onMouseDown);
+    return () => document.removeEventListener('mousedown', onMouseDown);
+  }, [isActionsOpen]);
+
   // --- STATI SINCRONIZZATI COL DETTAGLIO ---
-  // 1. TICKET
-  const [includeTickets] = useState(() => {
-    const saved = localStorage.getItem(`tickets_${worker.id}`);
-    return saved !== null ? JSON.parse(saved) : true;
-  });
-  // 2. START YEAR
-  const [startClaimYear] = useState(() => {
-    const saved = localStorage.getItem(`startYear_${worker.id}`);
-    return saved ? parseInt(saved) : 2008;
-  });
-  // 3. EX FEST (TETTO FERIE) - Questo mancava nel codice precedente
-  const [includeExFest] = useState(() => {
-    const saved = localStorage.getItem(`exFest_${worker.id}`);
-    return saved !== null ? JSON.parse(saved) : false; // Default 28gg
-  });
+  // Derivati direttamente dalla prop worker (aggiornata da onUpdateWorkerFields)
+  // con fallback a localStorage per compatibilità con dati precedenti alla migrazione
+  const includeTickets = worker.includeTickets ?? (
+    localStorage.getItem(`tickets_${worker.id}`) !== null
+      ? JSON.parse(localStorage.getItem(`tickets_${worker.id}`)!)
+      : true
+  );
+  const startClaimYear = worker.startClaimYear ?? (
+    localStorage.getItem(`startYear_${worker.id}`)
+      ? parseInt(localStorage.getItem(`startYear_${worker.id}`)!)
+      : 2008
+  );
+  const includeExFest = worker.includeExFest ?? (
+    localStorage.getItem(`exFest_${worker.id}`) !== null
+      ? JSON.parse(localStorage.getItem(`exFest_${worker.id}`)!)
+      : false
+  );
 
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!divRef.current) return;
@@ -284,10 +304,13 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
   const theme = useMemo(() => {
     const color = worker.accentColor || 'indigo';
     const hexMap: any = {
-      indigo: { start: '#6366f1', end: '#8b5cf6', text: '#4f46e5', bg: '#eef2ff', border: '#c7d2fe', glow: 'rgba(99, 102, 241, 0.5)', classes: 'bg-indigo-50 dark:bg-indigo-900/30 border-indigo-200 dark:border-indigo-700/50 text-indigo-600 dark:text-indigo-400' },
-      emerald: { start: '#10b981', end: '#14b8a6', text: '#059669', bg: '#ecfdf5', border: '#a7f3d0', glow: 'rgba(16, 185, 129, 0.5)', classes: 'bg-emerald-50 dark:bg-emerald-900/30 border-emerald-200 dark:border-emerald-700/50 text-emerald-600 dark:text-emerald-400' },
-      orange: { start: '#f97316', end: '#ef4444', text: '#ea580c', bg: '#fff7ed', border: '#fed7aa', glow: 'rgba(249, 115, 22, 0.5)', classes: 'bg-orange-50 dark:bg-orange-900/30 border-orange-200 dark:border-orange-700/50 text-orange-600 dark:text-orange-400' },
-      blue: { start: '#3b82f6', end: '#06b6d4', text: '#2563eb', bg: '#eff6ff', border: '#bfdbfe', glow: 'rgba(59, 130, 246, 0.5)', classes: 'bg-blue-50 dark:bg-blue-900/30 border-blue-200 dark:border-blue-700/50 text-blue-600 dark:text-cyan-400' }
+      indigo:  { start: '#6366f1', end: '#8b5cf6', text: '#4f46e5', bg: '#eef2ff', border: '#c7d2fe', glow: 'rgba(99, 102, 241, 0.5)',  classes: 'bg-indigo-50 dark:bg-indigo-900/30 border-indigo-200 dark:border-indigo-700/50 text-indigo-600 dark:text-indigo-400' },
+      emerald: { start: '#10b981', end: '#14b8a6', text: '#059669', bg: '#ecfdf5', border: '#a7f3d0', glow: 'rgba(16, 185, 129, 0.5)',  classes: 'bg-emerald-50 dark:bg-emerald-900/30 border-emerald-200 dark:border-emerald-700/50 text-emerald-600 dark:text-emerald-400' },
+      orange:  { start: '#f97316', end: '#ef4444', text: '#ea580c', bg: '#fff7ed', border: '#fed7aa', glow: 'rgba(249, 115, 22, 0.5)',  classes: 'bg-orange-50 dark:bg-orange-900/30 border-orange-200 dark:border-orange-700/50 text-orange-600 dark:text-orange-400' },
+      blue:    { start: '#3b82f6', end: '#06b6d4', text: '#2563eb', bg: '#eff6ff', border: '#bfdbfe', glow: 'rgba(59, 130, 246, 0.5)',  classes: 'bg-blue-50 dark:bg-blue-900/30 border-blue-200 dark:border-blue-700/50 text-blue-600 dark:text-cyan-400' },
+      rose:    { start: '#f43f5e', end: '#fb923c', text: '#e11d48', bg: '#fff1f2', border: '#fecdd3', glow: 'rgba(244, 63, 94, 0.5)',   classes: 'bg-rose-50 dark:bg-rose-900/30 border-rose-200 dark:border-rose-700/50 text-rose-600 dark:text-rose-400' },
+      violet:  { start: '#8b5cf6', end: '#d946ef', text: '#7c3aed', bg: '#f5f3ff', border: '#ddd6fe', glow: 'rgba(139, 92, 246, 0.5)', classes: 'bg-violet-50 dark:bg-violet-900/30 border-violet-200 dark:border-violet-700/50 text-violet-600 dark:text-violet-400' },
+      teal:    { start: '#14b8a6', end: '#06b6d4', text: '#0d9488', bg: '#f0fdfa', border: '#99f6e4', glow: 'rgba(20, 184, 166, 0.5)',  classes: 'bg-teal-50 dark:bg-teal-900/30 border-teal-200 dark:border-teal-700/50 text-teal-600 dark:text-teal-400' }
     };
     const c = hexMap[color] || hexMap.blue;
 
@@ -308,7 +331,7 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
   const badgeStyles = useMemo(() => {
     if (!worker.profilo) return 'bg-slate-200/50 dark:bg-slate-700/50 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-600';
     if (worker.profilo === 'ELIOR') return 'bg-orange-100/50 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 border-orange-200 dark:border-orange-700/50';
-    if (worker.profilo === 'REKEEP') return 'bg-emerald-100/50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-700/50';
+    if (worker.profilo === 'CLEAN_SERVICE') return 'bg-emerald-100/50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-700/50';
     if (worker.profilo === 'RFI') return 'bg-blue-100/50 dark:bg-blue-900/30 text-blue-700 dark:text-cyan-400 border-blue-200 dark:border-blue-700/50';
 
     // AZIENDE CUSTOM: Palette premium esclusiva (niente blu/arancio/verde base)
@@ -360,39 +383,134 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
                 <div className="absolute left-0 top-10 bottom-10 w-[3px] rounded-full z-30 transition-colors duration-500" style={{ backgroundColor: statusConfig.dot, boxShadow: `0 0 10px 2px ${statusConfig.dot}50` }} />
 
                 <div className="relative p-7 flex flex-col h-full z-20 pl-8">
-                  <div className="flex justify-between items-start mb-5 gap-2">
-                    <div className="flex items-center gap-4 min-w-0">
-                      <div className={`w-16 h-16 rounded-2xl flex items-center justify-center border shadow-sm transition-all duration-500 group-hover:rotate-3 group-hover:scale-110 shrink-0 ${theme.iconClasses}`}>
-                        <RoleIcon className="w-8 h-8" strokeWidth={1.5} />
-                      </div>
-                      <div className="flex flex-col justify-center min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <h3 className="text-lg font-bold text-slate-500 dark:text-slate-400 leading-none capitalize truncate">{worker.nome}</h3>
-                          <span className={`shrink-0 px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wide border shadow-sm backdrop-blur-md ${badgeStyles}`}>{getProfiloBadgeLabel(worker.profilo, worker.eliorType, true)}</span>
-                        </div>
-                        <h3 className="text-xl font-black text-slate-800 dark:text-white leading-none tracking-tight uppercase truncate">{worker.cognome}</h3>
-                      </div>
+                  <div className="flex items-start gap-3 mb-4">
+                    <div className={`w-16 h-16 rounded-2xl flex items-center justify-center border shadow-sm transition-all duration-500 group-hover:rotate-3 group-hover:scale-110 shrink-0 ${theme.iconClasses}`}>
+                      <RoleIcon className="w-8 h-8" strokeWidth={1.5} />
                     </div>
-                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all duration-500 translate-x-4 group-hover:translate-x-0 shrink-0">
-                      <button onClick={() => setIsFlipped(true)} className="p-2 text-slate-400 dark:text-slate-500 hover:text-indigo-500 dark:hover:text-indigo-400 transition-all hover:scale-125 hover:rotate-[360deg] duration-700"><RotateCw className="w-5 h-5" /></button>
-                      <button onClick={(e) => { e.stopPropagation(); onEdit(e); }} className="p-2 text-slate-400 dark:text-slate-500 hover:text-blue-500 dark:hover:text-cyan-400 transition-all hover:scale-125 hover:rotate-12"><Edit className="w-5 h-5" /></button>
-                      <button onClick={(e) => { e.stopPropagation(); onDelete(); }} className="p-2 text-slate-400 dark:text-slate-500 hover:text-red-500 dark:hover:text-red-400 transition-all hover:scale-125 hover:-rotate-12"><Trash2 className="w-5 h-5" /></button>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-xl font-black text-slate-800 dark:text-white leading-tight tracking-tight uppercase truncate">{worker.cognome}</h3>
+                      <h3 className="text-base font-bold text-slate-500 dark:text-slate-400 leading-snug capitalize truncate">{worker.nome}</h3>
+                      <span className={`mt-1.5 inline-block px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wide border shadow-sm backdrop-blur-md ${badgeStyles}`}>{getProfiloBadgeLabel(worker.profilo, worker.eliorType, true)}</span>
                     </div>
+
+                    {/* Tasto ruota + Menu ••• */}
+                    <div className="flex items-center gap-0.5 shrink-0">
+                      <button
+                        onClick={() => setIsFlipped(true)}
+                        className="p-2 rounded-xl opacity-0 group-hover:opacity-60 hover:!opacity-100 hover:bg-slate-100 dark:hover:bg-slate-700/60 transition-all duration-200 hover:rotate-180"
+                        title="Ruota card"
+                      >
+                        <RotateCw className="w-[18px] h-[18px] text-slate-500 dark:text-slate-400 transition-transform duration-500" />
+                      </button>
+
+                    <div className="relative" ref={actionsMenuRef}>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setIsActionsOpen(prev => !prev); }}
+                        className={`p-2 rounded-xl transition-all duration-200 ${isActionsOpen ? 'bg-slate-100 dark:bg-slate-700 opacity-100' : 'opacity-0 group-hover:opacity-60 hover:!opacity-100 hover:bg-slate-100 dark:hover:bg-slate-700/60'}`}
+                      >
+                        <MoreHorizontal className="w-[18px] h-[18px] text-slate-500 dark:text-slate-400" />
+                      </button>
+
+                      <AnimatePresence>
+                        {isActionsOpen && (
+                          <motion.div
+                            initial={{ opacity: 0, scale: 0.88, y: -8 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.88, y: -8 }}
+                            transition={{ type: 'spring', stiffness: 420, damping: 30 }}
+                            style={{ transformOrigin: 'top right' }}
+                            className="absolute top-full right-0 mt-2 z-50 w-60 bg-white/96 dark:bg-slate-900/95 backdrop-blur-2xl border border-slate-200/60 dark:border-slate-700/60 rounded-2xl shadow-2xl shadow-slate-900/20 overflow-hidden"
+                          >
+                            {/* Header */}
+                            <div className="px-4 pt-3.5 pb-2.5 border-b border-slate-100 dark:border-slate-800">
+                              <p className="text-[9px] font-black uppercase tracking-[0.15em] text-slate-400 dark:text-slate-500">Azioni pratica</p>
+                              <p className="text-[12px] font-black text-slate-700 dark:text-slate-200 mt-0.5 truncate">{worker.cognome} {worker.nome}</p>
+                            </div>
+
+                            {/* Voci */}
+                            <div className="p-2 space-y-0.5">
+                              {[
+                                ...(onOpenArchive ? [{
+                                  icon: <Archive className="w-4 h-4 text-white" />,
+                                  label: 'Archivio buste paga',
+                                  iconBg: 'bg-violet-500',
+                                  hoverBg: 'hover:bg-violet-50 dark:hover:bg-violet-950/60',
+                                  hoverText: 'hover:text-violet-700 dark:hover:text-violet-300',
+                                  onClick: (e: React.MouseEvent) => { e.stopPropagation(); onOpenArchive(worker.id); setIsActionsOpen(false); },
+                                }] : []),
+                                {
+                                  icon: <Edit className="w-4 h-4 text-white" />,
+                                  label: 'Modifica pratica',
+                                  iconBg: 'bg-sky-500',
+                                  hoverBg: 'hover:bg-sky-50 dark:hover:bg-sky-950/60',
+                                  hoverText: 'hover:text-sky-700 dark:hover:text-sky-300',
+                                  onClick: (e: React.MouseEvent) => { e.stopPropagation(); onEdit(e); setIsActionsOpen(false); },
+                                },
+                              ].map((item, i) => (
+                                <motion.button
+                                  key={i}
+                                  initial={{ opacity: 0, x: 6 }}
+                                  animate={{ opacity: 1, x: 0 }}
+                                  transition={{ delay: i * 0.04, type: 'spring', stiffness: 400, damping: 28 }}
+                                  onClick={item.onClick}
+                                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all duration-150 group/item ${item.hoverBg}`}
+                                >
+                                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 shadow-sm ${item.iconBg} transition-transform duration-200 group-hover/item:scale-110`}>
+                                    {item.icon}
+                                  </div>
+                                  <span className={`text-[13px] font-bold text-slate-600 dark:text-slate-300 transition-colors ${item.hoverText}`}>{item.label}</span>
+                                </motion.button>
+                              ))}
+
+                              <div className="mx-2 h-px bg-slate-100 dark:bg-slate-800 my-1.5" />
+
+                              {/* Elimina — separato e rosso */}
+                              <motion.button
+                                initial={{ opacity: 0, x: 6 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                transition={{ delay: (onOpenArchive ? 2 : 1) * 0.04, type: 'spring', stiffness: 400, damping: 28 }}
+                                onClick={(e) => { e.stopPropagation(); onDelete(); setIsActionsOpen(false); }}
+                                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all duration-150 hover:bg-red-50 dark:hover:bg-red-950/40 group/del"
+                              >
+                                <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 bg-red-500 shadow-sm transition-transform duration-200 group-hover/del:scale-110">
+                                  <Trash2 className="w-4 h-4 text-white" />
+                                </div>
+                                <span className="text-[13px] font-bold text-red-500/80 group-hover/del:text-red-600 dark:group-hover/del:text-red-400 transition-colors">Elimina pratica</span>
+                              </motion.button>
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
+                    </div> {/* chiude flex items-center gap-0.5 */}
                   </div>
 
-                  <div className="flex-1 space-y-4">
-                    <div className="relative" ref={statusMenuRef}>
+                  <div className="flex-1 min-h-0 space-y-4">
+                    <div className="relative">
                       <button
-                        onClick={(e) => { e.stopPropagation(); setIsStatusOpen(prev => !prev); }}
+                        ref={statusBtnRef}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (!isStatusOpen && statusBtnRef.current) {
+                            const r = statusBtnRef.current.getBoundingClientRect();
+                            setStatusPortalPos({ top: r.bottom + 6, left: r.left });
+                          }
+                          setIsStatusOpen(prev => !prev);
+                        }}
                         className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border shadow-sm w-fit backdrop-blur-md transition-all hover:opacity-80 ${statusConfig.color} dark:bg-opacity-20 dark:border-opacity-30`}
                       >
-                        <span className="w-2 h-2 rounded-full shadow-[0_0_8px_currentColor]" style={{ backgroundColor: statusConfig.dot }}></span>
+                        <span className="w-2 h-2 rounded-full shadow-[0_0_8px_currentColor]" style={{ backgroundColor: statusConfig.dot }} />
                         <StatusIcon className="w-3.5 h-3.5" />
                         <span className="text-[10px] font-bold uppercase tracking-wide">{statusConfig.label}</span>
                         <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${isStatusOpen ? 'rotate-180' : ''}`} />
                       </button>
-                      {isStatusOpen && (
-                        <div className="absolute top-full left-0 mt-1.5 z-50 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-xl overflow-hidden min-w-[160px]">
+
+                      {isStatusOpen && statusPortalPos && ReactDOM.createPortal(
+                        <div
+                          ref={statusPortalRef}
+                          style={{ position: 'fixed', top: statusPortalPos.top, left: statusPortalPos.left, zIndex: 9999 }}
+                          className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-xl overflow-hidden min-w-[160px]"
+                        >
                           {STATUS_PICKER_OPTIONS.map(opt => {
                             const isCurrent = worker.status === opt.value || (!worker.status && opt.value === '');
                             return (
@@ -407,12 +525,13 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
                               </button>
                             );
                           })}
-                        </div>
+                        </div>,
+                        document.body
                       )}
                     </div>
-                    <div className="flex flex-wrap items-center gap-2 mt-3">
-                      <span className="px-3 py-1.5 rounded-xl bg-white/50 dark:bg-slate-900/60 border border-slate-200/60 dark:border-slate-700/50 text-[10px] font-bold text-slate-500 dark:text-slate-400 capitalize shadow-sm backdrop-blur-sm transition-colors">{worker.ruolo || 'N.D.'}</span>
-                      <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/50 dark:bg-slate-900/60 border border-slate-200/60 dark:border-slate-700/50 shadow-sm backdrop-blur-sm transition-colors">
+                    <div className="flex items-center gap-2 mt-3 min-w-0">
+                      <span className="flex-1 min-w-0 truncate px-3 py-1.5 rounded-xl bg-white/50 dark:bg-slate-900/60 border border-slate-200/60 dark:border-slate-700/50 text-[10px] font-bold text-slate-500 dark:text-slate-400 capitalize shadow-sm backdrop-blur-sm transition-colors">{worker.ruolo || 'N.D.'}</span>
+                      <div className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/50 dark:bg-slate-900/60 border border-slate-200/60 dark:border-slate-700/50 shadow-sm backdrop-blur-sm transition-colors">
                         <CalendarRange className="w-3.5 h-3.5" style={theme.iconStyle} />
                         <span className="text-[10px] font-black text-slate-700 dark:text-slate-300 tracking-tight transition-colors">{stats.range}</span>
                       </div>
@@ -436,7 +555,7 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
                     )}
 
                     {financialStats.netto > 0 && (
-                      <div className="grid grid-cols-2 gap-2 pt-1">
+                      <div className={`grid gap-2 pt-1 ${includeTickets ? 'grid-cols-2' : 'grid-cols-1'}`}>
                         <div className="px-3 py-2.5 rounded-2xl bg-emerald-50/70 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800/40 transition-all duration-300 hover:scale-[1.03] hover:shadow-md hover:shadow-emerald-500/10">
                           <div className="flex items-center gap-1 mb-1">
                             <Wallet className="w-2.5 h-2.5 text-emerald-500/80 dark:text-emerald-400/70" />
@@ -446,22 +565,24 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
                             {financialStats.netto.toLocaleString('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })}
                           </p>
                         </div>
-                        <div className="px-3 py-2.5 rounded-2xl bg-amber-50/70 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-800/40 transition-all duration-300 hover:scale-[1.03] hover:shadow-md hover:shadow-amber-500/10">
-                          <div className="flex items-center gap-1 mb-1">
-                            <Ticket className="w-2.5 h-2.5 text-amber-500/80 dark:text-amber-400/70" />
-                            <p className="text-[8px] font-black uppercase tracking-widest text-amber-600/70 dark:text-amber-400/60">Ticket</p>
+                        {includeTickets && (
+                          <div className="px-3 py-2.5 rounded-2xl bg-amber-50/70 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-800/40 transition-all duration-300 hover:scale-[1.03] hover:shadow-md hover:shadow-amber-500/10">
+                            <div className="flex items-center gap-1 mb-1">
+                              <Ticket className="w-2.5 h-2.5 text-amber-500/80 dark:text-amber-400/70" />
+                              <p className="text-[8px] font-black uppercase tracking-widest text-amber-600/70 dark:text-amber-400/60">Ticket</p>
+                            </div>
+                            <p className="text-sm font-black text-amber-700 dark:text-amber-400 tabular-nums leading-none">
+                              {financialStats.ticket > 0
+                                ? financialStats.ticket.toLocaleString('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })
+                                : '—'}
+                            </p>
                           </div>
-                          <p className="text-sm font-black text-amber-700 dark:text-amber-400 tabular-nums leading-none">
-                            {financialStats.ticket > 0
-                              ? financialStats.ticket.toLocaleString('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })
-                              : '—'}
-                          </p>
-                        </div>
+                        )}
                       </div>
                     )}
                   </div>
 
-                  <div className="mt-8 grid grid-cols-2 gap-3 relative z-30">
+                  <div className="mt-4 grid grid-cols-2 gap-3 relative z-30">
                     <motion.button
                       initial="idle"
                       whileHover="hover"

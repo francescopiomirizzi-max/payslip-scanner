@@ -3,41 +3,79 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     Bot, Calculator, Search, X, Loader2,
     CheckCircle2, AlertCircle, LayoutGrid, Sun, Moon,
-    Database, Settings, LogOut, Copy, User, DownloadCloud, Trash2, ArrowRight, QrCode, Smartphone, Sparkles, LoaderCircle, FileText, Check, XCircle, ArrowLeft, Download, FileSpreadsheet, Printer
+    Database, Settings, LogOut, Copy, User, DownloadCloud, Trash2, ArrowRight, QrCode, Smartphone, Sparkles, LoaderCircle, FileText, Check, XCircle, ArrowLeft, Download, FileSpreadsheet, Printer, Archive, Minimize2
 } from 'lucide-react';
 import { useIsland } from '../IslandContext';
+import { FRAMER_PHYSICS, APPLE_EASE } from '../framerConfig';
 
 export const notifyIsland = (msg: string, type: 'success' | 'error' | 'ai' = 'success') => {
     window.dispatchEvent(new CustomEvent('island-notify', { detail: { msg, type } }));
 };
 
-// --- TRANSIZIONE FLUIDA GLOBALE ---
-const islandTransition = {
-    type: "spring",
-    stiffness: 400,
-    damping: 30,
-    mass: 0.8
-};
+// --- TRANSIZIONI ---
+// Centralizzate in framerConfig.ts → preset `dynamicIsland` (spring quasi-critica)
+// per x/boxShadow, e `dynamicIslandLayout` (overdamped) per il resize del contenitore.
 
 // --- GESTORE DEGLI STILI ---
-const getIslandStyles = (mode: string, isExpanded: boolean, uploadState: any) => {
+// NOTA: il border-radius è gestito separatamente da `getIslandBorderRadius` come valore
+// numerico animato nello `style` del motion.div. Le classi `rounded-*` sono volutamente
+// rimosse da qui per evitare che Framer Motion le "perda" durante i layout-shift
+// (causa del bug angoli appuntiti in mode calc).
+const getIslandStyles = (mode: string, _isExpanded: boolean, _uploadState: any) => {
     if (mode === 'uploading') {
-        // ✨ FIX SQUADRATURE: Arrotondiamo il contenitore padre per curvare l'ombra e nascondiamo l'overflow
-        const radius = isExpanded && !uploadState.isFinishing ? 'rounded-[32px]' : 'rounded-[20px]';
-        return `pointer-events-auto bg-transparent border-none shadow-none overflow-hidden flex flex-col ${radius}`;
+        return `pointer-events-auto bg-transparent border-none shadow-none overflow-hidden flex flex-col`;
     }
 
-    const base = "overflow-hidden backdrop-blur-md transition-all duration-500 pointer-events-auto flex flex-col";
+    // ❌ NIENTE `backdrop-filter` nella transition: causa repaint con corner bug
+    // su container con backdrop-blur + border-radius durante interazione dei figli.
+    const base = "overflow-hidden backdrop-blur-md pointer-events-auto flex flex-col transition-[background-color,border-color,box-shadow,opacity] duration-500";
 
     switch (mode) {
         case 'idle':
-            return `${base} bg-white/20 dark:bg-slate-900/30 border border-white/20 dark:border-cyan-500/15 rounded-full shadow-sm hover:backdrop-blur-2xl hover:bg-white/60 dark:hover:bg-slate-900/70 hover:border-slate-300 dark:hover:border-cyan-400/40 hover:shadow-[0_10px_30px_rgba(0,0,0,0.08)] dark:hover:shadow-[0_0_20px_rgba(6,182,212,0.25)]`;
+            return `${base} bg-white/20 dark:bg-slate-900/30 border border-white/20 dark:border-cyan-500/15 shadow-sm hover:backdrop-blur-2xl hover:bg-white/60 dark:hover:bg-slate-900/70 hover:border-slate-300 dark:hover:border-cyan-400/40 hover:shadow-[0_10px_30px_rgba(0,0,0,0.08)] dark:hover:shadow-[0_0_20px_rgba(6,182,212,0.25)]`;
         case 'dropzone':
-            return `${base} bg-slate-950/90 border-2 border-fuchsia-500 rounded-[2.5rem] shadow-[0_0_50px_rgba(217,70,239,0.5)]`;
+            return `${base} bg-slate-950/90 border-2 border-fuchsia-500 shadow-[0_0_50px_rgba(217,70,239,0.5)]`;
         case 'ticker':
-            return `${base} bg-white/90 dark:bg-slate-950/90 border border-emerald-500/50 rounded-full shadow-[0_10px_30px_rgba(16,185,129,0.3)]`;
+            return `${base} bg-white/90 dark:bg-slate-950/90 border border-emerald-500/50 shadow-[0_10px_30px_rgba(16,185,129,0.3)]`;
         default:
-            return `${base} bg-white/70 dark:bg-slate-950/70 backdrop-blur-2xl border border-white/30 dark:border-cyan-500/10 rounded-[2rem] shadow-[0_20px_40px_rgba(0,0,0,0.15)] dark:shadow-[0_20px_40px_rgba(0,0,0,0.5)]`;
+            return `${base} bg-white/70 dark:bg-slate-950/70 backdrop-blur-2xl border border-white/30 dark:border-cyan-500/10 shadow-[0_20px_40px_rgba(0,0,0,0.15)] dark:shadow-[0_20px_40px_rgba(0,0,0,0.5)]`;
+    }
+};
+
+// Border-radius come numero → Framer Motion interpola pulito durante layout.
+// 9999 = pill shape; valori più contenuti per stati espansi.
+const getIslandBorderRadius = (mode: string, isExpanded: boolean, uploadState: any): number => {
+    if (mode === 'idle' || mode === 'ticker' || mode === 'quick_actions') return 9999;
+    if (mode === 'notify') return 9999;
+    if (mode === 'dropzone') return 40;
+    if (mode === 'uploading') {
+        if (uploadState.isFinishing) return 20;
+        return isExpanded ? 32 : 20;
+    }
+    // calc, calc_history, ai, menu, stats, notification → 32px sempre
+    return 32;
+};
+
+// Width esplicita per ogni mode → animata via `animate` (no transform scale di Framer).
+// Eliminando `layout` prop, evitiamo lo schiacciamento durante apertura/chiusura.
+const getIslandWidth = (mode: string, isExpanded: boolean, uploadState: any): number => {
+    switch (mode) {
+        case 'dropzone': return 350;
+        case 'ticker': return 220;
+        case 'idle': return 140;
+        case 'notify':
+        case 'notification': return 350;
+        case 'ai': return 500;
+        case 'calc': return 280;
+        case 'calc_history': return 320;
+        case 'stats': return 360;
+        case 'quick_actions': return 180;
+        case 'menu': return 420;
+        case 'uploading':
+            if (isExpanded) return 300;
+            if (uploadState.isFinishing) return 280;
+            return 260;
+        default: return 320;
     }
 };
 
@@ -52,7 +90,9 @@ const DynamicIsland = ({ workers = [] }: { workers?: { id: string | number; nome
         closeIsland,
         workerStats,
         showWorkerStats,
-        uploadState
+        uploadState,
+        minimizeUpload,
+        restoreUpload
     } = useIsland();
 
     // ✨ BISTURI 1A: STATO CONTESTO ISOLA
@@ -90,25 +130,78 @@ const DynamicIsland = ({ workers = [] }: { workers?: { id: string | number; nome
 
     const [localMode, setLocalMode] = useState<'idle' | 'calc' | 'ai' | 'notify' | 'menu' | 'dropzone' | 'ticker'>('idle');
     const [isUploadExpanded, setIsUploadExpanded] = useState(false);
+    const [isDark, setIsDark] = useState<boolean>(() =>
+        typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
+    );
 
-    const mode = globalMode !== 'idle' ? globalMode : localMode;
+    // Quando l'upload è minimized, l'isola principale rilascia il mode `uploading` e
+    // segue il localMode (idle/calc/ai/menu). Gli altri global mode (notification, stats,
+    // quick_actions) continuano ad avere priorità sul local.
+    const uploadingActive = globalMode === 'uploading' && !uploadState.minimized;
+    const mode = uploadingActive
+        ? globalMode
+        : (globalMode !== 'idle' && globalMode !== 'uploading')
+            ? globalMode
+            : localMode;
 
     // Keep a ref so stale-closure handlers can always read the current globalMode
     const globalModeRef = useRef(globalMode);
     useEffect(() => { globalModeRef.current = globalMode; }, [globalMode]);
 
+    useEffect(() => {
+        const obs = new MutationObserver(() => {
+            setIsDark(document.documentElement.classList.contains('dark'));
+        });
+        obs.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+        return () => obs.disconnect();
+    }, []);
+
     const setMode = (newMode: any) => {
-        // Never let a local-mode change kill an active upload
-        if (globalModeRef.current === 'uploading') return;
-        if (globalModeRef.current !== 'idle') closeIsland();
+        // Upload attivo NON minimizzato → blocca local mode (preserve full Live Activity).
+        // Upload attivo minimized → consenti cambio local mode (l'utente l'ha rilasciato volontariamente).
+        if (globalModeRef.current === 'uploading' && !uploadState.minimized) return;
+        if (globalModeRef.current !== 'idle' && globalModeRef.current !== 'uploading') closeIsland();
         setLocalMode(newMode);
     };
 
     const [notifyData, setNotifyData] = useState<{ msg: string, type: string } | null>(null);
+
+    useEffect(() => {
+        const handleNotify = (e: any) => {
+            if (globalModeRef.current === 'uploading') return;
+            setNotifyData(e.detail);
+            setLocalMode('notify');
+            setTimeout(() => {
+                setLocalMode((prev: any) => prev === 'notify' ? 'idle' : prev);
+                setNotifyData(null);
+            }, 3000);
+        };
+        window.addEventListener('island-notify', handleNotify);
+        return () => window.removeEventListener('island-notify', handleNotify);
+    }, []);
+
     const inputRef = useRef<HTMLInputElement>(null);
     const [liveTicker, setLiveTicker] = useState<number | null>(null);
     const prevTickerRef = useRef<number | null>(null);
     const [display, setDisplay] = useState('');
+    // Ripple effect bottoni calcolatrice: ogni click crea un ripple con coordinate locali
+    // al bottone. Auto-cleanup dopo 600ms (durata animazione).
+    const [calcRipples, setCalcRipples] = useState<Array<{ id: number; btn: string; x: number; y: number }>>([]);
+
+    // === PILL SATELLITE INTELLIGENCE: ETA dinamico + stall detection ===
+    const [uploadEta, setUploadEta] = useState<string>('—');
+    const [uploadIsStalled, setUploadIsStalled] = useState(false);
+    const uploadStartTimeRef = useRef<number | null>(null);
+    const lastProgressUpdateRef = useRef<number>(0);
+    const lastProgressValueRef = useRef<number>(0);
+    const spawnRipple = (btn: string, e: React.MouseEvent<HTMLButtonElement>) => {
+        const rect = e.currentTarget.getBoundingClientRect();
+        const id = Date.now() + Math.random();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        setCalcRipples(prev => [...prev, { id, btn, x, y }]);
+        setTimeout(() => setCalcRipples(prev => prev.filter(r => r.id !== id)), 600);
+    };
     const [searchQuery, setSearchQuery] = useState('');
     const [searchResults, setSearchResults] = useState<any[]>([]);
     const [isAiThinking, setIsAiThinking] = useState(false);
@@ -252,7 +345,7 @@ const DynamicIsland = ({ workers = [] }: { workers?: { id: string | number; nome
         const handleClickOutside = (event: MouseEvent) => {
             if (islandRef.current && !islandRef.current.contains(event.target as Node)) {
                 setIsUploadExpanded(false);
-                if (localMode === 'menu' || localMode === 'ai' || localMode === 'calc' || localMode === 'calc_history') {
+                if (localMode === 'menu' || localMode === 'ai' || localMode === 'calc') {
                     setMode('idle');
                 }
             }
@@ -392,6 +485,61 @@ const DynamicIsland = ({ workers = [] }: { workers?: { id: string | number; nome
         if (mode === 'ai' && inputRef.current) setTimeout(() => inputRef.current?.focus(), 100);
     }, [mode]);
 
+    // === PILL SATELLITE: tracking start time + reset stall on progress change ===
+    useEffect(() => {
+        if (uploadState.isUploading && !uploadState.isFinishing) {
+            if (uploadStartTimeRef.current === null) {
+                uploadStartTimeRef.current = Date.now();
+                lastProgressUpdateRef.current = Date.now();
+                lastProgressValueRef.current = 0;
+                setUploadIsStalled(false);
+                setUploadEta('—');
+            }
+        } else {
+            uploadStartTimeRef.current = null;
+        }
+    }, [uploadState.isUploading, uploadState.isFinishing]);
+
+    useEffect(() => {
+        if (uploadState.progress !== lastProgressValueRef.current) {
+            lastProgressValueRef.current = uploadState.progress;
+            lastProgressUpdateRef.current = Date.now();
+            setUploadIsStalled(false);
+        }
+    }, [uploadState.progress]);
+
+    // ETA + stall watcher (1s tick), attivo solo durante upload non-finishing
+    useEffect(() => {
+        if (!uploadState.isUploading || uploadState.isFinishing) {
+            setUploadEta('—');
+            setUploadIsStalled(false);
+            return;
+        }
+        const tick = () => {
+            // ETA per batch e single (mobile non ha total significativo)
+            if (uploadState.type !== 'mobile' && uploadStartTimeRef.current && uploadState.progress > 0 && uploadState.total > 0) {
+                const elapsedMs = Date.now() - uploadStartTimeRef.current;
+                const rate = uploadState.progress / (elapsedMs / 1000);
+                const remainingItems = uploadState.total - uploadState.progress;
+                if (rate > 0 && remainingItems > 0) {
+                    const remainingSec = remainingItems / rate;
+                    if (remainingSec < 1) setUploadEta('<1s');
+                    else if (remainingSec < 60) setUploadEta(`${Math.ceil(remainingSec)}s`);
+                    else setUploadEta(`${Math.floor(remainingSec / 60)}m ${Math.ceil(remainingSec % 60)}s`);
+                } else {
+                    setUploadEta('—');
+                }
+            }
+            // Stall: nessun progress update da > 5s e progress < total
+            if (Date.now() - lastProgressUpdateRef.current > 5000 && uploadState.progress < uploadState.total) {
+                setUploadIsStalled(true);
+            }
+        };
+        tick();
+        const interval = setInterval(tick, 1000);
+        return () => clearInterval(interval);
+    }, [uploadState.isUploading, uploadState.isFinishing, uploadState.type, uploadState.progress, uploadState.total]);
+
     // Flush any ticker value that was stashed while upload was running
     useEffect(() => {
         if (globalMode !== 'idle') return;
@@ -426,68 +574,119 @@ const DynamicIsland = ({ workers = [] }: { workers?: { id: string | number; nome
             if (uploadState.type === 'mobile') return 'rgba(99, 102, 241, 0.6)';
             return 'rgba(6, 182, 212, 0.6)';
         }
-        return 'rgba(6, 182, 212, 0.15)';
+        return isDark ? 'rgba(6, 182, 212, 0.3)' : 'rgba(99, 102, 241, 0.3)';
     };
 
-    const calcBtnClass = "h-12 rounded-xl font-bold text-lg transition-all active:scale-95 flex items-center justify-center shadow-sm";
+    // Helper per generare colore con opacità arbitraria (es. per keyframes "respirante").
+    const withOpacity = (op: number) => getGlowColor().replace(/[\d.]+\)\s*$/, `${op})`);
+
+    // Varianti standard del glow (legacy compat per code che non usa keyframes).
+    const getGlowColorMuted = () => withOpacity(0.12);
+    const getGlowColorRing = () => withOpacity(0.55);
+
+    const calcBtnClass = "relative overflow-hidden h-12 rounded-xl font-bold text-lg transition-[transform,background-color,color] active:scale-95 flex items-center justify-center shadow-sm";
 
     return (
         <div ref={islandRef} className="fixed top-6 left-1/2 -translate-x-1/2 z-[9999] flex flex-col items-center pointer-events-none group/island print:hidden">
+            {/* Glow blob esterno: ambient (idle, dropzone). In idle fa COLOR DRIFT aurora-style. */}
             <motion.div
-                layout
-                className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full blur-[40px] -z-10"
+                className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full blur-[50px] -z-10 pointer-events-none"
                 animate={{
-                    backgroundColor: getGlowColor(),
-                    width: mode === 'idle' ? ['90px', '160px', '90px'] : mode === 'dropzone' ? '300px' : '400px',
-                    height: mode === 'idle' ? ['20px', '50px', '20px'] : '100px',
-                    opacity: mode === 'idle' ? [0.3, 0.9, 0.3] : 1,
-                    scale: mode === 'idle' ? [0.9, 1.15, 0.9] : 1,
+                    // ✨ COLOR DRIFT in idle: ciclo lento cyan → indigo → fuchsia → cyan (8s).
+                    // Negli altri mode resta sul colore del mode.
+                    backgroundColor: mode === 'idle'
+                        ? (isDark
+                            ? ['rgba(6,182,212,0.35)', 'rgba(99,102,241,0.35)', 'rgba(217,70,239,0.30)', 'rgba(6,182,212,0.35)']
+                            : ['rgba(99,102,241,0.30)', 'rgba(168,85,247,0.28)', 'rgba(217,70,239,0.26)', 'rgba(99,102,241,0.30)'])
+                        : getGlowColor(),
+                    width: mode === 'idle' ? ['90px', '190px', '90px'] : mode === 'dropzone' ? '300px' : '140px',
+                    height: mode === 'idle' ? ['24px', '64px', '24px'] : mode === 'dropzone' ? '100px' : '40px',
+                    opacity: mode === 'idle' ? [0.4, 1.0, 0.4] : mode === 'dropzone' ? 1 : 0,
+                    scale: mode === 'idle' ? [0.9, 1.2, 0.9] : 1,
                 }}
                 transition={mode === 'idle'
-                    ? { repeat: Infinity, duration: 4, ease: "easeInOut" }
-                    : { duration: 0.7 }
+                    ? {
+                        repeat: Infinity,
+                        duration: 4,
+                        ease: "easeInOut",
+                        // Color drift su scala temporale più lunga (8s) per non sovrapporsi al pulse della forma.
+                        backgroundColor: { repeat: Infinity, duration: 8, ease: "easeInOut" },
+                    }
+                    : { duration: 0.4, ease: APPLE_EASE }
                 }
             />
 
             <motion.div
-                layout
-                transition={islandTransition}
+                // ❌ NIENTE `layout` prop: causava lo "schiacciamento" via transform scale.
+                // Animo `width` e `borderRadius` come property esplicite → niente distorsione.
+                initial={false}
+                transition={{
+                    // Liquid morphing: overshoot ~6% per sensazione "gel" Apple Dynamic Island-style
+                    width: FRAMER_PHYSICS.dynamicIslandElastic,
+                    borderRadius: FRAMER_PHYSICS.dynamicIslandElastic,
+                    x: FRAMER_PHYSICS.dynamicIsland,
+                    // Neon "respirante": loop 3.5s con ease morbido per i mode con array.
+                    // Per mode statici (uploading/dropzone) usa lo spring transition normale.
+                    boxShadow: (mode === 'idle' || (mode !== 'uploading' && mode !== 'dropzone'))
+                        ? { duration: 3.5, repeat: Infinity, ease: 'easeInOut' }
+                        : FRAMER_PHYSICS.dynamicIsland,
+                }}
                 className={getIslandStyles(mode, isUploadExpanded, uploadState)}
                 style={{
-                    width: mode === 'dropzone' ? '350px' :
-                        mode === 'ticker' ? '220px' :
-                            mode === 'idle' ? '140px' :
-                                (mode === 'notify' || mode === 'notification') ? '350px' :
-                                    mode === 'ai' ? '500px' :
-                                        mode === 'calc' ? '280px' :
-                                            mode === 'calc_history' ? '320px' :
-                                                mode === 'stats' ? '360px' :
-                                                    mode === 'quick_actions' ? '180px' :
-                                                        // ✨ FIX 1: Se ha finito (isFinishing) si allarga a 280px per far respirare il testo!
-                                                        mode === 'uploading' ? (isUploadExpanded ? '300px' : uploadState.isFinishing ? '280px' : '260px') : '320px',
-                    minHeight: (mode === 'idle' || mode === 'notify' || mode === 'ticker' || mode === 'quick_actions' || (mode === 'uploading' && !isUploadExpanded)) ? '40px' : 'auto'
+                    minHeight: (mode === 'idle' || mode === 'notify' || mode === 'ticker' || mode === 'quick_actions' || (mode === 'uploading' && !isUploadExpanded)) ? '40px' : 'auto',
+                    cursor: mode === 'idle' ? 'pointer' : mode === 'ai' ? 'text' : 'default',
+                    willChange: 'width, border-radius, transform',
+                    overflow: 'hidden',
+                    // FIX backdrop-filter corner bug: forza un proprio stacking context
+                    // così il backdrop-blur è clippato correttamente dal border-radius anche
+                    // durante repaint dei figli (es. active:scale-95 dei bottoni calcolatrice).
+                    isolation: 'isolate',
+                    // GPU layer forzato (no conflict con `transform` gestito da Framer Motion).
+                    backfaceVisibility: 'hidden',
                 }}
-                // ✨ BREATHING GLOW: boxShadow pulsante in idle + Head Shake su errore
                 animate={
                     (mode === 'uploading' && uploadState.isError) || display === 'Errore'
-                        ? { x: [0, -8, 8, -6, 6, -3, 3, 0] }
+                        ? {
+                            x: [0, -8, 8, -6, 6, -3, 3, 0],
+                            width: getIslandWidth(mode, isUploadExpanded, uploadState),
+                            borderRadius: getIslandBorderRadius(mode, isUploadExpanded, uploadState),
+                        }
                         : {
                             x: 0,
+                            width: getIslandWidth(mode, isUploadExpanded, uploadState),
+                            borderRadius: getIslandBorderRadius(mode, isUploadExpanded, uploadState),
                             boxShadow: mode === 'idle'
                                 ? [
-                                    `0 0 15px 2px ${getGlowColor()}, 0 0 30px 5px rgba(6,182,212,0)`,
-                                    `0 0 25px 8px ${getGlowColor()}, 0 0 50px 15px rgba(6,182,212,0.25)`,
-                                    `0 0 15px 2px ${getGlowColor()}, 0 0 30px 5px rgba(6,182,212,0)`
+                                    `0 0 15px 2px ${getGlowColor()}, 0 0 30px 5px transparent`,
+                                    `0 0 28px 10px ${getGlowColor()}, 0 0 55px 18px ${isDark ? 'rgba(6,182,212,0.2)' : 'rgba(99,102,241,0.12)'}`,
+                                    `0 0 15px 2px ${getGlowColor()}, 0 0 30px 5px transparent`
                                 ]
-                                // ✨ FIX SQUADRATURE: Disattiviamo il glow del padre durante l'upload, la card ha già la sua ombra arrotondata!
-                                : mode === 'uploading' ? 'none' : `0 0 20px 5px ${getGlowColor()}`
+                                : mode === 'uploading' ? 'none'
+                                : mode === 'dropzone' ? `0 0 20px 5px ${getGlowColor()}`
+                                // ✨ NEON RESPIRANTE per i mode espansi: array di 3 keyframes che pulsano
+                                //  in 3.5s loop. Opacità ridotte rispetto al primo tentativo: il glow
+                                //  saturato troppo creava la "cornice rettangolare" percettiva durante
+                                //  i repaint. Layer:
+                                //  1. Ring 1.5px (segue border-radius con precisione)
+                                //  2. Neon core 6px (filamento)
+                                //  3. Halo medio 14px (sfumatura)
+                                //  4. Atmosphere 32px (alone lontano)
+                                //  5+6. Drop-shadow scuri per profondità Apple
+                                : [
+                                    `0 0 0 1.5px ${withOpacity(0.40)}, 0 0 6px 0 ${withOpacity(0.30)}, 0 0 14px 0 ${withOpacity(0.18)}, 0 0 32px 2px ${withOpacity(0.08)}, 0 20px 40px -12px ${isDark ? 'rgba(0,0,0,0.7)' : 'rgba(15,23,42,0.25)'}, 0 8px 16px -8px ${isDark ? 'rgba(0,0,0,0.5)' : 'rgba(15,23,42,0.15)'}`,
+                                    `0 0 0 1.5px ${withOpacity(0.65)}, 0 0 6px 0 ${withOpacity(0.50)}, 0 0 14px 0 ${withOpacity(0.28)}, 0 0 32px 2px ${withOpacity(0.14)}, 0 20px 40px -12px ${isDark ? 'rgba(0,0,0,0.7)' : 'rgba(15,23,42,0.25)'}, 0 8px 16px -8px ${isDark ? 'rgba(0,0,0,0.5)' : 'rgba(15,23,42,0.15)'}`,
+                                    `0 0 0 1.5px ${withOpacity(0.40)}, 0 0 6px 0 ${withOpacity(0.30)}, 0 0 14px 0 ${withOpacity(0.18)}, 0 0 32px 2px ${withOpacity(0.08)}, 0 20px 40px -12px ${isDark ? 'rgba(0,0,0,0.7)' : 'rgba(15,23,42,0.25)'}, 0 8px 16px -8px ${isDark ? 'rgba(0,0,0,0.5)' : 'rgba(15,23,42,0.15)'}`,
+                                ]
                         }
                 }
-                // ✨ HOVER INTENSIFICATION: Il glow esplode morbidamente al passaggio del mouse
                 whileHover={mode === 'idle' ? {
-                    boxShadow: `0 0 35px 12px ${getGlowColor()}, 0 0 60px 20px rgba(6,182,212,0.35)`,
+                    boxShadow: `0 0 35px 12px ${getGlowColor()}, 0 0 60px 20px ${isDark ? 'rgba(6,182,212,0.35)' : 'rgba(99,102,241,0.18)'}`,
                     scale: 1.03,
                     transition: { duration: 0.4, ease: "easeOut" }
+                } : undefined}
+                whileTap={mode === 'idle' ? {
+                    scale: 0.94,
+                    transition: { type: 'spring' as const, stiffness: 500, damping: 30 }
                 } : undefined}
             >
                 <AnimatePresence mode="wait">
@@ -640,6 +839,26 @@ const DynamicIsland = ({ workers = [] }: { workers?: { id: string | number; nome
                                         )}
                                     </AnimatePresence>
 
+                                    {/* ✨ Bottone Minimize — visibile durante TUTTO l'upload (espanso + collassato).
+                                        Posizione absolute right-1 con z-40, sopra contatori e titolo per garanzia di click. */}
+                                    <AnimatePresence>
+                                        {!uploadState.isFinishing && (
+                                            <motion.button
+                                                key="minimize-btn"
+                                                initial={{ opacity: 0, scale: 0.5, rotate: -45 }}
+                                                animate={{ opacity: 1, scale: 1, rotate: 0 }}
+                                                exit={{ opacity: 0, scale: 0.5, rotate: 45 }}
+                                                whileHover={{ scale: 1.15 }}
+                                                whileTap={{ scale: 0.92 }}
+                                                onClick={(e) => { e.stopPropagation(); minimizeUpload(); }}
+                                                className="absolute right-1 top-1/2 -translate-y-1/2 p-1.5 text-white/85 hover:text-white bg-white/10 hover:bg-white/25 rounded-full transition-colors z-40 pointer-events-auto border border-white/20 hover:border-white/40 shadow-[0_0_8px_rgba(255,255,255,0.15)]"
+                                                title="Minimizza in pill — libera l'isola per altre azioni"
+                                            >
+                                                <Minimize2 size={14} strokeWidth={2.5} />
+                                            </motion.button>
+                                        )}
+                                    </AnimatePresence>
+
                                     {/* ✨ Contatore Laterale (Visibile SOLO quando CHIUSA) */}
                                     <AnimatePresence>
                                         {!isUploadExpanded && !uploadState.isFinishing && (
@@ -648,7 +867,7 @@ const DynamicIsland = ({ workers = [] }: { workers?: { id: string | number; nome
                                                 initial={{ opacity: 0, x: 10 }}
                                                 animate={{ opacity: 1, x: 0 }}
                                                 exit={{ opacity: 0, x: 10 }}
-                                                className="ml-auto flex items-center justify-end font-mono text-[12px] font-bold text-white relative z-20 min-w-[120px]"
+                                                className="ml-auto mr-8 flex items-center justify-end font-mono text-[12px] font-bold text-white relative z-20 min-w-[100px]"
                                             >
                                                 {uploadState.type === 'mobile' ? (
                                                     <div className="flex items-center gap-2">
@@ -1014,8 +1233,28 @@ const DynamicIsland = ({ workers = [] }: { workers?: { id: string | number; nome
 
                     {/* STATO 1: IDLE */}
                     {mode === 'idle' && (
-                        <motion.div key="idle" initial={{ opacity: 0, filter: 'blur(5px)' }} animate={{ opacity: 1, filter: 'blur(0px)' }} exit={{ opacity: 0, scale: 0.95, filter: 'blur(4px)' }} className="flex items-center justify-center px-4 py-2.5 h-full w-full group cursor-pointer" onClick={() => setMode('menu')}>
-                            <div className="absolute w-6 h-1 bg-slate-400/30 dark:bg-cyan-500/30 rounded-full transition-all duration-300 group-hover:opacity-0 group-hover:scale-50"></div>
+                        <motion.div key="idle" initial={{ opacity: 0, filter: 'blur(5px)' }} animate={{ opacity: 1, filter: 'blur(0px)', transition: { duration: 0.28, ease: APPLE_EASE } }} exit={{ opacity: 0, filter: 'blur(3px)', transition: { duration: 0.15, ease: 'easeIn' } }} className="flex items-center justify-center px-4 py-2.5 h-full w-full group cursor-pointer" onClick={() => setMode('menu')}>
+                            {/* ✨ HEARTBEAT DOT: pattern 2-pulse + lunga pausa, ciclo 4s.
+                                Sostituisce la vecchia barra centrale per dare "vita" all'isola idle.
+                                Svanisce al hover per fare spazio alle icone shortcut. */}
+                            <motion.div
+                                className="absolute w-2 h-2 rounded-full bg-slate-400/50 dark:bg-cyan-400/60 transition-opacity duration-300 group-hover:opacity-0 group-hover:scale-50"
+                                animate={{
+                                    scale: [0.85, 1.4, 0.95, 1.2, 0.85],
+                                    opacity: [0.45, 1, 0.7, 0.95, 0.45],
+                                }}
+                                transition={{
+                                    duration: 4,
+                                    times: [0, 0.06, 0.12, 0.18, 1],
+                                    repeat: Infinity,
+                                    ease: "easeOut",
+                                }}
+                                style={{
+                                    boxShadow: isDark
+                                        ? '0 0 6px rgba(34,211,238,0.6), 0 0 14px rgba(34,211,238,0.3)'
+                                        : '0 0 6px rgba(99,102,241,0.5), 0 0 14px rgba(99,102,241,0.25)',
+                                }}
+                            />
                             <div className="flex items-center justify-center gap-4 opacity-0 group-hover:opacity-100 transition-all duration-300 scale-95 group-hover:scale-100 w-full relative z-10">
                                 <button onClick={(e) => { e.stopPropagation(); setMode('menu'); }} className="text-slate-500 dark:text-cyan-600 hover:text-slate-800 dark:hover:text-cyan-300 transition-colors" title="Menu"><LayoutGrid size={16} strokeWidth={2.5} /></button>
                                 <div className="w-px h-4 bg-slate-300 dark:bg-cyan-900/50"></div>
@@ -1028,7 +1267,7 @@ const DynamicIsland = ({ workers = [] }: { workers?: { id: string | number; nome
 
                     {/* STATO 2: TICKER */}
                     {mode === 'ticker' && liveTicker !== null && (
-                        <motion.div key="ticker" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, filter: 'blur(4px)' }} className="flex items-center justify-center gap-3 px-5 py-2.5 h-full w-full">
+                        <motion.div key="ticker" initial={{ opacity: 0, y: -16, scale: 0.9, filter: 'blur(4px)' }} animate={{ opacity: 1, y: 0, scale: 1, filter: 'blur(0px)', transition: FRAMER_PHYSICS.dynamicIsland }} exit={{ opacity: 0, filter: 'blur(3px)', transition: { duration: 0.15, ease: 'easeIn' } }} className="flex items-center justify-center gap-3 px-5 py-2.5 h-full w-full">
                             <div className="w-2 h-2 bg-emerald-500 rounded-full animate-ping"></div>
                             <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">Netto</span>
                             <span className="text-emerald-600 dark:text-emerald-400 font-mono font-black text-[15px] tracking-wide">
@@ -1039,7 +1278,7 @@ const DynamicIsland = ({ workers = [] }: { workers?: { id: string | number; nome
 
                     {/* STATO 3: DROPZONE */}
                     {mode === 'dropzone' && (
-                        <motion.div key="dropzone" initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }} className="p-8 flex flex-col items-center justify-center pointer-events-none">
+                        <motion.div key="dropzone" initial={{ opacity: 0, scale: 0.8, filter: 'blur(6px)' }} animate={{ opacity: 1, scale: 1, filter: 'blur(0px)', transition: { duration: 0.38, ease: [0.34, 1.56, 0.64, 1] } }} exit={{ opacity: 0, transition: { duration: 0.15, ease: 'easeIn' } }} className="p-8 flex flex-col items-center justify-center pointer-events-none">
                             <motion.div animate={{ y: [-5, 5, -5] }} transition={{ repeat: Infinity, duration: 2 }}>
                                 <DownloadCloud className="w-12 h-12 text-fuchsia-400 mb-3 drop-shadow-[0_0_15px_rgba(217,70,239,0.8)]" />
                             </motion.div>
@@ -1057,32 +1296,39 @@ const DynamicIsland = ({ workers = [] }: { workers?: { id: string | number; nome
                             className="p-2 w-full flex items-center justify-between gap-2"
                         >
                             <div className="flex items-center gap-2 pl-2">
-                                {/* Tema */}
-                                <motion.button variants={{ hidden: { scale: 0, opacity: 0 }, show: { scale: 1, opacity: 1 } }} onClick={() => { window.dispatchEvent(new Event('island-theme')); setMode('idle'); }} className="p-2.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 rounded-xl transition-all duration-200 hover:scale-105 text-amber-500 dark:text-amber-400 group" title="Tema Chiaro/Scuro">
-                                    <Sun className="w-4 h-4 dark:hidden block group-hover:rotate-90 transition-transform" />
-                                    <Moon className="w-4 h-4 hidden dark:block text-indigo-400 group-hover:-rotate-12 transition-transform" />
+                                {/* Tema — Sun: rotate-180 + scale + glow ambra · Moon: rotate-negative + scale + glow indigo */}
+                                <motion.button variants={{ hidden: { scale: 0, opacity: 0 }, show: { scale: 1, opacity: 1 } }} onClick={() => { window.dispatchEvent(new Event('island-theme')); setMode('idle'); }} className="group/btn p-2.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 rounded-xl transition-[transform,background-color,box-shadow] duration-300 hover:scale-110 text-amber-500 dark:text-amber-400 hover:shadow-[0_0_12px_rgba(245,158,11,0.5)] dark:hover:shadow-[0_0_12px_rgba(129,140,248,0.5)]" title="Tema Chiaro/Scuro">
+                                    <Sun className="w-4 h-4 dark:hidden block group-hover/btn:rotate-180 group-hover/btn:scale-110 transition-transform duration-500 ease-out drop-shadow-[0_0_3px_currentColor]" />
+                                    <Moon className="w-4 h-4 hidden dark:block text-indigo-400 group-hover/btn:-rotate-12 group-hover/btn:scale-110 transition-transform duration-500 ease-out drop-shadow-[0_0_3px_currentColor]" />
                                 </motion.button>
 
-                                {/* Aziende Custom */}
-                                <motion.button variants={{ hidden: { scale: 0, opacity: 0 }, show: { scale: 1, opacity: 1 } }} onClick={() => { window.dispatchEvent(new Event('island-company')); setMode('idle'); }} className="p-2.5 bg-slate-200 dark:bg-slate-800 hover:bg-cyan-100 dark:hover:bg-cyan-900/50 rounded-xl transition-all duration-200 hover:scale-105 text-cyan-600 dark:text-cyan-400" title="Aziende Custom">
-                                    <Database className="w-4 h-4" />
+                                {/* Aziende Custom — Database: scale + glow cyan */}
+                                <motion.button variants={{ hidden: { scale: 0, opacity: 0 }, show: { scale: 1, opacity: 1 } }} onClick={() => { window.dispatchEvent(new Event('island-company')); setMode('idle'); }} className="group/btn p-2.5 bg-slate-200 dark:bg-slate-800 hover:bg-cyan-100 dark:hover:bg-cyan-900/50 rounded-xl transition-[transform,background-color,box-shadow] duration-300 hover:scale-110 text-cyan-600 dark:text-cyan-400 hover:shadow-[0_0_12px_rgba(6,182,212,0.5)]" title="Aziende Custom">
+                                    <Database className="w-4 h-4 group-hover/btn:scale-110 transition-transform duration-300 drop-shadow-[0_0_3px_currentColor] group-hover/btn:drop-shadow-[0_0_5px_currentColor]" />
                                 </motion.button>
 
-                                {/* 👇 NUOVO TASTO: EXPORT BACKUP 👇 */}
-                                <motion.button variants={{ hidden: { scale: 0, opacity: 0 }, show: { scale: 1, opacity: 1 } }} onClick={(e) => { e.stopPropagation(); window.dispatchEvent(new CustomEvent('island-export')); setMode('idle'); }} className="p-2.5 bg-slate-200 dark:bg-slate-800 hover:bg-purple-100 dark:hover:bg-purple-900/50 rounded-xl transition-all duration-200 hover:scale-105 text-purple-600 dark:text-purple-400" title="Esporta JSON (copia locale)">
-                                    <DownloadCloud className="w-4 h-4" />
+                                {/* Export Backup — Cloud bounce y + freccia in giù che pulsa */}
+                                <motion.button variants={{ hidden: { scale: 0, opacity: 0 }, show: { scale: 1, opacity: 1 } }} onClick={(e) => { e.stopPropagation(); window.dispatchEvent(new CustomEvent('island-export')); setMode('idle'); }} className="group/btn relative p-2.5 bg-slate-200 dark:bg-slate-800 hover:bg-purple-100 dark:hover:bg-purple-900/50 rounded-xl transition-[transform,background-color,box-shadow] duration-300 hover:scale-110 text-purple-600 dark:text-purple-400 hover:shadow-[0_0_12px_rgba(168,85,247,0.5)]" title="Esporta JSON (copia locale)">
+                                    <DownloadCloud className="w-4 h-4 group-hover/btn:translate-y-[1px] group-hover/btn:scale-110 transition-transform duration-300 drop-shadow-[0_0_3px_currentColor] group-hover/btn:drop-shadow-[0_0_5px_currentColor]" />
+                                    {/* Mini-particles che cadono dalla cloud al hover */}
+                                    <span className="absolute left-1/2 top-[60%] -translate-x-1/2 w-[2px] h-[2px] bg-current rounded-full opacity-0 group-hover/btn:opacity-100 group-hover/btn:translate-y-[5px] transition-all duration-500" />
                                 </motion.button>
 
-                                {/* Password/Settings */}
-                                <motion.button variants={{ hidden: { scale: 0, opacity: 0 }, show: { scale: 1, opacity: 1 } }} onClick={() => { window.dispatchEvent(new Event('island-settings')); setMode('idle'); }} className="p-2.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 rounded-xl transition-all duration-200 hover:scale-105 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white" title="Password di sicurezza">
-                                    <Settings className="w-4 h-4" />
+                                {/* Archivio — Lid box che si solleva */}
+                                <motion.button variants={{ hidden: { scale: 0, opacity: 0 }, show: { scale: 1, opacity: 1 } }} onClick={() => { window.dispatchEvent(new Event('island-archive')); setMode('idle'); }} className="group/btn p-2.5 bg-slate-200 dark:bg-slate-800 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 rounded-xl transition-[transform,background-color,box-shadow] duration-300 hover:scale-110 text-indigo-600 dark:text-indigo-400 hover:shadow-[0_0_12px_rgba(99,102,241,0.5)]" title="Archivio Buste Paga">
+                                    <Archive className="w-4 h-4 group-hover/btn:-translate-y-0.5 group-hover/btn:scale-105 transition-transform duration-300 drop-shadow-[0_0_3px_currentColor] group-hover/btn:drop-shadow-[0_0_5px_currentColor]" />
+                                </motion.button>
+
+                                {/* Password/Settings — Rotate continuo lento al hover */}
+                                <motion.button variants={{ hidden: { scale: 0, opacity: 0 }, show: { scale: 1, opacity: 1 } }} onClick={() => { window.dispatchEvent(new Event('island-settings')); setMode('idle'); }} className="group/btn p-2.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 rounded-xl transition-[transform,background-color,box-shadow] duration-300 hover:scale-110 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:shadow-[0_0_12px_rgba(148,163,184,0.5)]" title="Password di sicurezza">
+                                    <Settings className="w-4 h-4 group-hover/btn:rotate-180 transition-transform duration-700 ease-out drop-shadow-[0_0_3px_currentColor]" />
                                 </motion.button>
 
                                 <motion.div variants={{ hidden: { height: 0 }, show: { height: 24 } }} className="w-px bg-slate-300 dark:bg-slate-700 mx-1"></motion.div>
 
-                                {/* Disconnetti */}
-                                <motion.button variants={{ hidden: { scale: 0, opacity: 0 }, show: { scale: 1, opacity: 1 } }} onClick={() => { window.dispatchEvent(new Event('island-logout')); setMode('idle'); }} className="p-2.5 bg-red-100 dark:bg-red-950/40 hover:bg-red-200 dark:hover:bg-red-900/60 rounded-xl transition-all duration-200 hover:scale-105 text-red-600 dark:text-red-400" title="Disconnetti">
-                                    <LogOut className="w-4 h-4" />
+                                {/* Disconnetti — Arrow che esce dal box */}
+                                <motion.button variants={{ hidden: { scale: 0, opacity: 0 }, show: { scale: 1, opacity: 1 } }} onClick={() => { window.dispatchEvent(new Event('island-logout')); setMode('idle'); }} className="group/btn p-2.5 bg-red-100 dark:bg-red-950/40 hover:bg-red-200 dark:hover:bg-red-900/60 rounded-xl transition-[transform,background-color,box-shadow] duration-300 hover:scale-110 text-red-600 dark:text-red-400 hover:shadow-[0_0_12px_rgba(239,68,68,0.5)]" title="Disconnetti">
+                                    <LogOut className="w-4 h-4 group-hover/btn:translate-x-0.5 group-hover/btn:scale-110 transition-transform duration-300 drop-shadow-[0_0_3px_currentColor] group-hover/btn:drop-shadow-[0_0_5px_currentColor]" />
                                 </motion.button>
                             </div>
                             <motion.button variants={{ hidden: { scale: 0, opacity: 0 }, show: { scale: 1, opacity: 1 } }} onClick={(e) => { e.stopPropagation(); setMode('idle'); }} className="text-slate-500 hover:text-slate-800 dark:hover:text-white p-2 mr-1"><X size={14} /></motion.button>
@@ -1091,7 +1337,13 @@ const DynamicIsland = ({ workers = [] }: { workers?: { id: string | number; nome
 
                     {/* STATO 5: NOTIFY */}
                     {mode === 'notify' && notifyData && (
-                        <motion.div key="notify" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9 }} className="flex items-center gap-3 px-5 py-2.5 h-full w-full">
+                        <motion.div
+                            key="notify"
+                            initial={{ opacity: 0, y: -14, scale: 0.92, filter: 'blur(4px)' }}
+                            animate={{ opacity: 1, y: 0, scale: 1, filter: 'blur(0px)', transition: FRAMER_PHYSICS.dynamicIsland }}
+                            exit={{ opacity: 0, filter: 'blur(3px)', transition: { duration: 0.15, ease: 'easeIn' } }}
+                            className="flex items-center gap-3 px-5 py-2.5 h-full w-full"
+                        >
                             {notifyData.type === 'success' ? <CheckCircle2 className="w-5 h-5 text-emerald-500 dark:text-emerald-400 shrink-0" /> :
                                 notifyData.type === 'error' ? <AlertCircle className="w-5 h-5 text-red-500 dark:text-red-400 shrink-0" /> : <Bot className="w-5 h-5 text-fuchsia-500 dark:text-fuchsia-400 shrink-0" />}
                             <span className="text-[13px] font-bold text-slate-800 dark:text-white truncate">{notifyData.msg}</span>
@@ -1100,7 +1352,7 @@ const DynamicIsland = ({ workers = [] }: { workers?: { id: string | number; nome
 
                     {/* STATO 6: CALCOLATRICE */}
                     {mode === 'calc' && (
-                        <motion.div key="calc" initial={{ opacity: 0, y: 8, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, scale: 0.95, filter: 'blur(4px)' }} className="p-4 w-full flex flex-col">
+                        <motion.div key="calc" initial={{ opacity: 0, y: 8, scale: 0.98, filter: 'blur(4px)' }} animate={{ opacity: 1, y: 0, scale: 1, filter: 'blur(0px)', transition: { duration: 0.32, ease: APPLE_EASE } }} exit={{ opacity: 0, filter: 'blur(3px)', transition: { duration: 0.15, ease: 'easeIn' } }} className="p-4 w-full flex flex-col">
                             <div className="flex justify-between items-center mb-3">
                                 <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-widest flex items-center gap-2"><Calculator size={12} /> Calcolatrice</span>
                                 <div className="flex items-center gap-3">
@@ -1111,12 +1363,48 @@ const DynamicIsland = ({ workers = [] }: { workers?: { id: string | number; nome
                                 </div>
                             </div>
                             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl mb-3 h-16 flex items-center justify-between px-4 overflow-hidden shadow-inner group/display">
-                                <button onClick={handleCopyResult} disabled={!display || display === 'Errore'} className="p-1.5 text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 rounded-md transition-all disabled:opacity-0"><Copy size={16} /></button>
-                                <span className="text-3xl font-mono text-slate-800 dark:text-white font-bold tracking-wider truncate ml-4">{display || '0'}</span>
+                                <button onClick={handleCopyResult} disabled={!display || display === 'Errore'} className="p-1.5 text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 rounded-md transition-all disabled:opacity-0 shrink-0"><Copy size={16} /></button>
+                                <span className="text-3xl font-mono text-slate-800 dark:text-white font-bold tracking-wider truncate ml-4 min-w-0 flex-1 text-right">{display || '0'}</span>
                             </div>
                             <div className="grid grid-cols-4 gap-2">
                                 {['7', '8', '9', '/', '4', '5', '6', '*', '1', '2', '3', '-', 'C', '0', '=', '+'].map((btn) => (
-                                    <button key={btn} onClick={() => { if (btn === '=') handleCalc(); else if (btn === 'C') handleClear(); else handleInput(btn); }} className={`${calcBtnClass} ${btn === '=' ? 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-500/30' : btn === 'C' ? 'bg-red-50 dark:bg-red-500/10 text-red-500 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-500/20' : ['/', '*', '-', '+'].includes(btn) ? 'bg-slate-100 dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700' : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-white hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700'}`}>{btn}</button>
+                                    <button
+                                        key={btn}
+                                        onClick={(e) => {
+                                            spawnRipple(btn, e);
+                                            if (btn === '=') handleCalc();
+                                            else if (btn === 'C') handleClear();
+                                            else handleInput(btn);
+                                        }}
+                                        className={`${calcBtnClass} ${btn === '=' ? 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-500/30' : btn === 'C' ? 'bg-red-50 dark:bg-red-500/10 text-red-500 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-500/20' : ['/', '*', '-', '+'].includes(btn) ? 'bg-slate-100 dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700' : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-white hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700'}`}
+                                    >
+                                        <span className="relative z-10">{btn}</span>
+                                        {/* Ripple layer: onda concentrica al click. Colore basato su tipo bottone. */}
+                                        {calcRipples.filter(r => r.btn === btn).map(r => {
+                                            const rippleColor = btn === '=' ? 'rgba(255,255,255,0.45)'
+                                                : btn === 'C' ? 'rgba(239,68,68,0.35)'
+                                                : ['/', '*', '-', '+'].includes(btn) ? 'rgba(99,102,241,0.30)'
+                                                : 'rgba(99,102,241,0.20)';
+                                            return (
+                                                <motion.span
+                                                    key={r.id}
+                                                    initial={{ opacity: 0.8, scale: 0 }}
+                                                    animate={{ opacity: 0, scale: 2.5 }}
+                                                    transition={{ duration: 0.6, ease: 'easeOut' }}
+                                                    className="absolute rounded-full pointer-events-none"
+                                                    style={{
+                                                        left: r.x,
+                                                        top: r.y,
+                                                        width: 12,
+                                                        height: 12,
+                                                        marginLeft: -6,
+                                                        marginTop: -6,
+                                                        backgroundColor: rippleColor,
+                                                    }}
+                                                />
+                                            );
+                                        })}
+                                    </button>
                                 ))}
                             </div>
                         </motion.div>
@@ -1124,7 +1412,7 @@ const DynamicIsland = ({ workers = [] }: { workers?: { id: string | number; nome
 
                     {/* STATO 7: SPOTLIGHT AI POTENZIATO */}
                     {mode === 'ai' && (
-                        <motion.div key="ai" initial={{ opacity: 0, y: 8, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, scale: 0.95, filter: 'blur(4px)' }} className="p-5 w-full flex flex-col gap-4 relative overflow-hidden">
+                        <motion.div key="ai" initial={{ opacity: 0, y: 8, scale: 0.98, filter: 'blur(4px)' }} animate={{ opacity: 1, y: 0, scale: 1, filter: 'blur(0px)', transition: { duration: 0.32, ease: APPLE_EASE } }} exit={{ opacity: 0, filter: 'blur(3px)', transition: { duration: 0.15, ease: 'easeIn' } }} className="p-5 w-full flex flex-col gap-4 relative overflow-hidden">
 
                             {/* ✨ NUOVO: Effetto Shimmer (Raggio di luce) durante l'elaborazione */}
                             {isAiThinking && (
@@ -1284,7 +1572,7 @@ const DynamicIsland = ({ workers = [] }: { workers?: { id: string | number; nome
 
                     {/* STATO 8: CRONOLOGIA CALCOLATRICE RIFINITO */}
                     {mode === 'calc_history' && (
-                        <motion.div key="calc_history" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="p-4 pb-5 w-full h-[250px] flex flex-col">
+                        <motion.div key="calc_history" initial={{ opacity: 0, filter: 'blur(4px)' }} animate={{ opacity: 1, filter: 'blur(0px)', transition: { duration: 0.28, ease: APPLE_EASE } }} exit={{ opacity: 0, filter: 'blur(3px)', transition: { duration: 0.15, ease: 'easeIn' } }} className="p-4 pb-5 w-full h-[250px] flex flex-col">
                             <div className="flex justify-between items-center mb-3">
                                 <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-widest flex items-center gap-2"><Calculator size={12} /> Memoria Calcoli</span>
                                 <button onClick={() => setMode('calc')} className="text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors text-[9px] font-bold uppercase tracking-wider bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded-md">
@@ -1315,10 +1603,9 @@ const DynamicIsland = ({ workers = [] }: { workers?: { id: string | number; nome
                     {mode === 'notification' && notification && (
                         <motion.div
                             key="global_notify"
-                            // ✨ FIX 2B: Initial in fade puro (senza muoversi dal basso), si "spalma" sulla pillola che si sta allargando
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1, transition: { delay: 0.1 } }}
-                            exit={{ opacity: 0, scale: 0.95, filter: 'blur(4px)' }}
+                            initial={{ opacity: 0, y: -14, scale: 0.94, filter: 'blur(4px)' }}
+                            animate={{ opacity: 1, y: 0, scale: 1, filter: 'blur(0px)', transition: { ...FRAMER_PHYSICS.dynamicIsland, delay: 0.05 } }}
+                            exit={{ opacity: 0, filter: 'blur(3px)', transition: { duration: 0.15, ease: 'easeIn' } }}
                             className="flex items-start gap-4 px-5 py-3 w-full h-full min-h-[48px] max-h-32 overflow-y-auto custom-scrollbar"
                         >
                             <motion.div
@@ -1345,9 +1632,9 @@ const DynamicIsland = ({ workers = [] }: { workers?: { id: string | number; nome
                     {mode === 'stats' && workerStats && (
                         <motion.div
                             key="stats_expand"
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, scale: 0.95 }}
+                            initial={{ opacity: 0, y: 10, filter: 'blur(4px)' }}
+                            animate={{ opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.32, ease: APPLE_EASE } }}
+                            exit={{ opacity: 0, filter: 'blur(3px)', transition: { duration: 0.15, ease: 'easeIn' } }}
                             // ✨ FIX 1: Aggiunto pb-6 per dare respiro vitale all'ombra del pulsante inferiore
                             className="p-5 pb-6 w-full flex flex-col gap-4"
                         >
@@ -1393,7 +1680,9 @@ const DynamicIsland = ({ workers = [] }: { workers?: { id: string | number; nome
                     {mode === 'quick_actions' && (
                         <motion.div
                             key="quick_actions"
-                            initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.8 }}
+                            initial={{ opacity: 0, scale: 0.85, filter: 'blur(4px)' }}
+                            animate={{ opacity: 1, scale: 1, filter: 'blur(0px)', transition: { duration: 0.28, ease: [0.34, 1.56, 0.64, 1] } }}
+                            exit={{ opacity: 0, filter: 'blur(3px)', transition: { duration: 0.15, ease: 'easeIn' } }}
                             className="flex items-center justify-around w-full px-3 py-1.5 h-10"
                         >
                             {islandContext === 'report' ? (
@@ -1417,6 +1706,184 @@ const DynamicIsland = ({ workers = [] }: { workers?: { id: string | number; nome
                     )}
                 </AnimatePresence>
             </motion.div>
+
+            {/* ✨ SPARKLE PARTICLES — emanate dal centro dell'isola al completamento upload con successo.
+                12 particelle emerald con traiettoria radiale, durata ~1.2s, delay scaglionato.
+                Posizionate come sibling del motion.div principale per poter uscire oltre i bordi dell'isola. */}
+            <AnimatePresence>
+                {uploadState.isFinishing && !uploadState.isError && (
+                    <div
+                        key="sparkle-burst"
+                        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-1 h-1 pointer-events-none z-10"
+                    >
+                        {[...Array(12)].map((_, i) => {
+                            const angle = (i / 12) * Math.PI * 2;
+                            const distance = 70 + Math.random() * 40;
+                            return (
+                                <motion.div
+                                    key={`sparkle-${i}`}
+                                    className="absolute top-0 left-0 w-1.5 h-1.5 rounded-full bg-emerald-300"
+                                    initial={{ x: 0, y: 0, scale: 0, opacity: 0 }}
+                                    animate={{
+                                        x: Math.cos(angle) * distance,
+                                        y: Math.sin(angle) * distance,
+                                        scale: [0, 1.3, 0],
+                                        opacity: [0, 1, 0],
+                                    }}
+                                    transition={{
+                                        duration: 1.0 + Math.random() * 0.3,
+                                        ease: 'easeOut',
+                                        delay: 0.1 + Math.random() * 0.2,
+                                    }}
+                                    style={{
+                                        boxShadow: '0 0 8px rgba(110,231,183,0.9), 0 0 16px rgba(16,185,129,0.5)',
+                                    }}
+                                />
+                            );
+                        })}
+                    </div>
+                )}
+            </AnimatePresence>
+
+            {/* PILL SATELLITE v2 — Background Job Drawer (Apple-style + intelligence).
+                ✦ Visuale: gradient pill, ring SVG con linearGradient, Bot pulsante, completion flash
+                ✦ Intelligence: ETA real-time, stall detection (>5s no progress), currentScanLabel
+                Click → restoreUpload() riapre la Live Activity completa sull'isola. */}
+            <AnimatePresence>
+                {uploadState.isUploading && uploadState.minimized && (() => {
+                    // Color theming per tipo
+                    const baseTheme = uploadState.type === 'batch'
+                        ? { from: '#a855f7', to: '#d946ef', glow: 'rgba(217,70,239,0.5)', border: 'rgba(217,70,239,0.4)' }
+                        : uploadState.type === 'mobile'
+                            ? { from: '#0ea5e9', to: '#22d3ee', glow: 'rgba(34,211,238,0.5)', border: 'rgba(34,211,238,0.4)' }
+                            : { from: '#4f46e5', to: '#6366f1', glow: 'rgba(99,102,241,0.5)', border: 'rgba(99,102,241,0.4)' };
+
+                    // State override per stall (giallo warning)
+                    const isStallVisible = uploadIsStalled && !uploadState.isFinishing;
+                    const theme = isStallVisible
+                        ? { from: '#f59e0b', to: '#facc15', glow: 'rgba(245,158,11,0.55)', border: 'rgba(245,158,11,0.5)' }
+                        : baseTheme;
+
+                    // Completion flash (transient, quando isFinishing && !isError)
+                    const isCompleteFlash = uploadState.isFinishing && !uploadState.isError;
+                    const themeFinal = isCompleteFlash
+                        ? { from: '#10b981', to: '#34d399', glow: 'rgba(16,185,129,0.65)', border: 'rgba(16,185,129,0.55)' }
+                        : theme;
+
+                    // Label principale (counter o stato)
+                    const label = uploadState.type === 'batch'
+                        ? `${uploadState.progress}/${uploadState.total}`
+                        : uploadState.type === 'mobile'
+                            ? `${uploadState.progress}`
+                            : `${uploadState.progress}%`;
+
+                    // Hint testo (cambia in base allo stato): ETA / Stallo / Riapri / Fatto
+                    const hint = isCompleteFlash
+                        ? 'Fatto'
+                        : isStallVisible
+                            ? 'Verifica…'
+                            : uploadState.type === 'mobile'
+                                ? 'In ascolto'
+                                : uploadEta !== '—'
+                                    ? uploadEta
+                                    : 'Calcolo…';
+
+                    const progressRatio = Math.min(1, uploadState.progress / Math.max(1, uploadState.total));
+                    const RADIUS = 10;
+                    const CIRC = 2 * Math.PI * RADIUS;
+                    const gradientId = `sat-grad-${uploadState.type}-${isStallVisible ? 'stall' : isCompleteFlash ? 'done' : 'ok'}`;
+
+                    return (
+                        <motion.button
+                            key="upload-satellite"
+                            initial={{ opacity: 0, y: -10, scale: 0.8 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, y: -6, scale: 0.85 }}
+                            transition={FRAMER_PHYSICS.dynamicIsland}
+                            onClick={restoreUpload}
+                            className="mt-2 relative flex items-center gap-3 pl-1 pr-4 py-1 bg-gradient-to-r from-slate-900/95 via-slate-800/95 to-slate-900/95 backdrop-blur-xl rounded-full pointer-events-auto hover:scale-[1.05] active:scale-[0.97] transition-transform group/sat"
+                            style={{
+                                isolation: 'isolate',
+                                backfaceVisibility: 'hidden',
+                                border: `1px solid ${themeFinal.border}`,
+                                boxShadow: `0 0 0 1px rgba(255,255,255,0.05) inset, 0 0 14px -2px ${themeFinal.glow}, 0 10px 25px -8px rgba(0,0,0,0.55)`,
+                            }}
+                            title={currentScanLabel ? `Riapri (${currentScanLabel})` : 'Riapri upload'}
+                        >
+                            {/* Ring SVG con gradient + Bot pulsante centrale */}
+                            <div className="relative w-[24px] h-[24px] flex items-center justify-center shrink-0">
+                                <svg width="24" height="24" viewBox="0 0 24 24" className="absolute inset-0">
+                                    <defs>
+                                        <linearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="100%">
+                                            <stop offset="0%" stopColor={themeFinal.from} />
+                                            <stop offset="100%" stopColor={themeFinal.to} />
+                                        </linearGradient>
+                                    </defs>
+                                    <circle cx="12" cy="12" r={RADIUS} stroke="rgba(255,255,255,0.12)" strokeWidth="2" fill="none" />
+                                    <motion.circle
+                                        cx="12" cy="12" r={RADIUS}
+                                        stroke={`url(#${gradientId})`}
+                                        strokeWidth="2"
+                                        fill="none"
+                                        strokeLinecap="round"
+                                        strokeDasharray={CIRC}
+                                        animate={{ strokeDashoffset: isCompleteFlash ? 0 : (1 - progressRatio) * CIRC }}
+                                        transition={{ type: 'spring', stiffness: 100, damping: 22 }}
+                                        transform="rotate(-90 12 12)"
+                                        style={{ filter: `drop-shadow(0 0 4px ${themeFinal.glow})` }}
+                                    />
+                                </svg>
+                                {/* Bot icon (o Check al completion) con pulse subtle */}
+                                <motion.div
+                                    animate={isCompleteFlash
+                                        ? { scale: [0.6, 1.3, 1], rotate: [0, 360, 360] }
+                                        : isStallVisible
+                                            ? { opacity: [0.6, 1, 0.6] }
+                                            : { scale: [0.95, 1.1, 0.95] }
+                                    }
+                                    transition={isCompleteFlash
+                                        ? { duration: 0.7, ease: 'easeOut' }
+                                        : { duration: 1.8, repeat: Infinity, ease: 'easeInOut' }
+                                    }
+                                    className="relative z-10 flex items-center justify-center"
+                                >
+                                    {isCompleteFlash
+                                        ? <Check size={11} className="text-emerald-300" strokeWidth={3} />
+                                        : <Bot size={11} className="text-white" />
+                                    }
+                                </motion.div>
+                            </div>
+
+                            {/* Counter principale (numeri tabulari per evitare jitter) */}
+                            <span className="text-[12px] font-mono font-bold text-white tracking-wide tabular-nums leading-none">
+                                {label}
+                            </span>
+
+                            {/* Hint dinamico (ETA / Stallo / Fatto / Riapri) — slot 72px fissa per evitare
+                                overlap col counter (es. "1/2"). whitespace-nowrap impedisce wrap. */}
+                            <span className="relative text-[9px] font-bold uppercase tracking-[0.1em] leading-none w-[72px] h-[10px] shrink-0 block">
+                                {/* Stato attuale */}
+                                <span className={`absolute right-0 top-1/2 -translate-y-1/2 whitespace-nowrap transition-opacity duration-300 ${
+                                    isStallVisible ? 'text-amber-300' : isCompleteFlash ? 'text-emerald-300' : 'text-white/55'
+                                } group-hover/sat:opacity-0`}>
+                                    {hint}
+                                </span>
+                                {/* Hover: appare "Riapri" */}
+                                <span className="absolute right-0 top-1/2 -translate-y-1/2 whitespace-nowrap opacity-0 group-hover/sat:opacity-100 transition-opacity duration-300 text-white">
+                                    Riapri
+                                </span>
+                            </span>
+
+                            {/* Tooltip filename scrolling (visibile solo on hover, se c'è label scan) */}
+                            {currentScanLabel && !isCompleteFlash && (
+                                <span className="absolute left-1/2 -translate-x-1/2 -bottom-7 px-2 py-0.5 bg-slate-900/95 backdrop-blur-md rounded-md text-[9px] font-mono text-white/85 whitespace-nowrap opacity-0 group-hover/sat:opacity-100 transition-opacity duration-200 pointer-events-none border border-white/10 shadow-lg max-w-[200px] truncate">
+                                    {currentScanLabel}
+                                </span>
+                            )}
+                        </motion.button>
+                    );
+                })()}
+            </AnimatePresence>
         </div>
     );
 };
