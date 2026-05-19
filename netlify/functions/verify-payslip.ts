@@ -40,9 +40,9 @@ ${ticketRule}
 **Arretrati:** Somma voci "Arretrati", "Una Tantum", "Conguagli" nella colonna Competenze/Importo.
 `;
 
-  } else if (co === "RFI") {
+  } else if (co === "RFI" || co === "TRENITALIA") {
     companyRules = `
-### REGOLE DI CALCOLO AZIENDALI — RFI
+### REGOLE DI CALCOLO AZIENDALI — ${co} (struttura SAP/Zucchetti ferroviaria)
 
 **daysWorked — REGOLA DELL'INCOLONNAMENTO RIGIDO (CRITICA):**
 La tabella presenze in alto ha questa intestazione esatta:
@@ -57,14 +57,14 @@ La tabella presenze in alto ha questa intestazione esatta:
 - I valori sotto "Riposi" (spesso 8-12) NON sono ferie: non assegnarli a daysVacation.
 - Se la colonna risulta vuota o fusa → daysVacation = 0 è CORRETTO.
 
-**Sfasamento Temporale RFI:**
-In RFI le indennità sono pagate il mese successivo alla maturazione.
+**Sfasamento Temporale Ferroviario:**
+Nel settore ferroviario (RFI/Trenitalia) le indennità sono pagate il mese successivo alla maturazione.
 È NORMALE e CORRETTO che daysWorked = 0 con importi di indennità > 0.
 In questo caso NON segnalare discrepanza su daysWorked.
 
 **ticket:** Codici 0E99 / 0299 / 0293 → colonna "Aliquota". IGNORA la colonna "Parametro".
 
-**Arretrati (RFI):** Somma SOLO gli importi positivi in colonna Competenze per:
+**Arretrati (Ferroviario):** Somma SOLO gli importi positivi in colonna Competenze per:
 3E10, 3E16, Indennità INPS, codici che iniziano per 0K, 74.., 6INT, 3105. IGNORA la colonna Trattenute.
 `;
 

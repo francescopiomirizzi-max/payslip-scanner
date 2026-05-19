@@ -130,6 +130,7 @@ const App: React.FC = () => {
         
         if (filterId === 'ALL') return 'bg-slate-800 text-white shadow-lg shadow-slate-500/30 ring-2 ring-slate-400 scale-105 border-transparent';
         if (filterId === 'RFI') return 'bg-blue-600 text-white shadow-lg shadow-blue-500/40 ring-2 ring-blue-400 scale-105 border-transparent';
+        if (filterId === 'TRENITALIA') return 'bg-red-600 text-white shadow-lg shadow-red-500/40 ring-2 ring-red-400 scale-105 border-transparent';
         if (filterId === 'ELIOR') return 'bg-orange-500 text-white shadow-lg shadow-orange-500/40 ring-2 ring-orange-300 scale-105 border-transparent';
         if (filterId === 'CLEAN_SERVICE') return 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/40 ring-2 ring-emerald-300 scale-105 border-transparent';
 

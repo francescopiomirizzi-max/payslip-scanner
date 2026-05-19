@@ -160,6 +160,15 @@ const THEMES: any = {
         lightGlow: 'rgba(59, 130, 246, 0.5)',
         icon: Train
     },
+    TRENITALIA: {
+        color: '#dc2626',
+        glow: '0 0 60px -15px rgba(220, 38, 38, 0.7)',
+        gradient: 'from-red-600 via-rose-600 to-red-700',
+        avatarBg: 'from-red-600 to-rose-700',
+        avatarText: 'text-white',
+        lightGlow: 'rgba(220, 38, 38, 0.5)',
+        icon: Train
+    },
     ELIOR: {
         color: '#f97316',
         glow: '0 0 60px -15px rgba(249, 115, 22, 0.7)',
@@ -182,6 +191,7 @@ const THEMES: any = {
 
 const OPTIONS = [
     { value: 'RFI', label: 'RFI', sub: 'Infrastrutture' },
+    { value: 'TRENITALIA', label: 'TRENITALIA', sub: 'Trasporto Ferroviario' },
     { value: 'ELIOR', label: 'ELIOR', sub: 'Ristorazione' },
     { value: 'CLEAN_SERVICE', label: 'CLEAN SERVICE', sub: 'Multiservizi' },
 ];
@@ -246,7 +256,7 @@ const WorkerModal: React.FC<WorkerModalProps> = ({ isOpen, onClose, onConfirm, i
     const compileDataFromAI = (data: any) => {
         setFormData(prev => {
             // 1. Recupera dinamicamente tutte le aziende valide (Sistema + Custom)
-            const validCompanies = ['RFI', 'ELIOR', 'CLEAN_SERVICE', ...Object.keys(customCompanies)];
+            const validCompanies = ['RFI', 'TRENITALIA', 'ELIOR', 'CLEAN_SERVICE', ...Object.keys(customCompanies)];
 
             // 2. Normalizza il nome letto dall'AI (tutto maiuscolo)
             const detectedCompany = data.azienda ? data.azienda.toUpperCase().trim() : '';

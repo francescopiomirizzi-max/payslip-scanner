@@ -13,7 +13,7 @@ interface CompanyBuilderProps {
     onClose: () => void;
 }
 
-const SYSTEM_COMPANIES = ['RFI', 'ELIOR', 'CLEAN_SERVICE'];
+const SYSTEM_COMPANIES = ['RFI', 'TRENITALIA', 'ELIOR', 'CLEAN_SERVICE'];
 
 const COLOR_OPTIONS = [
     { id: 'indigo',  hex: '#6366f1', light: '#e0e7ff' },

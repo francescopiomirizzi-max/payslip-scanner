@@ -64,6 +64,7 @@ const AnnualCalculationTable: React.FC<AnnualCalculationTableProps> = ({
     if (profilo === 'ELIOR') return 'text-orange-400 border-orange-600 bg-orange-900/30';
     if (profilo === 'CLEAN_SERVICE') return 'text-emerald-400 border-emerald-600 bg-emerald-900/30';
     if (profilo === 'RFI') return 'text-blue-400 border-blue-600 bg-blue-900/30';
+    if (profilo === 'TRENITALIA') return 'text-red-400 border-red-600 bg-red-900/30';
 
     // AZIENDE CUSTOM (Palette dinamica)
     const customPalette = [

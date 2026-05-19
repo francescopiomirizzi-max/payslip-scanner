@@ -374,6 +374,11 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                                 <span className="text-[11px] font-black text-blue-800 dark:text-cyan-300 transition-colors">RFI</span>
                                 <span className="text-[11px] font-bold text-blue-600 dark:text-cyan-500 transition-colors">{workers.filter(w => w.profilo === 'RFI').length}</span>
                             </div>
+                            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border backdrop-blur-md bg-red-50 dark:bg-red-900/30 border-red-200 dark:border-red-700/50 transition-colors">
+                                <div className="w-2 h-2 rounded-full bg-red-600 dark:bg-red-400 dark:shadow-[0_0_8px_currentColor]"></div>
+                                <span className="text-[11px] font-black text-red-800 dark:text-red-300 transition-colors">TRENITALIA</span>
+                                <span className="text-[11px] font-bold text-red-600 dark:text-red-500 transition-colors">{workers.filter(w => w.profilo === 'TRENITALIA').length}</span>
+                            </div>
                             <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border backdrop-blur-md bg-orange-50 dark:bg-orange-900/30 border-orange-200 dark:border-orange-700/50 transition-colors">
                                 <div className="w-2 h-2 rounded-full bg-orange-500 dark:bg-orange-400 dark:shadow-[0_0_8px_currentColor]"></div>
                                 <span className="text-[11px] font-black text-orange-800 dark:text-orange-300 transition-colors">ELIOR</span>
@@ -527,7 +532,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                         <div className="mt-6 space-y-3">
                             {/* RIGA PRINCIPALE: AZIENDE + TOGGLE STATO */}
                             <div className="flex justify-center gap-3 flex-wrap items-center">
-                                {['ALL', 'RFI', 'ELIOR', 'CLEAN_SERVICE', ...customFilters].map((filterId) => {
+                                {['ALL', 'RFI', 'TRENITALIA', 'ELIOR', 'CLEAN_SERVICE', ...customFilters].map((filterId) => {
                                     const isActive = activeFilter === filterId;
                                     return (
                                         <button

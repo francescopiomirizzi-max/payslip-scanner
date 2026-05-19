@@ -62,7 +62,7 @@ export function usePayslipUpload({
         (c: any) => c.id !== 'month' && c.id !== 'total' && c.id !== 'note' && c.id !== 'arretrati'
       );
     }
-    if (['RFI', 'ELIOR', 'CLEAN_SERVICE'].includes(worker.profilo)) return null;
+    if (['RFI', 'TRENITALIA', 'ELIOR', 'CLEAN_SERVICE'].includes(worker.profilo)) return null;
     try {
       const saved = localStorage.getItem('customCompanies');
       if (saved) {

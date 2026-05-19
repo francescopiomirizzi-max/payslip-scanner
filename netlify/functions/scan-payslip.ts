@@ -75,7 +75,7 @@ function cleanAndParseJSON(text: string): any {
 // 1. PROMPT RFI (PLATINUM EDITION - VERSIONE FINALE CON FIX RIPOSI)
 // ==========================================
 const PROMPT_RFI = `
-  Sei un estrattore dati deterministico specializzato in Buste Paga RFI / TRENITALIA.
+  Sei un estrattore dati deterministico specializzato in Buste Paga RFI.
   Il tuo unico scopo è generare un JSON valido, preciso e impeccabile. 
   [REGOLE SUI NUMERI]: Ignora i punti delle migliaia (es. 1.000,50 diventa 1000.50). Usa sempre e solo il PUNTO (.) come separatore decimale.
   [REGOLE OCR]: I documenti scansionati possono contenere errori di lettura (es. "O" al posto di "0", "I" al posto di "1"). Usa le descrizioni testuali tra parentesi come conferma infallibile se il codice numerico risulta sporco o illeggibile.
@@ -159,6 +159,105 @@ const PROMPT_RFI = `
   Restituisci ESCLUSIVAMENTE un oggetto JSON crudo. 
   È SEVERAMENTE VIETATO usare formattazioni markdown come \`\`\`json o \`\`\`. 
   
+  Esempio di output perfetto:
+  {
+    "isCUD": false, "month": 3, "year": 2019, "daysWorked": 18.0, "daysVacation": 1.0, "ticketRate": 7.0, "arretrati": 158.12, "eventNote": "[Malattia/Carenza]", "aiWarning": "Nessuna anomalia",
+    "fondo_pregresso_31_12": 2938.55, "imponibile_tfr_mensile": 2107.91,
+    "codes": {
+      "0152": 576.06, "0421": 0.0, "0423": 0.0, "0457": 140.00, "0470": 0.0, "0482": 0.0, "0496": 0.0, "0687": 0.0, "0686": 0.0, "0AA1": 0.0, "0576": 0.0, "0584": 64.00, "0919": 0.0, "0920": 0.0, "0932": 0.0, "0933": 0.0, "0995": 0.0, "0996": 0.0, "0376": 0.0
+    }
+  }
+`;
+// ==========================================
+// 1-bis. PROMPT TRENITALIA (Baseline = clone integrale RFI: stessa struttura SAP/Zucchetti)
+// La Master List dei codici è la stessa di RFI finché non avremo i codici "personale viaggiante"
+// (es. indennità di condotta). Mantiene tutte le regole anti-scivolamento, TFR dicembre, arretrati.
+// ==========================================
+const PROMPT_TRENITALIA = `
+  Sei un estrattore dati deterministico specializzato in Buste Paga TRENITALIA.
+  Il tuo unico scopo è generare un JSON valido, preciso e impeccabile.
+  [REGOLE SUI NUMERI]: Ignora i punti delle migliaia (es. 1.000,50 diventa 1000.50). Usa sempre e solo il PUNTO (.) come separatore decimale.
+  [REGOLE OCR]: I documenti scansionati possono contenere errori di lettura (es. "O" al posto di "0", "I" al posto di "1"). Usa le descrizioni testuali tra parentesi come conferma infallibile se il codice numerico risulta sporco o illeggibile.
+
+  ### 0. REGOLA DELLE MULTI-PAGINE (CRITICA)
+  Il documento contiene più pagine. La tabella centrale "Cod. Voce | Descrizione | Competenze | Trattenute" continua fisicamente sulle pagine 2, 3, ecc.
+  DEVI analizzare l'intero documento riga per riga, dalla prima all'ultima pagina. Chi si ferma alla prima pagina fallisce il task in modo irreversibile.
+
+  ### 1. DATI BASE
+  - "month" (numero 1-12) e "year" (4 cifre). Identificali dalla testata del cedolino.
+
+ ### 2. PRESENZE E FERIE (TRENITALIA) - REGOLA DELL'INCOLONNAMENTO (CRITICA)
+  La tabella in alto ha questa intestazione esatta: "Presenze | Riposi | Ferie | 26mi PTV | Malattie | Infortuni ... | Ferie anno prec. | Ferie anno corrente".
+  I dati si trovano nella riga sottostante. Applica questa logica TASSATIVA:
+
+  - **daysWorked (Giorni Lavorati):** Guarda ESATTAMENTE sotto l'intestazione "Presenze" (è la primissima colonna a sinistra).
+    [REGOLA DELLA CELLA VUOTA]: Se la colonna "Presenze" è vuota o contiene spazi, DEVI RESTITUIRE 0. NON cercare il "primo numero disponibile" spostandoti a destra.
+    [DIVIETO ASSOLUTO]: È SEVERAMENTE VIETATO assegnare ai giorni lavorati i numeri presenti sotto le colonne "Malattie" o "Infortuni". (Es. se c'è 31 sotto Malattie, daysWorked è 0).
+    [DIVIETO APA]: Non estrarre MAI il numero "7" se è vicino alla scritta "N° A.P.A.".
+
+  - **daysVacation (Ferie godute nel mese):** Guarda ESATTAMENTE la colonna sotto l'intestazione "Ferie".
+    [ANTI-SCIVOLAMENTO OCR - REGOLA SALVAVITA]: Spesso la colonna Ferie è vuota e l'OCR "unisce" i numeri. Se sotto la riga delle intestazioni leggi una sequenza come "16,00  12,00  0,00", significa che 16,00 sono le Presenze, 12,00 sono i RIPOSI, le Ferie sono ASSENTI (quindi 0), e 0,00 è 26mi PTV.
+    È SEVERAMENTE VIETATO assegnare il valore dei Riposi (che si aggira spesso tra 8,00 e 12,00) a daysVacation. Se la cella è vuota o fusa, DEVI restituire 0.
+    [DIVIETO RESIDUI]: È SEVERAMENTE VIETATO pescare numeri alla fine della riga (es. 25,00 o 3,00) perché appartengono a "Ferie anno prec./corrente". Estrai SOLO le ferie del mese.
+
+ ### 3. TICKET RESTAURANT (Codici 0E99 / 0299 / 0293)
+  - Cerca questi codici in TUTTE le pagine.
+  - Estrai ESATTAMENTE il valore dalla colonna "Aliquota" (es. 5.29, 7.00).
+  - IGNORA TASSATIVAMENTE la colonna "Parametro". Se non trovi il codice, restituisci 0.0.
+
+  ### 4. CODICI VARIABILI (MASTER LIST) E SFASAMENTO TEMPORALE
+  [SFASAMENTO]: Nel settore ferroviario le indennità sono pagate il mese successivo. È perfettamente NORMALE avere daysWorked=0 ma incassare indennità > 0. Non "inventare" giorni di presenza per giustificare gli importi.
+
+  Cerca i seguenti codici in TUTTE le pagine, estraendo il valore ESCLUSIVAMENTE dalla colonna "Competenze" (importi positivi).
+  REGOLA D'ORO: Il JSON finale DEVE contenere TUTTE le chiavi elencate qui sotto. Se un codice non è presente nella busta paga, il suo valore DEVE essere 0.0. Non omettere mai nessuna chiave.
+
+  - 0152 (Str. feriale D. non recup / Straord. Diurno)
+  - 0421 (Ind. Notturno)
+  - 0423 (Comp. Cantiere/Festivo)
+  - 0457 (Festivo Notturno)
+  - 0470 (Ind. Chiamata)
+  - 0482 (Ind. Reperibilità)
+  - 0496 (Ind. Disp. Chiamata)
+  - 0687 (Ind. Linea <= 10h)
+  - 0686 (Ind. Linea > 10h)
+  - 0AA1 (Trasferta - Somma tutte le occorrenze)
+  - 0576 (Ind. Orario Spezz.)
+  - 0584 (Rep. Festive/Riposo)
+  - 0919 (Str. Feriale Diurno)
+  - 0920 (Str. Fest/Notturno)
+  - 0932 (Str. Diurno Rep.)
+  - 0933 (Str. Fest/Not Rep.)
+  - 0995 (Str. Diurno Disp.)
+  - 0996 (Str. Fest/Not Disp.)
+  - 0376 (Indennità varie)
+
+  ### 5. ARRETRATI E NOTE
+  - "arretrati": Somma SOLO gli importi POSITIVI (situati nella colonna Competenze) delle seguenti voci: 3E10, 3E16, Indennità INPS, codici che iniziano per 0K.., 74.., 6INT, 3105. IGNORA categoricamente la colonna Trattenute.
+  - "eventNote": Se rilevi codici di malattia (es. 3E.., Indennità INPS) o giorni segnati sotto la colonna "Malattie", scrivi la stringa "[Malattia/Carenza]". Altrimenti lascia una stringa vuota "".
+
+  ### 6. AUDITOR AI
+  - "aiWarning":
+    * Se daysWorked > 31 -> "Anomalia: Presenze > 31"
+    * Se daysWorked = 0 ma ci sono importi variabili > 0 -> "Nessuna anomalia (Conguaglio mese prec.)"
+    * In tutti gli altri casi -> "Nessuna anomalia"
+
+  ### 7. TFR E FONDO PREGRESSO (⚠️ REGOLA CRITICA DEL MESE DI DICEMBRE E GRANDEZZA NUMERI ⚠️)
+  - "fondo_pregresso_31_12": Cerca la tabella in basso intitolata 'TFR'. Estrai il valore sotto 'TFR al 31.12 A.P.' (TFR anno precedente). Formato numero (es. 2938.55). Se non c'è, scrivi 0.0.
+  - "imponibile_tfr_mensile": [DIVIETO ASSOLUTO] Cerca il riquadro TFR SOLO se la busta paga è di DICEMBRE (Mese 12) o c'è scritto "Cessazione"/"Fine Rapporto". Estrai ESCLUSIVAMENTE il valore della riga "Imponibile" (che è una cifra alta, solitamente tra 20.000 e 40.000). È SEVERAMENTE VIETATO estrarre il valore della riga "Accantonamento" o "Quota" (che è molto più basso, solitamente sui 2.000). Per tutti i mesi da Gennaio a Novembre, restituisci SEMPRE E TASSATIVAMENTE 0.0, ignorando completamente il riquadro.
+
+  ### 8. 🚨 MODALITÀ CERTIFICAZIONE UNICA (CUD) 🚨
+  Se il documento NON è una busta paga ma riporta diciture come "CERTIFICAZIONE UNICA" o "CUD":
+  1. Imposta la chiave "isCUD": true.
+  2. Imposta "month": 12.
+  3. Cerca la sezione "TFR" o "Trattamento di Fine Rapporto".
+  4. Estrai in "imponibile_tfr_mensile" il valore totale dell'imponibile TFR dell'intero anno.
+  5. Estrai in "fondo_pregresso_31_12" il TFR maturato fino al 31/12 dell'anno precedente.
+  6. Imposta tutti gli altri codici, giorni lavorati e ferie a 0.0 (se non chiaramente indicati).
+
+  ### 9. FORMATO DI OUTPUT STRICT (DIVIETO DI MARKDOWN)
+  Restituisci ESCLUSIVAMENTE un oggetto JSON crudo.
+  È SEVERAMENTE VIETATO usare formattazioni markdown come \`\`\`json o \`\`\`.
+
   Esempio di output perfetto:
   {
     "isCUD": false, "month": 3, "year": 2019, "daysWorked": 18.0, "daysVacation": 1.0, "ticketRate": 7.0, "arretrati": 158.12, "eventNote": "[Malattia/Carenza]", "aiWarning": "Nessuna anomalia",
@@ -283,7 +382,9 @@ const PROMPT_CLEAN_SERVICE = `
     }
   }
 `;
-
+// =========================================================================
+// 4. PROMPT GENERALE PER ELIOR
+// =========================================================================
 export const getEliorPrompt = (eliorType = 'viaggiante') => {
   const isMagazzino = eliorType === 'magazzino';
 
@@ -435,6 +536,7 @@ const PROMPT_GENERICO = `
 // ==========================================
 const PROMPT_DIRECTORY: Record<string, string> = {
   "RFI": PROMPT_RFI,
+  "TRENITALIA": PROMPT_TRENITALIA,
   "CLEAN_SERVICE": PROMPT_CLEAN_SERVICE
 };
 

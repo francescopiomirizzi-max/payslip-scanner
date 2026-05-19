@@ -16,7 +16,7 @@ export const YEARS = Array.from({ length: 19 }, (_, i) => 2007 + i);
 // --- MODIFICA CHIRURGICA 1: TIPO APERTO ---
 // Invece di limitare alle sole 3 aziende, lo apriamo a qualsiasi stringa, 
 // mantenendo i suggerimenti per le 3 principali.
-export type ProfiloAzienda = 'RFI' | 'ELIOR' | 'CLEAN_SERVICE' | string;
+export type ProfiloAzienda = 'RFI' | 'TRENITALIA' | 'ELIOR' | 'CLEAN_SERVICE' | string;
 
 export interface AnnoDati {
   id?: string;
@@ -85,6 +85,7 @@ export interface ColumnDef {
 // --- CONFIGURAZIONE COLONNE PER PROFILO (BLINDATE) ---
 
 // Colonne RFI (Allineate al Prompt V14)
+// Nota: TRENITALIA usa la stessa Master List finché non avremo i codici "personale viaggiante"
 export const INDENNITA_RFI: ColumnDef[] = [
   { id: '0152', label: 'Straord. Diurno', subLabel: '(0152)', width: 'min-w-[120px]', type: 'currency' },
   { id: '0421', label: 'Ind. Notturno', subLabel: '(0421)', width: 'min-w-[120px]', type: 'currency' },
@@ -210,6 +211,7 @@ export const getColumnsByProfile = (profilo: ProfiloAzienda, eliorType?: 'viaggi
         specificColumns = INDENNITA_CLEAN_SERVICE;
         break;
       case 'RFI':
+      case 'TRENITALIA':
         specificColumns = INDENNITA_RFI;
         break;
       default:
