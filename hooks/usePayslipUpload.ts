@@ -62,7 +62,7 @@ export function usePayslipUpload({
         (c: any) => c.id !== 'month' && c.id !== 'total' && c.id !== 'note' && c.id !== 'arretrati'
       );
     }
-    if (['RFI', 'TRENITALIA', 'ELIOR', 'CLEAN_SERVICE'].includes(worker.profilo)) return null;
+    if (['RFI', 'TRENITALIA', 'ELIOR', 'CLEAN_SERVICE', 'MERCITALIA'].includes(worker.profilo)) return null;
     try {
       const saved = localStorage.getItem('customCompanies');
       if (saved) {
@@ -189,6 +189,15 @@ export function usePayslipUpload({
         row.note = row.note
           ? `${row.note}${sep}[⚠️ AI: ${aiResult.aiWarning}]`
           : `[⚠️ AI: ${aiResult.aiWarning}]`;
+
+      // MERCITALIA: i ticket non hanno colonna, vengono isolati nella nota del mese
+      if (worker.profilo === 'MERCITALIA') {
+        const ticketCount = parseLocalFloat(aiResult.count);
+        if (ticketCount > 0 && ticketVal > 0 && !row.note?.includes('ticket restaurant')) {
+          const ticketNote = `Erogati ${Math.round(ticketCount)} ticket restaurant da ${ticketVal.toFixed(2)}€`;
+          row.note = row.note ? `${row.note}${sep}[${ticketNote}]` : `[${ticketNote}]`;
+        }
+      }
 
       if (aiResult.imponibile_tfr_mensile !== undefined) {
         const newVal = parseLocalFloat(aiResult.imponibile_tfr_mensile);
@@ -425,10 +434,18 @@ export function usePayslipUpload({
           row.note = row.note
             ? `${row.note}${sep}[⚠️ AI: ${aiResult.aiWarning}]`
             : `[⚠️ AI: ${aiResult.aiWarning}]`;
-        if (!isNaN(ticketVal) && ticketVal > 0 && !row.note?.includes('Ticket'))
+        // MERCITALIA isola i ticket nella nota con dicitura esatta; gli altri usano il tag generico
+        if (worker.profilo === 'MERCITALIA') {
+          const ticketCount = parseLocalFloat(aiResult.count);
+          if (ticketCount > 0 && ticketVal > 0 && !row.note?.includes('ticket restaurant')) {
+            const ticketNote = `Erogati ${Math.round(ticketCount)} ticket restaurant da ${ticketVal.toFixed(2)}€`;
+            row.note = row.note ? `${row.note}${sep}[${ticketNote}]` : `[${ticketNote}]`;
+          }
+        } else if (!isNaN(ticketVal) && ticketVal > 0 && !row.note?.includes('Ticket')) {
           row.note = row.note
             ? `${row.note}${sep}[🎫 Ticket: €${ticketVal.toFixed(2)}]`
             : `[🎫 Ticket: €${ticketVal.toFixed(2)}]`;
+        }
 
         if (aiResult.imponibile_tfr_mensile !== undefined) {
           const newVal = parseLocalFloat(aiResult.imponibile_tfr_mensile);

@@ -138,7 +138,7 @@ export function printPayslipTables({
     doc.setFontSize(7); doc.setTextColor(100);
 
     let nomeCCNL = 'CCNL di Categoria';
-    if (worker.profilo === 'RFI' || worker.profilo === 'TRENITALIA') nomeCCNL = 'CCNL Mobilità';
+    if (worker.profilo === 'RFI' || worker.profilo === 'TRENITALIA' || worker.profilo === 'MERCITALIA') nomeCCNL = 'CCNL Mobilità';
     if (worker.profilo === 'CLEAN_SERVICE') nomeCCNL = 'CCNL Multiservizi';
     if (worker.profilo === 'ELIOR') nomeCCNL = 'CCNL Ristorazione';
 

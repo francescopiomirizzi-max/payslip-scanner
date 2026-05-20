@@ -334,6 +334,7 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
     if (worker.profilo === 'CLEAN_SERVICE') return 'bg-emerald-100/50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-700/50';
     if (worker.profilo === 'RFI') return 'bg-blue-100/50 dark:bg-blue-900/30 text-blue-700 dark:text-cyan-400 border-blue-200 dark:border-blue-700/50';
     if (worker.profilo === 'TRENITALIA') return 'bg-red-100/50 dark:bg-red-900/30 text-red-700 dark:text-red-400 border-red-200 dark:border-red-700/50';
+    if (worker.profilo === 'MERCITALIA') return 'bg-amber-100/50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-700/50';
 
     // AZIENDE CUSTOM: Palette premium esclusiva (niente blu/arancio/verde base)
     const customPalette = [

@@ -389,6 +389,11 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                                 <span className="text-[11px] font-black text-emerald-800 dark:text-emerald-300 transition-colors">CLEAN SERVICE</span>
                                 <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-500 transition-colors">{workers.filter(w => w.profilo === 'CLEAN_SERVICE').length}</span>
                             </div>
+                            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border backdrop-blur-md bg-amber-50 dark:bg-amber-900/30 border-amber-200 dark:border-amber-700/50 transition-colors">
+                                <div className="w-2 h-2 rounded-full bg-amber-600 dark:bg-amber-400 dark:shadow-[0_0_8px_currentColor]"></div>
+                                <span className="text-[11px] font-black text-amber-800 dark:text-amber-300 transition-colors">MERCITALIA</span>
+                                <span className="text-[11px] font-bold text-amber-600 dark:text-amber-500 transition-colors">{workers.filter(w => w.profilo === 'MERCITALIA').length}</span>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -532,7 +537,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                         <div className="mt-6 space-y-3">
                             {/* RIGA PRINCIPALE: AZIENDE + TOGGLE STATO */}
                             <div className="flex justify-center gap-3 flex-wrap items-center">
-                                {['ALL', 'RFI', 'TRENITALIA', 'ELIOR', 'CLEAN_SERVICE', ...customFilters].map((filterId) => {
+                                {['ALL', 'RFI', 'TRENITALIA', 'ELIOR', 'CLEAN_SERVICE', 'MERCITALIA', ...customFilters].map((filterId) => {
                                     const isActive = activeFilter === filterId;
                                     return (
                                         <button

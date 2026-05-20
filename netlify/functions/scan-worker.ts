@@ -8,23 +8,48 @@ const genAI = new GoogleGenerativeAI(apiKey);
 const PROMPT_ANAGRAFICA = `
   Sei un assistente HR specializzato nell'estrazione di dati anagrafici da buste paga e cedolini italiani.
   Il tuo UNICO compito è leggere il documento fornito (che può essere storto o fotografato male) ed estrarre i dati del lavoratore.
-  
-  Estrai esattamente questi campi:
-  1. "nome": Il nome di battesimo del lavoratore.
-  2. "cognome": Il cognome del lavoratore.
-  3. "ruolo": La qualifica o la mansione (es. "Macchinista", "Capotreno", "Cuoco", "Operatore", "Capo Impianto").
-  4. "profiloProfessionale": Il livello di inquadramento, parametro o livello contrattuale (es. "Livello B", "Parametro 130", "Livello 4", "B1").
-  5. "azienda": Identifica l'azienda dalla testata o dal logo (es. "RFI", "TRENITALIA", "ELIOR", "CLEAN_SERVICE"). Se trovi "Rete Ferroviaria Italiana" o "RFI", scrivi "RFI". Se trovi "Trenitalia", scrivi "TRENITALIA". Se trovi "Ferrovie dello Stato" o "FS" senza altra specificazione, scrivi "RFI" come fallback storico. Se trovi "Clean Service", "Clean Service SRL" o varianti, scrivi "CLEAN_SERVICE".
 
-  Pulisci i testi (es. metti la prima lettera maiuscola per nome e cognome).
-  
+  Estrai esattamente questi campi:
+
+  1. "nome": Il nome di battesimo del lavoratore. Prima lettera maiuscola.
+
+  2. "cognome": Il cognome del lavoratore. Prima lettera maiuscola.
+
+  3. "ruolo" → **MANSIONE OPERATIVA SPECIFICA** (cosa fa concretamente il lavoratore).
+     ✅ Esempi corretti: "Macchinista", "Capotreno", "Tecnico Manutenzione Linea", "Cuoco", "Operatore Polifunzionale", "Capo Impianto", "Addetto Pulizie", "Verificatore", "Manovratore".
+     📍 Dove cercarlo nel cedolino: sezioni "Mansione", "Funzione", "Profilo", "Profilo Professionale Operativo", "Ruolo Aziendale".
+     ⚠️ Se nel documento NON c'è una mansione operativa esplicita (solo il livello contrattuale), lascia "ruolo" come stringa vuota "". È PREFERIBILE lasciare vuoto piuttosto che inserire un livello.
+
+  4. "profiloProfessionale" → **LIVELLO / CATEGORIA CONTRATTUALE** di inquadramento (struttura gerarchica del CCNL).
+     ✅ Esempi corretti: "Professional", "Specialist", "Capo Tecnico", "Quadro", "Livello B", "Parametro 130", "Livello 4", "B1", "A2", "Impiegato 1° Liv.", "Operaio Comune".
+     📍 Dove cercarlo nel cedolino: sezioni "Qualifica", "Q.Prof", "Q.PROF", "Categoria", "Livello", "Inquadramento", "Cat.".
+
+  🚨 REGOLA ANTI-CONFUSIONE CRITICA (BUG STORICO):
+  Sui cedolini RFI/TRENITALIA esistono DUE colonne distinte: "Q.PROF" (livello, es. "Professional") e "Mansione" (es. "Macchinista").
+  È SEVERAMENTE VIETATO mettere il livello contrattuale nel campo "ruolo".
+  Token che NON DEVONO MAI finire in "ruolo" (vanno SEMPRE in "profiloProfessionale"):
+  - "Professional", "Specialist", "Capo Tecnico", "Quadro", "Quadro A", "Quadro B"
+  - "Operaio", "Operaio Comune", "Operaio Qualificato", "Impiegato", "Impiegato 1° Liv."
+  - "Livello A/B/C/D/E", "Liv. 1/2/3/4/5/6/7"
+  - "Parametro 100/110/130/140/175"
+  - Codici tipo "B1", "A2", "C3" da soli
+
+  Esempi di output:
+  ✅ CORRETTO  → "ruolo": "Tecnico Manutenzione Linea", "profiloProfessionale": "Professional"
+  ✅ CORRETTO  → "ruolo": "Macchinista",                "profiloProfessionale": "Livello B"
+  ✅ CORRETTO  → "ruolo": "",                            "profiloProfessionale": "Professional"   (mansione assente sul PDF)
+  ❌ SBAGLIATO → "ruolo": "Professional",                "profiloProfessionale": ""               (livello scivolato in ruolo)
+  ❌ SBAGLIATO → "ruolo": "Quadro",                      "profiloProfessionale": ""
+
+  5. "azienda": Identifica l'azienda dalla testata o dal logo (es. "RFI", "TRENITALIA", "ELIOR", "CLEAN_SERVICE", "MERCITALIA"). Se trovi "Rete Ferroviaria Italiana" o "RFI", scrivi "RFI". Se trovi "Trenitalia", scrivi "TRENITALIA". Se trovi "Mercitalia", "Mercitalia Shunting", "Mercitalia Shunting & Terminal" oppure il framework/logo del gestionale ADP (it-adp.com), scrivi "MERCITALIA". Se trovi "Ferrovie dello Stato" o "FS" senza altra specificazione, scrivi "RFI" come fallback storico. Se trovi "Clean Service", "Clean Service SRL" o varianti, scrivi "CLEAN_SERVICE".
+
   Restituisci ESATTAMENTE ED ESCLUSIVAMENTE un file JSON valido con questa struttura, senza codice markdown o testo aggiuntivo:
   {
     "nome": "Mario",
     "cognome": "Rossi",
     "ruolo": "Macchinista",
-    "profiloProfessionale": "Livello B",
-    "azienda": "RFI"
+    "profiloProfessionale": "Professional",
+    "azienda": "TRENITALIA"
   }
 `;
 
@@ -53,7 +78,7 @@ export const handler: Handler = async (event, context) => {
         // Usiamo il modello veloce (flash) perché l'operazione è semplicissima
         const model = genAI.getGenerativeModel({
             model: "gemini-2.5-flash",
-            generationConfig: { responseMimeType: "application/json", temperature: 0.1 }
+            generationConfig: { responseMimeType: "application/json", temperature: 0.0 }
         });
 
         const result = await model.generateContent([

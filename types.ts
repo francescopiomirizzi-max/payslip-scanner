@@ -16,7 +16,7 @@ export const YEARS = Array.from({ length: 19 }, (_, i) => 2007 + i);
 // --- MODIFICA CHIRURGICA 1: TIPO APERTO ---
 // Invece di limitare alle sole 3 aziende, lo apriamo a qualsiasi stringa, 
 // mantenendo i suggerimenti per le 3 principali.
-export type ProfiloAzienda = 'RFI' | 'TRENITALIA' | 'ELIOR' | 'CLEAN_SERVICE' | string;
+export type ProfiloAzienda = 'RFI' | 'TRENITALIA' | 'ELIOR' | 'CLEAN_SERVICE' | 'MERCITALIA' | string;
 
 export interface AnnoDati {
   id?: string;
@@ -171,6 +171,27 @@ export const INDENNITA_CLEAN_SERVICE: ColumnDef[] = [
   { id: '8053', label: 'Maneggio Den.',    subLabel: '(8053)', width: 'min-w-[110px]', type: 'currency' },
 ];
 
+// Colonne MERCITALIA (Mercitalia Shunting & Terminal - layout gestionale ADP)
+// Master List a 4 cifre: A) indennità variabili di presenza, B) straordinario, C) festività.
+// I ticket NON hanno colonna: vivono solo nella nota del mese.
+export const INDENNITA_MERCITALIA: ColumnDef[] = [
+  // A — Indennità variabili di presenza
+  { id: '1801', label: 'Ind. Notturno',     subLabel: '(1801)', width: 'min-w-[120px]', type: 'currency' },
+  { id: '1802', label: 'Ind. Turno H24',    subLabel: '(1802)', width: 'min-w-[120px]', type: 'currency' },
+  { id: '1811', label: 'Lav. Domenicale',   subLabel: '(1811)', width: 'min-w-[120px]', type: 'currency' },
+  { id: '1819', label: 'Lav. Festivo',      subLabel: '(1819)', width: 'min-w-[120px]', type: 'currency' },
+  { id: '1879', label: 'Ore Viaggio',       subLabel: '(1879)', width: 'min-w-[120px]', type: 'currency' },
+  { id: '2331', label: 'Trasferta Italia',  subLabel: '(2331)', width: 'min-w-[130px]', type: 'currency' },
+  // B — Ore di straordinario
+  { id: '2013', label: 'Str. Diurno 18%',   subLabel: '(2013)', width: 'min-w-[120px]', type: 'currency' },
+  { id: '2023', label: 'Str. Fest. 35%',    subLabel: '(2023)', width: 'min-w-[120px]', type: 'currency' },
+  { id: '2033', label: 'Str. Notturno 35%', subLabel: '(2033)', width: 'min-w-[130px]', type: 'currency' },
+  { id: '2073', label: 'Str. Fest/Nott 50%',subLabel: '(2073)', width: 'min-w-[130px]', type: 'currency' },
+  // C — Festività
+  { id: '2263', label: 'Festività',         subLabel: '(2263)', width: 'min-w-[120px]', type: 'currency' },
+  { id: '2293', label: 'Festività Infras.', subLabel: '(2293)', width: 'min-w-[130px]', type: 'currency' },
+];
+
 // --- COLONNA ARRETRATI (Universale) ---
 export const COLONNA_ARRETRATI: ColumnDef = {
   id: 'arretrati',
@@ -210,6 +231,9 @@ export const getColumnsByProfile = (profilo: ProfiloAzienda, eliorType?: 'viaggi
       case 'CLEAN_SERVICE':
         specificColumns = INDENNITA_CLEAN_SERVICE;
         break;
+      case 'MERCITALIA':
+        specificColumns = INDENNITA_MERCITALIA;
+        break;
       case 'RFI':
       case 'TRENITALIA':
         specificColumns = INDENNITA_RFI;
@@ -220,7 +244,7 @@ export const getColumnsByProfile = (profilo: ProfiloAzienda, eliorType?: 'viaggi
   }
 
   // 3. Compone la tabella finale aggiungendo la colonna mesi, gli arretrati e le somme
-  return [
+  const tabella: ColumnDef[] = [
     { id: 'month', label: 'MESE', width: 'min-w-[120px]', sticky: true },
     ...specificColumns,
     COLONNA_ARRETRATI, // Viene sempre aggiunta alla fine delle indennità
@@ -229,6 +253,9 @@ export const getColumnsByProfile = (profilo: ProfiloAzienda, eliorType?: 'viaggi
     { id: 'daysVacation', label: 'GG Ferie', subLabel: 'Fruite', width: 'min-w-[80px]', type: 'integer' },
     { id: 'ticket', label: 'Ticket', subLabel: 'Past.', width: 'min-w-[80px]', type: 'currency' }
   ];
+
+  // MERCITALIA: i ticket vivono solo nella nota del mese → nessuna colonna ticket dedicata
+  return profilo === 'MERCITALIA' ? tabella.filter(c => c.id !== 'ticket') : tabella;
 };
 
 import { parseFloatSafe } from './utils/formatters';

@@ -457,6 +457,9 @@ const StatsDashboard: React.FC<StatsDashboardProps> = ({ workers = [], onBack })
                                 } else if (profile === 'TRENITALIA') {
                                     barColor = '#dc2626';
                                     bgClass = 'bg-red-600';
+                                } else if (profile === 'MERCITALIA') {
+                                    barColor = '#d97706';
+                                    bgClass = 'bg-amber-600';
                                 } else if (profile !== 'RFI' && profile !== 'ALTRO') {
                                     // AZIENDE CUSTOM (Usa lo stesso algoritmo basato sul nome)
                                     const customColors = [

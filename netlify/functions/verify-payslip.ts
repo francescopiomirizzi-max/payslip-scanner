@@ -84,6 +84,37 @@ In questo caso NON segnalare discrepanza su daysWorked.
 **Arretrati (CLEAN SERVICE):** Somma SOLO importi positivi delle voci la cui DESCRIZIONE contiene "UNA TANTUM", "ARRETRATI", "CONGUAGLIO", "ARR." (case-insensitive). Queste voci NON devono comparire in "codes" anche se il loro codice numerico coincide con uno dei codici Clean Service (la descrizione testuale prevale sul codice). Se segnali una discrepanza su un codice "codes.NNNN", verifica prima che la voce nel PDF non sia in realtà un UNA TANTUM/ARRETRATO.
 `;
 
+  } else if (co === "MERCITALIA") {
+    companyRules = `
+### REGOLE DI CALCOLO AZIENDALI — MERCITALIA (struttura gestionale ADP)
+
+**MARCATORI DEL FRAMEWORK ADP:**
+Questo cedolino NON usa il layout SAP/Zucchetti di RFI/Trenitalia. NON cercare la tabella
+"Presenze | Riposi | Ferie | 26mi PTV" — non esiste su ADP.
+Valida che il documento sia ADP verificando la presenza dei riquadri intitolati
+"Informazioni Aziendali", "Informazioni Previdenziali", "Informazioni Fiscali" e
+"Informazioni TFR" (tipicamente a fondo pagina / pagina 2). La tabella centrale delle voci
+ha le colonne "Codice | Descrizione | Numero o base di calcolo | ... | Valori".
+
+**daysWorked:** valore della stringa esatta "GIORNI INPS" nel riquadro
+"Informazioni Previdenziali" (pagina 2). In alternativa, colonna "Numero o base di calcolo"
+del codice 1213 (RETRIBUZ.ORDINARIA) a pagina 1. Se assente → daysWorked = 0 è CORRETTO.
+
+**daysVacation:** colonna "Numero o base di calcolo" del codice 3833 (FERIE GODUTE) nel
+corpo centrale di pagina 1. IGNORA i contatori progressivi annuali dei residui ferie di
+pagina 2. Se il codice 3833 è assente → daysVacation = 0 è CORRETTO.
+
+**ticket:** codici 3994 (VAL.CONV.TICKETS E) / 4001 (VAL.TICKETS E). Su MERCITALIA i ticket
+NON hanno una colonna dedicata: compaiono solo come testo nella nota del mese
+("Erogati N ticket restaurant da X€"). Non segnalare discrepanze sul ticket come colonna.
+
+**Codici indennità (sotto-oggetto "codes"):** confronta l'importo nella colonna "Valori".
+I codici 1723, 1733, 2469, 2501, 2502, 2512 (13ma/14ma, Una Tantum, Welfare) NON sono
+indennità ordinarie: sono confluiti in "arretrati". Non segnalarli come discrepanza su "codes".
+
+**Arretrati:** somma degli importi positivi di 1723, 1733, 2469, 2501, 2502, 2512.
+`;
+
   } else {
     // Custom / generico
     const codeList = customColumns && customColumns.length > 0

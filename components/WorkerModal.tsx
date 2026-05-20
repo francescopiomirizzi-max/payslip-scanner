@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     X, User, Briefcase, Building2, Sparkles, Save,
     Check, Train, Coffee, AlignLeft, ArrowRight,
-    Fingerprint, BadgeCheck, Wand2, Loader2, UploadCloud, Smartphone, FileText, Cpu // <-- AGGIUNTE QUESTE
+    Fingerprint, BadgeCheck, Wand2, Loader2, UploadCloud, Smartphone, FileText, Cpu, Truck // <-- AGGIUNTE QUESTE
 } from 'lucide-react';
 import QRCode from 'react-qr-code';
 import { v4 as uuidv4 } from 'uuid';
@@ -19,6 +19,45 @@ interface WorkerModalProps {
     initialData?: any;
     mode: 'create' | 'edit';
 }
+
+// Token che indicano un LIVELLO CONTRATTUALE (non una mansione). Se l'AI li mette
+// erroneamente nel campo "ruolo" li riportiamo a "profiloProfessionale".
+const LIVELLO_KEYWORDS = [
+    'professional', 'specialist', 'capo tecnico', 'quadro',
+    'operaio', 'operaia', 'impiegato', 'impiegata',
+    'dirigente', 'apprendista', 'praticante',
+];
+const LIVELLO_PATTERNS = [
+    /^liv(\.|ello)?\s*[a-z0-9]+$/i,            // "Liv. 4", "Livello B"
+    /^parametro\s*\d+$/i,                       // "Parametro 130"
+    /^categoria\s*[a-z0-9]+$/i,                 // "Categoria B"
+    /^cat\.?\s*[a-z0-9]+$/i,                    // "Cat. B"
+    /^[a-z]\d{1,2}$/i,                          // "B1", "A2", "C3"
+    /^\d+°?\s*liv(\.|ello)?$/i,                 // "1° Liv.", "3 Livello"
+];
+
+const looksLikeLivello = (s: string): boolean => {
+    const trimmed = s.trim().toLowerCase();
+    if (!trimmed) return false;
+    if (LIVELLO_KEYWORDS.some(k => trimmed === k || trimmed.startsWith(k + ' '))) return true;
+    return LIVELLO_PATTERNS.some(p => p.test(trimmed));
+};
+
+const normalizeRuoloProfilo = (
+    rawRuolo: unknown,
+    rawProfilo: unknown
+): { ruolo: string; profiloProfessionale: string } => {
+    const ruolo = typeof rawRuolo === 'string' ? rawRuolo.trim() : '';
+    const profilo = typeof rawProfilo === 'string' ? rawProfilo.trim() : '';
+
+    // L'AI ha sbagliato a smistare: "ruolo" è in realtà un livello contrattuale.
+    if (ruolo && looksLikeLivello(ruolo)) {
+        // Se profiloProfessionale è vuoto, sposto il valore lì e svuoto ruolo.
+        // Se è già popolato, lo rispetto e svuoto ruolo (preferisco vuoto a sbagliato).
+        return { ruolo: '', profiloProfessionale: profilo || ruolo };
+    }
+    return { ruolo, profiloProfessionale: profilo };
+};
 // --- COMPONENTE AI X-RAY VISION (HUD OLOGRAFICO) ---
 const AiScannerOverlay = ({ isScanning }: { isScanning: boolean }) => {
     const [scanText, setScanText] = useState("Inizializzazione Motore AI...");
@@ -186,6 +225,15 @@ const THEMES: any = {
         avatarText: 'text-white',
         lightGlow: 'rgba(16, 185, 129, 0.5)',
         icon: Sparkles
+    },
+    MERCITALIA: {
+        color: '#d97706',
+        glow: '0 0 60px -15px rgba(217, 119, 6, 0.7)',
+        gradient: 'from-amber-600 via-amber-500 to-orange-700',
+        avatarBg: 'from-amber-600 to-orange-700',
+        avatarText: 'text-white',
+        lightGlow: 'rgba(217, 119, 6, 0.5)',
+        icon: Truck
     }
 };
 
@@ -194,6 +242,7 @@ const OPTIONS = [
     { value: 'TRENITALIA', label: 'TRENITALIA', sub: 'Trasporto Ferroviario' },
     { value: 'ELIOR', label: 'ELIOR', sub: 'Ristorazione' },
     { value: 'CLEAN_SERVICE', label: 'CLEAN SERVICE', sub: 'Multiservizi' },
+    { value: 'MERCITALIA', label: 'MERCITALIA', sub: 'Logistica e Shunting' },
 ];
 
 const WorkerModal: React.FC<WorkerModalProps> = ({ isOpen, onClose, onConfirm, initialData, mode }) => {
@@ -256,18 +305,25 @@ const WorkerModal: React.FC<WorkerModalProps> = ({ isOpen, onClose, onConfirm, i
     const compileDataFromAI = (data: any) => {
         setFormData(prev => {
             // 1. Recupera dinamicamente tutte le aziende valide (Sistema + Custom)
-            const validCompanies = ['RFI', 'TRENITALIA', 'ELIOR', 'CLEAN_SERVICE', ...Object.keys(customCompanies)];
+            const validCompanies = ['RFI', 'TRENITALIA', 'ELIOR', 'CLEAN_SERVICE', 'MERCITALIA', ...Object.keys(customCompanies)];
 
             // 2. Normalizza il nome letto dall'AI (tutto maiuscolo)
             const detectedCompany = data.azienda ? data.azienda.toUpperCase().trim() : '';
+
+            // 3. SAFETY NET: l'AI a volte mette il livello contrattuale (es. "Professional")
+            //    nel campo "ruolo" invece che in "profiloProfessionale". Lo correggiamo qui.
+            const { ruolo, profiloProfessionale } = normalizeRuoloProfilo(
+                data.ruolo,
+                data.profiloProfessionale
+            );
 
             return {
                 ...prev,
                 nome: data.nome || prev.nome,
                 cognome: data.cognome || prev.cognome,
-                ruolo: data.ruolo || prev.ruolo,
-                profiloProfessionale: data.profiloProfessionale || prev.profiloProfessionale,
-                // 3. Se l'azienda trovata è tra quelle valide, la seleziona in automatico!
+                ruolo: ruolo || prev.ruolo,
+                profiloProfessionale: profiloProfessionale || prev.profiloProfessionale,
+                // 4. Se l'azienda trovata è tra quelle valide, la seleziona in automatico!
                 profilo: validCompanies.includes(detectedCompany) ? detectedCompany : prev.profilo
             };
         });
@@ -650,11 +706,22 @@ const WorkerModal: React.FC<WorkerModalProps> = ({ isOpen, onClose, onConfirm, i
 
                                         <AnimatePresence>
                                             {isQrActive && (
-                                                <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden mt-4">
+                                                <motion.div
+                                                    initial={{ height: 0, opacity: 0 }}
+                                                    animate={{ height: 'auto', opacity: 1 }}
+                                                    exit={{ height: 0, opacity: 0 }}
+                                                    transition={{ duration: 0.28, ease: [0.4, 0, 0.2, 1] }}
+                                                    className="overflow-hidden mt-4"
+                                                >
                                                     <div className="bg-white border border-slate-200 p-5 rounded-2xl flex flex-col items-center justify-center shadow-md relative">
                                                         <QRCode value={`${window.location.origin}/?mobile=true&session=${qrSessionId}&type=onboarding`} size={150} level="H" className="relative z-10 p-2 bg-white rounded-xl shadow-sm border border-slate-100" />
                                                         <p className="text-[11px] text-slate-500 mt-4 text-center max-w-[200px] font-medium leading-tight">Inquadra con la fotocamera per scansionare la busta paga.</p>
-                                                        <motion.div animate={{ top: ['10%', '80%', '10%'] }} transition={{ duration: 2.5, ease: "linear", repeat: Infinity }} className="absolute left-1/2 -translate-x-1/2 w-[160px] h-0.5 bg-emerald-500 shadow-[0_0_8px_2px_rgba(16,185,129,0.5)] z-20 opacity-60 pointer-events-none" />
+                                                        <motion.div
+                                                            initial={{ top: '10%' }}
+                                                            animate={{ top: ['10%', '80%', '10%'] }}
+                                                            transition={{ top: { duration: 2.5, ease: "linear", repeat: Infinity, delay: 0.28 } }}
+                                                            className="absolute left-1/2 -translate-x-1/2 w-[160px] h-0.5 bg-emerald-500 shadow-[0_0_8px_2px_rgba(16,185,129,0.5)] z-20 opacity-60 pointer-events-none"
+                                                        />
                                                     </div>
                                                 </motion.div>
                                             )}

@@ -18,6 +18,7 @@ import { Worker, AnnoDati, getColumnsByProfile, MONTH_NAMES } from '../types';
 const PROFILE_CONFIG: any = {
   RFI: { label: 'RFI', pec: 'ru.rfi@pec.rfi.it' },
   TRENITALIA: { label: 'Trenitalia', pec: '' },
+  MERCITALIA: { label: 'Mercitalia', pec: '' },
   ELIOR: { label: 'ELIOR', pec: 'elior@legalmail.it' },
   CLEAN_SERVICE: { label: 'Clean Service', pec: '' }
 };
@@ -74,7 +75,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
     setVerifyStates(prev => ({ ...prev, [vKey]: { status: 'loading', discrepancies: [] } }));
 
     // Build customColumns only for non-standard profiles (Company Builder)
-    const standardProfiles = new Set(['RFI', 'TRENITALIA', 'ELIOR', 'CLEAN_SERVICE']);
+    const standardProfiles = new Set(['RFI', 'TRENITALIA', 'ELIOR', 'CLEAN_SERVICE', 'MERCITALIA']);
     const standardFields = new Set(['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'arretrati', 'note']);
     const isCustomProfile = !standardProfiles.has((worker.profilo || '').toUpperCase());
     const customColumns = isCustomProfile
@@ -321,6 +322,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
     if (worker.profilo === 'CLEAN_SERVICE') return 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-700/50';
     if (worker.profilo === 'RFI') return 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-cyan-400 border-blue-200 dark:border-blue-700/50';
     if (worker.profilo === 'TRENITALIA') return 'bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 border-red-200 dark:border-red-700/50';
+    if (worker.profilo === 'MERCITALIA') return 'bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-700/50';
     const customPalette = [
       'bg-fuchsia-50 dark:bg-fuchsia-900/30 text-fuchsia-600 dark:text-fuchsia-400 border-fuchsia-200 dark:border-fuchsia-700/50',
       'bg-violet-50 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400 border-violet-200 dark:border-violet-700/50',

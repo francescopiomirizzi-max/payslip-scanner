@@ -155,6 +155,7 @@ const IndemnityPivotTable: React.FC<IndemnityPivotTableProps> = ({
     if (profilo === 'CLEAN_SERVICE') return { badge: 'text-emerald-400 border-emerald-600 bg-emerald-900/30', header: 'text-emerald-600' };
     if (profilo === 'RFI') return { badge: 'text-blue-400 border-blue-600 bg-blue-900/30', header: 'text-blue-700' };
     if (profilo === 'TRENITALIA') return { badge: 'text-red-400 border-red-600 bg-red-900/30', header: 'text-red-700' };
+    if (profilo === 'MERCITALIA') return { badge: 'text-amber-400 border-amber-600 bg-amber-900/30', header: 'text-amber-700' };
 
     // AZIENDE CUSTOM (Palette dinamica sincronizzata)
     const customPalette = [
