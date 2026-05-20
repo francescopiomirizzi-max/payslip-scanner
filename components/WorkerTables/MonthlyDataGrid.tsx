@@ -276,6 +276,7 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
   const [tableScrollWidth, setTableScrollWidth] = useState(0);
   // STATO SCROLL (Per disabilitare hover pesanti mentre si muove)
   const [isScrolling, setIsScrolling] = useState(false);
+  const isScrollingRef = useRef(false);
   const scrollTimeout = useRef<NodeJS.Timeout | null>(null);
   // --- STATO MACCHINA DEL TEMPO (UNDO) ---
   const [history, setHistory] = useState<AnnoDati[][]>([]);
@@ -375,9 +376,15 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
 
     const handleScroll = (source: HTMLElement) => {
       // 1. Spegne gli effetti CSS per la massima fluidità
-      if (!isScrolling) setIsScrolling(true);
+      if (!isScrollingRef.current) {
+        isScrollingRef.current = true;
+        setIsScrolling(true);
+      }
       if (scrollTimeout.current) clearTimeout(scrollTimeout.current);
-      scrollTimeout.current = setTimeout(() => setIsScrolling(false), 150);
+      scrollTimeout.current = setTimeout(() => {
+        isScrollingRef.current = false;
+        setIsScrolling(false);
+      }, 150);
 
       if (isSyncing.current) return;
 
@@ -410,13 +417,13 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
       topEl.removeEventListener('scroll', onTopScroll);
       botEl.removeEventListener('scroll', onBotScroll);
     };
-  }, [profilo, isScrolling]); // Si riaggiorna se cambia il profilo/colonne
+  }, [profilo]); // Si riaggiorna solo se cambia il profilo/colonne (isScrolling gestito via ref per evitare loop)
   // --- 1. CONFIGURAZIONE COLONNE ---
   const currentColumns = useMemo(() => {
     const cols = getColumnsByProfile(profilo, eliorType);
     // ESCLUSIONE DEFINITIVA: Rimuoviamo Ticket e i codici di Produttività
     return cols.filter(c => !['ticket', '3B70', '3B71'].includes(c.id));
-  }, [profilo]);
+  }, [profilo, eliorType]);
 
   const editableColumns = useMemo(() => {
     return currentColumns.filter(col =>
@@ -532,6 +539,18 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
 
     if (onCellFocus) onCellFocus(rowIndex, colId);
     e.target.select();
+  };
+
+  // Quando l'utente fa click su un input non ancora focused, blocchiamo il
+  // mousedown default che riposiziona il caret (e annulla la select() fatta
+  // in onFocus). Se l'input è GIÀ focused lasciamo passare il click normale,
+  // così l'utente può riposizionare il caret in mezzo al numero se vuole.
+  const handleInputMouseDown = (e: React.MouseEvent<HTMLInputElement>) => {
+    const target = e.currentTarget;
+    if (document.activeElement !== target) {
+      e.preventDefault();
+      target.focus();
+    }
   };
 
   // --- FUNZIONE CHE ESEGUE LA CANCELLAZIONE REALE ---
@@ -1297,24 +1316,53 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
                                       : vs.status === 'warning'
                                         ? 'text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30 hover:bg-amber-100 dark:hover:bg-amber-900/50'
                                         : 'text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/30 hover:bg-red-100 dark:hover:bg-red-900/50';
+                                  const discrepancyList = vs?.discrepancies ?? [];
+                                  const hasDetails = discrepancyList.length > 0 || !!vs?.errorMessage;
                                   return (
-                                    <button
-                                      onClick={(e) => { e.stopPropagation(); if (!isLoading) onVerifyRequest(currentRows[rowIndex] as AnnoDati); }}
-                                      tabIndex={-1}
-                                      title={
-                                        isLoading ? 'Verifica in corso…'
-                                          : vs?.status === 'success' ? 'Dati verificati ✓ — Riclicca per ri-verificare'
-                                            : vs?.status === 'warning' ? 'Anomalie minori rilevate — Riclicca per ri-verificare'
-                                              : vs?.status === 'error' ? 'Discrepanze trovate! — Riclicca per ri-verificare'
-                                                : 'Verifica dati con AI (confronta con il PDF archiviato)'
-                                      }
-                                      className={`p-1.5 rounded-lg transition-all focus:outline-none ${btnColor} ${isLoading ? 'cursor-wait' : ''}`}
-                                    >
-                                      {isLoading
-                                        ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                        : <ShieldCheck className="w-3.5 h-3.5" strokeWidth={vs ? 2.5 : 2} />
-                                      }
-                                    </button>
+                                    <div className="relative group/vbtn flex-shrink-0">
+                                      <button
+                                        onClick={(e) => { e.stopPropagation(); if (!isLoading) onVerifyRequest(currentRows[rowIndex] as AnnoDati); }}
+                                        tabIndex={-1}
+                                        title={
+                                          isLoading ? 'Verifica in corso…'
+                                            : vs?.status === 'success' ? 'Dati verificati ✓ — Riclicca per ri-verificare'
+                                              : vs?.status === 'warning' ? `${discrepancyList.length} anomalie minori — passa il mouse per i dettagli, riclicca per ri-verificare`
+                                                : vs?.status === 'error' ? `${discrepancyList.length} discrepanze — passa il mouse per i dettagli, riclicca per ri-verificare`
+                                                  : 'Verifica dati con AI (confronta con il PDF archiviato)'
+                                        }
+                                        className={`p-1.5 rounded-lg transition-all focus:outline-none ${btnColor} ${isLoading ? 'cursor-wait' : ''}`}
+                                      >
+                                        {isLoading
+                                          ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                          : <ShieldCheck className="w-3.5 h-3.5" strokeWidth={vs ? 2.5 : 2} />
+                                        }
+                                      </button>
+                                      {/* Pannello dettaglio discrepanze: ancorato al tasto (target grande e visibile),
+                                          elenca TUTTE le discrepanze, anche quelle su campi senza colonna (ticket, TFR). */}
+                                      {hasDetails && (
+                                        <div className={`
+                                          opacity-0 invisible group-hover/vbtn:opacity-100 group-hover/vbtn:visible
+                                          transition-all duration-200 delay-150
+                                          absolute left-full ml-2 ${rowIndex > 7 ? 'bottom-0' : 'top-0'}
+                                          w-72 p-2.5 bg-slate-900 text-white text-[10px] rounded-lg shadow-2xl z-[9999]
+                                          border border-slate-700 pointer-events-none whitespace-normal leading-relaxed text-left
+                                        `}>
+                                          <span className={`font-bold block mb-1.5 uppercase tracking-wider ${vs?.status === 'error' ? 'text-red-400' : 'text-amber-400'}`}>
+                                            {vs?.errorMessage && discrepancyList.length === 0
+                                              ? '⚠ Errore di verifica'
+                                              : vs?.status === 'error'
+                                                ? `⚠ ${discrepancyList.length} discrepanze rilevate`
+                                                : `⚡ ${discrepancyList.length} anomalie minori`}
+                                          </span>
+                                          {vs?.errorMessage && (
+                                            <div className="text-red-300 border-t border-slate-700/60 pt-1 mt-1 first:border-0 first:pt-0 first:mt-0">{vs.errorMessage}</div>
+                                          )}
+                                          {discrepancyList.map((d, i) => (
+                                            <div key={i} className="border-t border-slate-700/60 pt-1 mt-1 first:border-0 first:pt-0 first:mt-0">{d.message}</div>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
                                   );
                                 })()}
 
@@ -1363,6 +1411,7 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
                                   value={col.type === 'formula' && cellValue !== 0 ? formatCurrency(cellValue) : (cellValue ?? '')}
                                   onChange={(e) => handleCellChange(rowIndex, col.id, e.target.value)}
                                   onFocus={(e) => handleInputFocus(e, rowIndex, col.id)}
+                                  onMouseDown={handleInputMouseDown}
                                   onKeyDown={(e) => handleKeyDown(e, rowIndex, col.id)}
                                   onPaste={(e) => handlePaste(e, rowIndex, col.id)}
                                 />

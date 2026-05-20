@@ -3,13 +3,57 @@
 > **Documento**: piano tattico, derivato da `tasks/rag-architecture.md` rev. 2 (Ollama locale).
 > **Target**: 1-2 settimane di sviluppo end-to-end → primo demo interno funzionante.
 > **Stack**: Browser client TypeScript ↔ Ollama localhost:11434 ↔ Supabase (pgvector + Storage).
+> **Branch attiva**: `feat/rag-mvp`
+> **Status setup**: Ollama + qwen3.6:35b + nomic-embed-text verificati ✅
+
+---
+
+## Context Alignment — Il "Sacro Graal" (Caso Lecce vs Elior)
+
+L'obiettivo finale dell'Avvocato Virtuale, raccontato sul caso reale:
+
+> Tra novembre 2017 e luglio 2023, Elior Ristorazione S.p.A. ha pagato ai lavoratori l'indennità di "assenza dalla residenza" con tariffa oraria **0,75 €** (servizi senza riposo). Il CCNL applicabile prevede **1,30 €**. Il ricorso ex art. 414 c.p.c. al Tribunale di Lecce chiede il recupero delle differenze retributive (€0,55/h × ore × mesi × lavoratori).
+
+### Implicazione architetturale: DOPPIA NATURA DEI DATI
+
+Da oggi in poi, ogni dato estratto da una busta paga ha due usi distinti:
+
+| Dato | Uso "matematico" (esistente) | Uso "audit RAG" (nuovo) |
+|------|------------------------------|--------------------------|
+| Importo totale voce (es. €123.45 codice 4300) | `computeHolidayIndemnity` usa il totale per la media ferie | — |
+| **Valore unitario** (es. €0.75/h della voce 4300) | — | Confrontato con €1.30/h legale → anomalia |
+| **Quantità** (es. 164 ore per la voce 4300) | — | Usato come moltiplicatore differenza |
+| Codice voce (es. "4300") | Mappato a `ColumnDef.id` per cella tabella | Cercato come `section_ref` nei chunks CCNL |
+
+**Cosa NON cambia in Phase 1 RAG MVP**:
+- L'infrastruttura RAG che stiamo costruendo è **agnostica** rispetto a questo: indicizziamo documenti legali e facciamo retrieval, niente di più.
+- Lo schema `legal_chunks` non viene modificato.
+
+**Cosa cambierà DOPO il MVP RAG** (Phase 2/3, da pianificare separatamente):
+- Arricchire `PROMPT_RFI` / `PROMPT_CLEAN_SERVICE` / `PROMPT_ELIOR` (e `scan-payslip.ts`) per estrarre **anche** `valore_unitario` e `quantità` per ogni codice voce, non solo l'importo totale. Probabile nuova chiave JSON tipo `codes_detail: { "4300": { totale: 123.45, valore_unitario: 0.75, quantita: 164.6 } }`.
+- L'Avvocato Virtuale, dopo retrieval del CCNL, confronterà `valore_unitario` estratto vs valore CCNL → segnala anomalia con calcolo della differenza recuperabile.
+
+**Decisione architetturale per Phase 1**: il `metadata` JSONB di `legal_chunks` rimane libero → quando in futuro popolerò chunk CCNL con `{ "rates": { "indennita_assenza_residenza_h": 1.30, "unit": "EUR/ora" } }`, il sistema sarà pronto a usarli senza ulteriori migration. **Schema future-proof confermato**.
+
+---
+
+## ✅ Decisioni acquisite (5 risposte definitive ricevute)
+
+1. **Tag Ollama LLM**: `qwen3.6:35b` (verificato presente sulla macchina: 36B params, Q4_K_M, 23.94 GB)
+2. **Tag Ollama Embedding**: `nomic-embed-text` (768 dim, 270 MB, sanity test OK con `prompt: "indennità di assenza dalla residenza CCNL Multiservizi"` → ritorna vector di 768 dimensioni)
+3. **Corpus seed**: PDF già pronti sul Mac dell'utente, sarà lui a caricarli via UI admin
+4. **Admin role**: bootstrap iniziale via **service_role key** (bypass RLS). JWT claim `role='admin'` posticipato a Phase 2.
+5. **Surface UI**: Dynamic Island Spotlight **+** modale "Avvocato Virtuale" dedicato (decisione UI di dettaglio: il modale è per query lunghe/strutturate, lo Spotlight per quick-ask). Vedi §UI di seguito.
+6. **Topologia**: single-user, tutto in locale sul Mac dell'utente.
+
+---
 
 ---
 
 ## 0. Prerequisiti hardware/setup
 
 ### 0.1 Macchina dello sviluppatore (host Ollama)
-- **RAM/VRAM**: ≥ 24 GB libera per `qwen3:35b` (Q4 quantizzato ~22 GB)
+- **RAM/VRAM**: ≥ 24 GB libera per `qwen3.6:35b` (Q4 quantizzato ~22 GB)
 - **Disco**: ≥ 30 GB liberi (modelli + cache)
 - **OS**: macOS / Linux / Windows (Ollama supporta tutti)
 - **Connessione internet**: solo per download iniziale modelli + chiamate Supabase
@@ -27,7 +71,7 @@ ollama serve  # listening su 0.0.0.0:11434 di default
 
 # 3. Pull dei modelli necessari
 ollama pull nomic-embed-text     # ~270 MB
-ollama pull qwen3:35b            # ~22 GB — verifica il tag esatto su https://ollama.com/library
+ollama pull qwen3.6:35b            # ~22 GB — verifica il tag esatto su https://ollama.com/library
 
 # 4. Verifica installazione
 ollama list                       # deve mostrare entrambi i modelli
@@ -42,7 +86,7 @@ curl http://localhost:11434/api/embeddings -d '{
 
 # 6. Test chat (sanity check)
 curl http://localhost:11434/api/chat -d '{
-  "model": "qwen3:35b",
+  "model": "qwen3.6:35b",
   "messages": [{"role": "user", "content": "In una frase, cos'è il CCNL Multiservizi?"}],
   "stream": false
 }'
@@ -420,19 +464,22 @@ Modificare `DynamicIsland.tsx` (chiamante esistente di `ask-ai`) per:
 
 ## 3. Step di implementazione ordinati
 
-### Step 1 — Setup ambiente (1 giorno)
-- [ ] Install Ollama + pull `nomic-embed-text` + `qwen3:35b` (verifica tag esatto!)
-- [ ] Config `OLLAMA_ORIGINS` per il dev domain
-- [ ] Test manuale endpoint con `curl` (sanity check §0.2)
-- [ ] Branch `git checkout -b feat/rag-mvp`
+### Step 1 — Setup ambiente ✅ COMPLETATO (2026-05-17)
+- [x] Ollama running su localhost:11434
+- [x] `qwen3.6:35b` installato (36B, Q4_K_M, 23.94 GB)
+- [x] `nomic-embed-text:latest` installato (270 MB)
+- [x] Sanity test embedding: ritorna 768 dim correttamente
+- [x] Branch `feat/rag-mvp` aperta (su `main` clean)
+- [ ] **TODO utente**: config `OLLAMA_ORIGINS="http://localhost:5173"` (o `"*"` per dev) + restart Ollama → solo se in fase di test browser-side appare errore CORS
 
-### Step 2 — Migration DB (mezza giornata)
-- [ ] Eseguire migration `001` (pgvector extension)
-- [ ] Eseguire migration `002` (schema tabelle + indici HNSW)
-- [ ] Eseguire migration `003` (RLS policies)
-- [ ] Eseguire migration `004` (RPC match_legal_chunks)
-- [ ] Creare bucket `legal-corpus` da Dashboard
-- [ ] Smoke test: insert manuale di 1 chunk dummy con embedding random, verifica RPC ritorna risultato
+### Step 2 — Migration DB ✅ FILE PRONTI (esecuzione richiesta utente)
+- [x] File `supabase/migrations/001_enable_pgvector.sql` creato
+- [x] File `supabase/migrations/002_legal_corpus_schema.sql` creato
+- [x] File `supabase/migrations/003_rls_policies.sql` creato
+- [x] File `supabase/migrations/004_match_legal_chunks_rpc.sql` creato
+- [ ] **TODO utente**: applicare le 4 migration su Supabase (vedi §Esecuzione migration sotto)
+- [ ] **TODO utente**: creare bucket `legal-corpus` privato (vedi §1.5 di questo doc)
+- [ ] **Smoke test post-migration**: insert manuale di 1 chunk dummy con embedding random, verifica RPC ritorna risultato (Step 2 verifica finale)
 
 ### Step 3 — Lib base (1-2 giorni)
 - [ ] Implementare `lib/ollama.ts` con tutte le signature §2.1 + test unit
@@ -506,12 +553,81 @@ Modificare `DynamicIsland.tsx` (chiamante esistente di `ask-ai`) per:
 
 ---
 
-## 7. Decisioni residue ancora aperte (da chiarire prima di iniziare)
+## 7. Decisioni residue — ✅ TUTTE RISOLTE
 
-1. **Tag Ollama esatto di Qwen 3.6 35b** — verifica che `ollama pull qwen3:35b` (o variante) sia disponibile sulla tua macchina
-2. **Corpus seed** — quali 5-10 PDF concreti? Hai già i file o vanno scaricati?
-3. **Admin role per RLS** — service_role per Phase 1 OK?
-4. **Surface UI** — innesto in Dynamic Island Spotlight (raccomandato) o modale dedicato "Avvocato Virtuale"?
-5. **Topologia** — confermi single-user per Phase 1?
+Vedi sezione "Decisioni acquisite" in testa al documento.
 
-Appena rispondi, apriamo il branch `feat/rag-mvp` e partiamo dallo Step 1.
+---
+
+## 8. Esecuzione migration SQL — istruzioni per l'utente
+
+Le 4 migration sono pronte nella cartella `supabase/migrations/`. Per applicarle, **scegli uno dei due metodi**:
+
+### Metodo A — Supabase Dashboard SQL Editor (più semplice)
+
+1. Vai su https://supabase.com/dashboard → seleziona il progetto RailFlow
+2. Sidebar → **SQL Editor** → **New query**
+3. Apri il primo file `001_enable_pgvector.sql`, copia il contenuto, incolla nell'editor, premi **Run**
+4. Ripeti per `002`, `003`, `004` (in ordine!)
+5. Verifica esito: ogni Run mostra "Success. No rows returned" o conteggi simili
+
+### Metodo B — Supabase CLI (se la hai configurata)
+
+```bash
+# Dalla root del progetto
+supabase db push --linked
+# Oppure se non hai linked il progetto:
+supabase link --project-ref <your-project-ref>
+supabase db push
+```
+
+### Step finale (entrambi i metodi)
+
+Crea il bucket Storage:
+1. Dashboard → **Storage** → **New bucket**
+2. Nome: `legal-corpus`
+3. Public: **NO** (privato)
+4. Allowed MIME types: `application/pdf`
+5. Max file size: `50 MB`
+
+### Smoke test post-migration
+
+Dalla Supabase Dashboard SQL Editor, esegui:
+
+```sql
+-- 1. Verifica pgvector
+SELECT extversion FROM pg_extension WHERE extname = 'vector';
+-- Atteso: 0.7.x o superiore
+
+-- 2. Verifica tabelle
+SELECT table_name FROM information_schema.tables
+WHERE table_schema = 'public' AND table_name LIKE 'legal_%';
+-- Atteso: legal_documents, legal_chunks, legal_queries
+
+-- 3. Verifica indici HNSW
+SELECT indexname FROM pg_indexes
+WHERE schemaname = 'public' AND tablename = 'legal_chunks';
+-- Atteso: idx_legal_chunks_document_id, idx_legal_chunks_embedding_hnsw, e PK
+
+-- 4. Verifica RPC esiste
+SELECT proname FROM pg_proc WHERE proname = 'match_legal_chunks';
+-- Atteso: 1 riga "match_legal_chunks"
+
+-- 5. (Opzionale) Inserto dummy + similarity test
+-- Eseguire solo per verifica, poi rollback:
+BEGIN;
+  INSERT INTO legal_documents (title, doc_type, embedding_model)
+  VALUES ('DUMMY TEST', 'altro', 'nomic-embed-text')
+  RETURNING id \gset
+  INSERT INTO legal_chunks (document_id, chunk_index, content, embedding)
+  VALUES (:'id', 0, 'test contenuto',
+          (SELECT array_to_string(ARRAY(SELECT random()::text FROM generate_series(1, 768)), ',')::vector);
+  -- Test RPC (passando un embedding random)
+  SELECT chunk_id, similarity FROM match_legal_chunks(
+    (SELECT embedding FROM legal_chunks WHERE document_id = :'id'),
+    0.0, 5, NULL
+  );
+ROLLBACK;
+```
+
+Appena confermi che le migration sono andate a buon fine, procederemo con lo **Step 3 — Implementazione `lib/ollama.ts`, `lib/pdfChunker.ts`, `lib/ragRepository.ts`**.

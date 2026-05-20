@@ -71,6 +71,30 @@ function cleanAndParseJSON(text: string): any {
   }
 }
 
+// --- RETRY CON TIMEOUT PER LE CHIAMATE GEMINI ---
+// La latenza dell'API Gemini è molto variabile (osservato 13s vs 249s sullo stesso file:
+// throttling/sovraccarico lato Google). Un tentativo lento viene abortito al timeout e
+// ritentato: il retry è quasi sempre veloce. Evita che la Function vada in timeout secco.
+async function generateContentWithRetry(
+  model: any,
+  parts: any,
+  attempts = 3,
+  perAttemptMs = 16000
+): Promise<any> {
+  let lastErr: any;
+  for (let i = 1; i <= attempts; i++) {
+    try {
+      return await model.generateContent(parts, { timeout: perAttemptMs });
+    } catch (err: any) {
+      lastErr = err;
+      console.warn(`⏳ Tentativo Gemini ${i}/${attempts} non riuscito (${err?.message || err})`);
+    }
+  }
+  throw new Error(
+    `Servizio AI non disponibile dopo ${attempts} tentativi (Gemini lento o sovraccarico). Riprova tra poco. [${lastErr?.message || lastErr}]`
+  );
+}
+
 // ==========================================
 // 1. PROMPT RFI (PLATINUM EDITION - VERSIONE FINALE CON FIX RIPOSI)
 // ==========================================
@@ -707,7 +731,7 @@ REGOLE ASSOLUTE:
 - Se il valore non è presente o è zero, restituisci esattamente: 0
 - NON aggiungere testo, simboli €, unità di misura, spiegazioni o markdown.`;
 
-      const result = await model.generateContent([
+      const result = await generateContentWithRetry(model, [
         prompt,
         { inlineData: { data: cleanData, mimeType: mimeType || "application/pdf" } }
       ]);
@@ -760,10 +784,10 @@ REGOLE ASSOLUTE:
 
       console.log(`--- 🤖 AVVIO SPIEGAZIONE AI (EXPLAINER: Gemini 3.1 Pro) ---`);
 
-      const result = await modelExplainer.generateContent([
+      const result = await generateContentWithRetry(modelExplainer, [
         explainPrompt,
         { inlineData: { data: cleanData, mimeType: mimeType || "application/pdf" } }
-      ]);
+      ], 2, 26000);
 
       return { statusCode: 200, headers, body: JSON.stringify({ explanation: result.response.text() }) };
     }
@@ -844,7 +868,7 @@ REGOLE ASSOLUTE:
       ]
     });
 
-    const result = await model.generateContent([
+    const result = await generateContentWithRetry(model, [
       targetPrompt,
       { inlineData: { data: cleanData, mimeType: mimeType || "application/pdf" } }
     ]);

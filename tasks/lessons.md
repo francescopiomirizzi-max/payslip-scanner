@@ -3,6 +3,139 @@
 > Pattern e errori da evitare nelle prossime sessioni.
 > Aggiornato dopo ogni correzione utente.
 
+## 2026-05-20 — verify-payslip: il verificatore "ignorava i campi a 0" → cieco alle omissioni
+
+### Lezione: un verificatore non deve MAI saltare i campi a zero
+
+**Bug riscontrato (segnalato dall'utente):** la verifica AI "non rileva errori veri" — dava
+esito verde anche a estrazioni in cui mancavano interi codici indennità.
+
+**Causa root in `verify-payslip.ts`:** il prompt comune conteneva la regola
+"IGNORA i campi con valore 0 o 0.0 — niente da verificare". Quando l'OCR PERDE un dato lo
+lascia a 0.0: il verificatore, istruito a saltare gli 0.0, non poteva strutturalmente
+accorgersi delle omissioni — cioè proprio la classe di errore più importante. Aggravante: il
+JSON `monthData` passato al verificatore contiene solo i codici non-zero (il merge client
+scarta i valori 0), quindi un codice perso non era nemmeno presente come chiave da controllare.
+
+**Fix:**
+1. Rimossa la regola "IGNORA 0.0"; aggiunta una regola esplicita "VALORE MANCANTE": un campo
+   a 0.0 va dato per buono SOLO dopo aver verificato sul PDF che la voce è davvero assente.
+2. Passata SEMPRE (anche per i profili di sistema, non solo i custom) la checklist completa
+   dei codici indennità del profilo → il verificatore li spunta voce per voce, anche quelli
+   non presenti nel JSON.
+3. Intro riscritta in chiave "revisore pignolo e scettico".
+4. Chiarita la regola TFR: "TFR 31/12 A.P." ≠ "RETR.UTILE TFR" (un test ha rivelato che le
+   confondeva, generando un falso positivo) — fix applicato sia a verify che a scan-payslip.
+
+**Regola generale:**
+> Un controllo di qualità che salta i valori "vuoti/zero" è cieco proprio agli errori di
+> omissione. Il verificatore deve avere la lista COMPLETA di ciò che si aspetta e spuntarla
+> tutta contro la fonte, non limitarsi a ricontrollare ciò che è già stato estratto.
+> Verificato empiricamente eseguendo verify-payslip end-to-end: caso errato → 3/3 discrepanze
+> intercettate (incluso un codice mancante); caso corretto → success, 0 falsi positivi.
+
+**Aggiornamento (cross-profili).** La fix sopra toccava la sezione di prompt CONDIVISA tra tutti
+i profili. Ri-testando RFI ed ELIOR sono emersi due effetti collaterali, poi corretti:
+(a) riscrivendo il `commonSection` avevo perso la regola "i codici si leggono dalla colonna
+Competenze" → reintrodotta in modo generico;
+(b) la regola "valore mancante" era troppo ampia: segnalava come errori anche voci NON tracciate
+dall'app (trattenute, addizionali IRPEF, quote sindacali) → ristretta ESPLICITAMENTE ai soli
+codici della checklist + campi standard.
+**Regola:** una modifica a un blocco di prompt CONDIVISO va ri-testata su OGNI profilo, non solo
+su quello in focus; e ogni regola "cattura tutto" ha bisogno di un ambito esplicito, altrimenti
+genera falsi positivi. Verifica finale: RFI → 2/2 discrepanze reali, 0 falsi positivi;
+ELIOR → daysWorked intercettato, 0 falsi positivi; caso corretto → success su entrambi.
+
+---
+
+## 2026-05-20 — MERCITALIA: prompt OCR scritto da spec testuale, senza il PDF reale
+
+### Lezione: NON scrivere un prompt di estrazione OCR senza prima vedere un cedolino reale
+
+**Bug riscontrato (segnalato dall'utente):** il `PROMPT_MERCITALIA` estraeva dati sbagliati.
+`daysWorked` restava sempre 26 anche con ferie; le indennità risultavano vuote/0.
+
+**Causa root:** ho scritto `PROMPT_MERCITALIA` (e il ramo MERCITALIA di `verify-payslip.ts`)
+basandomi SOLO sulla specifica testuale dell'utente, senza un PDF ADP reale. Tre errori:
+1. **Ordine colonne errato.** Avevo descritto la tabella come "Codice | Descrizione |
+   Numero o base di calcolo | … | Valori". L'ordine reale ADP è 7 colonne:
+   `Cod.Voce | Descrizione | Valori | Numero o base di calcolo | Compenso unitario o % | Competenze | Trattenute`.
+2. **Indennità lette dalla colonna sbagliata.** Il prompt diceva di leggere gli importi
+   delle indennità da "Valori". Su ADP gli importi pagati sono in **"Competenze"** (6ª col).
+   "Valori" contiene solo retribuzione base/imponibili. → indennità tutte a 0.
+3. **`daysWorked` senza sottrarre le ferie.** "GIORNI INPS" (≈26) INCLUDE le ferie godute.
+   Il valore corretto è `daysWorked = GIORNI INPS − ferie (cod. 3833)`, come per ELIOR.
+
+**Fix:** riscritto `PROMPT_MERCITALIA` con la mappa colonne esatta, indennità da "Competenze",
+`daysWorked` calcolato con few-shot examples. Stesso allineamento su `verify-payslip.ts`.
+
+**Regola generale:**
+> Un prompt OCR per un nuovo layout di documento DEVE essere scritto guardando almeno un
+> documento reale, non solo una descrizione testuale. Le specifiche a parole sbagliano
+> sistematicamente l'ordine delle colonne e la colonna-sorgente dei valori. Se l'utente
+> non fornisce subito un campione, CHIEDERLO prima di scrivere il prompt.
+> Inoltre: i campi "giorni lavorati" sui cedolini italiani spesso includono ferie/permessi
+> — verificare sempre se vanno sottratti (pattern già visto su ELIOR: `GG INPS − ferie`).
+
+---
+
+## 2026-05-19 — scan-worker: "ruolo" sempre compilato con "Professional"
+
+### Lezione: i prompt OCR devono distinguere LIVELLO CONTRATTUALE da MANSIONE OPERATIVA
+
+**Bug riscontrato:** il modale di creazione lavoratore mostrava sempre "Professional" nel campo Qualifica, indipendentemente dal cedolino scansionato.
+
+**Causa root in `netlify/functions/scan-worker.ts`:**
+Il `PROMPT_ANAGRAFICA` descriveva `ruolo` come "la qualifica o la mansione". Sui cedolini RFI/Trenitalia esistono DUE voci distinte:
+- "Q.PROF" / "Qualifica" → categoria contrattuale (es. "Professional", "Specialist") — appartiene a `profiloProfessionale`
+- "Mansione" / "Funzione" / "Profilo" → ruolo operativo specifico (es. "Macchinista", "Tecnico") — appartiene a `ruolo`
+
+L'AI, vedendo la voce letterale "QUALIFICA: PROFESSIONAL" in alto sul cedolino, la prendeva e la metteva in `ruolo` come prima parola che il prompt chiedeva.
+
+**Fix (doppia difesa):**
+1. **Lato prompt** — riscritto PROMPT_ANAGRAFICA: separazione netta dei due campi con anti-pattern espliciti ("❌ SBAGLIATO: ruolo=Professional"), blacklist di token vietati in `ruolo` (Professional/Specialist/Quadro/Operaio/Impiegato/Livello X/Parametro N/codici come "B1"), istruzione "meglio vuoto che sbagliato". Temperature abbassata 0.1 → 0.0.
+2. **Lato client** (`WorkerModal.compileDataFromAI`) — safety net `normalizeRuoloProfilo()`: se l'AI mette in `ruolo` qualcosa che matcha la blacklist (parole esatte + regex per Livello/Parametro/codici tipo "B1"), lo sposta automaticamente in `profiloProfessionale` (se vuoto) e svuota `ruolo`.
+
+**Regole generali per prompt di estrazione dati strutturati:**
+> Quando un PDF ha PIÙ campi con label simili (es. "Qualifica" vs "Profilo"), il prompt deve:
+> 1. Definire ogni target field con la **fonte specifica** ("dove cercarlo: sezione X"), non solo il significato semantico
+> 2. Includere una **blacklist esplicita** di valori che NON devono mai finire in quel campo
+> 3. Fornire esempi anti-pattern ("❌ così no"), non solo positivi
+> 4. Permettere il valore vuoto come fallback sicuro ("meglio vuoto che sbagliato")
+> 5. Aggiungere una safety net client-side per i casi residui — i prompt LLM non sono mai deterministici al 100%
+
+---
+
+## 2026-05-19 — MonthlyDataGrid: re-render loop dopo scansione AI
+
+### Lezione: MAI mettere uno state nelle deps di un useEffect se lo stesso effect lo aggiorna
+
+**Bug riscontrato (segnalato dall'utente):** in Chrome, dopo l'inserimento di dati scansionati dall'AI nella tabella di `WorkerDetailPage`, le tabelle sembravano ricaricare continuamente. Riducendo la finestra il bug si fermava (scrollbar orizzontale spariva → niente eventi scroll → loop interrotto).
+
+**Causa root in `components/WorkerTables/MonthlyDataGrid.tsx`:**
+- `useEffect` aveva `[profilo, isScrolling]` come deps
+- Lo scroll handler dentro l'effect chiamava `setIsScrolling(true)` e poi `setIsScrolling(false)` dopo 150ms
+- Ogni cambio di `isScrolling` → effect ricreato → cleanup + nuovo `ResizeObserver` + nuovi listener ad ogni evento scroll
+- Il `ResizeObserver` appena creato fa fire immediato di `updateWidth` → `setTableScrollWidth` → re-render
+- Su schermo piccolo niente scrollbar orizzontale → nessun evento scroll → loop non si innesca
+
+**Fix elegante:**
+- State `isScrolling` mantenuto solo per il className (`pointer-events-none` durante scroll)
+- Aggiunto `isScrollingRef` per il guard interno (`if (!isScrollingRef.current)`)
+- Rimosso `isScrolling` dalle deps del useEffect → listener e observer creati una volta sola
+
+**Regola generale:**
+> Se un useEffect contiene listener/observer che chiamano `setX`, **X NON deve essere nelle deps**. Usa un `ref` per leggere il valore corrente dentro il callback. Le deps di un effect "setup-once" devono contenere solo identità stabili (props, config, non state che lo stesso effect muta).
+
+**Bonus trovato durante la review:** `currentColumns = useMemo(..., [profilo])` usava `eliorType` senza dichiararlo nelle deps → cambio di `eliorType` non aggiornava le colonne. Aggiunto.
+
+**Checklist da seguire per i prossimi effect con listener:**
+1. Lo state nelle deps viene mutato dentro l'effect stesso? → spostalo in ref
+2. L'effect crea un `ResizeObserver`/`MutationObserver`/`addEventListener`? → deps devono essere solo identità DOM/config, non state mutabili
+3. Verificare deps del useMemo accanto: ogni variabile usata DEVE essere dichiarata
+
+---
+
 ## 2026-05-15 — DynamicIsland: bug border-radius + fluidità
 
 ### Lezione 1: MAI duplicare `borderRadius` in `style` + `animate` su un `motion.div` con `layout`
@@ -144,6 +277,48 @@ className="backdrop-blur-md rounded-2xl transition-[transform,box-shadow,border-
 **Audit pattern da fare**: cercare nel progetto tutti i casi di `transition-all` su elementi con `backdrop-blur` → sostituire con transition esplicita. (Es. `.glass-panel`, `.glass-btn`, `.glass-input` in `index.css` hanno `backdrop-blur` ma niente `transition-all` esplicito → safe).
 
 **Heuristica:** se due elementi NON RELATI mostrano lo stesso glitch visivo, la causa è quasi sempre in una utility/pattern CSS condivisa (`transition-all`, `glass-*` mixins, classi globali). Non perdere tempo a fixare uno specifico nodo prima di aver capito il pattern.
+
+### Lezione 11 (2026-05-17): `position: fixed` viene catturato da antenati con `backdrop-filter`/`transform` → modali devono usare React Portal
+
+**Errore commesso**: ho montato `<RagAdminPanel />` come child del `<div ref={islandRef}>` della Dynamic Island. Il modale ha `fixed inset-0 z-[9999]` ma all'apertura non copriva il viewport: appariva come un rettangolo nero confinato dentro l'area della pill della Dynamic Island. La Dynamic Island sembrava "crashare".
+
+**Causa**: in CSS, `position: fixed` si ancora normalmente al viewport, MA se un antenato ha una di queste proprietà CSS, l'antenato diventa il containing block per i fixed discendenti:
+- `transform` (qualsiasi, anche `translate(0,0)`)
+- `filter`
+- `perspective`
+- `backdrop-filter` ✅ ← causa nel nostro caso
+- `contain: paint`
+- `will-change: transform`
+
+Framer Motion applica `transform` ai motion.div animati, e la Dynamic Island ha un `backdrop-blur-2xl` su un wrapper. Risultato: il modale `fixed inset-0` finisce ancorato alla pill della Dynamic Island, non al viewport.
+
+**Fix canonico**: usare React Portal per montare il modale come sibling diretto di `document.body`, fuori dal subtree problematico:
+
+```tsx
+import { createPortal } from 'react-dom';
+
+return createPortal(
+  <AnimatePresence>
+    {isOpen && (
+      <div className="fixed inset-0 z-[9999] ...">
+        {/* modale */}
+      </div>
+    )}
+  </AnimatePresence>,
+  document.body
+);
+```
+
+Note implementative:
+- **SSR safety**: `if (typeof document === 'undefined') return null;` prima del `createPortal` per evitare crash in build SSR.
+- **AnimatePresence + condizione**: spostare la condizione `isOpen` come child di AnimatePresence (`{isOpen && <motion.div .../>}`), NON come early-return esterno (`if (!isOpen) return null`). Altrimenti AnimatePresence non vede mai gli enter/exit dei figli.
+- **Niente `backdrop-blur` su backdrop fixed**: combinato con border-radius/transform di figli crea repaint con corner clipping (vedi Lezione 6/7). Sul backdrop di un modale, opacità alta basta.
+
+**Heuristica**: ogni volta che monti un modale dentro un component che ha `backdrop-blur`, `motion.div animate`, `filter`, o simili, **assumi** che il containing block sarà rotto e usa subito il portal. Non aspettare di vedere il bug.
+
+**Audit pattern da fare**: cercare in tutto il progetto `position: fixed` (o classi Tailwind `fixed inset-0`) all'interno di subtree che hanno `backdrop-blur-*` o `motion.div animate={{ ...transform... }}`. WorkerModal e altri modali nel codebase usano lo stesso pattern dentro componenti potenzialmente problematici — verificare al prossimo bug.
+
+---
 
 ### Lezione 10 (2026-05-16): Ticket sempre fuori dalle indennità + chiave interna vs display label
 

@@ -103,7 +103,7 @@ POST http://localhost:11434/api/embeddings
 
 ### 2.3 LLM di generazione — LOCALE via Ollama
 
-**Decisione**: **`qwen3:35b`** (Qwen 3 / variante 35B parametri) servito da Ollama, come specificato dalla direttiva utente.
+**Decisione**: **`qwen3.6:35b`** (Qwen 3 / variante 35B parametri) servito da Ollama, come specificato dalla direttiva utente.
 
 **Hardware richiesto** (per riferimento — è hardware dell'utente):
 - 35B parametri quantizzati Q4 ≈ ~20-22 GB VRAM/RAM
@@ -115,7 +115,7 @@ POST http://localhost:11434/api/embeddings
 ```
 POST http://localhost:11434/api/chat
 {
-  "model": "qwen3:35b",
+  "model": "qwen3.6:35b",
   "messages": [
     {"role": "system", "content": "<BASE_PROMPT + CONTESTO + FONTI>"},
     {"role": "user", "content": "<domanda utente>"}
@@ -382,7 +382,7 @@ flowchart TD
     D --> E[Browser → Supabase RPC: match_legal_chunks top-K]
     E --> F[Filtra per ccnl_ref del worker se rilevante]
     F --> G[Browser: costruisce prompt BASE + worker_ctx + chunks + domanda]
-    G --> H[Browser → Ollama localhost: qwen3:35b /api/chat con stream:true]
+    G --> H[Browser → Ollama localhost: qwen3.6:35b /api/chat con stream:true]
     H --> I[Streaming token nel Dynamic Island - effetto typewriter]
     I --> J[Browser: insert legal_queries via Supabase per analytics]
     J --> K[Render: answer + sources array linkabili al PDF]
@@ -457,7 +457,7 @@ Esposta come Postgres function (RPC) → richiamabile via `supabase.rpc('match_l
 ```
 
 **Step 5 — Generazione risposta (LOCALE, streaming)**
-- `POST http://localhost:11434/api/chat` con `model: 'qwen3:35b'`, `temperature: 0.2`, `stream: true`
+- `POST http://localhost:11434/api/chat` con `model: 'qwen3.6:35b'`, `temperature: 0.2`, `stream: true`
 - Body: `messages: [{role:'system', content: SYSTEM_PROMPT}, {role:'user', content: USER_PROMPT}]` (vedi prompt template Step 4)
 - **Streaming NDJSON**: ogni chunk JSON ricevuto contiene `message.content` parziale → push live nel Dynamic Island per effetto typewriter coerente con UX esistente
 - Latenza tipica fino al primo token: 1-3s (model load + prefill); throughput: ~15-25 token/s su Mac M3 Max → risposta ~500 token in 25-40s
@@ -481,7 +481,7 @@ Esposta come Postgres function (RPC) → richiamabile via `supabase.rpc('match_l
 ## 6. Roadmap proposta (fasi)
 
 ### Phase 1 — MVP (target: 1-2 settimane, accelerato grazie a stack locale)
-1. Setup Ollama macchina utente: install + `ollama pull nomic-embed-text` + `ollama pull qwen3:35b`
+1. Setup Ollama macchina utente: install + `ollama pull nomic-embed-text` + `ollama pull qwen3.6:35b`
 2. Abilitare pgvector su Supabase (1 click + SQL migration)
 3. Creare tabelle `legal_documents`, `legal_chunks`, `legal_queries` + RLS
 4. Creare bucket `legal-corpus` Supabase Storage
@@ -544,7 +544,7 @@ Assunzioni: 200 documenti seed, media 50 chunks/doc → ~10.000 chunks; 500 quer
 | **Ollama offline** (utente non l'ha avviato) | **Alta** | **Alto** | Health check su mount del Dynamic Island: ping `GET http://localhost:11434/api/tags`. Se KO → UI degradata con badge rosso "Avvia Ollama" + istruzioni step-by-step inline. Niente errore criptico. |
 | **CORS bloccato dal browser** verso localhost | Media | Alto | Documentazione setup: `OLLAMA_ORIGINS='*'` (dev) o whitelist domain (prod). Test al primo avvio: se fetch fallisce con CORS, mostra istruzione esatta da copiare |
 | **Hardware utente insufficiente** (RAM/VRAM per 35b) | Media | Alto | Fallback automatico a `qwen3:14b` o `qwen3:8b` se 35b OOM. Helper di startup detecta e suggerisce il modello max supportato |
-| **Modello Qwen 3.6 35b non disponibile** su Ollama | Bassa | Medio | Verificare alla Phase 1 il nome esatto del tag Ollama (es. `qwen3:35b` vs `qwen3.5:35b`); doc ufficiale https://ollama.com/library/qwen3 |
+| **Modello Qwen 3.6 35b non disponibile** su Ollama | Bassa | Medio | Verificare alla Phase 1 il nome esatto del tag Ollama (es. `qwen3.6:35b` vs `qwen3.5:35b`); doc ufficiale https://ollama.com/library/qwen3 |
 | **Qualità retrieval scarsa** (top-5 non rilevante) | Media | Alto | Phase 2: hybrid search + reranking; nel frattempo, soglia similarity (`> 0.7`) + chunking accurato |
 | **Allucinazioni residue** ("inventa" citazione) | Media | Alto | Prompt esplicito "non inventare riferimenti diversi"; UI mostra le citazioni con link al PDF per verifica visiva immediata; `temperature: 0.2` per minimizzare creatività |
 | **Cambio embedding model** in futuro | Bassa | Medio | Schema versionato (`embedding_model` field) → reindex job pronto (è veloce: 10k chunks in pochi minuti localmente) |
@@ -563,7 +563,7 @@ Per validare il piano e procedere con la Phase 1, servono tue scelte su:
 3. **Admin role**: come gestiamo l'identificazione admin per RLS? JWT claim custom Supabase, tabella `admin_users` allowlist, o per la Phase 1 accettiamo che gli insert avvengano solo via service_role key (no UI admin)?
 4. **Where to surface the RAG**: la prima esperienza utente del RAG deve essere in (a) Dynamic Island Spotlight, (b) un nuovo "Avvocato Virtuale" modale dedicato, (c) integrato in `verify-payslip` (citation automatica accanto alle discrepancies), oppure (d) tutto e tre? La scelta cambia priorità UI in Phase 1.
 5. ~~**Budget mensile target**~~ → **Risolto in rev. 2**: $0 incrementale grazie a stack locale.
-6. **NUOVO — Tag esatto del modello Qwen su Ollama**: hai già `ollama pull qwen3:35b` funzionante, oppure dobbiamo verificare il tag corretto (es. `qwen3.5:35b`, `qwen2.5:32b-instruct`)? Da chiarire prima dell'implementazione.
+6. **NUOVO — Tag esatto del modello Qwen su Ollama**: hai già `ollama pull qwen3.6:35b` funzionante, oppure dobbiamo verificare il tag corretto (es. `qwen3.5:35b`, `qwen3.6:35b-instruct`)? Da chiarire prima dell'implementazione.
 7. **NUOVO — Topologia distribuzione**: confermi single-user (solo tu sviluppatore) per Phase 1? O dobbiamo già pensare a team interno con Ollama condiviso su una macchina LAN dedicata?
 
 ---

@@ -3,10 +3,14 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     Bot, Calculator, Search, X, Loader2,
     CheckCircle2, AlertCircle, LayoutGrid, Sun, Moon,
-    Database, Settings, LogOut, Copy, User, DownloadCloud, Trash2, ArrowRight, QrCode, Smartphone, Sparkles, LoaderCircle, FileText, Check, XCircle, ArrowLeft, Download, FileSpreadsheet, Printer, Archive, Minimize2
+    Database, Settings, LogOut, Copy, User, DownloadCloud, Trash2, ArrowRight, QrCode, Smartphone, Sparkles, LoaderCircle, FileText, Check, XCircle, ArrowLeft, Download, FileSpreadsheet, Printer, Archive, Minimize2,
+    ScrollText, ExternalLink
 } from 'lucide-react';
 import { useIsland } from '../IslandContext';
 import { FRAMER_PHYSICS, APPLE_EASE } from '../framerConfig';
+import { useRagAvvocato } from '../hooks/useRagAvvocato';
+import RagAdminPanel from './RagAdminPanel';
+import { openLegalDocumentInTab } from '../lib/ragRepository';
 
 export const notifyIsland = (msg: string, type: 'success' | 'error' | 'ai' = 'success') => {
     window.dispatchEvent(new CustomEvent('island-notify', { detail: { msg, type } }));
@@ -66,6 +70,7 @@ const getIslandWidth = (mode: string, isExpanded: boolean, uploadState: any): nu
         case 'notify':
         case 'notification': return 350;
         case 'ai': return 500;
+        case 'ai_cloud': return 500;
         case 'calc': return 280;
         case 'calc_history': return 320;
         case 'stats': return 360;
@@ -128,7 +133,7 @@ const DynamicIsland = ({ workers = [] }: { workers?: { id: string | number; nome
         return () => window.removeEventListener('island-worker-context', handleWorkerCtx);
     }, []);
 
-    const [localMode, setLocalMode] = useState<'idle' | 'calc' | 'ai' | 'notify' | 'menu' | 'dropzone' | 'ticker'>('idle');
+    const [localMode, setLocalMode] = useState<'idle' | 'calc' | 'ai' | 'ai_cloud' | 'notify' | 'menu' | 'dropzone' | 'ticker'>('idle');
     const [isUploadExpanded, setIsUploadExpanded] = useState(false);
     const [isDark, setIsDark] = useState<boolean>(() =>
         typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
@@ -204,10 +209,27 @@ const DynamicIsland = ({ workers = [] }: { workers?: { id: string | number; nome
     };
     const [searchQuery, setSearchQuery] = useState('');
     const [searchResults, setSearchResults] = useState<any[]>([]);
-    const [isAiThinking, setIsAiThinking] = useState(false);
     const [aiResponse, setAiResponse] = useState<string | null>(null);
     const [aiHistory, setAiHistory] = useState<Array<{ id: number; question: string; answer: string }>>([]);
     const [historyIdx, setHistoryIdx] = useState(-1);
+
+    // --- Avvocato Virtuale RAG (mode 'ai' — Local-First Ollama) ---
+    const {
+        ask: askAvvocato,
+        streamingAnswer,
+        sources: ragSources,
+        isAsking: isAiThinking,
+        error: ragError,
+        reset: resetAvvocato,
+        abort: abortAvvocato,
+    } = useRagAvvocato();
+    const [isRagAdminOpen, setIsRagAdminOpen] = useState(false);
+
+    // --- Spotlight Cloud (mode 'ai_cloud' — Gemini Pro via Netlify Function) ---
+    const [cloudResponse, setCloudResponse] = useState<string | null>(null);
+    const [isCloudThinking, setIsCloudThinking] = useState(false);
+    const [cloudHistory, setCloudHistory] = useState<Array<{ id: number; question: string; answer: string }>>([]);
+    const [cloudHistoryIdx, setCloudHistoryIdx] = useState(-1);
 
     // pendingTickerRef: store a ticker value that arrived during upload so we can show it after upload ends
     const pendingTickerRef = useRef<number | null>(null);
@@ -266,7 +288,7 @@ const DynamicIsland = ({ workers = [] }: { workers?: { id: string | number; nome
     }, [mode]);
 
     useEffect(() => {
-        if (mode === 'ai' && searchQuery.trim().length > 1) {
+        if ((mode === 'ai' || mode === 'ai_cloud') && searchQuery.trim().length > 1) {
             const query = searchQuery.toLowerCase();
             const matches = workers.filter(w =>
                 w.nome.toLowerCase().includes(query) || w.cognome.toLowerCase().includes(query)
@@ -282,35 +304,46 @@ const DynamicIsland = ({ workers = [] }: { workers?: { id: string | number; nome
         setSearchQuery('');
     };
 
-    const handleAskGemini = async (e?: React.FormEvent) => {
+    // ──────────────────────────────────────────────────────────
+    // MODE 'ai' — Avvocato Virtuale (Ollama RAG locale, con citazioni)
+    // ──────────────────────────────────────────────────────────
+    const handleAskAvvocato = async (e?: React.FormEvent) => {
         if (e) e.preventDefault();
-        if (!searchQuery.trim()) return;
+        const question = searchQuery.trim();
+        if (!question) return;
 
-        setIsAiThinking(true);
         setAiResponse(null);
-
         try {
-            const response = await fetch('/.netlify/functions/ask-ai', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ question: searchQuery, workerContext })
+            await askAvvocato(question, {
+                worker: workerContext
+                    ? {
+                        nome: workerContext.nome,
+                        cognome: workerContext.cognome,
+                        profilo: workerContext.profilo,
+                        eliorType: workerContext.eliorType,
+                    }
+                    : undefined,
             });
-            const data = await response.json();
-            if (!response.ok) {
-                setAiResponse(`⚠️ ${data.error || `Errore (${response.status})`}`);
-            } else if (data.answer) {
-                setAiResponse(data.answer);
-                setAiHistory(prev => [{ id: Date.now(), question: searchQuery, answer: data.answer }, ...prev].slice(0, 5));
-            } else {
-                setAiResponse("Il modello non ha restituito una risposta valida. Riprova.");
+            setAiHistory(prev => [
+                { id: Date.now(), question, answer: '' /* riempito post-stream */ },
+                ...prev,
+            ].slice(0, 5));
+        } catch (err: any) {
+            if (err?.name !== 'AbortError') {
+                setAiResponse(`⚠️ ${err?.message ?? 'Errore Avvocato Virtuale'}`);
             }
-        } catch (error) {
-            setAiResponse("Errore di connessione. Controlla la rete.");
         }
-        setIsAiThinking(false);
     };
 
+    // Sincronizza la cronologia Avvocato con la risposta finale dello stream
+    useEffect(() => {
+        if (!isAiThinking && streamingAnswer && aiHistory.length > 0 && !aiHistory[0].answer) {
+            setAiHistory(prev => prev.map((h, i) => (i === 0 ? { ...h, answer: streamingAnswer } : h)));
+        }
+    }, [isAiThinking, streamingAnswer, aiHistory]);
+
     const handleResetAi = () => {
+        resetAvvocato();
         setAiResponse(null);
         setSearchQuery('');
         setHistoryIdx(-1);
@@ -340,12 +373,74 @@ const DynamicIsland = ({ workers = [] }: { workers?: { id: string | number; nome
         }
     };
 
+    // ──────────────────────────────────────────────────────────
+    // MODE 'ai_cloud' — Spotlight Cloud (Gemini Pro via Netlify Function)
+    // Risposta rapida senza retrieval, niente citazioni; utile come fallback
+    // o per query generiche/test quando Ollama è giù o serve velocità.
+    // ──────────────────────────────────────────────────────────
+    const handleAskCloud = async (e?: React.FormEvent) => {
+        if (e) e.preventDefault();
+        if (!searchQuery.trim()) return;
+        setIsCloudThinking(true);
+        setCloudResponse(null);
+        const question = searchQuery;
+        try {
+            const response = await fetch('/.netlify/functions/ask-ai', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ question, workerContext })
+            });
+            const data = await response.json();
+            if (!response.ok) {
+                setCloudResponse(`⚠️ ${data.error || `Errore (${response.status})`}`);
+            } else if (data.answer) {
+                setCloudResponse(data.answer);
+                setCloudHistory(prev => [{ id: Date.now(), question, answer: data.answer }, ...prev].slice(0, 5));
+            } else {
+                setCloudResponse('Il modello cloud non ha restituito una risposta valida. Riprova.');
+            }
+        } catch {
+            setCloudResponse('Errore di connessione. Controlla la rete.');
+        }
+        setIsCloudThinking(false);
+    };
+
+    const handleResetCloud = () => {
+        setCloudResponse(null);
+        setSearchQuery('');
+        setCloudHistoryIdx(-1);
+        setTimeout(() => inputRef.current?.focus(), 50);
+    };
+
+    const handleCloudInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (cloudHistory.length === 0) return;
+        if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            const next = Math.min(cloudHistoryIdx + 1, cloudHistory.length - 1);
+            setCloudHistoryIdx(next);
+            setSearchQuery(cloudHistory[next].question);
+            setCloudResponse(cloudHistory[next].answer);
+        } else if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            if (cloudHistoryIdx > 0) {
+                const prev = cloudHistoryIdx - 1;
+                setCloudHistoryIdx(prev);
+                setSearchQuery(cloudHistory[prev].question);
+                setCloudResponse(cloudHistory[prev].answer);
+            } else {
+                setCloudHistoryIdx(-1);
+                setSearchQuery('');
+                setCloudResponse(null);
+            }
+        }
+    };
+
     const islandRef = useRef<HTMLDivElement>(null);
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
             if (islandRef.current && !islandRef.current.contains(event.target as Node)) {
                 setIsUploadExpanded(false);
-                if (localMode === 'menu' || localMode === 'ai' || localMode === 'calc') {
+                if (localMode === 'menu' || localMode === 'ai' || localMode === 'ai_cloud' || localMode === 'calc') {
                     setMode('idle');
                 }
             }
@@ -482,7 +577,7 @@ const DynamicIsland = ({ workers = [] }: { workers?: { id: string | number; nome
     }, [display, mode]);
 
     useEffect(() => {
-        if (mode === 'ai' && inputRef.current) setTimeout(() => inputRef.current?.focus(), 100);
+        if ((mode === 'ai' || mode === 'ai_cloud') && inputRef.current) setTimeout(() => inputRef.current?.focus(), 100);
     }, [mode]);
 
     // === PILL SATELLITE: tracking start time + reset stall on progress change ===
@@ -556,7 +651,8 @@ const DynamicIsland = ({ workers = [] }: { workers?: { id: string | number; nome
         if (mode === 'dropzone') return 'rgba(217, 70, 239, 0.8)';
         if (mode === 'notify' && notifyData?.type === 'error') return 'rgba(239,68,68,0.4)';
         if (mode === 'notify' && notifyData?.type === 'success') return 'rgba(16,185,129,0.4)';
-        if (mode === 'ai') return 'rgba(217,70,239,0.4)';
+        if (mode === 'ai') return 'rgba(139,92,246,0.4)';     // violet — Avvocato Virtuale (RAG locale)
+        if (mode === 'ai_cloud') return 'rgba(217,70,239,0.4)'; // fuchsia — Spotlight Cloud (Gemini)
         if (mode === 'calc') return 'rgba(99,102,241,0.4)';
         if (mode === 'menu') return 'rgba(59,130,246,0.4)';
         if (mode === 'ticker') return 'rgba(16, 185, 129, 0.4)';
@@ -634,7 +730,7 @@ const DynamicIsland = ({ workers = [] }: { workers?: { id: string | number; nome
                 className={getIslandStyles(mode, isUploadExpanded, uploadState)}
                 style={{
                     minHeight: (mode === 'idle' || mode === 'notify' || mode === 'ticker' || mode === 'quick_actions' || (mode === 'uploading' && !isUploadExpanded)) ? '40px' : 'auto',
-                    cursor: mode === 'idle' ? 'pointer' : mode === 'ai' ? 'text' : 'default',
+                    cursor: mode === 'idle' ? 'pointer' : (mode === 'ai' || mode === 'ai_cloud') ? 'text' : 'default',
                     willChange: 'width, border-radius, transform',
                     overflow: 'hidden',
                     // FIX backdrop-filter corner bug: forza un proprio stacking context
@@ -1319,6 +1415,16 @@ const DynamicIsland = ({ workers = [] }: { workers?: { id: string | number; nome
                                     <Archive className="w-4 h-4 group-hover/btn:-translate-y-0.5 group-hover/btn:scale-105 transition-transform duration-300 drop-shadow-[0_0_3px_currentColor] group-hover/btn:drop-shadow-[0_0_5px_currentColor]" />
                                 </motion.button>
 
+                                {/* Spotlight Cloud — Gemini Pro veloce senza retrieval: Bot fuchsia */}
+                                <motion.button variants={{ hidden: { scale: 0, opacity: 0 }, show: { scale: 1, opacity: 1 } }} onClick={(e) => { e.stopPropagation(); setMode('ai_cloud'); }} className="group/btn p-2.5 bg-slate-200 dark:bg-slate-800 hover:bg-fuchsia-100 dark:hover:bg-fuchsia-900/50 rounded-xl transition-[transform,background-color,box-shadow] duration-300 hover:scale-110 text-fuchsia-600 dark:text-fuchsia-400 hover:shadow-[0_0_12px_rgba(217,70,239,0.5)]" title="Spotlight Cloud · Gemini Pro (risposta veloce senza RAG)">
+                                    <Bot className="w-4 h-4 group-hover/btn:scale-110 transition-transform duration-300 drop-shadow-[0_0_3px_currentColor] group-hover/btn:drop-shadow-[0_0_5px_currentColor]" />
+                                </motion.button>
+
+                                {/* Libreria Legale — Avvocato Virtuale: scroll che srotola + glow violet */}
+                                <motion.button variants={{ hidden: { scale: 0, opacity: 0 }, show: { scale: 1, opacity: 1 } }} onClick={(e) => { e.stopPropagation(); setIsRagAdminOpen(true); setMode('idle'); }} className="group/btn p-2.5 bg-slate-200 dark:bg-slate-800 hover:bg-violet-100 dark:hover:bg-violet-900/50 rounded-xl transition-[transform,background-color,box-shadow] duration-300 hover:scale-110 text-violet-600 dark:text-violet-400 hover:shadow-[0_0_12px_rgba(139,92,246,0.5)]" title="Libreria Legale · Avvocato Virtuale">
+                                    <ScrollText className="w-4 h-4 group-hover/btn:scale-110 group-hover/btn:-rotate-3 transition-transform duration-300 drop-shadow-[0_0_3px_currentColor] group-hover/btn:drop-shadow-[0_0_5px_currentColor]" />
+                                </motion.button>
+
                                 {/* Password/Settings — Rotate continuo lento al hover */}
                                 <motion.button variants={{ hidden: { scale: 0, opacity: 0 }, show: { scale: 1, opacity: 1 } }} onClick={() => { window.dispatchEvent(new Event('island-settings')); setMode('idle'); }} className="group/btn p-2.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 rounded-xl transition-[transform,background-color,box-shadow] duration-300 hover:scale-110 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:shadow-[0_0_12px_rgba(148,163,184,0.5)]" title="Password di sicurezza">
                                     <Settings className="w-4 h-4 group-hover/btn:rotate-180 transition-transform duration-700 ease-out drop-shadow-[0_0_3px_currentColor]" />
@@ -1424,10 +1530,19 @@ const DynamicIsland = ({ workers = [] }: { workers?: { id: string | number; nome
                             )}
 
                             <div className="flex justify-between items-center relative z-10">
-                                <span className="text-[10px] font-bold text-fuchsia-600 dark:text-fuchsia-400 uppercase tracking-widest flex items-center gap-2">
-                                    <Bot size={12} className={isAiThinking ? "animate-pulse" : ""} /> Spotlight & Gemini Pro
+                                <span className="text-[10px] font-bold text-violet-600 dark:text-violet-400 uppercase tracking-widest flex items-center gap-2">
+                                    <Sparkles size={12} className={isAiThinking ? "animate-pulse" : ""} /> Avvocato Virtuale · Local RAG
                                 </span>
                                 <div className="flex items-center gap-3">
+                                    {isAiThinking && (
+                                        <button
+                                            onClick={abortAvvocato}
+                                            className="text-[9px] font-bold text-red-500 hover:text-red-600 uppercase tracking-widest"
+                                            title="Annulla risposta"
+                                        >
+                                            Stop
+                                        </button>
+                                    )}
                                     <span className="text-[9px] text-slate-500 border border-slate-300 dark:border-slate-700 px-1.5 rounded bg-slate-100 dark:bg-slate-800 shadow-sm">ESC</span>
                                     <button onClick={() => setMode('idle')} className="text-slate-500 hover:text-slate-800 dark:hover:text-white transition-colors"><X size={14} /></button>
                                 </div>
@@ -1447,7 +1562,7 @@ const DynamicIsland = ({ workers = [] }: { workers?: { id: string | number; nome
                                 </div>
                             )}
 
-                            <form onSubmit={handleAskGemini} className="relative z-10 group/input">
+                            <form onSubmit={handleAskAvvocato} className="relative z-10 group/input">
                                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-fuchsia-500/50 transition-colors group-focus-within/input:text-fuchsia-500" />
                                 <input
                                     ref={inputRef}
@@ -1505,16 +1620,18 @@ const DynamicIsland = ({ workers = [] }: { workers?: { id: string | number; nome
                                 </motion.div>
                             )}
 
-                            {/* Risposta Gemini AI SICURA E OTTIMIZZATA */}
+                            {/* Risposta Avvocato Virtuale — streaming live + citazioni cliccabili */}
                             <AnimatePresence>
-                                {isAiThinking && (
-                                    <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="flex items-center gap-3 text-fuchsia-600/70 dark:text-fuchsia-400/80 py-2 relative z-10 overflow-hidden">
+                                {/* Pre-token: solo loader di attesa */}
+                                {isAiThinking && !streamingAnswer && (
+                                    <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="flex items-center gap-3 text-violet-600/70 dark:text-violet-400/80 py-2 relative z-10 overflow-hidden">
                                         <Loader2 className="w-4 h-4 animate-spin" />
-                                        <span className="text-[10px] font-black tracking-widest uppercase drop-shadow-sm">Sincronizzazione Rete Neurale...</span>
+                                        <span className="text-[10px] font-black tracking-widest uppercase drop-shadow-sm">Interrogazione corpus + Qwen 35b…</span>
                                     </motion.div>
                                 )}
 
-                                {aiResponse && !isAiThinking && (
+                                {/* Risposta (streaming o snapshot da cronologia) + citazioni */}
+                                {(streamingAnswer || (aiResponse && !isAiThinking)) && (
                                     <motion.div
                                         initial={{ opacity: 0, height: 0, y: 10 }}
                                         animate={{ opacity: 1, height: 'auto', y: 0 }}
@@ -1522,17 +1639,60 @@ const DynamicIsland = ({ workers = [] }: { workers?: { id: string | number; nome
                                         transition={{ type: "spring", damping: 25, stiffness: 300 }}
                                         className="flex flex-col gap-2 relative z-10"
                                     >
-                                        <div className="bg-linear-to-br from-fuchsia-50/80 to-white/50 dark:from-fuchsia-950/30 dark:to-slate-900/50 border border-fuchsia-200/60 dark:border-fuchsia-500/20 p-4 rounded-xl backdrop-blur-md shadow-sm max-h-[50vh] overflow-y-auto custom-scrollbar pointer-events-auto">
+                                        <div className="bg-linear-to-br from-violet-50/80 to-white/50 dark:from-violet-950/30 dark:to-slate-900/50 border border-violet-200/60 dark:border-violet-500/20 p-4 rounded-xl backdrop-blur-md shadow-sm max-h-[50vh] overflow-y-auto custom-scrollbar pointer-events-auto">
                                             <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">
-                                                {aiResponse}
+                                                {streamingAnswer || aiResponse}
+                                                {isAiThinking && (
+                                                    <motion.span
+                                                        animate={{ opacity: [0.2, 1, 0.2] }}
+                                                        transition={{ duration: 1, repeat: Infinity, ease: 'easeInOut' }}
+                                                        className="inline-block w-[6px] h-[14px] bg-violet-500 ml-1 align-middle rounded-sm"
+                                                    />
+                                                )}
                                             </p>
                                         </div>
-                                        <button
-                                            onClick={handleResetAi}
-                                            className="self-start flex items-center gap-1.5 text-[10px] font-bold text-fuchsia-500 hover:text-fuchsia-700 dark:hover:text-fuchsia-300 uppercase tracking-widest transition-colors py-1 px-2 rounded-lg hover:bg-fuchsia-50 dark:hover:bg-fuchsia-950/30"
-                                        >
-                                            <ArrowLeft size={11} /> Nuova domanda
-                                        </button>
+
+                                        {/* Citazioni cliccabili (solo se ci sono sources, principalmente durante/dopo streaming) */}
+                                        {ragSources.length > 0 && (
+                                            <div className="flex flex-wrap gap-1.5 mt-1">
+                                                <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mr-1 self-center">
+                                                    Fonti
+                                                </span>
+                                                {ragSources.map((s, i) => {
+                                                    const label = [s.doc_title, s.section_ref].filter(Boolean).join(' · ');
+                                                    return (
+                                                        <button
+                                                            key={s.chunk_id}
+                                                            onClick={() => openLegalDocumentInTab(s.document_id)}
+                                                            title={`${label} (similarity ${s.similarity.toFixed(2)}) — apri PDF`}
+                                                            className="group flex items-center gap-1.5 px-2 py-1 rounded-lg bg-violet-100/70 hover:bg-violet-200 dark:bg-violet-900/40 dark:hover:bg-violet-800/60 border border-violet-300/50 dark:border-violet-700/50 text-violet-700 dark:text-violet-300 transition-all"
+                                                        >
+                                                            <span className="text-[10px] font-black">[{i + 1}]</span>
+                                                            <span className="text-[10px] font-bold truncate max-w-[140px]">
+                                                                {s.doc_title}
+                                                            </span>
+                                                            <ExternalLink size={10} className="opacity-50 group-hover:opacity-100 transition-opacity" />
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
+
+                                        {/* Errore RAG */}
+                                        {ragError && !isAiThinking && (
+                                            <div className="text-[11px] text-red-600 dark:text-red-400 px-2 py-1 bg-red-50/50 dark:bg-red-950/30 rounded-lg border border-red-200/50 dark:border-red-700/30">
+                                                ⚠️ {ragError}
+                                            </div>
+                                        )}
+
+                                        {!isAiThinking && (
+                                            <button
+                                                onClick={handleResetAi}
+                                                className="self-start flex items-center gap-1.5 text-[10px] font-bold text-violet-500 hover:text-violet-700 dark:hover:text-violet-300 uppercase tracking-widest transition-colors py-1 px-2 rounded-lg hover:bg-violet-50 dark:hover:bg-violet-950/30"
+                                            >
+                                                <ArrowLeft size={11} /> Nuova domanda
+                                            </button>
+                                        )}
                                     </motion.div>
                                 )}
                             </AnimatePresence>
@@ -1558,6 +1718,165 @@ const DynamicIsland = ({ workers = [] }: { workers?: { id: string | number; nome
                                                 animate={{ opacity: 1, x: 0 }}
                                                 transition={{ delay: i * 0.04 }}
                                                 onClick={() => { setSearchQuery(item.question); setAiResponse(item.answer); setHistoryIdx(i); }}
+                                                className="flex items-start gap-2.5 p-2.5 bg-slate-50/80 dark:bg-slate-800/40 hover:bg-fuchsia-50 dark:hover:bg-fuchsia-950/20 rounded-xl border border-slate-200/50 dark:border-slate-700/50 hover:border-fuchsia-200 dark:hover:border-fuchsia-700/40 transition-all text-left group"
+                                            >
+                                                <Bot size={11} className="mt-0.5 shrink-0 text-fuchsia-400 group-hover:text-fuchsia-500 transition-colors" />
+                                                <span className="text-[11px] text-slate-600 dark:text-slate-300 leading-snug line-clamp-2 group-hover:text-fuchsia-700 dark:group-hover:text-fuchsia-300 transition-colors">{item.question}</span>
+                                            </motion.button>
+                                        ))}
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
+                        </motion.div>
+                    )}
+
+                    {/* STATO 7-BIS: SPOTLIGHT CLOUD (Gemini Pro, no RAG) */}
+                    {mode === 'ai_cloud' && (
+                        <motion.div key="ai_cloud" initial={{ opacity: 0, y: 8, scale: 0.98, filter: 'blur(4px)' }} animate={{ opacity: 1, y: 0, scale: 1, filter: 'blur(0px)', transition: { duration: 0.32, ease: APPLE_EASE } }} exit={{ opacity: 0, filter: 'blur(3px)', transition: { duration: 0.15, ease: 'easeIn' } }} className="p-5 w-full flex flex-col gap-4 relative overflow-hidden">
+
+                            {/* Shimmer durante thinking */}
+                            {isCloudThinking && (
+                                <motion.div
+                                    className="absolute inset-0 z-0 bg-linear-to-r from-transparent via-fuchsia-500/10 to-transparent skew-x-12"
+                                    animate={{ left: ['-100%', '200%'] }}
+                                    transition={{ repeat: Infinity, duration: 1.5, ease: "linear" }}
+                                />
+                            )}
+
+                            <div className="flex justify-between items-center relative z-10">
+                                <span className="text-[10px] font-bold text-fuchsia-600 dark:text-fuchsia-400 uppercase tracking-widest flex items-center gap-2">
+                                    <Bot size={12} className={isCloudThinking ? "animate-pulse" : ""} /> Spotlight Cloud · Gemini Pro
+                                </span>
+                                <div className="flex items-center gap-3">
+                                    <span className="text-[9px] text-slate-500 border border-slate-300 dark:border-slate-700 px-1.5 rounded bg-slate-100 dark:bg-slate-800 shadow-sm">ESC</span>
+                                    <button onClick={() => setMode('idle')} className="text-slate-500 hover:text-slate-800 dark:hover:text-white transition-colors"><X size={14} /></button>
+                                </div>
+                            </div>
+
+                            {workerContext && (
+                                <div className="flex items-center gap-2 mb-2">
+                                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-fuchsia-500/10 dark:bg-fuchsia-500/15 border border-fuchsia-400/30 min-w-0">
+                                        <User size={10} className="text-fuchsia-400 shrink-0" />
+                                        <span className="text-[11px] text-fuchsia-400 font-bold truncate">
+                                            {workerContext.cognome} {workerContext.nome}
+                                        </span>
+                                    </div>
+                                    <span className="text-[10px] text-slate-400 dark:text-slate-500 shrink-0 font-medium">
+                                        {workerContext.profilo}{workerContext.eliorType ? ` · ${workerContext.eliorType}` : ''}
+                                    </span>
+                                </div>
+                            )}
+
+                            <form onSubmit={handleAskCloud} className="relative z-10 group/input">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-fuchsia-500/50 transition-colors group-focus-within/input:text-fuchsia-500" />
+                                <input
+                                    ref={inputRef}
+                                    type="text"
+                                    value={searchQuery}
+                                    onChange={(e) => { setSearchQuery(e.target.value); setCloudResponse(null); setCloudHistoryIdx(-1); }}
+                                    onKeyDown={handleCloudInputKeyDown}
+                                    placeholder={workerContext ? `Domanda su ${workerContext.cognome} ${workerContext.nome}…` : cloudHistory.length > 0 ? "Domanda, nome lavoratore… ↑ cronologia" : "Domanda veloce a Gemini Pro..."}
+                                    className="w-full bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm border border-fuchsia-300/50 dark:border-fuchsia-500/30 rounded-xl py-3.5 pl-10 pr-10 text-slate-800 dark:text-white text-sm focus:outline-none focus:border-fuchsia-500 focus:ring-2 focus:ring-fuchsia-500/50 shadow-inner transition-all"
+                                />
+                                <AnimatePresence>
+                                    {searchQuery.length > 0 && (
+                                        <motion.button
+                                            initial={{ opacity: 0, scale: 0.5 }}
+                                            animate={{ opacity: 1, scale: 1 }}
+                                            exit={{ opacity: 0, scale: 0.5 }}
+                                            type="button"
+                                            onClick={() => setSearchQuery('')}
+                                            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-fuchsia-500 transition-colors bg-slate-100 dark:bg-slate-800 rounded-full p-1"
+                                            title="Svuota ricerca"
+                                        >
+                                            <X size={12} strokeWidth={3} />
+                                        </motion.button>
+                                    )}
+                                </AnimatePresence>
+                            </form>
+
+                            {/* Risultati lavoratori (stessa search di mode 'ai') */}
+                            {searchResults.length > 0 && !isCloudThinking && (
+                                <motion.div
+                                    initial="hidden"
+                                    animate="visible"
+                                    variants={{ visible: { transition: { staggerChildren: 0.05 } } }}
+                                    className="flex flex-col gap-1.5 relative z-10"
+                                >
+                                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1">Lavoratori in archivio</span>
+                                    {searchResults.map(w => (
+                                        <motion.button
+                                            key={w.id}
+                                            variants={{ hidden: { opacity: 0, y: 10 }, visible: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 400, damping: 25 } } }}
+                                            onClick={() => handleOpenWorker(w)}
+                                            className={`flex items-center gap-2.5 bg-slate-50/80 dark:bg-slate-800/50 hover:bg-fuchsia-50 dark:hover:bg-fuchsia-900/30 rounded-xl border border-slate-200/50 dark:border-slate-700/50 hover:border-fuchsia-300 dark:hover:border-fuchsia-600/50 transition-colors text-left group ${cloudResponse ? 'px-3 py-2' : 'p-3'}`}
+                                        >
+                                            <div className={`rounded-full bg-fuchsia-100 dark:bg-fuchsia-900/50 text-fuchsia-600 dark:text-fuchsia-400 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform ${cloudResponse ? 'w-6 h-6' : 'w-8 h-8'}`}>
+                                                <User size={cloudResponse ? 11 : 14} />
+                                            </div>
+                                            <div className="min-w-0">
+                                                <h4 className="text-sm font-bold text-slate-800 dark:text-white group-hover:text-fuchsia-500 transition-colors truncate">{w.cognome} {w.nome}</h4>
+                                                {!cloudResponse && <p className="text-[10px] text-slate-500 uppercase">{w.profilo} • {w.ruolo}</p>}
+                                            </div>
+                                            <ArrowRight size={12} className="ml-auto shrink-0 text-slate-300 group-hover:text-fuchsia-400 transition-colors" />
+                                        </motion.button>
+                                    ))}
+                                </motion.div>
+                            )}
+
+                            {/* Risposta Cloud */}
+                            <AnimatePresence>
+                                {isCloudThinking && (
+                                    <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="flex items-center gap-3 text-fuchsia-600/70 dark:text-fuchsia-400/80 py-2 relative z-10 overflow-hidden">
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                        <span className="text-[10px] font-black tracking-widest uppercase drop-shadow-sm">Sincronizzazione Gemini Pro…</span>
+                                    </motion.div>
+                                )}
+
+                                {cloudResponse && !isCloudThinking && (
+                                    <motion.div
+                                        initial={{ opacity: 0, height: 0, y: 10 }}
+                                        animate={{ opacity: 1, height: 'auto', y: 0 }}
+                                        exit={{ opacity: 0, height: 0, y: -10 }}
+                                        transition={{ type: "spring", damping: 25, stiffness: 300 }}
+                                        className="flex flex-col gap-2 relative z-10"
+                                    >
+                                        <div className="bg-linear-to-br from-fuchsia-50/80 to-white/50 dark:from-fuchsia-950/30 dark:to-slate-900/50 border border-fuchsia-200/60 dark:border-fuchsia-500/20 p-4 rounded-xl backdrop-blur-md shadow-sm max-h-[50vh] overflow-y-auto custom-scrollbar pointer-events-auto">
+                                            <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">
+                                                {cloudResponse}
+                                            </p>
+                                        </div>
+                                        <button
+                                            onClick={handleResetCloud}
+                                            className="self-start flex items-center gap-1.5 text-[10px] font-bold text-fuchsia-500 hover:text-fuchsia-700 dark:hover:text-fuchsia-300 uppercase tracking-widest transition-colors py-1 px-2 rounded-lg hover:bg-fuchsia-50 dark:hover:bg-fuchsia-950/30"
+                                        >
+                                            <ArrowLeft size={11} /> Nuova domanda
+                                        </button>
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
+
+                            {/* Cronologia cloud */}
+                            <AnimatePresence>
+                                {!cloudResponse && !isCloudThinking && searchQuery.length === 0 && cloudHistory.length > 0 && (
+                                    <motion.div
+                                        key="cloud-history"
+                                        initial={{ opacity: 0, height: 0 }}
+                                        animate={{ opacity: 1, height: 'auto' }}
+                                        exit={{ opacity: 0, height: 0 }}
+                                        className="flex flex-col gap-1.5 relative z-10 overflow-hidden"
+                                    >
+                                        <div className="flex items-center justify-between mb-0.5">
+                                            <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Domande recenti · ↑↓</span>
+                                            <button onClick={() => setCloudHistory([])} className="text-[9px] text-slate-400 hover:text-red-400 transition-colors flex items-center gap-1"><Trash2 size={9} /> Svuota</button>
+                                        </div>
+                                        {cloudHistory.map((item, i) => (
+                                            <motion.button
+                                                key={item.id}
+                                                initial={{ opacity: 0, x: -10 }}
+                                                animate={{ opacity: 1, x: 0 }}
+                                                transition={{ delay: i * 0.04 }}
+                                                onClick={() => { setSearchQuery(item.question); setCloudResponse(item.answer); setCloudHistoryIdx(i); }}
                                                 className="flex items-start gap-2.5 p-2.5 bg-slate-50/80 dark:bg-slate-800/40 hover:bg-fuchsia-50 dark:hover:bg-fuchsia-950/20 rounded-xl border border-slate-200/50 dark:border-slate-700/50 hover:border-fuchsia-200 dark:hover:border-fuchsia-700/40 transition-all text-left group"
                                             >
                                                 <Bot size={11} className="mt-0.5 shrink-0 text-fuchsia-400 group-hover:text-fuchsia-500 transition-colors" />
@@ -1884,6 +2203,9 @@ const DynamicIsland = ({ workers = [] }: { workers?: { id: string | number; nome
                     );
                 })()}
             </AnimatePresence>
+
+            {/* Modale Libreria Legale (Avvocato Virtuale RAG) — montato qui per essere overlay full-screen */}
+            <RagAdminPanel isOpen={isRagAdminOpen} onClose={() => setIsRagAdminOpen(false)} />
         </div>
     );
 };
