@@ -200,6 +200,12 @@ export function usePayslipUpload({
           const ticketNote = `Erogati ${Math.round(ticketCount)} ticket restaurant da ${ticketVal.toFixed(2)}€`;
           row.note = row.note ? `${row.note}${sep}[${ticketNote}]` : `[${ticketNote}]`;
         }
+        // Storno ferie (righe 3833 negative): correzione retroattiva, isolata nella nota
+        const ferieStorno = parseLocalFloat(aiResult.ferieStorno);
+        if (ferieStorno > 0 && !row.note?.includes('storno ferie')) {
+          const stornoNote = `Rilevato storno ferie periodi prec.: -${ferieStorno.toFixed(1)} gg`;
+          row.note = row.note ? `${row.note}${sep}[${stornoNote}]` : `[${stornoNote}]`;
+        }
       }
 
       if (aiResult.imponibile_tfr_mensile !== undefined) {
@@ -447,6 +453,12 @@ export function usePayslipUpload({
           if (ticketCount > 0 && ticketVal > 0 && !row.note?.includes('ticket restaurant')) {
             const ticketNote = `Erogati ${Math.round(ticketCount)} ticket restaurant da ${ticketVal.toFixed(2)}€`;
             row.note = row.note ? `${row.note}${sep}[${ticketNote}]` : `[${ticketNote}]`;
+          }
+          // Storno ferie (righe 3833 negative): correzione retroattiva, isolata nella nota
+          const ferieStorno = parseLocalFloat(aiResult.ferieStorno);
+          if (ferieStorno > 0 && !row.note?.includes('storno ferie')) {
+            const stornoNote = `Rilevato storno ferie periodi prec.: -${ferieStorno.toFixed(1)} gg`;
+            row.note = row.note ? `${row.note}${sep}[${stornoNote}]` : `[${stornoNote}]`;
           }
         } else if (!isNaN(ticketVal) && ticketVal > 0 && !row.note?.includes('Ticket')) {
           row.note = row.note

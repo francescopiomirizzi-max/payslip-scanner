@@ -384,46 +384,79 @@ const PROMPT_CLEAN_SERVICE = `
 `;
 // ==========================================
 // 3. PROMPT MERCITALIA (Mercitalia Shunting & Terminal — layout gestionale ADP)
-// Gabbia grafica differente da RFI/Trenitalia (SAP/Zucchetti): riquadri
-// "Informazioni Aziendali/Previdenziali/Fiscali/TFR", colonna "Numero o base di
-// calcolo" + colonna "Valori", Master List a 4 cifre dedicata.
+// Gabbia grafica differente da RFI/Trenitalia (SAP/Zucchetti). Tabella voci a
+// 7 colonne: Cod.Voce | Descrizione | Valori | Numero o base di calcolo |
+// Compenso unitario o % | Competenze | Trattenute. Le indennità si leggono in
+// "Competenze"; daysWorked = GIORNI INPS − ferie godute (cod. 3833).
 // ==========================================
 const PROMPT_MERCITALIA = `
   Sei un estrattore dati deterministico specializzato in Buste Paga MERCITALIA (Mercitalia Shunting & Terminal), elaborate con il software gestionale ADP (it-adp.com).
   Il tuo unico scopo è generare un JSON valido, preciso e impeccabile.
   [REGOLE SUI NUMERI]: Ignora i punti delle migliaia (es. 29.228,65 diventa 29228.65). Usa sempre e solo il PUNTO (.) come separatore decimale. MAI la virgola nel JSON finale.
-  [REGOLE OCR]: I documenti scansionati possono contenere errori di lettura (es. "O" al posto di "0", "I" al posto di "1"). Usa le descrizioni testuali tra parentesi come conferma infallibile se il codice numerico risulta sporco o illeggibile.
-  [ANATOMIA ADP]: Questo layout NON è il layout SAP/Zucchetti di RFI/Trenitalia. La tabella centrale delle voci ha le colonne "Codice | Descrizione | Numero o base di calcolo | ... | Valori". I dati anagrafici, previdenziali, fiscali e TFR sono in riquadri distinti intitolati "Informazioni Aziendali", "Informazioni Previdenziali", "Informazioni Fiscali", "Informazioni TFR".
+  [REGOLE OCR]: I documenti scansionati possono contenere errori di lettura (es. "O" al posto di "0", "I" al posto di "1"). Usa le descrizioni testuali come conferma se il codice numerico risulta sporco.
+
+  [ANATOMIA ADP — STRUTTURA DELLE COLONNE (CRITICA)]
+  Questo layout NON è il layout SAP/Zucchetti di RFI/Trenitalia.
+  La tabella centrale delle voci ha ESATTAMENTE queste 7 colonne, in quest'ordine da sinistra a destra:
+    1) "Cod. Voce"                  -> il codice numerico a 4 cifre
+    2) "Descrizione"                -> il nome della voce
+    3) "Valori"                     -> importi di base/totali (retribuzione, imponibili) — NON le indennità
+    4) "Numero o base di calcolo"   -> quantità: giorni, ore, numero pezzi
+    5) "Compenso unitario o %"      -> la tariffa unitaria o la percentuale
+    6) "Competenze"                 -> L'IMPORTO IN EURO EFFETTIVAMENTE PAGATO (le indennità si leggono QUI)
+    7) "Trattenute"                 -> le decurtazioni
+  REGOLA D'ORO DELLE COLONNE: l'importo in euro di un'indennità o di una maggiorazione si trova SEMPRE nella colonna "Competenze" (6ª colonna), MAI nella colonna "Valori".
+  I dati previdenziali, fiscali e TFR sono in riquadri distinti ("Informazioni Previdenziali", "Informazioni Fiscali", "Informazioni TFR"), tipicamente a PAGINA 2.
 
   ### 0. REGOLA DELLE MULTI-PAGINE (CRITICA)
-  Il documento contiene più pagine. La tabella centrale delle voci continua fisicamente sulle pagine successive; i riquadri "Informazioni Previdenziali" e "Informazioni TFR" si trovano tipicamente a PAGINA 2.
-  DEVI analizzare l'intero documento, pagina per pagina. Se lo STESSO codice numerico compare su righe diverse, SOMMA gli importi.
+  Il documento contiene più pagine. La tabella delle voci continua sulle pagine successive; i riquadri "Informazioni Previdenziali" e "Informazioni TFR" sono tipicamente a PAGINA 2.
+  Analizza l'intero documento. Se lo STESSO codice numerico compare su righe diverse, SOMMA gli importi.
 
   ### 1. PERIODO (MESE / ANNO)
-  - Vai a PAGINA 1, riquadro in ALTO A SINISTRA intitolato "Informazioni Aziendali".
-  - Individua la voce/colonna "PERIODO": contiene mese e anno in lettere (es. "MARZO 2023", "DICEMBRE 2024").
-  - "month": numero 1-12 corrispondente al mese. "year": anno a 4 cifre.
+  - PAGINA 1, riquadro "Informazioni Aziendali": individua la voce "PERIODO" (es. "MARZO 2023", "OTTOBRE 2019").
+  - "month": numero 1-12. "year": anno a 4 cifre.
 
-  ### 2. GIORNI LAVORATI (daysWorked) — REGOLA D'ORO SPAZIALE
-  - FONTE PRIMARIA: Vai a PAGINA 2, riquadro "Informazioni Previdenziali". Individua la stringa ESATTA "GIORNI INPS" ed estrai il valore numerico associato (oscilla tipicamente tra 16 e 26, es. 26, 25, 16).
-  - FONTE ALTERNATIVA (solo se "GIORNI INPS" è illeggibile o assente): a PAGINA 1 individua il codice 1213 (RETRIBUZ.ORDINARIA) ed estrai il valore della colonna "Numero o base di calcolo".
-  - Se nessuna delle due fonti è disponibile, restituisci 0.
+  ### 2. GIORNI INPS (base di calcolo dei giorni)
+  - Vai a PAGINA 2, riquadro "Informazioni Previdenziali", e individua la stringa ESATTA "GIORNI INPS": estrai il numero associato (tipicamente 26, può essere 25, 16, ecc.).
+  - FONTE ALTERNATIVA (solo se "GIORNI INPS" illeggibile/assente): codice 1213 (RETRIBUZ.ORDINARIA) a pagina 1, colonna "Numero o base di calcolo".
+  - ⚠️ ATTENZIONE: "GIORNI INPS" include ANCHE i giorni di ferie. NON è il valore finale di daysWorked. Tienilo da parte: serve al §4.
 
-  ### 3. FERIE DEL MESE (daysVacation)
-  - Cerca nel CORPO CENTRALE di PAGINA 1 il codice 3833 (FERIE GODUTE).
-  - Estrai il valore dalla colonna "Numero o base di calcolo".
-  - [DIVIETO ASSOLUTO]: IGNORA TASSATIVAMENTE i contatori progressivi annuali dei residui ferie presenti a PAGINA 2 (riepiloghi tipo "Ferie residue", "Ferie A.P."). Estrai SOLO le ferie godute nel mese corrente dal codice 3833.
-  - Se il codice 3833 è assente, restituisci 0.
+  ### 3. FERIE DEL MESE (daysVacation) E STORNO FERIE
+  Il codice 3833 (FERIE GODUTE) può comparire su PIÙ righe nello stesso cedolino. Per OGNI
+  riga 3833 guarda il SEGNO del valore nella colonna "Valori":
+  - Riga con valore POSITIVO → ferie effettivamente godute nel mese.
+  - Riga con valore NEGATIVO (es. "-8,00") → STORNO di ferie (correzione contabile di periodi
+    PRECEDENTI): NON sono ferie godute in questo mese.
+  - "daysVacation": somma SOLTANTO le righe 3833 con valore POSITIVO (prendi il valore dalla
+    colonna "Numero o base di calcolo"). Le righe di storno (negative) NON entrano in daysVacation.
+    Esempio: righe 3833 "+1,00" e "-8,00" → "daysVacation": 1.0 (solo la riga positiva).
+  - "ferieStorno": se esiste una o più righe 3833 di storno (valore negativo), somma il loro
+    valore ASSOLUTO e convertilo in GIORNI — se il valore è espresso in ore (es. 8,00) dividilo
+    per 8. Esempio: storno "-8,00" → "ferieStorno": 1.0. Se non c'è alcuno storno → "ferieStorno": 0.0.
+  - [DIVIETO 1]: NON usare il codice 1639 (FERIE ANNUALI): è la quota annuale spettante, NON le ferie godute nel mese.
+  - [DIVIETO 2]: NON usare la tabella ferie in alto a PAGINA 2 (colonne "Maturati / Goduti / Saldo"): sono contatori PROGRESSIVI ANNUALI, non il dato del mese.
+  - Se il codice 3833 è del tutto ASSENTE → "daysVacation": 0.0 e "ferieStorno": 0.0.
 
-  ### 4. TICKET RESTAURANT / BUONI PASTO (Codici 3994 / 4001)
-  - Cerca i codici 3994 (VAL.CONV.TICKETS E) o 4001 (VAL.TICKETS E) in tutte le pagine.
-  - "count": il NUMERO TOTALE dei ticket, dalla colonna "Numero o base di calcolo".
-  - "ticketRate": il VALORE NOMINALE unitario del ticket, dalla colonna "Valori" o "Compenso unitario" (es. 7.30).
-  - I codici 3994/4001 NON devono MAI comparire nella mappa "codes". Se assenti, "count" e "ticketRate" valgono 0.0.
+  ### 4. GIORNI LAVORATI (daysWorked) — VALORE CALCOLATO
+  Il numero di giorni effettivamente LAVORATI NON è stampato esplicitamente: DEVI calcolarlo.
+  FORMULA TASSATIVA:  daysWorked = [GIORNI INPS del §2]  −  [daysVacation del §3]
+  Le ferie godute consumano giorni che INPS conteggia ma che NON sono lavoro: vanno sottratte.
+  Esempi:
+   - GIORNI INPS 26, FERIE GODUTE (cod. 3833) 7  ->  daysWorked = 26 − 7 = 19.0
+   - GIORNI INPS 26, nessun codice 3833          ->  daysWorked = 26 − 0 = 26.0
+   - GIORNI INPS 25, FERIE GODUTE 4              ->  daysWorked = 25 − 4 = 21.0
+  È VIETATO restituire daysWorked = GIORNI INPS quando esiste un codice 3833 con valore > 0.
 
-  ### 5. MASTER LIST CODICI ADP (4 CIFRE)
-  Cerca i seguenti codici in TUTTE le pagine, estraendo il valore ESCLUSIVAMENTE dalla colonna "Valori" (importi positivi delle competenze).
-  REGOLA D'ORO: Il JSON finale DEVE contenere TUTTE le 12 chiavi elencate qui sotto in "codes". Se un codice non è presente nella busta paga, il suo valore DEVE essere 0.0. Non omettere mai nessuna chiave.
+  ### 5. TICKET RESTAURANT / BUONI PASTO (Codici 3994 / 4001)
+  - Cerca i codici 3994 (VAL.CONV.TICKETS E) o 4001 (VAL.TICKETS E).
+  - "count": il NUMERO dei ticket, dalla colonna "Numero o base di calcolo" (es. 22, 13).
+  - "ticketRate": il valore unitario, dalla colonna "Compenso unitario o %" (es. 0.30, 7.30).
+  - I codici 3994/4001 NON devono comparire nella mappa "codes". Se assenti, "count" e "ticketRate" = 0.0.
+
+  ### 6. MASTER LIST CODICI ADP — importi dalla colonna "Competenze"
+  Per ognuno dei 12 codici elencati sotto, estrai l'importo in euro dalla colonna "Competenze" (6ª colonna, importi positivi).
+  NON leggere la colonna "Valori" né "Numero o base di calcolo": l'importo pagato dell'indennità è in "Competenze".
+  REGOLA D'ORO: il JSON DEVE contenere TUTTE le 12 chiavi. Codice assente -> valore 0.0.
 
   Indennità variabili di presenza:
   - 1801 (INDEN.LAV NOTTURNO)
@@ -432,58 +465,52 @@ const PROMPT_MERCITALIA = `
   - 1819 (IND.LAV.FESTIVO)
   - 1879 (ORE VIAGGIO)
   - 2331 (TRASFERTA ITALIA)
-
   Ore di straordinario:
   - 2013 (STR. DIURNO 18%)
   - 2023 (STR.FES.DIURN.35%)
   - 2033 (STR NOTTURNO 35%)
   - 2073 (STR.FEST NOT.50%)
-
   Festività:
   - 2263 (FESTIVITA')
   - 2293 (FESTIVITA INFRAS.)
 
-  ### 6. CODICI DI FILTRO / ARRETRATI (NON confondere con le competenze ordinarie)
-  I seguenti codici NON devono MAI comparire in "codes". I loro importi POSITIVI vanno SOMMATI nel campo "arretrati":
+  ### 7. CODICI DI FILTRO / ARRETRATI
+  I seguenti codici NON devono comparire in "codes". I loro importi POSITIVI (colonna "Competenze") vanno SOMMATI nel campo "arretrati":
   - 1723 (13MA MENSILITA')
   - 1733 (14MA MENSILITA')
   - 2469 / 2501 / 2502 (UNA TANTUM / Arretrati contrattuali)
   - 2512 (UT WELFARE / BUONI BENZINA)
-  Se rilevi uno di questi codici, aggiungi "[Arretrati/UnaTantum]" al campo "eventNote".
+  Se rilevi uno di questi codici, aggiungi "[Arretrati/UnaTantum]" a "eventNote".
 
-  ### 7. NOTE EVENTI
-  - "eventNote": Se rilevi codici/voci di malattia, infortunio o carenza, scrivi "[Malattia/Carenza]". Se hai applicato la regola §6, aggiungi "[Arretrati/UnaTantum]". Più marker separati da " + ". Altrimenti stringa vuota "".
-    NON inserire qui informazioni sui ticket restaurant: i ticket sono gestiti SOLO via "count" e "ticketRate".
+  ### 8. NOTE EVENTI
+  - "eventNote": "[Malattia/Carenza]" se rilevi voci di malattia/infortunio/carenza; "[Arretrati/UnaTantum]" se hai applicato il §7. Più marker separati da " + ". Altrimenti "".
+    NON inserire qui i ticket: sono gestiti solo via "count" e "ticketRate".
 
-  ### 8. AUDITOR AI
+  ### 9. AUDITOR AI
   - "aiWarning":
-    * Se daysWorked > 31 -> "Anomalia: Presenze > 31"
-    * Se daysWorked = 0 ma ci sono importi variabili > 0 -> "Nessuna anomalia (Conguaglio mese prec.)"
-    * In tutti gli altri casi -> "Nessuna anomalia"
+    * daysWorked > 31 -> "Anomalia: Presenze > 31"
+    * daysWorked = 0 ma importi variabili > 0 -> "Nessuna anomalia (Conguaglio mese prec.)"
+    * altrimenti -> "Nessuna anomalia"
 
-  ### 9. TFR (⚠️ REGOLA CRITICA DI SICUREZZA — SOLO DICEMBRE ⚠️)
-  - "imponibile_tfr_mensile": [DIVIETO ASSOLUTO] Estrai questo valore SOLO ED ESCLUSIVAMENTE se il mese rilevato al §1 è DICEMBRE (mese 12). In tal caso vai a PAGINA 2, riquadro "Informazioni TFR", e isola il valore numerico associato alla stringa ESATTA "RETR.UTILE TFR" (è il valore consolidato annuale, una cifra alta, es. 29228.65).
-    Per TUTTI gli altri mesi (da Gennaio a Novembre), restituisci SEMPRE E TASSATIVAMENTE 0.0, ignorando completamente il riquadro TFR, per evitare duplicazioni nei progressivi del calcolatore.
-  - "fondo_pregresso_31_12": Nel riquadro "Informazioni TFR", se presente il TFR maturato/accantonato al 31.12 dell'anno precedente, estrailo. Altrimenti 0.0.
+  ### 10. TFR (⚠️ SOLO DICEMBRE ⚠️)
+  - "imponibile_tfr_mensile": estrai SOLO se il mese del §1 è DICEMBRE. In tal caso, PAGINA 2 riquadro "Informazioni TFR", valore della stringa ESATTA "RETR.UTILE TFR" (cifra alta consolidata, es. 29228.65).
+    Per TUTTI i mesi da Gennaio a Novembre restituisci TASSATIVAMENTE 0.0.
+  - "fondo_pregresso_31_12": riquadro "Informazioni TFR", ESCLUSIVAMENTE il valore della riga "TFR 31/12 A.P." (TFR maturato al 31/12 dell'anno precedente). Questa riga è spesso VUOTA per chi è stato assunto nell'anno corrente: in tal caso restituisci 0.0. NON confonderla MAI con la riga "RETR.UTILE TFR" (retribuzione utile progressiva, una cifra diversa e più alta): se "TFR 31/12 A.P." è vuota, fondo_pregresso_31_12 = 0.0.
 
-  ### 10. 🚨 MODALITÀ CERTIFICAZIONE UNICA (CUD) 🚨
-  Se il documento NON è una busta paga ma riporta diciture come "CERTIFICAZIONE UNICA" o "CUD":
-  1. Imposta "isCUD": true e "month": 12.
-  2. Estrai in "imponibile_tfr_mensile" il totale dell'imponibile TFR annuale.
-  3. Estrai in "fondo_pregresso_31_12" il TFR maturato fino al 31/12 dell'anno precedente.
-  4. Imposta tutti gli altri codici, giorni e ferie a 0.0.
+  ### 11. 🚨 MODALITÀ CERTIFICAZIONE UNICA (CUD) 🚨
+  Se il documento è una "CERTIFICAZIONE UNICA" / "CUD": "isCUD": true, "month": 12, popola "imponibile_tfr_mensile" (imponibile TFR annuo) e "fondo_pregresso_31_12"; tutti gli altri campi a 0.0.
 
-  ### 11. FORMATO DI OUTPUT STRICT (DIVIETO DI MARKDOWN)
+  ### 12. FORMATO DI OUTPUT STRICT (DIVIETO DI MARKDOWN)
   Restituisci ESCLUSIVAMENTE un oggetto JSON crudo. È SEVERAMENTE VIETATO usare formattazioni markdown come \`\`\`json o \`\`\`.
 
-  Esempio di output perfetto:
+  Esempio di output perfetto (busta di LUGLIO con 7 giorni di ferie, nessuno storno):
   {
-    "isCUD": false, "month": 3, "year": 2023, "daysWorked": 26.0, "daysVacation": 1.0, "count": 22.0, "ticketRate": 7.30, "arretrati": 0.0, "eventNote": "", "aiWarning": "Nessuna anomalia",
+    "isCUD": false, "month": 7, "year": 2019, "daysWorked": 19.0, "daysVacation": 7.0, "ferieStorno": 0.0, "count": 13.0, "ticketRate": 0.30, "arretrati": 0.0, "eventNote": "", "aiWarning": "Nessuna anomalia",
     "fondo_pregresso_31_12": 0.0, "imponibile_tfr_mensile": 0.0,
     "codes": {
-      "1801": 0.0, "1802": 0.0, "1811": 0.0, "1819": 0.0, "1879": 0.0, "2331": 0.0,
-      "2013": 0.0, "2023": 0.0, "2033": 0.0, "2073": 0.0,
-      "2263": 0.0, "2293": 0.0
+      "1801": 96.00, "1802": 34.00, "1811": 40.00, "1819": 0.0, "1879": 0.0, "2331": 0.0,
+      "2013": 0.0, "2023": 0.0, "2033": 0.0, "2073": 130.35,
+      "2263": 133.69, "2293": 0.0
     }
   }
 `;

@@ -2,6 +2,8 @@
 // FILE: src/types.ts
 // ==========================================
 
+import { SYSTEM_PROFILE_KEYS } from './config/profiles';
+
 export const MONTH_NAMES = [
   'GENNAIO', 'FEBBRAIO', 'MARZO', 'APRILE', 'MAGGIO', 'GIUGNO',
   'LUGLIO', 'AGOSTO', 'SETTEMBRE', 'OTTOBRE', 'NOVEMBRE', 'DICEMBRE'
@@ -207,8 +209,11 @@ export const COLONNA_ARRETRATI: ColumnDef = {
 export const getColumnsByProfile = (profilo: ProfiloAzienda, eliorType?: 'viaggiante' | 'magazzino'): ColumnDef[] => {
   let specificColumns: ColumnDef[] = [];
 
-  // 1. Prova a pescare le colonne personalizzate dal LocalStorage (Company Builder)
-  if (typeof window !== 'undefined') {
+  // 1. SOLO per le aziende CUSTOM: pesca le colonne dal Company Builder (localStorage).
+  //    I profili di sistema (RFI, TRENITALIA, ELIOR, CLEAN_SERVICE, MERCITALIA) usano
+  //    SEMPRE le loro colonne hardcoded: una voce "customCompanies" rimasta in
+  //    localStorage con la stessa chiave NON deve mai mascherare il profilo di sistema.
+  if (typeof window !== 'undefined' && !SYSTEM_PROFILE_KEYS.includes(profilo)) {
     const savedCustomCompanies = localStorage.getItem('customCompanies');
     if (savedCustomCompanies) {
       try {

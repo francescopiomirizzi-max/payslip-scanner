@@ -94,38 +94,44 @@ Questo cedolino NON usa il layout SAP/Zucchetti di RFI/Trenitalia. NON cercare l
 Valida che il documento sia ADP verificando la presenza dei riquadri intitolati
 "Informazioni Aziendali", "Informazioni Previdenziali", "Informazioni Fiscali" e
 "Informazioni TFR" (tipicamente a fondo pagina / pagina 2). La tabella centrale delle voci
-ha le colonne "Codice | Descrizione | Numero o base di calcolo | ... | Valori".
+ha 7 colonne: "Cod. Voce | Descrizione | Valori | Numero o base di calcolo | Compenso unitario o % | Competenze | Trattenute".
 
-**daysWorked:** valore della stringa esatta "GIORNI INPS" nel riquadro
-"Informazioni Previdenziali" (pagina 2). In alternativa, colonna "Numero o base di calcolo"
-del codice 1213 (RETRIBUZ.ORDINARIA) a pagina 1. Se assente → daysWorked = 0 è CORRETTO.
+**daysWorked — CAMPO CALCOLATO, non stampato esplicitamente:**
+daysWorked = [GIORNI INPS] − [daysVacation]. "GIORNI INPS" (riquadro "Informazioni
+Previdenziali", pagina 2, tipicamente 26; in alternativa colonna "Numero o base di
+calcolo" del codice 1213 RETRIBUZ.ORDINARIA) INCLUDE le ferie: i giorni di ferie godute
+vanno SOTTRATTI. Verifica: daysWorked_estratto ≈ GIORNI INPS − daysVacation (tolleranza
+≤ 0.50). Es.: GIORNI INPS 26 e ferie 7 → daysWorked corretto = 19; se l'estratto resta
+26 in presenza di ferie → discrepanza.
 
-**daysVacation:** colonna "Numero o base di calcolo" del codice 3833 (FERIE GODUTE) nel
-corpo centrale di pagina 1. IGNORA i contatori progressivi annuali dei residui ferie di
-pagina 2. Se il codice 3833 è assente → daysVacation = 0 è CORRETTO.
+**daysVacation:** codice 3833 (FERIE GODUTE), colonna "Numero o base di calcolo". Il codice
+3833 può comparire su PIÙ righe: conta SOLO le righe con valore POSITIVO nella colonna
+"Valori". Una riga 3833 con valore NEGATIVO (es. "-8,00") è uno STORNO di periodi precedenti
+e NON va sommata a daysVacation (va isolata nella nota del mese, non è una discrepanza).
+NON usare il codice 1639 (FERIE ANNUALI = quota annua) né i contatori progressivi
+"Maturati/Goduti/Saldo" della tabella ferie di pagina 2. Se il 3833 è assente → daysVacation = 0.
 
 **ticket:** codici 3994 (VAL.CONV.TICKETS E) / 4001 (VAL.TICKETS E). Su MERCITALIA i ticket
 NON hanno una colonna dedicata: compaiono solo come testo nella nota del mese
 ("Erogati N ticket restaurant da X€"). Non segnalare discrepanze sul ticket come colonna.
 
-**Codici indennità (sotto-oggetto "codes"):** confronta l'importo nella colonna "Valori".
+**Codici indennità (sotto-oggetto "codes"):** l'importo in euro si legge nella colonna
+"Competenze" (6ª colonna), NON nella colonna "Valori" e NON in "Numero o base di calcolo".
 I codici 1723, 1733, 2469, 2501, 2502, 2512 (13ma/14ma, Una Tantum, Welfare) NON sono
 indennità ordinarie: sono confluiti in "arretrati". Non segnalarli come discrepanza su "codes".
 
-**Arretrati:** somma degli importi positivi di 1723, 1733, 2469, 2501, 2502, 2512.
+**Arretrati:** somma degli importi positivi (colonna "Competenze") di 1723, 1733, 2469, 2501, 2502, 2512.
 `;
 
   } else {
     // Custom / generico
-    const codeList = customColumns && customColumns.length > 0
-      ? `\nCodici indennità attivi per questa azienda: ${customColumns.map(c => `${c.id} (${c.label})`).join(", ")}.`
-      : "";
     companyRules = `
 ### REGOLE DI CALCOLO AZIENDALI — ${co || "AZIENDA GENERICA"}
-Applica le regole standard di lettura dei cedolini italiani.${codeList}
+Applica le regole standard di lettura dei cedolini italiani.
 - daysWorked: leggi "GG lavorati" o "Presenze" dal riquadro in alto.
 - daysVacation: leggi "Ferie godute" dal riquadro presenze o dalla riga specifica.
 - ticket: colonna "Valore Unitario" del buono pasto.
+- codici indennità: l'importo in euro è nella colonna competenze/importi.
 `;
   }
 
@@ -140,40 +146,71 @@ Il campo "imponibile_tfr_mensile" DEVE essere 0.0 da Gennaio (mese 1) a Novembre
   NON usare la riga "Accantonamento" o "Quota mensile" (molto più bassa, ~1.500-2.000€).
 `;
 
+  // ── CHECKLIST CODICI INDENNITÀ (per la verifica esaustiva) ─────────────────
+  const codeChecklist = customColumns && customColumns.length > 0
+    ? customColumns.map(c => `${c.id} (${c.label})`).join(", ")
+    : "";
+
   // ── SEZIONE COMUNE ─────────────────────────────────────────────────────────
   const commonSection = `
+### METODO DI VERIFICA — ESAUSTIVO E SCETTICO
+Verifica OGNI campo del JSON estratto confrontandolo col PDF, UNO PER UNO.
+Un valore è "corretto" solo DOPO che l'hai trovato e confrontato sul PDF. Non saltare nulla.
+
 ### REGOLE DI CONFRONTO NUMERICO
-- Considera CORRETTO un importo monetario se la differenza assoluta è < 0.50€
-- Considera CORRETTO un valore in giorni se la differenza assoluta è ≤ 0.50
-- IGNORA i campi con valore 0 o 0.0 — niente da verificare
-- IGNORA i metadati: "aiWarning", "eventNote", "isCUD", "company", "month", "year", "monthIndex", "id"
-- Per i codici indennità nel sotto-oggetto "codes" (es. "0421", "1130"), cerca il codice nel PDF
-  e confronta l'importo nella colonna "Competenze". Se il codice non è presente nel PDF → il valore 0.0 è CORRETTO.
+- Importo monetario: CORRETTO se la differenza assoluta col PDF è < 0.50€.
+- Valore in giorni: CORRETTO se la differenza assoluta è ≤ 0.50.
+- IGNORA esclusivamente i metadati: "aiWarning", "eventNote", "note", "isCUD", "company", "month", "year", "monthIndex", "id".
+
+### ‼️ VALORE MANCANTE — l'errore PIÙ IMPORTANTE da intercettare
+Per i CAMPI STANDARD e per i CODICI DELLA CHECKLIST (entrambi elencati sotto): se nel JSON
+estratto valgono 0.0 o non compaiono, MA nel PDF quella voce ESISTE con un importo > 0 → è una
+DISCREPANZA ("suggested" = importo letto dal PDF). Uno 0.0 è corretto SOLO dopo aver verificato
+sul PDF che la voce è davvero assente.
+⚠️ AMBITO RISTRETTO — questo controllo si applica ESCLUSIVAMENTE ai campi standard e ai codici
+della checklist. Il cedolino contiene molte ALTRE voci (trattenute, addizionali IRPEF, quote
+sindacali/associative, recuperi anticipi, arrotondamenti, mutui, ecc.): NON sono di competenza
+di questa verifica — IGNORALE del tutto, non sono né errori né "valori mancanti".
+
+### CHECKLIST CODICI INDENNITÀ (verifica obbligatoria, voce per voce)
+${codeChecklist
+  ? `Questa azienda prevede SOLO questi codici indennità: ${codeChecklist}.
+‼️ Verifica ESCLUSIVAMENTE i codici di questa lista. Qualunque ALTRO codice presente sul
+cedolino (trattenute, addizionali, quote sindacali, recuperi, ecc.) è FUORI AMBITO: ignoralo.
+Per OGNUNO dei codici della lista:
+  1. cercalo nel PDF, in tutte le pagine;
+  2. se è PRESENTE nel PDF con un importo → leggi l'importo dalla colonna delle COMPETENZE
+     (l'importo in euro effettivamente pagato; MAI dalla colonna "Trattenute", né da
+     quantità/ore/parametri/aliquote) e confrontalo col valore in "codes" del JSON.
+     Se in "codes" il codice manca o è 0.0 → DISCREPANZA (valore mancante);
+  3. se è ASSENTE dal PDF → è corretto che nel JSON sia 0.0 o non compaia.
+Un codice della lista non presente nel JSON "codes" va trattato come estratto = 0.0.`
+  : `Per ogni codice nel sotto-oggetto "codes" cercalo nel PDF e confronta l'importo della colonna Competenze.`}
 
 ### MAPPATURA CAMPI STANDARD
-- "daysWorked" → vedi regole aziendali sopra
-- "daysVacation" → vedi regole aziendali sopra
-- "ticket" → valore unitario del buono pasto (NON la quantità, NON il totale)
-- "arretrati" → vedi regole aziendali sopra
-- "imponibile_tfr_mensile" → vedi Regola Globale TFR
-- "fondo_pregresso_31_12" → riquadro TFR → riga "TFR al 31.12 A.P."
+- "daysWorked" / "daysVacation" / "ticket" / "arretrati" → vedi regole aziendali sopra.
+- "imponibile_tfr_mensile" → vedi Regola Globale TFR.
+- "fondo_pregresso_31_12" → riquadro TFR, la riga del TFR maturato al 31/12 dell'anno precedente
+  (es. "TFR 31/12 A.P." / "TFR al 31.12 A.P."). Spesso VUOTA per chi è assunto nell'anno → 0.0 è
+  CORRETTO. NON confonderla con altre righe del riquadro TFR (es. "RETR.UTILE TFR", imponibili o
+  quote progressive): se la riga A.P. è vuota, fondo_pregresso_31_12 = 0.0 e non va segnalata discrepanza.
 
 ### REGOLE PER STATUS
-- "success": zero discrepanze → tutti i valori verificati coincidono con il PDF applicando le regole aziendali
-- "warning": 1-2 piccole incongruenze (differenza < 2€) o un valore non era chiaramente leggibile
-- "error": almeno una discrepanza ≥ 2€, oppure daysWorked matematicamente errato, oppure più di 2 discrepanze
+- "success": NESSUNA discrepanza — ogni valore e ogni codice della checklist coincide col PDF.
+- "warning": solo 1-2 micro-scostamenti border-line (< 2€), nessun valore mancante.
+- "error": almeno un VALORE MANCANTE, oppure una discrepanza ≥ 2€, oppure daysWorked errato, oppure più di 2 discrepanze.
 
 ### STRUTTURA DI OGNI DISCREPANZA (oggetto JSON, NON stringa libera)
 {
-  "field": "nome_campo_o_codice",   // es. "daysWorked", "0421", "ticket"
-  "extracted": <numero_estratto>,   // dal JSON fornito
-  "suggested": <numero_corretto>,   // letto/calcolato dal PDF
+  "field": "nome_campo_o_codice",
+  "extracted": <numero_estratto_o_0>,
+  "suggested": <numero_corretto_letto_dal_PDF>,
   "message": "stringa leggibile in italiano, concisa"
 }
 
 Esempi corretti:
-{ "field": "0421", "extracted": 576.06, "suggested": 580.12, "message": "Cod. 0421: estratto 576.06€, nel PDF è 580.12€ (+4.06€)" }
-{ "field": "daysWorked", "extracted": 18, "suggested": 20, "message": "daysWorked: estratto 18, calcolato dal PDF (GG INPS 26 − ferie 6) = 20" }
+{ "field": "1801", "extracted": 0, "suggested": 57.60, "message": "Cod. 1801: non estratto, ma nel PDF vale 57,60€ (valore mancante)" }
+{ "field": "daysWorked", "extracted": 26, "suggested": 19, "message": "daysWorked: estratto 26, ma con 7 giorni di ferie il valore corretto è 26−7=19" }
 { "field": "imponibile_tfr_mensile", "extracted": 1850.0, "suggested": 0.0, "message": "imponibile_tfr_mensile: il mese non è Dicembre, deve essere 0.0" }
 
 ### OUTPUT (JSON puro, ZERO markdown, ZERO testo extra)
@@ -183,11 +220,14 @@ Esempi corretti:
 }
 `;
 
-  return `Sei un Revisore Contabile specializzato in buste paga italiane.
+  return `Sei un Revisore Contabile PIGNOLO e SCETTICO, specializzato in buste paga italiane.
 Azienda: ${co || "NON SPECIFICATA"}
 
-Il tuo compito è verificare la CORRETTEZZA MATEMATICA e LOGICA dei dati estratti, applicando le regole di calcolo specifiche dell'azienda riportate sotto.
-NON fare un semplice confronto visivo testo-testo: ragiona sulle formule e sulle regole di estrazione.
+Il tuo obiettivo PRIMARIO è SCOVARE errori e OMISSIONI nei dati estratti — soprattutto i
+VALORI MANCANTI (voci presenti sul PDF ma non estratte, o estratte a 0). Dai per corretto un
+dato SOLO dopo averlo confrontato voce per voce col PDF; nel dubbio, segnalalo.
+Applica le regole di calcolo specifiche dell'azienda. Ragiona su formule e regole, non su un
+confronto testo-testo superficiale.
 
 Ti vengono forniti:
 1. Il PDF originale della busta paga

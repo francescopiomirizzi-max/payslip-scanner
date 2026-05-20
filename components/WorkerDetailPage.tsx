@@ -71,15 +71,12 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
 
     setVerifyStates(prev => ({ ...prev, [vKey]: { status: 'loading', discrepancies: [] } }));
 
-    // Build customColumns only for non-standard profiles (Company Builder)
-    const standardProfiles = new Set(SYSTEM_PROFILE_KEYS);
+    // Codici indennità del profilo (sistema O custom) — passati SEMPRE al verificatore
+    // così può fare una verifica esaustiva voce per voce, anche dei codici a 0.0.
     const standardFields = new Set(['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'arretrati', 'note']);
-    const isCustomProfile = !standardProfiles.has((worker.profilo || '').toUpperCase());
-    const customColumns = isCustomProfile
-      ? getColumnsByProfile(worker.profilo, worker.eliorType)
-          .filter(c => !standardFields.has(c.id) && c.type !== 'formula')
-          .map(c => ({ id: c.id, label: c.label }))
-      : undefined;
+    const customColumns = getColumnsByProfile(worker.profilo, worker.eliorType)
+      .filter(c => !standardFields.has(c.id) && c.type !== 'formula')
+      .map(c => ({ id: c.id, label: c.label }));
 
     try {
       const pdfUrl = await getSignedUrl(storagePath);
