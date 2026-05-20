@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useIsland } from '../IslandContext';
 import { Worker, AnnoDati, getColumnsByProfile, MONTH_NAMES } from '../types';
+import { isSystemProfile } from '../config/profiles';
 import { parseLocalFloat } from '../utils/formatters';
 
 interface UsePayslipUploadOptions {
@@ -35,7 +36,9 @@ export function usePayslipUpload({
 
   useEffect(() => {
     if (batchNotification) {
-      const timer = setTimeout(() => setBatchNotification(null), 4000);
+      // Errori/avvisi restano più a lungo: l'utente deve leggere la lista dei file falliti.
+      const ms = batchNotification.type === 'success' ? 4000 : 8000;
+      const timer = setTimeout(() => setBatchNotification(null), ms);
       return () => clearTimeout(timer);
     }
   }, [batchNotification]);
@@ -62,7 +65,7 @@ export function usePayslipUpload({
         (c: any) => c.id !== 'month' && c.id !== 'total' && c.id !== 'note' && c.id !== 'arretrati'
       );
     }
-    if (['RFI', 'TRENITALIA', 'ELIOR', 'CLEAN_SERVICE', 'MERCITALIA'].includes(worker.profilo)) return null;
+    if (isSystemProfile(worker.profilo)) return null;
     try {
       const saved = localStorage.getItem('customCompanies');
       if (saved) {
@@ -268,6 +271,7 @@ export function usePayslipUpload({
     let successCount = 0;
     let errorCount = 0;
     let lastDetectedYear = null;
+    const failedFiles: string[] = []; // feedback per-file: quali buste paga non sono passate
 
     const expectedColumns = getColumnsByProfile(worker.profilo, worker.eliorType) || [];
 
@@ -326,12 +330,14 @@ export function usePayslipUpload({
         } catch (e) {
           console.error(`❌ Il server ha fallito sul file ${file.name}. Risposta:`, responseText);
           errorCount++;
+          failedFiles.push(label);
           continue;
         }
 
         if (!response.ok || !aiResult || aiResult.error) {
           console.error(`Errore file ${file.name}`, aiResult?.error || 'Nessun dato valido');
           errorCount++;
+          failedFiles.push(label);
           continue;
         }
 
@@ -377,6 +383,7 @@ export function usePayslipUpload({
         ) {
           console.error('❌ Impossibile determinare data per il file:', file.name);
           errorCount++;
+          failedFiles.push(label);
           continue;
         }
 
@@ -494,6 +501,7 @@ export function usePayslipUpload({
       } catch (error) {
         console.error('Errore generico batch', error);
         errorCount++;
+        failedFiles.push(label);
       }
 
       if (!isSingle && i < files.length - 1) {
@@ -512,6 +520,24 @@ export function usePayslipUpload({
     if (batchInputRef.current) batchInputRef.current.value = '';
 
     finishUpload(successCount, errorCount, isSingle ? 'single' : 'batch');
+
+    // Feedback per-file: su un batch con errori elenca QUALI buste paga riprovare,
+    // così l'utente non deve indovinare quale ricaricare.
+    if (!isSingle && errorCount > 0) {
+      const MAX_LISTED = 6;
+      const listed = failedFiles
+        .slice(0, MAX_LISTED)
+        .map(name => `•  ${name}`)
+        .join('\n');
+      const extra =
+        failedFiles.length > MAX_LISTED
+          ? `\n•  …e altri ${failedFiles.length - MAX_LISTED}`
+          : '';
+      setBatchNotification({
+        type: successCount > 0 ? 'warning' : 'error',
+        msg: `${successCount} buste paga importate, ${errorCount} non riuscite.\nRiprova questi file:\n${listed}${extra}`,
+      });
+    }
   };
 
   // --- UPLOAD SINGOLO (wrapper) ---
