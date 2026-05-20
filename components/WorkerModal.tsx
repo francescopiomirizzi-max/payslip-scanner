@@ -4,9 +4,10 @@ import { useUserSettings } from '../hooks/useUserSettings';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     X, User, Briefcase, Building2, Sparkles, Save,
-    Check, Train, Coffee, AlignLeft, ArrowRight,
-    Fingerprint, BadgeCheck, Wand2, Loader2, UploadCloud, Smartphone, FileText, Cpu, Truck // <-- AGGIUNTE QUESTE
+    Check, Train, AlignLeft, ArrowRight,
+    Fingerprint, BadgeCheck, Wand2, Loader2, UploadCloud, Smartphone, FileText, Cpu
 } from 'lucide-react';
+import { SYSTEM_PROFILES, SYSTEM_PROFILE_KEYS } from '../config/profiles';
 import QRCode from 'react-qr-code';
 import { v4 as uuidv4 } from 'uuid';
 import { supabase } from '../supabaseClient';
@@ -181,6 +182,7 @@ const AiScannerOverlay = ({ isScanning }: { isScanning: boolean }) => {
     );
 };
 // --- SISTEMA COLORE "ZENITH NOVA" ---
+// NEUTRAL è locale al modale; i profili di sistema arrivano dal registro centralizzato.
 const THEMES: any = {
     NEUTRAL: {
         color: '#64748b',
@@ -188,62 +190,16 @@ const THEMES: any = {
         avatarText: 'text-slate-500',
         gradient: 'from-slate-700 to-slate-800',
         lightGlow: 'rgba(148, 163, 184, 0.1)',
-        icon: Building2 // <--- LA MAGIA È QUI: Abbiamo aggiunto l'icona di default!
+        icon: Building2
     },
-    RFI: {
-        color: '#3b82f6',
-        glow: '0 0 60px -15px rgba(59, 130, 246, 0.7)',
-        gradient: 'from-blue-500 via-indigo-600 to-violet-600',
-        avatarBg: 'from-blue-500 to-indigo-600',
-        avatarText: 'text-white',
-        lightGlow: 'rgba(59, 130, 246, 0.5)',
-        icon: Train
-    },
-    TRENITALIA: {
-        color: '#dc2626',
-        glow: '0 0 60px -15px rgba(220, 38, 38, 0.7)',
-        gradient: 'from-red-600 via-rose-600 to-red-700',
-        avatarBg: 'from-red-600 to-rose-700',
-        avatarText: 'text-white',
-        lightGlow: 'rgba(220, 38, 38, 0.5)',
-        icon: Train
-    },
-    ELIOR: {
-        color: '#f97316',
-        glow: '0 0 60px -15px rgba(249, 115, 22, 0.7)',
-        gradient: 'from-orange-500 via-amber-500 to-red-500',
-        avatarBg: 'from-orange-500 to-red-500',
-        avatarText: 'text-white',
-        lightGlow: 'rgba(249, 115, 22, 0.5)',
-        icon: Coffee
-    },
-    CLEAN_SERVICE: {
-        color: '#10b981',
-        glow: '0 0 60px -15px rgba(16, 185, 129, 0.7)',
-        gradient: 'from-emerald-500 via-teal-500 to-cyan-500',
-        avatarBg: 'from-emerald-500 to-teal-500',
-        avatarText: 'text-white',
-        lightGlow: 'rgba(16, 185, 129, 0.5)',
-        icon: Sparkles
-    },
-    MERCITALIA: {
-        color: '#d97706',
-        glow: '0 0 60px -15px rgba(217, 119, 6, 0.7)',
-        gradient: 'from-amber-600 via-amber-500 to-orange-700',
-        avatarBg: 'from-amber-600 to-orange-700',
-        avatarText: 'text-white',
-        lightGlow: 'rgba(217, 119, 6, 0.5)',
-        icon: Truck
-    }
+    ...Object.fromEntries(SYSTEM_PROFILE_KEYS.map(k => [k, SYSTEM_PROFILES[k].modal])),
 };
 
-const OPTIONS = [
-    { value: 'RFI', label: 'RFI', sub: 'Infrastrutture' },
-    { value: 'TRENITALIA', label: 'TRENITALIA', sub: 'Trasporto Ferroviario' },
-    { value: 'ELIOR', label: 'ELIOR', sub: 'Ristorazione' },
-    { value: 'CLEAN_SERVICE', label: 'CLEAN SERVICE', sub: 'Multiservizi' },
-    { value: 'MERCITALIA', label: 'MERCITALIA', sub: 'Logistica e Shunting' },
-];
+const OPTIONS = SYSTEM_PROFILE_KEYS.map(k => ({
+    value: k,
+    label: SYSTEM_PROFILES[k].label,
+    sub: SYSTEM_PROFILES[k].sub,
+}));
 
 const WorkerModal: React.FC<WorkerModalProps> = ({ isOpen, onClose, onConfirm, initialData, mode }) => {
     // Isola Dinamica
@@ -305,7 +261,7 @@ const WorkerModal: React.FC<WorkerModalProps> = ({ isOpen, onClose, onConfirm, i
     const compileDataFromAI = (data: any) => {
         setFormData(prev => {
             // 1. Recupera dinamicamente tutte le aziende valide (Sistema + Custom)
-            const validCompanies = ['RFI', 'TRENITALIA', 'ELIOR', 'CLEAN_SERVICE', 'MERCITALIA', ...Object.keys(customCompanies)];
+            const validCompanies = [...SYSTEM_PROFILE_KEYS, ...Object.keys(customCompanies)];
 
             // 2. Normalizza il nome letto dall'AI (tutto maiuscolo)
             const detectedCompany = data.azienda ? data.azienda.toUpperCase().trim() : '';

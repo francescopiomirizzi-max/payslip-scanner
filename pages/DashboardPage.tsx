@@ -31,6 +31,7 @@ import {
 import WorkerCard from '../components/WorkerCard';
 import { AnimatedCounter } from '../components/ui/AnimatedCounter';
 import { Worker } from '../types';
+import { SYSTEM_PROFILES, SYSTEM_PROFILE_KEYS } from '../config/profiles';
 import { DashboardStats, WorkerStatItem, ModalConfig } from '../hooks/useDashboardStats';
 import { COLOR_VARIANTS } from '../utils/colorVariants';
 
@@ -369,31 +370,16 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                     {/* Footer Badge Stats */}
                     <div className="px-8 pb-8 relative z-10">
                         <div className="flex flex-wrap gap-3 opacity-90 group-hover:opacity-100 transition-opacity duration-500 translate-y-2 group-hover:translate-y-0">
-                            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border backdrop-blur-md bg-blue-50 dark:bg-blue-900/30 border-blue-200 dark:border-blue-700/50 transition-colors">
-                                <div className="w-2 h-2 rounded-full bg-blue-500 dark:bg-cyan-400 dark:shadow-[0_0_8px_currentColor]"></div>
-                                <span className="text-[11px] font-black text-blue-800 dark:text-cyan-300 transition-colors">RFI</span>
-                                <span className="text-[11px] font-bold text-blue-600 dark:text-cyan-500 transition-colors">{workers.filter(w => w.profilo === 'RFI').length}</span>
-                            </div>
-                            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border backdrop-blur-md bg-red-50 dark:bg-red-900/30 border-red-200 dark:border-red-700/50 transition-colors">
-                                <div className="w-2 h-2 rounded-full bg-red-600 dark:bg-red-400 dark:shadow-[0_0_8px_currentColor]"></div>
-                                <span className="text-[11px] font-black text-red-800 dark:text-red-300 transition-colors">TRENITALIA</span>
-                                <span className="text-[11px] font-bold text-red-600 dark:text-red-500 transition-colors">{workers.filter(w => w.profilo === 'TRENITALIA').length}</span>
-                            </div>
-                            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border backdrop-blur-md bg-orange-50 dark:bg-orange-900/30 border-orange-200 dark:border-orange-700/50 transition-colors">
-                                <div className="w-2 h-2 rounded-full bg-orange-500 dark:bg-orange-400 dark:shadow-[0_0_8px_currentColor]"></div>
-                                <span className="text-[11px] font-black text-orange-800 dark:text-orange-300 transition-colors">ELIOR</span>
-                                <span className="text-[11px] font-bold text-orange-600 dark:text-orange-500 transition-colors">{workers.filter(w => w.profilo === 'ELIOR').length}</span>
-                            </div>
-                            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border backdrop-blur-md bg-emerald-50 dark:bg-emerald-900/30 border-emerald-200 dark:border-emerald-700/50 transition-colors">
-                                <div className="w-2 h-2 rounded-full bg-emerald-500 dark:bg-emerald-400 dark:shadow-[0_0_8px_currentColor]"></div>
-                                <span className="text-[11px] font-black text-emerald-800 dark:text-emerald-300 transition-colors">CLEAN SERVICE</span>
-                                <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-500 transition-colors">{workers.filter(w => w.profilo === 'CLEAN_SERVICE').length}</span>
-                            </div>
-                            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border backdrop-blur-md bg-amber-50 dark:bg-amber-900/30 border-amber-200 dark:border-amber-700/50 transition-colors">
-                                <div className="w-2 h-2 rounded-full bg-amber-600 dark:bg-amber-400 dark:shadow-[0_0_8px_currentColor]"></div>
-                                <span className="text-[11px] font-black text-amber-800 dark:text-amber-300 transition-colors">MERCITALIA</span>
-                                <span className="text-[11px] font-bold text-amber-600 dark:text-amber-500 transition-colors">{workers.filter(w => w.profilo === 'MERCITALIA').length}</span>
-                            </div>
+                            {SYSTEM_PROFILE_KEYS.map((key) => {
+                                const p = SYSTEM_PROFILES[key];
+                                return (
+                                    <div key={key} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border backdrop-blur-md transition-colors ${p.footer.wrap}`}>
+                                        <div className={`w-2 h-2 rounded-full ${p.footer.dot}`}></div>
+                                        <span className={`text-[11px] font-black transition-colors ${p.footer.name}`}>{p.label}</span>
+                                        <span className={`text-[11px] font-bold transition-colors ${p.footer.count}`}>{workers.filter(w => w.profilo === key).length}</span>
+                                    </div>
+                                );
+                            })}
                         </div>
                     </div>
                 </div>
@@ -537,7 +523,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                         <div className="mt-6 space-y-3">
                             {/* RIGA PRINCIPALE: AZIENDE + TOGGLE STATO */}
                             <div className="flex justify-center gap-3 flex-wrap items-center">
-                                {['ALL', 'RFI', 'TRENITALIA', 'ELIOR', 'CLEAN_SERVICE', 'MERCITALIA', ...customFilters].map((filterId) => {
+                                {['ALL', ...SYSTEM_PROFILE_KEYS, ...customFilters].map((filterId) => {
                                     const isActive = activeFilter === filterId;
                                     return (
                                         <button

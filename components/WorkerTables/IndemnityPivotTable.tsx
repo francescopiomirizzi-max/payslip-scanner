@@ -9,6 +9,7 @@ import {
   ProfiloAzienda
 } from '../../types';
 import { parseLocalFloat, formatCurrency, formatDay, getProfiloBadgeLabel } from '../../utils/formatters';
+import { SYSTEM_PROFILES, getCustomColorIndex } from '../../config/profiles';
 import { Info, TrendingUp, DollarSign, FileSearch } from 'lucide-react';
 
 
@@ -151,11 +152,8 @@ const IndemnityPivotTable: React.FC<IndemnityPivotTableProps> = ({
   }, [data, pivotConfig, viewMode, visibleYears, startClaimYear]);
 
   const customTheme = useMemo(() => {
-    if (profilo === 'ELIOR') return { badge: 'text-orange-400 border-orange-600 bg-orange-900/30', header: 'text-orange-600' };
-    if (profilo === 'CLEAN_SERVICE') return { badge: 'text-emerald-400 border-emerald-600 bg-emerald-900/30', header: 'text-emerald-600' };
-    if (profilo === 'RFI') return { badge: 'text-blue-400 border-blue-600 bg-blue-900/30', header: 'text-blue-700' };
-    if (profilo === 'TRENITALIA') return { badge: 'text-red-400 border-red-600 bg-red-900/30', header: 'text-red-700' };
-    if (profilo === 'MERCITALIA') return { badge: 'text-amber-400 border-amber-600 bg-amber-900/30', header: 'text-amber-700' };
+    const sysProfile = profilo ? SYSTEM_PROFILES[profilo] : undefined;
+    if (sysProfile) return { badge: sysProfile.badge.pivot, header: sysProfile.badge.pivotHeader };
 
     // AZIENDE CUSTOM (Palette dinamica sincronizzata)
     const customPalette = [
@@ -166,13 +164,7 @@ const IndemnityPivotTable: React.FC<IndemnityPivotTableProps> = ({
       { badge: 'text-indigo-400 border-indigo-600 bg-indigo-900/30', header: 'text-indigo-600' },
       { badge: 'text-teal-400 border-teal-600 bg-teal-900/30', header: 'text-teal-600' }
     ];
-    let hash = 0;
-    if (profilo) {
-      for (let i = 0; i < profilo.length; i++) {
-        hash = profilo.charCodeAt(i) + ((hash << 5) - hash);
-      }
-    }
-    return customPalette[Math.abs(hash) % customPalette.length];
+    return customPalette[getCustomColorIndex(profilo || '')];
   }, [profilo]);
 
   const badgeClass = customTheme.badge;

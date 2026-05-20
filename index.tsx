@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 import './index.css';
 import { IslandProvider } from './IslandContext'; // ✨ 1. IMPORTIAMO IL CERVELLO
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
@@ -13,8 +14,10 @@ const root = ReactDOM.createRoot(rootElement);
 root.render(
   <React.StrictMode>
     {/* ✨ 2. AVVOLGIAMO L'INTERA APP NELLA RETE NEURALE DELL'ISOLA */}
-    <IslandProvider>
-      <App />
-    </IslandProvider>
+    <ErrorBoundary>
+      <IslandProvider>
+        <App />
+      </IslandProvider>
+    </ErrorBoundary>
   </React.StrictMode>
 );

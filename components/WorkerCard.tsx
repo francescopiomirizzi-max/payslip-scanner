@@ -1,6 +1,7 @@
 import React, { useMemo, useState, useRef, useEffect } from 'react';
 import ReactDOM from 'react-dom';
 import { Worker, getColumnsByProfile } from '../types';
+import { SYSTEM_PROFILES, getCustomColorIndex } from '../config/profiles';
 import { parseLocalFloat, getProfiloBadgeLabel } from '../utils/formatters';
 import { computeHolidayIndemnity } from '../utils/calculationEngine';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -330,11 +331,7 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
 
   const badgeStyles = useMemo(() => {
     if (!worker.profilo) return 'bg-slate-200/50 dark:bg-slate-700/50 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-600';
-    if (worker.profilo === 'ELIOR') return 'bg-orange-100/50 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 border-orange-200 dark:border-orange-700/50';
-    if (worker.profilo === 'CLEAN_SERVICE') return 'bg-emerald-100/50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-700/50';
-    if (worker.profilo === 'RFI') return 'bg-blue-100/50 dark:bg-blue-900/30 text-blue-700 dark:text-cyan-400 border-blue-200 dark:border-blue-700/50';
-    if (worker.profilo === 'TRENITALIA') return 'bg-red-100/50 dark:bg-red-900/30 text-red-700 dark:text-red-400 border-red-200 dark:border-red-700/50';
-    if (worker.profilo === 'MERCITALIA') return 'bg-amber-100/50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-700/50';
+    if (SYSTEM_PROFILES[worker.profilo]) return SYSTEM_PROFILES[worker.profilo].badge.card;
 
     // AZIENDE CUSTOM: Palette premium esclusiva (niente blu/arancio/verde base)
     const customPalette = [
@@ -345,16 +342,8 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
       'bg-indigo-100/50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 border-indigo-200 dark:border-indigo-700/50',
       'bg-teal-100/50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-400 border-teal-200 dark:border-teal-700/50'
     ];
-
-    // Genera un numero fisso e immutabile basato sulle lettere del nome dell'azienda
-    let hash = 0;
-    for (let i = 0; i < worker.profilo.length; i++) {
-      hash = worker.profilo.charCodeAt(i) + ((hash << 5) - hash);
-    }
-
-    // Usa l'hash per pescare sempre lo stesso colore dalla customPalette
-    const index = Math.abs(hash) % customPalette.length;
-    return customPalette[index];
+    // Hash deterministico nome-azienda → colore fisso
+    return customPalette[getCustomColorIndex(worker.profilo)];
   }, [worker.profilo]);
 
   const noiseBg = `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.05'/%3E%3C/svg%3E")`;

@@ -5,6 +5,7 @@ import {
   Download, Archive, Loader2, X, FolderOpen, File, Calendar, UploadCloud, Check,
 } from 'lucide-react';
 import { Worker, MONTH_NAMES } from '../types';
+import { SYSTEM_PROFILES } from '../config/profiles';
 import { usePayslipArchive, PayslipRecord } from '../hooks/usePayslipArchive';
 import { getProfiloBadgeLabel } from '../utils/formatters';
 
@@ -324,11 +325,7 @@ const ArchivePage: React.FC<ArchivePageProps> = ({ workers, onBack, initialWorke
   }, [payslipCache]);
 
   const badgeStyle = (profilo: string) => {
-    if (profilo === 'RFI') return 'bg-blue-100 text-blue-700 border-blue-200';
-    if (profilo === 'TRENITALIA') return 'bg-red-100 text-red-700 border-red-200';
-    if (profilo === 'MERCITALIA') return 'bg-amber-100 text-amber-700 border-amber-200';
-    if (profilo === 'ELIOR') return 'bg-orange-100 text-orange-700 border-orange-200';
-    if (profilo === 'CLEAN_SERVICE') return 'bg-emerald-100 text-emerald-700 border-emerald-200';
+    if (SYSTEM_PROFILES[profilo]) return SYSTEM_PROFILES[profilo].badge.archive;
     return 'bg-violet-100 text-violet-700 border-violet-200';
   };
 

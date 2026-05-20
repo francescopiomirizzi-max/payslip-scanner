@@ -20,6 +20,9 @@ import { ConfirmImportModal } from './components/ui/ConfirmImportModal';
 import { ChangePasswordModal } from './components/ui/ChangePasswordModal';
 import { KeyboardShortcutsHint } from './components/ui/KeyboardShortcutsHint';
 
+// Config
+import { SYSTEM_PROFILES, getCustomColorIndex } from './config/profiles';
+
 // Context & Hooks
 import { useIsland } from './IslandContext';
 import { useTheme } from './hooks/useTheme';
@@ -129,12 +132,11 @@ const App: React.FC = () => {
         if (!isActive) return "bg-white/40 dark:bg-slate-800/60 text-slate-500 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-700 hover:text-indigo-600 dark:hover:text-indigo-400 hover:border-indigo-200 dark:hover:border-indigo-500/50 border border-white/40 dark:border-slate-700 hover:shadow-lg hover:shadow-indigo-500/10 hover:-translate-y-0.5";
         
         if (filterId === 'ALL') return 'bg-slate-800 text-white shadow-lg shadow-slate-500/30 ring-2 ring-slate-400 scale-105 border-transparent';
-        if (filterId === 'RFI') return 'bg-blue-600 text-white shadow-lg shadow-blue-500/40 ring-2 ring-blue-400 scale-105 border-transparent';
-        if (filterId === 'TRENITALIA') return 'bg-red-600 text-white shadow-lg shadow-red-500/40 ring-2 ring-red-400 scale-105 border-transparent';
-        if (filterId === 'MERCITALIA') return 'bg-amber-600 text-white shadow-lg shadow-amber-500/40 ring-2 ring-amber-400 scale-105 border-transparent';
-        if (filterId === 'ELIOR') return 'bg-orange-500 text-white shadow-lg shadow-orange-500/40 ring-2 ring-orange-300 scale-105 border-transparent';
-        if (filterId === 'CLEAN_SERVICE') return 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/40 ring-2 ring-emerald-300 scale-105 border-transparent';
 
+        // Profili di sistema → registro centralizzato
+        if (SYSTEM_PROFILES[filterId]) return SYSTEM_PROFILES[filterId].badge.filter;
+
+        // Aziende custom → palette deterministica via hash condiviso
         const customPalette = [
             'bg-fuchsia-500 text-white shadow-lg shadow-fuchsia-500/40 ring-2 ring-fuchsia-300 scale-105 border-transparent',
             'bg-violet-500 text-white shadow-lg shadow-violet-500/40 ring-2 ring-violet-300 scale-105 border-transparent',
@@ -143,9 +145,7 @@ const App: React.FC = () => {
             'bg-indigo-500 text-white shadow-lg shadow-indigo-500/40 ring-2 ring-indigo-300 scale-105 border-transparent',
             'bg-teal-500 text-white shadow-lg shadow-teal-500/40 ring-2 ring-teal-300 scale-105 border-transparent'
         ];
-        let hash = 0;
-        for (let i = 0; i < filterId.length; i++) hash = filterId.charCodeAt(i) + ((hash << 5) - hash);
-        return customPalette[Math.abs(hash) % customPalette.length];
+        return customPalette[getCustomColorIndex(filterId)];
     };
 
     const containerVariants = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.1 } } };

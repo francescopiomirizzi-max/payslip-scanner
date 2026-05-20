@@ -10,6 +10,7 @@ import {
   getProfiloBadgeLabel
 } from '../../utils/formatters';
 import { computeHolidayIndemnity } from '../../utils/calculationEngine';
+import { SYSTEM_PROFILES, getCustomColorIndex } from '../../config/profiles';
 import {
   ChevronRight,
   ChevronDown,
@@ -61,11 +62,8 @@ const AnnualCalculationTable: React.FC<AnnualCalculationTableProps> = ({
   const [includeExFest, setIncludeExFest] = useState(false);
   const [interestRate, setInterestRate] = useState<string>("0");
   const badgeClass = useMemo(() => {
-    if (profilo === 'ELIOR') return 'text-orange-400 border-orange-600 bg-orange-900/30';
-    if (profilo === 'CLEAN_SERVICE') return 'text-emerald-400 border-emerald-600 bg-emerald-900/30';
-    if (profilo === 'RFI') return 'text-blue-400 border-blue-600 bg-blue-900/30';
-    if (profilo === 'TRENITALIA') return 'text-red-400 border-red-600 bg-red-900/30';
-    if (profilo === 'MERCITALIA') return 'text-amber-400 border-amber-600 bg-amber-900/30';
+    const sysProfile = profilo ? SYSTEM_PROFILES[profilo] : undefined;
+    if (sysProfile) return sysProfile.badge.pivot;
 
     // AZIENDE CUSTOM (Palette dinamica)
     const customPalette = [
@@ -76,13 +74,7 @@ const AnnualCalculationTable: React.FC<AnnualCalculationTableProps> = ({
       'text-indigo-400 border-indigo-600 bg-indigo-900/30',
       'text-teal-400 border-teal-600 bg-teal-900/30'
     ];
-    let hash = 0;
-    if (profilo) {
-      for (let i = 0; i < profilo.length; i++) {
-        hash = profilo.charCodeAt(i) + ((hash << 5) - hash);
-      }
-    }
-    return customPalette[Math.abs(hash) % customPalette.length];
+    return customPalette[getCustomColorIndex(profilo || '')];
   }, [profilo]);
   const toggleYear = (year: number) => {
     const newSet = new Set(expandedYears);

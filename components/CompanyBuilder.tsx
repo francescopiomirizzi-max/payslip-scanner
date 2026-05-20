@@ -7,13 +7,14 @@ import {
     GripVertical, Hash, Euro, Sparkles, Layout, ChevronDown, Check, Palette
 } from 'lucide-react';
 import { ColumnDef } from '../types';
+import { SYSTEM_PROFILE_KEYS } from '../config/profiles';
 
 interface CompanyBuilderProps {
     isOpen: boolean;
     onClose: () => void;
 }
 
-const SYSTEM_COMPANIES = ['RFI', 'TRENITALIA', 'ELIOR', 'CLEAN_SERVICE', 'MERCITALIA'];
+const SYSTEM_COMPANIES = SYSTEM_PROFILE_KEYS;
 
 const COLOR_OPTIONS = [
     { id: 'indigo',  hex: '#6366f1', light: '#e0e7ff' },

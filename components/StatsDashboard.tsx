@@ -20,6 +20,7 @@ import { motion, useSpring, useMotionValue, AnimatePresence } from 'framer-motio
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { Worker } from '../types';
+import { SYSTEM_PROFILES, getCustomColorIndex } from '../config/profiles';
 import { computeHolidayIndemnity } from '../utils/calculationEngine';
 
 // --- COMPONENTE NUMERO ANIMATO (TICKING) ---
@@ -445,23 +446,15 @@ const StatsDashboard: React.FC<StatsDashboardProps> = ({ workers = [], onBack })
                             {Object.entries(stats.byProfile).map(([profile, data]: [string, { count: number, value: number }], idx) => {
                                 const percent = (data.value / stats.totalRevenue) * 100 || 0;
 
-                                let barColor = '#3b82f6'; // Default Blue (RFI)
+                                let barColor = '#3b82f6'; // Default Blue (RFI / ALTRO)
                                 let bgClass = 'bg-blue-500';
 
-                                if (profile === 'ELIOR') {
-                                    barColor = '#f97316';
-                                    bgClass = 'bg-orange-500';
-                                } else if (profile === 'CLEAN_SERVICE') {
-                                    barColor = '#10b981';
-                                    bgClass = 'bg-emerald-500';
-                                } else if (profile === 'TRENITALIA') {
-                                    barColor = '#dc2626';
-                                    bgClass = 'bg-red-600';
-                                } else if (profile === 'MERCITALIA') {
-                                    barColor = '#d97706';
-                                    bgClass = 'bg-amber-600';
-                                } else if (profile !== 'RFI' && profile !== 'ALTRO') {
-                                    // AZIENDE CUSTOM (Usa lo stesso algoritmo basato sul nome)
+                                const sysProfile = SYSTEM_PROFILES[profile];
+                                if (sysProfile) {
+                                    barColor = sysProfile.hex;
+                                    bgClass = sysProfile.badge.statsBg;
+                                } else if (profile !== 'ALTRO') {
+                                    // AZIENDE CUSTOM (stesso hash deterministico condiviso)
                                     const customColors = [
                                         { bar: '#d946ef', bg: 'bg-fuchsia-500' },
                                         { bar: '#8b5cf6', bg: 'bg-violet-500' },
@@ -470,11 +463,7 @@ const StatsDashboard: React.FC<StatsDashboardProps> = ({ workers = [], onBack })
                                         { bar: '#6366f1', bg: 'bg-indigo-500' },
                                         { bar: '#14b8a6', bg: 'bg-teal-500' }
                                     ];
-                                    let hash = 0;
-                                    for (let i = 0; i < profile.length; i++) {
-                                        hash = profile.charCodeAt(i) + ((hash << 5) - hash);
-                                    }
-                                    const theme = customColors[Math.abs(hash) % customColors.length];
+                                    const theme = customColors[getCustomColorIndex(profile)];
                                     barColor = theme.bar;
                                     bgClass = theme.bg;
                                 }

@@ -13,15 +13,12 @@ import TableComponent from './TableComponent';
 import WorkerDetailLayout from './WorkerDetailLayout';
 import { printPayslipTables } from '../utils/printTables';
 import { Worker, AnnoDati, getColumnsByProfile, MONTH_NAMES } from '../types';
+import { SYSTEM_PROFILES, SYSTEM_PROFILE_KEYS, getCustomColorIndex } from '../config/profiles';
 
-// --- CONFIGURAZIONE PROFILI PEC ---
-const PROFILE_CONFIG: any = {
-  RFI: { label: 'RFI', pec: 'ru.rfi@pec.rfi.it' },
-  TRENITALIA: { label: 'Trenitalia', pec: '' },
-  MERCITALIA: { label: 'Mercitalia', pec: '' },
-  ELIOR: { label: 'ELIOR', pec: 'elior@legalmail.it' },
-  CLEAN_SERVICE: { label: 'Clean Service', pec: '' }
-};
+// --- CONFIGURAZIONE PROFILI PEC (derivata dal registro centralizzato) ---
+const PROFILE_CONFIG: Record<string, { label: string; pec: string }> = Object.fromEntries(
+  SYSTEM_PROFILE_KEYS.map(k => [k, { label: SYSTEM_PROFILES[k].detailLabel, pec: SYSTEM_PROFILES[k].pec }])
+);
 
 interface WorkerDetailPageProps {
   worker: Worker;
@@ -75,7 +72,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
     setVerifyStates(prev => ({ ...prev, [vKey]: { status: 'loading', discrepancies: [] } }));
 
     // Build customColumns only for non-standard profiles (Company Builder)
-    const standardProfiles = new Set(['RFI', 'TRENITALIA', 'ELIOR', 'CLEAN_SERVICE', 'MERCITALIA']);
+    const standardProfiles = new Set(SYSTEM_PROFILE_KEYS);
     const standardFields = new Set(['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'arretrati', 'note']);
     const isCustomProfile = !standardProfiles.has((worker.profilo || '').toUpperCase());
     const customColumns = isCustomProfile
@@ -318,11 +315,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
 
   const badgeStyles = useMemo(() => {
     if (!worker.profilo) return 'bg-slate-200/50 dark:bg-slate-700/50 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-600';
-    if (worker.profilo === 'ELIOR') return 'bg-orange-50 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 border-orange-200 dark:border-orange-700/50';
-    if (worker.profilo === 'CLEAN_SERVICE') return 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-700/50';
-    if (worker.profilo === 'RFI') return 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-cyan-400 border-blue-200 dark:border-blue-700/50';
-    if (worker.profilo === 'TRENITALIA') return 'bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 border-red-200 dark:border-red-700/50';
-    if (worker.profilo === 'MERCITALIA') return 'bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-700/50';
+    if (SYSTEM_PROFILES[worker.profilo]) return SYSTEM_PROFILES[worker.profilo].badge.detail;
     const customPalette = [
       'bg-fuchsia-50 dark:bg-fuchsia-900/30 text-fuchsia-600 dark:text-fuchsia-400 border-fuchsia-200 dark:border-fuchsia-700/50',
       'bg-violet-50 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400 border-violet-200 dark:border-violet-700/50',
@@ -331,11 +324,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
       'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 border-indigo-200 dark:border-indigo-700/50',
       'bg-teal-50 dark:bg-teal-900/30 text-teal-600 dark:text-teal-400 border-teal-200 dark:border-teal-700/50'
     ];
-    let hash = 0;
-    for (let i = 0; i < worker.profilo.length; i++) {
-      hash = worker.profilo.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    return customPalette[Math.abs(hash) % customPalette.length];
+    return customPalette[getCustomColorIndex(worker.profilo)];
   }, [worker.profilo]);
 
   const [isGlobalDragging, setIsGlobalDragging] = useState(false);

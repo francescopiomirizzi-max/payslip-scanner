@@ -20,19 +20,16 @@ import {
   type ChatMessage,
 } from '../lib/ollama';
 import { matchLegalChunks, logLegalQuery, type MatchedChunk } from '../lib/ragRepository';
+import { SYSTEM_PROFILES, SYSTEM_PROFILE_KEYS } from '../config/profiles';
 
 // ============================================================
 // Mappatura profilo RailFlow → ccnl_ref nel corpus legale.
-// I valori a destra DEVONO coincidere con ciò che l'admin inserisce
-// in `legal_documents.ccnl_ref` quando indicizza il CCNL.
+// Derivata dal registro centralizzato: i valori DEVONO coincidere
+// con ciò che l'admin inserisce in `legal_documents.ccnl_ref`.
 // ============================================================
-const PROFILO_TO_CCNL_REF: Record<string, string> = {
-  RFI: 'Mobilità/Ferroviari',
-  TRENITALIA: 'Mobilità/Ferroviari',
-  MERCITALIA: 'Mobilità/Ferroviari',
-  ELIOR: 'Ristorazione Collettiva',
-  CLEAN_SERVICE: 'Multiservizi',
-};
+const PROFILO_TO_CCNL_REF: Record<string, string> = Object.fromEntries(
+  SYSTEM_PROFILE_KEYS.map(k => [k, SYSTEM_PROFILES[k].ccnlRef])
+);
 
 // ============================================================
 // Tipi pubblici

@@ -1,6 +1,7 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { Worker, AnnoDati, getColumnsByProfile, MONTH_NAMES } from '../types';
+import { SYSTEM_PROFILES } from '../config/profiles';
 import { parseLocalFloat } from './formatters';
 import { computeHolidayIndemnity, EXCLUDED_INDEMNITY_COLS } from './calculationEngine';
 
@@ -137,10 +138,7 @@ export function printPayslipTables({
 
     doc.setFontSize(7); doc.setTextColor(100);
 
-    let nomeCCNL = 'CCNL di Categoria';
-    if (worker.profilo === 'RFI' || worker.profilo === 'TRENITALIA' || worker.profilo === 'MERCITALIA') nomeCCNL = 'CCNL Mobilità';
-    if (worker.profilo === 'CLEAN_SERVICE') nomeCCNL = 'CCNL Multiservizi';
-    if (worker.profilo === 'ELIOR') nomeCCNL = 'CCNL Ristorazione';
+    const nomeCCNL = SYSTEM_PROFILES[worker.profilo]?.ccnl ?? 'CCNL di Categoria';
 
     const note = `Calcolo elaborato ai sensi Cass. n. 20216/2022 e Art. 64 ${nomeCCNL}. La media giornaliera è calcolata sul totale delle voci variabili diviso i giorni di effettiva presenza. Limite giorni indennizzabili: ${TETTO}.`;
     doc.text(note, 14, pageHeight - 10);
