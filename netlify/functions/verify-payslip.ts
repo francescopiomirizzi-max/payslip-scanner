@@ -44,18 +44,35 @@ ${ticketRule}
     companyRules = `
 ### REGOLE DI CALCOLO AZIENDALI — ${co} (struttura SAP/Zucchetti ferroviaria)
 
-**daysWorked — REGOLA DELL'INCOLONNAMENTO RIGIDO (CRITICA):**
-La tabella presenze in alto ha questa intestazione esatta:
-"Presenze | Riposi | Ferie | 26mi PTV | Malattie | Infortuni | ... | Ferie anno prec. | Ferie anno corrente"
-- daysWorked = valore ESATTAMENTE sotto la colonna "Presenze" (prima colonna a sinistra).
-- Se "Presenze" è vuota o assente → daysWorked = 0 è CORRETTO. NON spostarti a destra.
-- VIETATO usare i valori sotto "Malattie" o "Infortuni" come giorni lavorati.
-- VIETATO usare valori numerici delle ultime colonne (Ferie anno prec./corrente).
+**daysWorked — CONTROLLO ANTI-CONFUSIONE RIPOSI (CRITICO):**
+La tabella presenze ha 10 colonne in quest'ordine ESATTO:
+"Presenze | Riposi | Ferie | 26mi PTV | Malattie | Infortuni | Assenze retribuite | Assenze non retribuite | Ferie anno prec. | Ferie anno corrente".
+- daysWorked = SOLO il numero incolonnato sotto "Presenze" (1ª colonna). Se "Presenze" è
+  vuota → daysWorked = 0 è CORRETTO; NON spostarti a destra.
+- ⚠️ ERRORE TIPICO DA SCOVARE: i giorni lavorati confusi con i RIPOSI. Quando "Presenze" è
+  vuota, l'OCR parte da "Riposi" e il primo numero finisce per sbaglio in daysWorked.
+- I RIPOSI (2ª colonna) per un dipendente a tempo pieno sono SEMPRE presenti (tipicamente
+  4-13) e RIPOSI = 0 è praticamente impossibile. Se il daysWorked estratto coincide con il
+  numero che sul PDF è incolonnato sotto "Riposi" (mentre "Presenze" è vuota) → DISCREPANZA:
+  suggested = 0.
+- Quadratura: Presenze + Riposi + Ferie + 26mi PTV + Malattie + Infortuni + Assenze ≈ giorni
+  del mese (28-31). Se per far quadrare la somma i RIPOSI risulterebbero 0, il daysWorked
+  estratto è errato (ha "rubato" il valore dei Riposi).
+- VIETATO accettare come daysWorked valori sotto "Riposi", "Malattie", "Infortuni" o le
+  ultime due colonne "Ferie anno prec./corrente".
 
 **daysVacation — DIVIETO SCIVOLAMENTO COLONNE:**
-- Leggi SOLO la colonna sotto "Ferie" (la terza intestazione).
-- I valori sotto "Riposi" (spesso 8-12) NON sono ferie: non assegnarli a daysVacation.
+- Leggi SOLO la colonna sotto "Ferie" (la 3ª intestazione).
+- I valori sotto "Riposi" (spesso 4-13) NON sono ferie: non assegnarli a daysVacation.
 - Se la colonna risulta vuota o fusa → daysVacation = 0 è CORRETTO.
+
+**daysPaidLeave — Assenze retribuite (campo INFORMATIVO):**
+- Leggi SOLO la colonna sotto l'intestazione "Assenze retribuite" (7ª colonna della tabella
+  presenze, dopo "Infortuni" e prima di "Assenze non retribuite"). Sono permessi e distacco
+  sindacale, congedi e simili assenze comunque pagate.
+- Se la colonna è vuota → daysPaidLeave = 0 è CORRETTO.
+- È un dato puramente informativo: NON entra nel divisore. Verifica solo che il valore
+  estratto coincida con quello incolonnato sul PDF, esattamente come per daysVacation.
 
 **Sfasamento Temporale Ferroviario:**
 Nel settore ferroviario (RFI/Trenitalia) le indennità sono pagate il mese successivo alla maturazione.
@@ -188,7 +205,8 @@ Un codice della lista non presente nel JSON "codes" va trattato come estratto = 
   : `Per ogni codice nel sotto-oggetto "codes" cercalo nel PDF e confronta l'importo della colonna Competenze.`}
 
 ### MAPPATURA CAMPI STANDARD
-- "daysWorked" / "daysVacation" / "ticket" / "arretrati" → vedi regole aziendali sopra.
+- "daysWorked" / "daysVacation" / "daysPaidLeave" / "ticket" / "arretrati" → vedi regole aziendali sopra.
+  Nota: "daysPaidLeave" esiste solo per i profili ferroviari (RFI/Trenitalia); se non compare nei dati estratti, ignoralo.
 - "imponibile_tfr_mensile" → vedi Regola Globale TFR.
 - "fondo_pregresso_31_12" → riquadro TFR, la riga del TFR maturato al 31/12 dell'anno precedente
   (es. "TFR 31/12 A.P." / "TFR al 31.12 A.P."). Spesso VUOTA per chi è assunto nell'anno → 0.0 è

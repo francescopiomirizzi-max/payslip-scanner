@@ -31,6 +31,10 @@ export interface AnnoDati {
   daysVacation: string | number; // Ferie fruite
   ticket: string | number;       // Buono pasto
 
+  // Assenze retribuite (es. permessi / distacco sindacale).
+  // Colonna puramente INFORMATIVA: NON entra nel divisore né in alcuna formula.
+  daysPaidLeave?: string | number;
+
   // Note per eventi (es. Malattia, Infortunio)
   note?: string;
 
@@ -256,11 +260,26 @@ export const getColumnsByProfile = (profilo: ProfiloAzienda, eliorType?: 'viaggi
     { id: 'total', label: 'TOTALE', subLabel: 'Voci', width: 'min-w-[100px]', isTotal: true, isCalculated: true },
     { id: 'daysWorked', label: 'GG Lav.', subLabel: 'Divisore', width: 'min-w-[80px]', type: 'integer' },
     { id: 'daysVacation', label: 'GG Ferie', subLabel: 'Fruite', width: 'min-w-[80px]', type: 'integer' },
+    // Colonna informativa "Assenze retribuite" (tabella presenze ferroviaria): NON è un'indennità
+    // e NON entra nel divisore. Inclusa solo per i profili in PROFILES_WITH_PAID_LEAVE.
+    { id: 'daysPaidLeave', label: 'Ass. Retrib.', subLabel: 'GG (info)', width: 'min-w-[90px]', type: 'integer' },
     { id: 'ticket', label: 'Ticket', subLabel: 'Past.', width: 'min-w-[80px]', type: 'currency' }
   ];
 
+  let result = tabella;
+
+  // Colonna "Assenze retribuite": solo profili ferroviari SAP/Zucchetti (RFI e Trenitalia).
+  const PROFILES_WITH_PAID_LEAVE = ['RFI', 'TRENITALIA'];
+  if (!PROFILES_WITH_PAID_LEAVE.includes(profilo)) {
+    result = result.filter(c => c.id !== 'daysPaidLeave');
+  }
+
   // MERCITALIA: i ticket vivono solo nella nota del mese → nessuna colonna ticket dedicata
-  return profilo === 'MERCITALIA' ? tabella.filter(c => c.id !== 'ticket') : tabella;
+  if (profilo === 'MERCITALIA') {
+    result = result.filter(c => c.id !== 'ticket');
+  }
+
+  return result;
 };
 
 import { parseFloatSafe } from './utils/formatters';

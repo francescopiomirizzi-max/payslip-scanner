@@ -171,6 +171,8 @@ export function usePayslipUpload({
           row.daysWorked = parseLocalFloat(aiResult.daysWorked);
         if (aiResult.daysVacation !== undefined && aiResult.daysVacation !== null)
           row.daysVacation = parseLocalFloat(aiResult.daysVacation);
+        if (aiResult.daysPaidLeave !== undefined && aiResult.daysPaidLeave !== null)
+          row.daysPaidLeave = parseLocalFloat(aiResult.daysPaidLeave);
       }
 
       const ticketVal = parseLocalFloat(aiResult.ticketRate);
@@ -424,6 +426,8 @@ export function usePayslipUpload({
             row.daysWorked = parseLocalFloat(aiResult.daysWorked);
           if (aiResult.daysVacation !== undefined && aiResult.daysVacation !== null)
             row.daysVacation = parseLocalFloat(aiResult.daysVacation);
+          if (aiResult.daysPaidLeave !== undefined && aiResult.daysPaidLeave !== null)
+            row.daysPaidLeave = parseLocalFloat(aiResult.daysPaidLeave);
         }
 
         const ticketVal = parseLocalFloat(aiResult.ticketRate);

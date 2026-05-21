@@ -73,7 +73,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
 
     // Codici indennità del profilo (sistema O custom) — passati SEMPRE al verificatore
     // così può fare una verifica esaustiva voce per voce, anche dei codici a 0.0.
-    const standardFields = new Set(['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'arretrati', 'note']);
+    const standardFields = new Set(['month', 'total', 'daysWorked', 'daysVacation', 'daysPaidLeave', 'ticket', 'arretrati', 'note']);
     const customColumns = getColumnsByProfile(worker.profilo, worker.eliorType)
       .filter(c => !standardFields.has(c.id) && c.type !== 'formula')
       .map(c => ({ id: c.id, label: c.label }));
@@ -170,7 +170,8 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
       const activeInputs = worker.anni.filter((d: AnnoDati) =>
         (d.imponibile_tfr_mensile && d.imponibile_tfr_mensile > 0) ||
         (d.daysWorked && Number(d.daysWorked) > 0) ||
-        (d.daysVacation && Number(d.daysVacation) > 0)
+        (d.daysVacation && Number(d.daysVacation) > 0) ||
+        (d.daysPaidLeave && Number(d.daysPaidLeave) > 0)
       );
       const anniCompilati = activeInputs.map((d: AnnoDati) => Number(d.year)).filter((y: number) => !isNaN(y));
       if (anniCompilati.length > 0) return Math.max(...anniCompilati);

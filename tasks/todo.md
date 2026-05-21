@@ -142,3 +142,99 @@ curl http://localhost:11434/api/embeddings -d '{"model":"nomic-embed-text","prom
   - `npx vitest run` → 52/52 test passati, nessuna regressione
   - Audit `grep MERCITALIA` → presente in tutti i 17 file; parità completa con `TRENITALIA`
   - `getColumnsByProfile('MERCITALIA')` → 17 colonne, 12 indennità, **nessuna colonna ticket**
+
+---
+
+# Sessione — Tooltip Portal + Trenitalia "Assenze retribuite" (giorni lavorati = 0)
+
+> Piano approvato: `~/.claude/plans/dreamy-leaping-lecun.md`
+> Branch: `feat/trenitalia-assenze-retribuite-tooltip-portal`
+
+## Plan (approvato)
+
+### Parte A — Tooltip via React Portal
+- [x] **A1** — Nuovo `components/ui/PortalTooltip.tsx` (createPortal + position fixed)
+- [x] **A2** — `MonthlyDataGrid.tsx`: 3 tooltip cella mese → `<PortalTooltip>` (avviso AI, semaforo, tasto-scudo)
+
+### Parte B — Trenitalia colonna "Assenze retribuite" + fix divisore
+- [x] **B1** — `types.ts`: colonna `daysPaidLeave` (info) + interfaccia `AnnoDati`
+- [x] **B2** — `scan-payslip.ts` `PROMPT_TRENITALIA`: estrazione "Assenze retribuite"
+- [x] **B3** — `usePayslipUpload.ts`: mapping `daysPaidLeave` (upload singolo + batch)
+- [x] **B4** — Esclusione dai calcoli: `EXCLUDED_INDEMNITY_COLS` + 8 liste sparse
+- [x] **B5** — `MonthlyDataGrid.tsx`: fix `isDivisorError` + `totalDaysInput`
+- [x] **B6** — `verify-payslip.ts`: regola `daysPaidLeave` per RFI/TRENITALIA
+- [x] **B7** — Calc engine: verificato, nessuna modifica logica (solo B4)
+
+### Verifica
+- [x] `npm run test` → 57/57 verdi (+5 nuovi casi `daysPaidLeave`)
+- [x] `npm run build` pulito + `npx tsc --noEmit` exit 0
+- [ ] Test manuale Aprile/Agosto 2007 + tooltip (richiede ambiente Netlify + chiave Gemini → utente)
+
+## Review
+
+### Cosa è cambiato
+- **Tooltip portal**: nuovo `components/ui/PortalTooltip.tsx` — renderizza su `document.body`
+  con `position: fixed` e coordinate da `getBoundingClientRect()`, con flip orizzontale e
+  clamp nel viewport. Risolve alla radice lo stacking-context isolato della prima colonna
+  `sticky` e il clipping da `overflow-auto`. Applicato ai 3 tooltip della cella mese.
+- **Colonna `daysPaidLeave`**: nuova colonna informativa "Ass. Retrib." (solo Trenitalia,
+  RFI in follow-up). NON entra nel divisore né in nessuna formula — `EXCLUDED_INDEMNITY_COLS`
+  + 8 liste di classificazione colonne aggiornate. Estratta dal prompt Trenitalia, mappata
+  in upload singolo e batch, nota nel verificatore AI.
+- **`isDivisorError`**: ora scatta solo con indennità + 0 presenze + 0 ferie + 0 assenze
+  retribuite (mese senza alcuna copertura). Un mese a 0 presenze giustificato da
+  ferie/permessi sindacali non è più segnalato come errore.
+- **Motore di calcolo**: nessuna modifica logica — già applica la media annua ereditata ai
+  giorni di ferie di ogni mese, anche con `daysWorked = 0` (verificato con test dedicato).
+
+### Verifiche
+- `npx tsc --noEmit` → exit 0
+- `npx vitest run` → 57/57 (5 nuovi test: esclusione daysPaidLeave da divisore/medie,
+  scenario Aprile 2007, presenza colonna solo su Trenitalia)
+- `npm run build` → build di produzione completata
+
+### File modificati
+- Nuovo: `components/ui/PortalTooltip.tsx`
+- `components/WorkerTables/MonthlyDataGrid.tsx`, `types.ts`, `utils/calculationEngine.ts`
+- `netlify/functions/scan-payslip.ts`, `netlify/functions/verify-payslip.ts`
+- `hooks/usePayslipUpload.ts`, `hooks/useOCRSniper.ts`
+- `components/WorkerCard.tsx`, `components/WorkerDetailPage.tsx`, `RelazioneModal.tsx`
+- `components/WorkerTables/IndemnityPivotTable.tsx`, `components/WorkerTables/IstatDashboardModal.tsx`
+- `__tests__/calculationEngine.test.ts`
+
+### Estensione RFI ✅ (stessa sessione)
+Estesa la colonna "Assenze retribuite" anche al profilo **RFI** (stesse buste SAP/Zucchetti,
+stessa casistica 0 presenze / permessi sindacali):
+- `types.ts`: `PROFILES_WITH_PAID_LEAVE = ['RFI', 'TRENITALIA']`.
+- `scan-payslip.ts`: regola di estrazione "Assenze retribuite" aggiunta a `PROMPT_RFI` §2
+  + chiave `daysPaidLeave` nell'esempio di output RFI.
+- `verify-payslip.ts`, calcolo, tooltip, esclusioni: già profilo-agnostici, coprono RFI.
+- Test `getColumnsByProfile`: aggiornato → RFI e Trenitalia includono `daysPaidLeave`,
+  ELIOR/MERCITALIA no. `npx tsc --noEmit` exit 0, `npx vitest run` 57/57, build OK.
+
+### Fix popover discrepanza interattivo ✅ (stessa sessione)
+Segnalazione utente: il popover di discrepanza per-cella (con il tasto "Accetta correzione")
+spariva muovendo il mouse → impossibile da cliccare. Causa: gap tra pallino e pannello che
+rompeva la catena di hover, e `pointer-events-auto` attivo solo durante l'hover del trigger.
+- `PortalTooltip`: aggiunta modalità `interactive` — pannello cliccabile, resta aperto
+  mentre il mouse è sul trigger O sul pannello, con ritardo di chiusura (150ms) che fa da
+  "ponte" sul gap.
+- `MonthlyDataGrid.tsx`: il popover `group/disc` (discrepanza di cella + tasto Accetta)
+  convertito a `<PortalTooltip interactive>`. `npx tsc` exit 0, `vitest` 57/57, build OK.
+
+### Blindatura prompt anti-confusione Riposi/Presenze ✅ (stessa sessione)
+Segnalazione utente: su Marzo 2007 l'IA ha messo 9 in `daysWorked` — ma 9 era la colonna
+"Riposi", "Presenze" era vuota (daysWorked corretto = 0). Anche la verifica AI ha confermato
+il dato errato. Causa: con "Presenze" vuota, l'OCR produce una sequenza che parte da
+"Riposi" e il modello prende il primo numero come giorni lavorati.
+- `scan-payslip.ts` — riscritta §2 di `PROMPT_RFI` e `PROMPT_TRENITALIA` come **algoritmo
+  anti-confusione**: i Riposi (2ª col., 4-13, mai 0) vanno identificati per primi e non
+  finiscono mai in daysWorked; due esempi opposti (Presenze vuota vs valorizzata); controllo
+  di quadratura con il discriminante "se Riposi risulta 0 la lettura è errata".
+- `verify-payslip.ts` — blocco RFI/TRENITALIA: aggiunto il controllo anti-confusione Riposi
+  per il doppio check (se daysWorked coincide col valore dei Riposi e "Presenze" è vuota →
+  discrepanza, suggested = 0).
+- `npx tsc` exit 0, `vitest` 57/57, build OK.
+
+### Follow-up
+- Test manuale end-to-end con i PDF reali Marzo/Aprile/Agosto/Settembre 2007 (richiede `netlify dev`).

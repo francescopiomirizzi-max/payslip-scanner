@@ -4,6 +4,7 @@ import {
   computeHolidayIndemnity,
   EXCLUDED_INDEMNITY_COLS,
 } from '../utils/calculationEngine';
+import { getColumnsByProfile } from '../types';
 import type { AnnoDati } from '../types';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -51,7 +52,7 @@ describe('EXCLUDED_INDEMNITY_COLS', () => {
   });
 
   it('contains all structural columns', () => {
-    const structural = ['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'coeffPercepito', 'coeffTicket', 'note', 'arretrati'];
+    const structural = ['month', 'total', 'daysWorked', 'daysVacation', 'daysPaidLeave', 'ticket', 'coeffPercepito', 'coeffTicket', 'note', 'arretrati'];
     structural.forEach(col => expect(EXCLUDED_INDEMNITY_COLS).toContain(col));
   });
 });
@@ -344,6 +345,65 @@ describe('computeHolidayIndemnity — 3B70/3B71 exclusion', () => {
 
     expect(r2.avgApplied).toBeCloseTo(r1.avgApplied);
     expect(r2.sumIndennitaSpettante).toBeCloseTo(r1.sumIndennitaSpettante);
+  });
+});
+
+// ─── daysPaidLeave (assenze retribuite) — colonna informativa ───────────────
+
+describe('daysPaidLeave — colonna informativa esclusa dai calcoli', () => {
+  it('EXCLUDED_INDEMNITY_COLS contains daysPaidLeave', () => {
+    expect(EXCLUDED_INDEMNITY_COLS).toContain('daysPaidLeave');
+  });
+
+  it('adding daysPaidLeave does not affect average or indemnity', () => {
+    const base = [
+      row(2023, 0, 20, 0, 200),
+      row(2024, 0, 20, 5, 300),
+    ];
+    const withPaidLeave = [
+      row(2023, 0, 20, 0, 200, { daysPaidLeave: 17 }),
+      row(2024, 0, 20, 5, 300, { daysPaidLeave: 10 }),
+    ];
+    const r1 = computeHolidayIndemnity(params(base)).find(r => r.year === 2024)!;
+    const r2 = computeHolidayIndemnity(params(withPaidLeave)).find(r => r.year === 2024)!;
+
+    expect(r2.avgApplied).toBeCloseTo(r1.avgApplied);
+    expect(r2.sumIndennitaSpettante).toBeCloseTo(r1.sumIndennitaSpettante);
+    expect(r2.sumGiorniLav).toBe(r1.sumGiorniLav);
+  });
+
+  it('daysPaidLeave non entra nel divisore (Cass. 20216/2022)', () => {
+    // Mese con 0 presenze ma 17 giorni di assenze retribuite: il divisore resta invariato.
+    const data = [
+      row(2023, 0, 20, 0, 200),                      // media = 200/20 = 10/gg
+      row(2023, 3, 0, 0, 0, { daysPaidLeave: 17 }),  // mese 100% assenze retribuite
+    ];
+    const avgs = computeYearlyAverages(data, 'RFI');
+    expect(avgs[2023]).toBeCloseTo(10); // il mese di assenze non tocca il divisore
+  });
+
+  it('la colonna daysPaidLeave esiste per i profili ferroviari (RFI e Trenitalia)', () => {
+    expect(getColumnsByProfile('TRENITALIA').map(c => c.id)).toContain('daysPaidLeave');
+    expect(getColumnsByProfile('RFI').map(c => c.id)).toContain('daysPaidLeave');
+    expect(getColumnsByProfile('ELIOR').map(c => c.id)).not.toContain('daysPaidLeave');
+    expect(getColumnsByProfile('MERCITALIA').map(c => c.id)).not.toContain('daysPaidLeave');
+  });
+
+  it('un mese a 0 presenze con ferie è valorizzato con la media ereditata (caso Aprile 2007)', () => {
+    const data = [
+      // 2023: anno di riferimento → media = 220/22 = 10/gg
+      row(2023, 0, 22, 0, 220),
+      // Aprile (mese 3): 0 presenze, 3 ferie, 17 assenze retribuite
+      row(2024, 3, 0, 3, 0, { daysPaidLeave: 17, coeffPercepito: '0', coeffTicket: '0' }),
+    ];
+    const result = computeHolidayIndemnity(params(data, { years: [2023, 2024] }));
+    const y2024 = result.find(r => r.year === 2024)!;
+    const aprile = y2024.monthlyDetails[0];
+
+    expect(y2024.avgApplied).toBeCloseTo(10);           // media ereditata dal 2023
+    expect(aprile.giorniLav).toBe(0);                   // 0 presenze: corretto
+    expect(aprile.giorniUtili).toBe(3);                 // i 3 giorni di ferie restano validi
+    expect(aprile.indennitaSpettante).toBeCloseTo(30);  // 3 × 10
   });
 });
 

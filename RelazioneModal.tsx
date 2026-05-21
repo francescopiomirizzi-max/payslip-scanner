@@ -32,7 +32,7 @@ const generaEsempioDinamico = (worker: any, startClaimYear: number, tettoGiorni:
     if (worker?.anni && Array.isArray(worker.anni)) {
         const validCodes = getColumnsByProfile(worker.profilo, worker.eliorType)
             .map((c: any) => c.id)
-            .filter((id: string) => !['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'coeffPercepito', 'coeffTicket', 'note', 'arretrati', '3B70', '3B71'].includes(id));
+            .filter((id: string) => !['month', 'total', 'daysWorked', 'daysVacation', 'daysPaidLeave', 'ticket', 'coeffPercepito', 'coeffTicket', 'note', 'arretrati', '3B70', '3B71'].includes(id));
 
         // Raccoglie tutti gli anni candidati (ordinati ASC) con i dati già calcolati
         const tuttiGliAnni: number[] = Array.from(new Set(worker.anni.map((m: any) => Number(m.year)))).sort((a: number, b: number) => a - b) as number[];
@@ -437,7 +437,7 @@ export const RelazioneModal = ({ isOpen, onClose, worker, totals, includeExFest 
         const specificColumns = getColumnsByProfile(worker?.profilo, worker?.eliorType);
         const codiciArray = specificColumns
             .map((c: any) => c.id)
-            .filter((id: string) => !['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'coeffPercepito', 'coeffTicket', 'note', 'arretrati', '3B70', '3B71'].includes(id))
+            .filter((id: string) => !['month', 'total', 'daysWorked', 'daysVacation', 'daysPaidLeave', 'ticket', 'coeffPercepito', 'coeffTicket', 'note', 'arretrati', '3B70', '3B71'].includes(id))
             .sort();
 
         const mesi = worker?.anni || [];

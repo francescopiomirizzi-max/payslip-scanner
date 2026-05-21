@@ -35,7 +35,7 @@ const Sparkline = ({ worker }: { worker: Worker }) => {
     const values = sortedData.slice(-12).map(anno => {
       let sum = 0;
       cols.forEach(col => {
-        if (!['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'note', 'arretrati', 'coeffPercepito', 'coeffTicket'].includes(col.id))
+        if (!['month', 'total', 'daysWorked', 'daysVacation', 'daysPaidLeave', 'ticket', 'note', 'arretrati', 'coeffPercepito', 'coeffTicket'].includes(col.id))
           sum += parseLocalFloat(anno[col.id]);
       });
       return sum > 0 ? sum : (Math.random() * 200 + 300); // Fallback estetico se 0
@@ -95,7 +95,7 @@ const BackChart = ({ worker, theme, startYear }: { worker: Worker, theme: any, s
       const cols = getColumnsByProfile(worker.profilo, worker.eliorType);
       let sum = 0;
       cols.forEach(col => {
-        if (!['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'note', 'arretrati'].includes(col.id))
+        if (!['month', 'total', 'daysWorked', 'daysVacation', 'daysPaidLeave', 'ticket', 'note', 'arretrati'].includes(col.id))
           sum += parseLocalFloat(d[col.id]);
       });
       return sum;
