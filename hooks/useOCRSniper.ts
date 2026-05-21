@@ -13,6 +13,7 @@ interface UseOCRSniperOptions {
 const SPECIAL_COL_LABELS: Record<string, string> = {
   daysWorked: 'Giorni Lavorati (Presenze / GG INPS)',
   daysVacation: 'Giorni di Ferie godute nel mese',
+  daysPaidLeave: 'Giorni di Assenze retribuite nel mese (colonna "Assenze retribuite")',
   ticket: 'Ticket Restaurant — valore unitario del singolo buono pasto',
   arretrati: 'Arretrati o importi una tantum',
 };

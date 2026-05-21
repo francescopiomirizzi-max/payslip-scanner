@@ -2,7 +2,7 @@ import { AnnoDati, MONTH_NAMES, ProfiloAzienda, getColumnsByProfile } from '../t
 import { parseLocalFloat } from './formatters';
 
 export const EXCLUDED_INDEMNITY_COLS = [
-  'month', 'total', 'daysWorked', 'daysVacation', 'ticket',
+  'month', 'total', 'daysWorked', 'daysVacation', 'daysPaidLeave', 'ticket',
   'coeffPercepito', 'coeffTicket', 'note', 'arretrati', '3B70', '3B71'
 ];
 

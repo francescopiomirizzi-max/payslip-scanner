@@ -111,22 +111,48 @@ const PROMPT_RFI = `
   ### 1. DATI BASE
   - "month" (numero 1-12) e "year" (4 cifre). Identificali dalla testata del cedolino.
   
- ### 2. PRESENZE E FERIE (RFI) - REGOLA DELL'INCOLONNAMENTO (CRITICA)
-  La tabella in alto ha questa intestazione esatta: "Presenze | Riposi | Ferie | 26mi PTV | Malattie | Infortuni ... | Ferie anno prec. | Ferie anno corrente".
-  I dati si trovano nella riga sottostante. Applica questa logica TASSATIVA:
-  
-  - **daysWorked (Giorni Lavorati):** Guarda ESATTAMENTE sotto l'intestazione "Presenze" (è la primissima colonna a sinistra).
-    [REGOLA DELLA CELLA VUOTA]: Se la colonna "Presenze" è vuota o contiene spazi, DEVI RESTITUIRE 0. NON cercare il "primo numero disponibile" spostandoti a destra.
-    [DIVIETO ASSOLUTO]: È SEVERAMENTE VIETATO assegnare ai giorni lavorati i numeri presenti sotto le colonne "Malattie" o "Infortuni". (Es. se c'è 31 sotto Malattie, daysWorked è 0).
-    [DIVIETO APA]: Non estrarre MAI il numero "7" se è vicino alla scritta "N° A.P.A.".
-  
-  - **daysVacation (Ferie godute nel mese):** Guarda ESATTAMENTE la colonna sotto l'intestazione "Ferie".
-    [ANTI-SCIVOLAMENTO OCR - REGOLA SALVAVITA]: Spesso la colonna Ferie è vuota e l'OCR "unisce" i numeri. Se sotto la riga delle intestazioni leggi una sequenza come "16,00  12,00  0,00", significa che 16,00 sono le Presenze, 12,00 sono i RIPOSI, le Ferie sono ASSENTI (quindi 0), e 0,00 è 26mi PTV. 
-    È SEVERAMENTE VIETATO assegnare il valore dei Riposi (che si aggira spesso tra 8,00 e 12,00) a daysVacation. Se la cella è vuota o fusa, DEVI restituire 0.
-    [DIVIETO RESIDUI]: È SEVERAMENTE VIETATO pescare numeri alla fine della riga (es. 25,00 o 3,00) perché appartengono a "Ferie anno prec./corrente". Estrai SOLO le ferie del mese.
-  
+ ### 2. PRESENZE, RIPOSI E FERIE (RFI) — ALGORITMO ANTI-CONFUSIONE (CRITICO)
+  La tabella in alto ha 10 colonne in quest'ordine ESATTO:
+  "Presenze | Riposi | Ferie | 26mi PTV | Malattie | Infortuni | Assenze retribuite | Assenze non retribuite | Ferie anno prec. | Ferie anno corrente".
+  I dati sono nella riga immediatamente sotto le intestazioni.
+
+  ⚠️ ERRORE PIÙ FREQUENTE E GRAVE: scambiare i RIPOSI per i giorni lavorati (daysWorked).
+  Quando la colonna "Presenze" è VUOTA l'OCR produce una sequenza di numeri che PARTE da
+  "Riposi": il primo numero NON è daysWorked.
+  - Esempio reale (Marzo, 31 giorni): riga "9,00  22,00  0,00" con "Presenze" VUOTA significa
+    Presenze = 0, RIPOSI = 9, FERIE = 22, 26mi PTV = 0  →  daysWorked = 0, daysVacation = 22.
+  - Esempio opposto: riga "16,00  12,00  0,00" con "Presenze" VALORIZZATA significa
+    Presenze = 16, RIPOSI = 12, FERIE = 0, 26mi PTV = 0  →  daysWorked = 16, daysVacation = 0.
+
+  ESEGUI SEMPRE QUESTO ALGORITMO, nell'ordine:
+  1. RIPOSI (2ª colonna): per un dipendente a tempo pieno i riposi settimanali sono SEMPRE
+     presenti, tipicamente tra 4 e 13. RIPOSI = 0 è praticamente IMPOSSIBILE. Individua quale
+     numero è Riposi: quel numero NON finirà MAI in daysWorked né in daysVacation.
+  2. daysWorked = SOLO il numero fisicamente incolonnato sotto "Presenze" (1ª colonna).
+     [REGOLA DELLA CELLA VUOTA]: se sotto "Presenze" non c'è alcun numero, daysWorked = 0.
+     NON prendere "il primo numero disponibile" spostandoti a destra: se il primo numero è
+     incolonnato sotto "Riposi", allora daysWorked = 0.
+  3. daysVacation = SOLO il numero sotto "Ferie" (3ª colonna). Cella vuota → 0.
+  4. daysPaidLeave = SOLO il numero sotto "Assenze retribuite" (7ª colonna, dopo "Infortuni"
+     e prima di "Assenze non retribuite"): permessi/distacco sindacale, congedi e simili.
+     Cella vuota → 0.
+  5. 26mi PTV (4ª colonna) è quasi sempre 0,00: non è né presenze né ferie né riposi.
+  6. CONTROLLO DI QUADRATURA (obbligatorio): Presenze + Riposi + Ferie + 26mi PTV + Malattie
+     + Infortuni + Assenze retribuite + Assenze non retribuite ≈ giorni del mese (28-31).
+     ⚠️ La somma da sola NON basta a disambiguare: "9 Presenze + 0 Riposi + 22 Ferie" e
+     "0 Presenze + 9 Riposi + 22 Ferie" fanno entrambe 31. Il discriminante è il punto 1:
+     se la tua lettura porta a RIPOSI = 0, è SBAGLIATA — il numero che hai messo in
+     daysWorked è in realtà RIPOSI, quindi daysWorked = 0. Ricomincia dal punto 1.
+
+  [DIVIETO ASSOLUTO]: è SEVERAMENTE VIETATO mettere in daysWorked un numero incolonnato
+  sotto "Riposi", "Malattie", "Infortuni", "Ferie anno prec." o "Ferie anno corrente"
+  (es. se c'è 31 sotto "Malattie", daysWorked = 0).
+  [DIVIETO RESIDUI FERIE]: per daysVacation non pescare le ultime due colonne "Ferie anno
+  prec./corrente": estrai SOLO le ferie del mese (3ª colonna).
+  [DIVIETO APA]: non estrarre MAI il numero accanto alla scritta "N° A.P.A." (es. il "7").
+
  ### 3. TICKET RESTAURANT (Codici 0E99 / 0299 / 0293)
-  - Cerca questi codici in TUTTE le pagine. 
+  - Cerca questi codici in TUTTE le pagine.
   - Estrai ESATTAMENTE il valore dalla colonna "Aliquota" (es. 5.29, 7.00). 
   - IGNORA TASSATIVAMENTE la colonna "Parametro". Se non trovi il codice, restituisci 0.0.
   
@@ -185,7 +211,7 @@ const PROMPT_RFI = `
   
   Esempio di output perfetto:
   {
-    "isCUD": false, "month": 3, "year": 2019, "daysWorked": 18.0, "daysVacation": 1.0, "ticketRate": 7.0, "arretrati": 158.12, "eventNote": "[Malattia/Carenza]", "aiWarning": "Nessuna anomalia",
+    "isCUD": false, "month": 3, "year": 2019, "daysWorked": 18.0, "daysVacation": 1.0, "daysPaidLeave": 0.0, "ticketRate": 7.0, "arretrati": 158.12, "eventNote": "[Malattia/Carenza]", "aiWarning": "Nessuna anomalia",
     "fondo_pregresso_31_12": 2938.55, "imponibile_tfr_mensile": 2107.91,
     "codes": {
       "0152": 576.06, "0421": 0.0, "0423": 0.0, "0457": 140.00, "0470": 0.0, "0482": 0.0, "0496": 0.0, "0687": 0.0, "0686": 0.0, "0AA1": 0.0, "0576": 0.0, "0584": 64.00, "0919": 0.0, "0920": 0.0, "0932": 0.0, "0933": 0.0, "0995": 0.0, "0996": 0.0, "0376": 0.0
@@ -210,19 +236,45 @@ const PROMPT_TRENITALIA = `
   ### 1. DATI BASE
   - "month" (numero 1-12) e "year" (4 cifre). Identificali dalla testata del cedolino.
 
- ### 2. PRESENZE E FERIE (TRENITALIA) - REGOLA DELL'INCOLONNAMENTO (CRITICA)
-  La tabella in alto ha questa intestazione esatta: "Presenze | Riposi | Ferie | 26mi PTV | Malattie | Infortuni ... | Ferie anno prec. | Ferie anno corrente".
-  I dati si trovano nella riga sottostante. Applica questa logica TASSATIVA:
+ ### 2. PRESENZE, RIPOSI E FERIE (TRENITALIA) — ALGORITMO ANTI-CONFUSIONE (CRITICO)
+  La tabella in alto ha 10 colonne in quest'ordine ESATTO:
+  "Presenze | Riposi | Ferie | 26mi PTV | Malattie | Infortuni | Assenze retribuite | Assenze non retribuite | Ferie anno prec. | Ferie anno corrente".
+  I dati sono nella riga immediatamente sotto le intestazioni.
 
-  - **daysWorked (Giorni Lavorati):** Guarda ESATTAMENTE sotto l'intestazione "Presenze" (è la primissima colonna a sinistra).
-    [REGOLA DELLA CELLA VUOTA]: Se la colonna "Presenze" è vuota o contiene spazi, DEVI RESTITUIRE 0. NON cercare il "primo numero disponibile" spostandoti a destra.
-    [DIVIETO ASSOLUTO]: È SEVERAMENTE VIETATO assegnare ai giorni lavorati i numeri presenti sotto le colonne "Malattie" o "Infortuni". (Es. se c'è 31 sotto Malattie, daysWorked è 0).
-    [DIVIETO APA]: Non estrarre MAI il numero "7" se è vicino alla scritta "N° A.P.A.".
+  ⚠️ ERRORE PIÙ FREQUENTE E GRAVE: scambiare i RIPOSI per i giorni lavorati (daysWorked).
+  Quando la colonna "Presenze" è VUOTA l'OCR produce una sequenza di numeri che PARTE da
+  "Riposi": il primo numero NON è daysWorked.
+  - Esempio reale (Marzo, 31 giorni): riga "9,00  22,00  0,00" con "Presenze" VUOTA significa
+    Presenze = 0, RIPOSI = 9, FERIE = 22, 26mi PTV = 0  →  daysWorked = 0, daysVacation = 22.
+  - Esempio opposto: riga "16,00  12,00  0,00" con "Presenze" VALORIZZATA significa
+    Presenze = 16, RIPOSI = 12, FERIE = 0, 26mi PTV = 0  →  daysWorked = 16, daysVacation = 0.
 
-  - **daysVacation (Ferie godute nel mese):** Guarda ESATTAMENTE la colonna sotto l'intestazione "Ferie".
-    [ANTI-SCIVOLAMENTO OCR - REGOLA SALVAVITA]: Spesso la colonna Ferie è vuota e l'OCR "unisce" i numeri. Se sotto la riga delle intestazioni leggi una sequenza come "16,00  12,00  0,00", significa che 16,00 sono le Presenze, 12,00 sono i RIPOSI, le Ferie sono ASSENTI (quindi 0), e 0,00 è 26mi PTV.
-    È SEVERAMENTE VIETATO assegnare il valore dei Riposi (che si aggira spesso tra 8,00 e 12,00) a daysVacation. Se la cella è vuota o fusa, DEVI restituire 0.
-    [DIVIETO RESIDUI]: È SEVERAMENTE VIETATO pescare numeri alla fine della riga (es. 25,00 o 3,00) perché appartengono a "Ferie anno prec./corrente". Estrai SOLO le ferie del mese.
+  ESEGUI SEMPRE QUESTO ALGORITMO, nell'ordine:
+  1. RIPOSI (2ª colonna): per un dipendente a tempo pieno i riposi settimanali sono SEMPRE
+     presenti, tipicamente tra 4 e 13. RIPOSI = 0 è praticamente IMPOSSIBILE. Individua quale
+     numero è Riposi: quel numero NON finirà MAI in daysWorked né in daysVacation.
+  2. daysWorked = SOLO il numero fisicamente incolonnato sotto "Presenze" (1ª colonna).
+     [REGOLA DELLA CELLA VUOTA]: se sotto "Presenze" non c'è alcun numero, daysWorked = 0.
+     NON prendere "il primo numero disponibile" spostandoti a destra: se il primo numero è
+     incolonnato sotto "Riposi", allora daysWorked = 0.
+  3. daysVacation = SOLO il numero sotto "Ferie" (3ª colonna). Cella vuota → 0.
+  4. daysPaidLeave = SOLO il numero sotto "Assenze retribuite" (7ª colonna, dopo "Infortuni"
+     e prima di "Assenze non retribuite"): permessi/distacco sindacale, congedi e simili.
+     Cella vuota → 0.
+  5. 26mi PTV (4ª colonna) è quasi sempre 0,00: non è né presenze né ferie né riposi.
+  6. CONTROLLO DI QUADRATURA (obbligatorio): Presenze + Riposi + Ferie + 26mi PTV + Malattie
+     + Infortuni + Assenze retribuite + Assenze non retribuite ≈ giorni del mese (28-31).
+     ⚠️ La somma da sola NON basta a disambiguare: "9 Presenze + 0 Riposi + 22 Ferie" e
+     "0 Presenze + 9 Riposi + 22 Ferie" fanno entrambe 31. Il discriminante è il punto 1:
+     se la tua lettura porta a RIPOSI = 0, è SBAGLIATA — il numero che hai messo in
+     daysWorked è in realtà RIPOSI, quindi daysWorked = 0. Ricomincia dal punto 1.
+
+  [DIVIETO ASSOLUTO]: è SEVERAMENTE VIETATO mettere in daysWorked un numero incolonnato
+  sotto "Riposi", "Malattie", "Infortuni", "Ferie anno prec." o "Ferie anno corrente"
+  (es. se c'è 31 sotto "Malattie", daysWorked = 0).
+  [DIVIETO RESIDUI FERIE]: per daysVacation non pescare le ultime due colonne "Ferie anno
+  prec./corrente": estrai SOLO le ferie del mese (3ª colonna).
+  [DIVIETO APA]: non estrarre MAI il numero accanto alla scritta "N° A.P.A." (es. il "7").
 
  ### 3. TICKET RESTAURANT (Codici 0E99 / 0299 / 0293)
   - Cerca questi codici in TUTTE le pagine.
@@ -284,7 +336,7 @@ const PROMPT_TRENITALIA = `
 
   Esempio di output perfetto:
   {
-    "isCUD": false, "month": 3, "year": 2019, "daysWorked": 18.0, "daysVacation": 1.0, "ticketRate": 7.0, "arretrati": 158.12, "eventNote": "[Malattia/Carenza]", "aiWarning": "Nessuna anomalia",
+    "isCUD": false, "month": 3, "year": 2019, "daysWorked": 18.0, "daysVacation": 1.0, "daysPaidLeave": 0.0, "ticketRate": 7.0, "arretrati": 158.12, "eventNote": "[Malattia/Carenza]", "aiWarning": "Nessuna anomalia",
     "fondo_pregresso_31_12": 2938.55, "imponibile_tfr_mensile": 2107.91,
     "codes": {
       "0152": 576.06, "0421": 0.0, "0423": 0.0, "0457": 140.00, "0470": 0.0, "0482": 0.0, "0496": 0.0, "0687": 0.0, "0686": 0.0, "0AA1": 0.0, "0576": 0.0, "0584": 64.00, "0919": 0.0, "0920": 0.0, "0932": 0.0, "0933": 0.0, "0995": 0.0, "0996": 0.0, "0376": 0.0

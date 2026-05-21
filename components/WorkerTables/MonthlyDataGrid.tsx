@@ -9,6 +9,7 @@ import {
   evaluateFormula
 } from '../../types';
 import { parseLocalFloat, formatCurrency, formatDay } from '../../utils/formatters';
+import { PortalTooltip } from '../ui/PortalTooltip';
 import {
   MessageSquareText,
   X,
@@ -146,6 +147,11 @@ const INDENNITA_DETAILS: Record<string, IndennitaDetail> = {
     title: "Giorni Ferie (Moltiplicatore)",
     explanation: "Giorni di ferie goduti. Tetto max 28gg (Sent. Cass. 20216/2022).",
     location: "Testata del cedolino, riquadro 'Ferie' -> Colonna 'Godute' o 'Anno Corr.'."
+  },
+  "daysPaidLeave": {
+    title: "Assenze Retribuite (Informativa)",
+    explanation: "Giorni di assenza comunque pagata (es. permessi e distacco sindacale). Dato puramente informativo: NON entra nel divisore — i giorni non lavorati abbasserebbero la media giornaliera (Cass. 20216/2022).",
+    location: "Testata del cedolino, tabella presenze, colonna 'Assenze retribuite'."
   },
   "0457": {
     title: "Festivo Notturno (Alta Incidenza)",
@@ -438,6 +444,7 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
       if (
         col.id !== 'month' && col.id !== 'total' &&
         col.id !== 'daysWorked' && col.id !== 'daysVacation' &&
+        col.id !== 'daysPaidLeave' && // colonna informativa, fuori dal totale
         col.id !== 'ticket' && col.id !== 'note' &&
         col.id !== 'arretrati' // <--- MODIFICA: ESCLUDA ARRETRATI DAL TOTALE RIGA
       ) {
@@ -474,7 +481,7 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
   const annualStats = useMemo(() => {
     // MODIFICA: Aggiunto 'arretrati' alla lista delle esclusioni
     const indennitaCols = currentColumns.filter(col =>
-      !['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'note', 'arretrati'].includes(col.id)
+      !['month', 'total', 'daysWorked', 'daysVacation', 'daysPaidLeave', 'ticket', 'note', 'arretrati'].includes(col.id)
     );
     let totIndennita = 0;
     let totGiorniLav = 0;
@@ -1138,6 +1145,7 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
 
                   const vacDays = parseLocalFloat(row.daysVacation);
                   const workedDays = parseLocalFloat(row.daysWorked);
+                  const paidLeaveDays = parseLocalFloat(row.daysPaidLeave);
 
                   const prevTotal = ferieCumulateCounter;
                   ferieCumulateCounter += vacDays;
@@ -1149,21 +1157,23 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
 
                   // --- VALIDAZIONE DATI (Data Quality) ---
 
-                  // 1. Controllo Somma Giorni (Mese Reale)
-                  const totalDaysInput = workedDays + vacDays; // Se si aggiungono malattie, sommare qui
+                  // 1. Controllo Somma Giorni (Mese Reale): presenze + ferie + assenze retribuite
+                  const totalDaysInput = workedDays + vacDays + paidLeaveDays;
                   const daysInMonth = getDaysInMonth(selectedYear, rowIndex);
                   const isDayCountError = totalDaysInput > daysInMonth;
 
-                  // 2. Controllo Divisore (Fatal)
-                  // Se ho indennità (> 0) ma 0 giorni lavorati -> ERRORE
-                  // Calcoliamo se ci sono indennità (escludendo daysWorked, daysVacation etc)
+                  // 2. Controllo Divisore
+                  // Calcoliamo se ci sono indennità (escludendo i campi strutturali)
                   let hasIndennita = false;
                   currentColumns.forEach(c => {
-                    if (!['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'note'].includes(c.id)) {
+                    if (!['month', 'total', 'daysWorked', 'daysVacation', 'daysPaidLeave', 'ticket', 'note'].includes(c.id)) {
                       if (parseLocalFloat(row[c.id]) > 0) hasIndennita = true;
                     }
                   });
-                  const isDivisorError = hasIndennita && workedDays === 0;
+                  // È un errore reale SOLO se ci sono indennità con 0 giorni lavorati E nessuna
+                  // copertura del mese (né ferie né assenze retribuite). Un mese a 0 presenze
+                  // giustificato da ferie / permessi sindacali è normale (sfasamento ferroviario).
+                  const isDivisorError = hasIndennita && workedDays === 0 && vacDays === 0 && paidLeaveDays === 0;
 
                   // Colore Riga Validazione: Premium UX Puntamento
                   let rowClass = isActiveRow
@@ -1241,27 +1251,21 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
                                 }}
                                 title="Clicca per bloccare/sbloccare l'evidenziatore su questo mese"
                               >
-                                <div className="flex items-center gap-2 overflow-hidden relative group/ai">
+                                <div className="flex items-center gap-2 overflow-hidden relative">
                                   {isDivisorError ? (
-                                    <div className="text-red-600 animate-pulse" title="ERRORE: Indennità presenti senza giorni lavorati"><AlertCircle size={14} /></div>
+                                    <div className="text-red-600 animate-pulse" title="ERRORE: Indennità senza giorni lavorati né copertura ferie/assenze retribuite"><AlertCircle size={14} /></div>
                                   ) : isDayCountError ? (
                                     <div className="text-orange-500" title={`ATTENZIONE: Totale giorni (${totalDaysInput}) supera il limite del mese (${daysInMonth})`}><TriangleAlert size={14} /></div>
                                   ) : hasAiWarning ? (
-                                    <div className="text-red-500 cursor-help" title="Anomalia Rilevata dall'IA"><AlertCircle size={14} className="animate-bounce" /></div>
+                                    <PortalTooltip
+                                      panelClassName="w-48 p-2 bg-slate-900 text-white text-[10px] rounded shadow-xl whitespace-normal leading-tight border border-slate-700"
+                                      content={<><span className="font-bold text-red-400 block mb-1">Avviso AI:</span>{aiWarning}</>}
+                                    >
+                                      <div className="text-red-500 cursor-help"><AlertCircle size={14} className="animate-bounce" /></div>
+                                    </PortalTooltip>
                                   ) : aiWarning === "Nessuna anomalia" ? (
                                     <div className="text-emerald-500"><CheckCircle2 size={14} /></div>
                                   ) : null}
-
-                                  {hasAiWarning && (
-                                    <div className={`
-                                      opacity-0 invisible group-hover/ai:opacity-100 group-hover/ai:visible transition-all duration-300 delay-500
-                                      absolute left-full ml-2 ${rowIndex > 7 ? 'bottom-0' : 'top-0'}
-                                      w-48 p-2 bg-slate-900 text-white text-[10px] rounded shadow-xl z-[9999] whitespace-normal leading-tight border border-slate-700 pointer-events-none
-                                    `}>
-                                      <span className="font-bold text-red-400 block mb-1">Avviso AI:</span>
-                                      {aiWarning}
-                                    </div>
-                                  )}
 
                                   {/* Semaphore indicator for AI verification result */}
                                   {(() => {
@@ -1273,17 +1277,14 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
                                       : vs.status === 'warning'
                                         ? 'bg-amber-400'
                                         : 'bg-red-500';
+                                    const hasVerifyDetails = vs.discrepancies.length > 0 || !!vs.errorMessage;
                                     return (
-                                      <div className="relative group/verify flex-shrink-0">
-                                        <div className={`w-2 h-2 rounded-full ${dotColor} ring-1 ring-white/50`} />
-                                        {(vs.discrepancies.length > 0 || vs.errorMessage) && (
-                                          <div className={`
-                                            opacity-0 invisible group-hover/verify:opacity-100 group-hover/verify:visible
-                                            transition-all duration-200 delay-300
-                                            absolute left-full ml-2 ${rowIndex > 7 ? 'bottom-0' : 'top-0'}
-                                            w-64 p-2.5 bg-slate-900 text-white text-[10px] rounded-lg shadow-2xl z-[9999]
-                                            border border-slate-700 pointer-events-none whitespace-normal leading-relaxed
-                                          `}>
+                                      <PortalTooltip
+                                        wrapperClassName="flex-shrink-0"
+                                        disabled={!hasVerifyDetails}
+                                        panelClassName="w-64 p-2.5 bg-slate-900 text-white text-[10px] rounded-lg shadow-2xl border border-slate-700 whitespace-normal leading-relaxed"
+                                        content={hasVerifyDetails ? (
+                                          <>
                                             <span className={`font-bold block mb-1.5 text-[10px] uppercase tracking-wider ${vs.status === 'error' ? 'text-red-400' : 'text-amber-400'}`}>
                                               {vs.status === 'error' ? '⚠ Discrepanze trovate' : '⚡ Anomalie minori'}
                                             </span>
@@ -1293,9 +1294,11 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
                                             {vs.discrepancies.map((d, i) => (
                                               <div key={i} className="border-t border-slate-700/60 pt-1 mt-1 first:border-0 first:pt-0 first:mt-0">{d.message}</div>
                                             ))}
-                                          </div>
-                                        )}
-                                      </div>
+                                          </>
+                                        ) : null}
+                                      >
+                                        <div className={`w-2 h-2 rounded-full ${dotColor} ring-1 ring-white/50`} />
+                                      </PortalTooltip>
                                     );
                                   })()}
 
@@ -1319,7 +1322,31 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
                                   const discrepancyList = vs?.discrepancies ?? [];
                                   const hasDetails = discrepancyList.length > 0 || !!vs?.errorMessage;
                                   return (
-                                    <div className="relative group/vbtn flex-shrink-0">
+                                    /* Pannello dettaglio discrepanze: ancorato al tasto-scudo, reso in un
+                                       portale così è sempre sopra la tabella e mai clippato. Elenca TUTTE
+                                       le discrepanze, anche quelle su campi senza colonna (ticket, TFR). */
+                                    <PortalTooltip
+                                      wrapperClassName="flex-shrink-0"
+                                      disabled={!hasDetails}
+                                      panelClassName="w-72 p-2.5 bg-slate-900 text-white text-[10px] rounded-lg shadow-2xl border border-slate-700 whitespace-normal leading-relaxed text-left"
+                                      content={hasDetails ? (
+                                        <>
+                                          <span className={`font-bold block mb-1.5 uppercase tracking-wider ${vs?.status === 'error' ? 'text-red-400' : 'text-amber-400'}`}>
+                                            {vs?.errorMessage && discrepancyList.length === 0
+                                              ? '⚠ Errore di verifica'
+                                              : vs?.status === 'error'
+                                                ? `⚠ ${discrepancyList.length} discrepanze rilevate`
+                                                : `⚡ ${discrepancyList.length} anomalie minori`}
+                                          </span>
+                                          {vs?.errorMessage && (
+                                            <div className="text-red-300 border-t border-slate-700/60 pt-1 mt-1 first:border-0 first:pt-0 first:mt-0">{vs.errorMessage}</div>
+                                          )}
+                                          {discrepancyList.map((d, i) => (
+                                            <div key={i} className="border-t border-slate-700/60 pt-1 mt-1 first:border-0 first:pt-0 first:mt-0">{d.message}</div>
+                                          ))}
+                                        </>
+                                      ) : null}
+                                    >
                                       <button
                                         onClick={(e) => { e.stopPropagation(); if (!isLoading) onVerifyRequest(currentRows[rowIndex] as AnnoDati); }}
                                         tabIndex={-1}
@@ -1337,32 +1364,7 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
                                           : <ShieldCheck className="w-3.5 h-3.5" strokeWidth={vs ? 2.5 : 2} />
                                         }
                                       </button>
-                                      {/* Pannello dettaglio discrepanze: ancorato al tasto (target grande e visibile),
-                                          elenca TUTTE le discrepanze, anche quelle su campi senza colonna (ticket, TFR). */}
-                                      {hasDetails && (
-                                        <div className={`
-                                          opacity-0 invisible group-hover/vbtn:opacity-100 group-hover/vbtn:visible
-                                          transition-all duration-200 delay-150
-                                          absolute left-full ml-2 ${rowIndex > 7 ? 'bottom-0' : 'top-0'}
-                                          w-72 p-2.5 bg-slate-900 text-white text-[10px] rounded-lg shadow-2xl z-[9999]
-                                          border border-slate-700 pointer-events-none whitespace-normal leading-relaxed text-left
-                                        `}>
-                                          <span className={`font-bold block mb-1.5 uppercase tracking-wider ${vs?.status === 'error' ? 'text-red-400' : 'text-amber-400'}`}>
-                                            {vs?.errorMessage && discrepancyList.length === 0
-                                              ? '⚠ Errore di verifica'
-                                              : vs?.status === 'error'
-                                                ? `⚠ ${discrepancyList.length} discrepanze rilevate`
-                                                : `⚡ ${discrepancyList.length} anomalie minori`}
-                                          </span>
-                                          {vs?.errorMessage && (
-                                            <div className="text-red-300 border-t border-slate-700/60 pt-1 mt-1 first:border-0 first:pt-0 first:mt-0">{vs.errorMessage}</div>
-                                          )}
-                                          {discrepancyList.map((d, i) => (
-                                            <div key={i} className="border-t border-slate-700/60 pt-1 mt-1 first:border-0 first:pt-0 first:mt-0">{d.message}</div>
-                                          ))}
-                                        </div>
-                                      )}
-                                    </div>
+                                    </PortalTooltip>
                                   );
                                 })()}
 
@@ -1461,37 +1463,39 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
                                   </>
                                 )}
 
-                                {/* AI discrepancy indicator + tooltip with accept button */}
+                                {/* Indicatore discrepanza AI + popover interattivo con tasto "Accetta".
+                                    Reso in un portale (interactive): cliccabile e raggiungibile col mouse,
+                                    il ritardo di chiusura fa da ponte sul gap pallino→pannello. */}
                                 {cellDiscrepancy && !dragSelection.isDragging && (
-                                  <div className="absolute top-0.5 right-1 z-20 group/disc">
-                                    <div className={`w-2 h-2 rounded-full cursor-help ${rowVerifyState?.status === 'error' ? 'bg-red-400 shadow-[0_0_4px_rgba(248,113,113,0.8)]' : 'bg-amber-400 shadow-[0_0_4px_rgba(251,191,36,0.8)]'}`} />
-                                    <div className={`
-                                      opacity-0 invisible group-hover/disc:opacity-100 group-hover/disc:visible
-                                      pointer-events-none group-hover/disc:pointer-events-auto
-                                      transition-all duration-200 delay-200
-                                      absolute ${rowIndex > 7 ? 'bottom-full mb-1' : 'top-full mt-1'} right-0
-                                      w-56 bg-slate-900 border border-slate-700 rounded-lg shadow-2xl z-[9999] overflow-hidden
-                                    `}>
-                                      <div className="px-3 py-2.5">
-                                        <div className="text-[9px] uppercase tracking-wider text-slate-400 mb-1">AI Suggerisce</div>
-                                        <div className="font-bold text-white tabular-nums text-sm">
-                                          {cellDiscrepancy.suggested.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  <PortalTooltip
+                                    interactive
+                                    wrapperClassName="absolute top-0.5 right-1 z-20"
+                                    panelClassName="w-56 bg-slate-900 border border-slate-700 rounded-lg shadow-2xl overflow-hidden"
+                                    content={
+                                      <>
+                                        <div className="px-3 py-2.5">
+                                          <div className="text-[9px] uppercase tracking-wider text-slate-400 mb-1">AI Suggerisce</div>
+                                          <div className="font-bold text-white tabular-nums text-sm">
+                                            {cellDiscrepancy.suggested.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                          </div>
+                                          <div className="text-[9px] text-slate-500 mt-0.5">estratto: {cellDiscrepancy.extracted.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                                          <div className="text-[9px] text-slate-400 mt-1.5 leading-tight border-t border-slate-700/60 pt-1.5">{cellDiscrepancy.message}</div>
                                         </div>
-                                        <div className="text-[9px] text-slate-500 mt-0.5">estratto: {cellDiscrepancy.extracted.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-                                        <div className="text-[9px] text-slate-400 mt-1.5 leading-tight border-t border-slate-700/60 pt-1.5">{cellDiscrepancy.message}</div>
-                                      </div>
-                                      <button
-                                        className="w-full px-3 py-1.5 bg-emerald-700 hover:bg-emerald-600 text-white text-[10px] font-bold flex items-center justify-center gap-1 transition-colors border-t border-emerald-800"
-                                        onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          onAcceptCorrection?.(selectedYear, rowIndex, col.id, cellDiscrepancy.suggested);
-                                        }}
-                                      >
-                                        <CheckCircle2 className="w-3 h-3" /> Accetta correzione
-                                      </button>
-                                    </div>
-                                  </div>
+                                        <button
+                                          className="w-full px-3 py-1.5 bg-emerald-700 hover:bg-emerald-600 text-white text-[10px] font-bold flex items-center justify-center gap-1 transition-colors border-t border-emerald-800"
+                                          onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            onAcceptCorrection?.(selectedYear, rowIndex, col.id, cellDiscrepancy.suggested);
+                                          }}
+                                        >
+                                          <CheckCircle2 className="w-3 h-3" /> Accetta correzione
+                                        </button>
+                                      </>
+                                    }
+                                  >
+                                    <div className={`w-2 h-2 rounded-full cursor-help ${rowVerifyState?.status === 'error' ? 'bg-red-400 shadow-[0_0_4px_rgba(248,113,113,0.8)]' : 'bg-amber-400 shadow-[0_0_4px_rgba(251,191,36,0.8)]'}`} />
+                                  </PortalTooltip>
                                 )}
                               </div>
                             )}

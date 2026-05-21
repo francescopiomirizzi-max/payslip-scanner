@@ -61,7 +61,7 @@ const IndemnityPivotTable: React.FC<IndemnityPivotTableProps> = ({
     // Usiamo il motore universale. Togliamo le colonne di calcolo e di base (month, total, daysWorked, ecc)
     // per lasciare SOLO le indennità vere e proprie da mostrare nella Pivot
     return getColumnsByProfile(profilo, eliorType).filter(c =>
-      !['month', 'total', 'daysWorked', 'daysVacation', 'ticket', 'note', 'arretrati', 'coeffPercepito', 'coeffTicket'].includes(c.id)
+      !['month', 'total', 'daysWorked', 'daysVacation', 'daysPaidLeave', 'ticket', 'note', 'arretrati', 'coeffPercepito', 'coeffTicket'].includes(c.id)
     );
   }, [profilo, eliorType]);
 

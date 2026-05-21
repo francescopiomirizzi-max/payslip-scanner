@@ -44,18 +44,45 @@ ${ticketRule}
     companyRules = `
 ### REGOLE DI CALCOLO AZIENDALI — ${co} (struttura SAP/Zucchetti ferroviaria)
 
-**daysWorked — REGOLA DELL'INCOLONNAMENTO RIGIDO (CRITICA):**
-La tabella presenze in alto ha questa intestazione esatta:
-"Presenze | Riposi | Ferie | 26mi PTV | Malattie | Infortuni | ... | Ferie anno prec. | Ferie anno corrente"
-- daysWorked = valore ESATTAMENTE sotto la colonna "Presenze" (prima colonna a sinistra).
-- Se "Presenze" è vuota o assente → daysWorked = 0 è CORRETTO. NON spostarti a destra.
-- VIETATO usare i valori sotto "Malattie" o "Infortuni" come giorni lavorati.
-- VIETATO usare valori numerici delle ultime colonne (Ferie anno prec./corrente).
+**daysWorked — RIPOSI ≠ GIORNI LAVORATI (CRITICO, leggi due volte):**
+La tabella presenze ha 10 colonne in quest'ordine ESATTO:
+"Presenze | Riposi | Ferie | 26mi PTV | Malattie | Infortuni | Assenze retribuite | Assenze non retribuite | Ferie anno prec. | Ferie anno corrente".
+daysWorked corrisponde SOLO al numero fisicamente incolonnato sotto la 1ª colonna "Presenze".
+Il numero sotto la 2ª colonna "Riposi" (riposi settimanali) NON è daysWorked: MAI.
+
+⚠️ FALSO POSITIVO #1 DA NON COMMETTERE: segnalare un errore su daysWorked perché hai
+scambiato i RIPOSI per i giorni lavorati. Prima di segnalare daysWorked, fermati e rileggi.
+- daysWorked = 0 NON è un "valore mancante": per i cedolini ferroviari è normalissimo
+  (mese di sole ferie/permessi, sfasamento). La regola generale "valore mancante" NON si
+  applica a daysWorked.
+- I RIPOSI ci sono SEMPRE per un full-time (tipicamente 4-13, mai 0). Se nel JSON
+  daysWorked = 0 e nella riga presenze del PDF vedi un numero piccolo (≈4-13), quel numero
+  è RIPOSI, non Presenze: daysWorked = 0 è CORRETTO → NON segnalare alcuna discrepanza.
+- È VIETATO proporre come "suggested" di daysWorked il numero dei Riposi, delle Malattie,
+  degli Infortuni o delle ferie anno prec./corrente.
+
+QUANDO segnalare davvero una discrepanza su daysWorked:
+- SOLO se vedi con CERTEZZA ASSOLUTA un numero incolonnato ESATTAMENTE sotto "Presenze"
+  (1ª colonna) diverso dal valore estratto. In caso di minimo dubbio, il valore estratto
+  è corretto: NON segnalare.
+- Caso opposto: se daysWorked estratto è > 0 ma coincide col numero sotto "Riposi" mentre
+  "Presenze" è vuota → l'estrazione ha sbagliato: DISCREPANZA con suggested = 0.
+- Quadratura di controllo: Presenze + Riposi + Ferie + 26mi PTV + Malattie + Infortuni +
+  Assenze ≈ giorni del mese. Se per far quadrare la somma i RIPOSI risultassero 0, la tua
+  lettura è sbagliata.
 
 **daysVacation — DIVIETO SCIVOLAMENTO COLONNE:**
-- Leggi SOLO la colonna sotto "Ferie" (la terza intestazione).
-- I valori sotto "Riposi" (spesso 8-12) NON sono ferie: non assegnarli a daysVacation.
+- Leggi SOLO la colonna sotto "Ferie" (la 3ª intestazione).
+- I valori sotto "Riposi" (spesso 4-13) NON sono ferie: non assegnarli a daysVacation.
 - Se la colonna risulta vuota o fusa → daysVacation = 0 è CORRETTO.
+
+**daysPaidLeave — Assenze retribuite (campo INFORMATIVO):**
+- Leggi SOLO la colonna sotto l'intestazione "Assenze retribuite" (7ª colonna della tabella
+  presenze, dopo "Infortuni" e prima di "Assenze non retribuite"). Sono permessi e distacco
+  sindacale, congedi e simili assenze comunque pagate.
+- Se la colonna è vuota → daysPaidLeave = 0 è CORRETTO.
+- È un dato puramente informativo: NON entra nel divisore. Verifica solo che il valore
+  estratto coincida con quello incolonnato sul PDF, esattamente come per daysVacation.
 
 **Sfasamento Temporale Ferroviario:**
 Nel settore ferroviario (RFI/Trenitalia) le indennità sono pagate il mese successivo alla maturazione.
@@ -171,6 +198,10 @@ sul PDF che la voce è davvero assente.
 della checklist. Il cedolino contiene molte ALTRE voci (trattenute, addizionali IRPEF, quote
 sindacali/associative, recuperi anticipi, arrotondamenti, mutui, ecc.): NON sono di competenza
 di questa verifica — IGNORALE del tutto, non sono né errori né "valori mancanti".
+⚠️ ECCEZIONE CONTEGGI GIORNI — i campi "daysWorked", "daysVacation", "daysPaidLeave" possono
+valere LEGITTIMAMENTE 0: uno 0 su questi campi NON è di per sé un "valore mancante". Vale
+SOLO la regola aziendale specifica sopra. In particolare daysWorked = 0 è normale e corretto
+per i cedolini ferroviari; non segnalarlo scambiando i RIPOSI per i giorni lavorati.
 
 ### CHECKLIST CODICI INDENNITÀ (verifica obbligatoria, voce per voce)
 ${codeChecklist
@@ -188,7 +219,8 @@ Un codice della lista non presente nel JSON "codes" va trattato come estratto = 
   : `Per ogni codice nel sotto-oggetto "codes" cercalo nel PDF e confronta l'importo della colonna Competenze.`}
 
 ### MAPPATURA CAMPI STANDARD
-- "daysWorked" / "daysVacation" / "ticket" / "arretrati" → vedi regole aziendali sopra.
+- "daysWorked" / "daysVacation" / "daysPaidLeave" / "ticket" / "arretrati" → vedi regole aziendali sopra.
+  Nota: "daysPaidLeave" esiste solo per i profili ferroviari (RFI/Trenitalia); se non compare nei dati estratti, ignoralo.
 - "imponibile_tfr_mensile" → vedi Regola Globale TFR.
 - "fondo_pregresso_31_12" → riquadro TFR, la riga del TFR maturato al 31/12 dell'anno precedente
   (es. "TFR 31/12 A.P." / "TFR al 31.12 A.P."). Spesso VUOTA per chi è assunto nell'anno → 0.0 è
