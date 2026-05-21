@@ -236,5 +236,18 @@ il dato errato. Causa: con "Presenze" vuota, l'OCR produce una sequenza che part
   discrepanza, suggested = 0).
 - `npx tsc` exit 0, `vitest` 57/57, build OK.
 
+### Fix falso positivo verifica AI su daysWorked ✅ (stessa sessione)
+Segnalazione utente: la "Verifica dati con AI" segnala un errore su `daysWorked = 0`
+(corretto) perché il verificatore stesso, leggendo il PDF, scambia il numero dei Riposi
+per le Presenze e propone quel numero come valore corretto.
+- `verify-payslip.ts` — riscritto il blocco `daysWorked` RFI/TRENITALIA come "FALSO
+  POSITIVO #1 da non commettere": `daysWorked = 0` non è un valore mancante; un numero
+  piccolo (4-13) nella riga presenze è RIPOSI, non Presenze; vietato proporre il valore
+  dei Riposi come `suggested`; si segnala solo vedendo con certezza un numero sotto
+  "Presenze". Mantenuto il caso opposto (estratto > 0 = valore dei Riposi → suggested 0).
+- `verify-payslip.ts` — aggiunta "ECCEZIONE CONTEGGI GIORNI" alla regola comune "VALORE
+  MANCANTE": uno 0 su daysWorked/daysVacation/daysPaidLeave non è di per sé un valore
+  mancante. `npx tsc` exit 0, build OK.
+
 ### Follow-up
 - Test manuale end-to-end con i PDF reali Marzo/Aprile/Agosto/Settembre 2007 (richiede `netlify dev`).
