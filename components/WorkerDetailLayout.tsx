@@ -69,6 +69,7 @@ interface WorkerDetailLayoutProps {
   onContainerScroll: (e: React.UIEvent<HTMLDivElement>) => void;
   payslipFiles: string[];
   currentFileIndex: number;
+  currentFileMonthLabel: string | null;
   isSniperMode: boolean;
   onToggleSniper: () => void;
   isProcessing: boolean;
@@ -76,7 +77,6 @@ interface WorkerDetailLayoutProps {
   imgRef: React.RefObject<HTMLImageElement>;
   containerRef: React.RefObject<HTMLDivElement>;
   fileInputRef: React.RefObject<HTMLInputElement>;
-  batchInputRef: React.RefObject<HTMLInputElement>;
   imgScale: number;
   imgPos: { x: number; y: number };
   imgRotation: number;
@@ -177,8 +177,8 @@ const WorkerDetailLayout: React.FC<WorkerDetailLayoutProps> = ({
   isQRModalOpen, onOpenQR, onCloseQR, onQRData,
   activeTab, onSetActiveTab, archiveCount,
   isExplainerOpen, onCloseExplainer, isExplaining, explanationData, onContainerScroll,
-  payslipFiles, currentFileIndex, isSniperMode, onToggleSniper, isProcessing,
-  selectionBox, imgRef, containerRef, fileInputRef, batchInputRef,
+  payslipFiles, currentFileIndex, currentFileMonthLabel, isSniperMode, onToggleSniper, isProcessing,
+  selectionBox, imgRef, containerRef, fileInputRef,
   imgScale, imgPos, imgRotation, imgFilter, isDragging,
   onPrevFile, onNextFile, onDeleteCurrentFile, onImageUpload,
   onDragOver, onDrop, onMouseDown, onMouseMove, onMouseUp,
@@ -869,14 +869,13 @@ const WorkerDetailLayout: React.FC<WorkerDetailLayoutProps> = ({
               <SplitViewViewer
                 payslipFiles={payslipFiles}
                 currentFileIndex={currentFileIndex}
-                isBatchProcessing={isBatchProcessing}
+                currentFileMonthLabel={currentFileMonthLabel}
                 isSniperMode={isSniperMode}
                 isProcessing={isProcessing}
                 selectionBox={selectionBox}
                 imgRef={imgRef}
                 containerRef={containerRef}
                 fileInputRef={fileInputRef}
-                batchInputRef={batchInputRef}
                 imgScale={imgScale}
                 imgPos={imgPos}
                 imgRotation={imgRotation}
@@ -888,7 +887,6 @@ const WorkerDetailLayout: React.FC<WorkerDetailLayoutProps> = ({
                 onNextFile={onNextFile}
                 onDeleteCurrentFile={onDeleteCurrentFile}
                 onImageUpload={onImageUpload}
-                onBatchUpload={onBatchUpload}
                 onDragOver={onDragOver}
                 onDrop={onDrop}
                 onMouseDown={onMouseDown}

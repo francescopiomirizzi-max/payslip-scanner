@@ -1,3 +1,89 @@
+# Sessione 2026-05-22 (c) — Fix UX: Dynamic Island perde l'upload al refocus
+
+> **Problema 1:** uscendo dalla scheda durante un upload (per controllare altro sul PC)
+> e tornando, la Dynamic Island perde la Live Activity di caricamento e mostra il
+> messaggio "Bentornato!".
+>
+> **Causa:** Supabase ri-emette l'evento `SIGNED_IN` ogni volta che la scheda riprende
+> il focus. `useAuth` mostrava "Bentornato!" su OGNI `SIGNED_IN` → la notifica impostava
+> `mode='notification'` nel context. In DynamicIsland la visibilità dell'upload era
+> ancorata a `globalMode==='uploading'` → la notifica lo sovrascriveva e la Live
+> Activity spariva, senza più tornare per il resto dell'upload.
+
+## Plan — fix 1
+
+- [x] `useAuth.ts`: "Bentornato!" solo su login vero (transizione non-auth → auth),
+      non sui re-emit di `SIGNED_IN` al refocus della scheda.
+- [x] `DynamicIsland.tsx`: ancorare la priorità dell'upload a `uploadState.isUploading`
+      (stato reale) invece di `globalMode`, così nessuna notifica può nascondere un
+      caricamento in corso.
+- [x] `tsc` + test + build verdi.
+
+## Review — fix 1
+
+Implementato e verificato (`tsc` exit 0 · 71/71 test · build OK). 2 cause, 2 fix:
+
+- `useAuth.ts` — "Bentornato!" mostrato solo su un login vero (transizione
+  non-autenticato → autenticato), tracciata con `wasAuthenticatedRef`. I re-emit di
+  `SIGNED_IN` di Supabase al rientro sulla scheda non generano più la notifica.
+- `DynamicIsland.tsx` — `uploadingActive` ora deriva da `uploadState.isUploading`
+  (stato reale del caricamento) e il mode è forzato a `'uploading'`. Nessuna notifica,
+  da qualunque sorgente, può più nascondere un upload in corso.
+
+Effetto: uscendo e rientrando nella scheda durante un upload, la Live Activity resta
+visibile e non compare più il "Bentornato!". Da validare sul sito dopo il deploy.
+
+## Plan — fix 2 (visore ↔ tabella)
+
+Richiesta: (a) la tabella seleziona in automatico il mese mostrato nel visore;
+(b) badge col nome del mese nella barra in alto del visore. Sincronia una-via
+(visore → tabella), come scelto dall'utente.
+
+- [x] `constants.tsx`: helper `parseMonthFromFilename` (mese+anno dal nome file).
+- [x] `WorkerDetailPage.tsx`: stato `payslipFileNames` parallelo a `payslipFiles`
+      (sync in handleImageUpload / handleDrop / handleDeleteCurrentFile); deriva
+      `currentFileMonth` + `currentFileMonthLabel`.
+- [x] `SplitViewViewer.tsx` + `WorkerDetailLayout.tsx`: prop `currentFileMonthLabel`,
+      badge mese nella barra in alto del visore.
+- [x] `MonthlyDataGrid.tsx`: props `activeMonthIndex` / `activeYear`; switch anno +
+      evidenziazione riga + `scrollIntoView` del mese mostrato nel visore.
+- [x] `tsc` + test + build verdi.
+
+## Review — fix 2
+
+Implementato e verificato (`tsc` exit 0 · 71/71 test · build OK). 6 file:
+
+- `constants.tsx` — helper `parseMonthFromFilename(name)`: mese (0-11) + anno dal nome
+  del file (nome esteso del mese, o numerico 01-12; anno 20xx).
+- `WorkerDetailPage.tsx` — stato `payslipFileNames` parallelo a `payslipFiles`
+  (sincronizzato nei 3 handler che mutano i file); derivati `currentFileMonth`,
+  `currentFileMonthLabel` e `activeMonthIndex` / `activeYear` (attivi solo a visore aperto).
+- `SplitViewViewer.tsx` — badge col mese del PDF corrente come overlay in basso a
+  sinistra sul documento (icona calendario + "Mese Anno").
+- `WorkerDetailLayout.tsx` — pass-through del prop `currentFileMonthLabel`.
+- `MonthlyDataGrid.tsx` — props `activeMonthIndex` / `activeYear`; effetto che porta la
+  tabella sull'anno del cedolino mostrato; riga del mese evidenziata (accento indaco) e
+  portata in vista con `scrollIntoView`.
+
+Comportamento: navigando i PDF nel visore (◀ ▶) il badge si aggiorna e la tabella
+evidenzia/scrolla automaticamente sul mese corrispondente. Sola direzione visore →
+tabella, come richiesto.
+
+Limite: il mese si ricava dal NOME del file. File senza mese nel nome → niente badge né
+sync per quel file (gli altri funzionano). Verifica reale da fare sul sito.
+
+Aggiustamenti post-test utente: (1) il badge nella barra comandi la tagliava → spostato
+a overlay sul PDF (basso a sinistra); (2) evidenziazione riga troppo chiara → resa più
+marcata (sfondo indaco pieno + ring + accento laterale); (3) rimosso il pulsante "Smart
+Upload 12" dal visore: duplicava il "Tasto AI Agent" (stesso `handleBatchUpload`).
+Rimosso anche il ref ormai orfano `batchInputRef` (SplitViewViewer, WorkerDetailLayout,
+WorkerDetailPage, usePayslipUpload). (4) badge ri-posizionato nella barra in alto del
+visore, tra navigatore file e OCR (lo spazio liberato dallo Smart Upload). (5) rimosso
+lo `scrollIntoView` automatico: al cambio mese la schermata non scatta più, resta la
+sola evidenziazione (ben visibile) della riga. `tsc` exit 0 · 71/71 test · build OK.
+
+---
+
 # Sessione 2026-05-22 (b) — Fix slittamento Presenze: caso "mese sparso" (Aprile 2008)
 
 > **Problema:** `TRENITALIA/CATANEO PASQUALE/2008/Aprile 2008.PDF` — cella "Presenze"

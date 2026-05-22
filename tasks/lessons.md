@@ -457,3 +457,23 @@ Ho aggiunto un nuovo profilo a `scan-payslip.ts` (estrazione) ma dimenticato `ve
 3. **Limitare il blur**: `blur-[100px]` è spesso eccessivo. `blur-[60px]` con un blob più piccolo dà effetto simile senza overflow.
 
 **Pattern applicato nelle 3 card DashboardPage**: combinati 1+2 (inner wrapper + clip-path). Per DynamicIsland non applicabile clip-path perché borderRadius è animato, ma il fix Lezione 7 + Lezione 6 + rimozione del `layout` dal glow esterno è bastato.
+
+### Lezione 12 (2026-05-22): sincronizzazione UI — evidenzia, non scrollare in automatico
+
+Implementando la sync visore→tabella (badge mese + selezione automatica della riga del
+mese mostrato nel visore), il primo tentativo usava `scrollIntoView({behavior:'smooth'})`
+sulla riga sincronizzata. L'utente l'ha trovato **fastidioso**: a ogni cambio file la
+schermata "scattava" su/giù.
+
+**Lezione:** per una sincronizzazione di selezione, l'**evidenziazione** (sfondo/ring ben
+visibile) basta ed è non invasiva. Lo scroll automatico va evitato: sposta il punto di
+vista dell'utente senza che l'abbia chiesto. Se la lista è corta (qui 12 righe, tutte a
+schermo) non serve; se fosse lunga, al massimo `scrollIntoView({block:'nearest'})`, che
+scrolla solo se l'elemento è davvero fuori vista.
+
+**Corollario (stessa sessione):** un nuovo elemento UI va inserito verificando lo spazio
+REALE del contenitore. Il badge del mese, messo nella barra comandi del visore mentre
+c'era ancora il pulsante "Smart Upload", la tagliava. Rimosso quel pulsante (doppione
+dell'"AI Agent" — stesso `handleBatchUpload`), lo spazio si è liberato e il badge ci sta.
+Anche: un primo highlight `bg-indigo-50` era troppo chiaro → quasi invisibile; servono
+tinte piene (`bg-indigo-200` / `dark:bg-indigo-500/30`) perché una selezione si veda.

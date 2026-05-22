@@ -198,6 +198,9 @@ interface MonthlyDataGridProps {
   onVerifyRequest?: (row: AnnoDati) => void;
   onAcceptCorrection?: (year: number, monthIndex: number, field: string, value: number) => void;
   onAcceptAllCorrections?: (year: number, monthIndex: number) => void;
+  // Sincronizzazione col visore: mese (0-11) e anno del PDF attualmente mostrato.
+  activeMonthIndex?: number | null;
+  activeYear?: number | null;
 }
 
 // parseLocalFloat importato da formatters
@@ -221,6 +224,8 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
   onVerifyRequest,
   onAcceptCorrection,
   onAcceptAllCorrections,
+  activeMonthIndex = null,
+  activeYear = null,
 }) => {
   const [selectedYear, setSelectedYear] = useState<number>(initialYear);
 
@@ -347,6 +352,17 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
     setSelectedYear(year);
     onYearChange(year);
   };
+
+  // Sincronizzazione visore → tabella: quando nel visore cambia il PDF mostrato,
+  // porta la tabella sull'anno di quel cedolino. Dipende solo dal file mostrato,
+  // così un cambio anno manuale dell'utente non viene sovrascritto.
+  useEffect(() => {
+    if (activeYear != null && activeYear !== selectedYear) {
+      setSelectedYear(activeYear);
+      onYearChange(activeYear);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeYear, activeMonthIndex]);
 
   // Funzioni Tasti Laterali
   const startScrolling = (direction: 'left' | 'right') => {
@@ -1182,8 +1198,19 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
                   if (isDayCountError) rowClass = 'bg-orange-50 hover:bg-orange-100 ring-1 ring-orange-200 z-10 relative';
                   if (isDivisorError) rowClass = 'bg-red-50 hover:bg-red-100 ring-1 ring-red-200 z-10 relative';
 
+                  // Riga sincronizzata col visore: il PDF mostrato si riferisce a questo mese.
+                  const isViewerSyncedRow =
+                    activeMonthIndex === rowIndex &&
+                    (activeYear == null || activeYear === selectedYear);
+                  if (isViewerSyncedRow) {
+                    rowClass = 'bg-indigo-200 dark:bg-indigo-500/30 shadow-[inset_6px_0_0_0_#4f46e5] dark:shadow-[inset_6px_0_0_0_#22d3ee] ring-2 ring-indigo-500 dark:ring-cyan-400 z-30 relative transition-all duration-300';
+                  }
+
                   return (
-                    <tr key={rowIndex} className={`transition-colors duration-75 h-10 ${rowClass}`}>
+                    <tr
+                      key={rowIndex}
+                      className={`transition-colors duration-75 h-10 ${rowClass}`}
+                    >
                       {currentColumns.map((col, colIndex) => {
                         const cellValue = (row as any)[col.id];
                         const isTotal = col.id === 'total';

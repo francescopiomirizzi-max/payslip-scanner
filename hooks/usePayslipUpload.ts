@@ -32,7 +32,6 @@ export function usePayslipUpload({
   const [isQRModalOpen, setIsQRModalOpen] = useState(false);
 
   const scanRef = useRef<HTMLInputElement>(null);
-  const batchInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (batchNotification) {
@@ -533,8 +532,6 @@ export function usePayslipUpload({
     setMonthlyInputs(currentAnni);
     if (lastDetectedYear) setCurrentYear(lastDetectedYear);
 
-    if (batchInputRef.current) batchInputRef.current.value = '';
-
     finishUpload(successCount, errorCount, isSingle ? 'single' : 'batch');
 
     // Feedback per-file: su un batch con errori elenca QUALI buste paga riprovare,
@@ -574,7 +571,6 @@ export function usePayslipUpload({
     isQRModalOpen,
     setIsQRModalOpen,
     scanRef,
-    batchInputRef,
     handleBatchUpload,
     handleFileUpload,
     handleQRData,

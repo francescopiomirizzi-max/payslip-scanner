@@ -1,18 +1,18 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import {
-  Loader2, FileStack, Sparkles,
+  Loader2,
   ChevronLeft, ChevronRight,
   Crosshair, Eye, ScanEye,
   Wand2, RotateCw, ZoomOut, ZoomIn, Maximize,
-  Trash2, X, Bot, Upload,
+  Trash2, X, Bot, Upload, CalendarDays,
 } from 'lucide-react';
 
 interface SplitViewViewerProps {
   // File state
   payslipFiles: string[];
   currentFileIndex: number;
-  isBatchProcessing: boolean;
+  currentFileMonthLabel: string | null;
 
   // OCR sniper
   isSniperMode: boolean;
@@ -23,7 +23,6 @@ interface SplitViewViewerProps {
   imgRef: React.RefObject<HTMLImageElement>;
   containerRef: React.RefObject<HTMLDivElement>;
   fileInputRef: React.RefObject<HTMLInputElement>;
-  batchInputRef: React.RefObject<HTMLInputElement>;
   imgScale: number;
   imgPos: { x: number; y: number };
   imgRotation: number;
@@ -41,7 +40,6 @@ interface SplitViewViewerProps {
 
   // Callbacks — upload
   onImageUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  onBatchUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
 
   // Callbacks — drag & drop
   onDragOver: (e: React.DragEvent) => void;
@@ -66,14 +64,13 @@ interface SplitViewViewerProps {
 const SplitViewViewer: React.FC<SplitViewViewerProps> = ({
   payslipFiles,
   currentFileIndex,
-  isBatchProcessing,
+  currentFileMonthLabel,
   isSniperMode,
   isProcessing,
   selectionBox,
   imgRef,
   containerRef,
   fileInputRef,
-  batchInputRef,
   imgScale,
   imgPos,
   imgRotation,
@@ -85,7 +82,6 @@ const SplitViewViewer: React.FC<SplitViewViewerProps> = ({
   onNextFile,
   onDeleteCurrentFile,
   onImageUpload,
-  onBatchUpload,
   onDragOver,
   onDrop,
   onMouseDown,
@@ -119,45 +115,6 @@ const SplitViewViewer: React.FC<SplitViewViewerProps> = ({
     {/* HEADER */}
     <div className="p-4 bg-slate-800/80 backdrop-blur border-b border-slate-700 flex justify-between items-center z-20">
       <div className="flex items-center gap-3">
-        {/* Batch upload button */}
-        <div className="relative mr-2">
-          <input
-            type="file"
-            multiple
-            accept="application/pdf,image/*"
-            ref={batchInputRef}
-            onChange={onBatchUpload}
-            className="hidden"
-          />
-          <button
-            onClick={() => batchInputRef.current?.click()}
-            disabled={isBatchProcessing}
-            className={`group relative px-5 py-2 rounded-xl font-bold text-sm text-white shadow-lg transition-all duration-300 overflow-hidden flex items-center gap-2.5 border border-white/10
-              ${isBatchProcessing
-                ? 'bg-slate-800 cursor-wait opacity-80'
-                : 'bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 shadow-indigo-500/30 hover:shadow-indigo-500/50 hover:-translate-y-0.5 active:scale-95'
-              }`}
-          >
-            {!isBatchProcessing && (
-              <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500 rotate-12" />
-            )}
-            {isBatchProcessing ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin text-violet-200" />
-                <span className="tracking-wide text-xs">AI WORKING...</span>
-              </>
-            ) : (
-              <>
-                <div className="relative">
-                  <FileStack className="w-4 h-4 text-white" strokeWidth={2.5} />
-                  <Sparkles className="w-2.5 h-2.5 absolute -top-2 -right-2 text-amber-300 animate-pulse" fill="currentColor" />
-                </div>
-                <span className="tracking-wide">Smart Upload 12</span>
-              </>
-            )}
-          </button>
-        </div>
-
         {/* File navigator or mode label */}
         {payslipFiles.length > 1 ? (
           <div className="flex items-center gap-2 bg-slate-950/50 rounded-lg p-1 border border-slate-700">
@@ -173,6 +130,14 @@ const SplitViewViewer: React.FC<SplitViewViewerProps> = ({
           <div className="flex items-center gap-2 text-slate-300">
             {isSniperMode ? <Crosshair className="w-5 h-5 text-red-500 animate-pulse" /> : <Eye className="w-5 h-5 text-indigo-400" />}
             <span className="text-xs font-bold uppercase tracking-wider">{isSniperMode ? 'MODALITÀ CECCHINO' : 'Visore Buste paga'}</span>
+          </div>
+        )}
+
+        {/* Badge col mese del PDF visualizzato (nello spazio liberato dallo Smart Upload) */}
+        {currentFileMonthLabel && (
+          <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-indigo-500/15 border border-indigo-400/30 text-indigo-300">
+            <CalendarDays className="w-3.5 h-3.5" />
+            <span className="text-xs font-bold tracking-wide whitespace-nowrap">{currentFileMonthLabel}</span>
           </div>
         )}
       </div>

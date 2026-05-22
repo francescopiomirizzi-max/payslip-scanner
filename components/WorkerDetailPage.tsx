@@ -14,6 +14,7 @@ import WorkerDetailLayout from './WorkerDetailLayout';
 import { printPayslipTables } from '../utils/printTables';
 import { Worker, AnnoDati, getColumnsByProfile, MONTH_NAMES } from '../types';
 import { SYSTEM_PROFILES, SYSTEM_PROFILE_KEYS, getCustomColorIndex } from '../config/profiles';
+import { parseMonthFromFilename } from '../constants';
 
 // --- CONFIGURAZIONE PROFILI PEC (derivata dal registro centralizzato) ---
 const PROFILE_CONFIG: Record<string, { label: string; pec: string }> = Object.fromEntries(
@@ -198,7 +199,6 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
     isQRModalOpen,
     setIsQRModalOpen,
     scanRef,
-    batchInputRef,
     handleBatchUpload,
     handleFileUpload,
     handleQRData,
@@ -249,12 +249,28 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
 
   const [showSplit, setShowSplit] = useState(false);
   const [payslipFiles, setPayslipFiles] = useState<string[]>([]);
+  // Nomi dei file paralleli a payslipFiles (gli URL blob non li conservano): servono
+  // a ricavare il mese di ogni PDF per badge + sincronizzazione con la tabella.
+  const [payslipFileNames, setPayslipFileNames] = useState<string[]>([]);
   const [currentFileIndex, setCurrentFileIndex] = useState(0);
   const [imgScale, setImgScale] = useState(1);
   const [imgPos, setImgPos] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [imgRotation, setImgRotation] = useState(0);
   const [imgFilter, setImgFilter] = useState<'none' | 'contrast'>('none');
+
+  // Mese/anno del PDF mostrato nel visore, ricavato dal nome del file. Alimenta il
+  // badge del visore e la sincronizzazione con la tabella (sola direzione visore → tabella).
+  const currentFileMonth = useMemo(
+    () => parseMonthFromFilename(payslipFileNames[currentFileIndex]),
+    [payslipFileNames, currentFileIndex]
+  );
+  const currentFileMonthLabel = currentFileMonth
+    ? `${MONTH_NAMES[currentFileMonth.monthIndex]}${currentFileMonth.year ? ` ${currentFileMonth.year}` : ''}`
+    : null;
+  // Attivi solo a visore aperto: pilotano l'evidenziazione del mese nella tabella.
+  const activeMonthIndex = showSplit && currentFileMonth ? currentFileMonth.monthIndex : null;
+  const activeYear = showSplit && currentFileMonth ? currentFileMonth.year : null;
 
   const handleZoom = (delta: number) => {
     setImgScale(prev => Math.max(0.5, Math.min(3, prev + delta)));
@@ -441,7 +457,9 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
         return a.name.localeCompare(b.name);
       });
       const newFiles = filesArray.map(file => URL.createObjectURL(file));
+      const newNames = filesArray.map(file => file.name);
       setPayslipFiles(prev => [...prev, ...newFiles]);
+      setPayslipFileNames(prev => [...prev, ...newNames]);
       setCurrentFileIndex(prev => prev === 0 && payslipFiles.length === 0 ? 0 : prev);
       setShowSplit(true);
       setImgScale(1); setImgPos({ x: 0, y: 0 }); setImgRotation(0); setImgFilter('none');
@@ -479,7 +497,9 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
         return a.name.localeCompare(b.name);
       });
       const newFiles = filesArray.map(file => URL.createObjectURL(file));
+      const newNames = filesArray.map(file => file.name);
       setPayslipFiles(prev => [...prev, ...newFiles]);
+      setPayslipFileNames(prev => [...prev, ...newNames]);
       if (payslipFiles.length === 0) {
         setCurrentFileIndex(0);
         setImgScale(1);
@@ -516,6 +536,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
   const handleDeleteCurrentFile = () => {
     const newFiles = payslipFiles.filter((_, i) => i !== currentFileIndex);
     setPayslipFiles(newFiles);
+    setPayslipFileNames(prev => prev.filter((_, i) => i !== currentFileIndex));
     if (newFiles.length > 0 && currentFileIndex >= newFiles.length) {
       setCurrentFileIndex(newFiles.length - 1);
     } else if (newFiles.length === 0) {
@@ -634,6 +655,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
       onContainerScroll={handleContainerScroll}
       payslipFiles={payslipFiles}
       currentFileIndex={currentFileIndex}
+      currentFileMonthLabel={currentFileMonthLabel}
       isSniperMode={isSniperMode}
       onToggleSniper={() => setIsSniperMode(!isSniperMode)}
       isProcessing={isProcessing}
@@ -641,7 +663,6 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
       imgRef={imgRef}
       containerRef={containerRef}
       fileInputRef={fileInputRef}
-      batchInputRef={batchInputRef}
       imgScale={imgScale}
       imgPos={imgPos}
       imgRotation={imgRotation}
@@ -685,6 +706,8 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
             onDataChange={handleDataChange}
             initialYear={currentYear}
             onYearChange={setCurrentYear}
+            activeMonthIndex={activeMonthIndex}
+            activeYear={activeYear}
             profilo={worker.profilo}
             eliorType={worker.eliorType}
             onCellFocus={handleCellFocus}
