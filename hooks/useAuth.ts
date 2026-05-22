@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useIsland } from '../IslandContext';
 import { getFormattedDate, getFormattedTime } from '../utils/formatters';
 import { supabase } from '../supabaseClient';
@@ -12,15 +12,26 @@ export const useAuth = (setViewMode: (mode: 'home' | 'simple' | 'complex' | 'sta
 
     const { showNotification } = useIsland();
 
+    // Supabase ri-emette `SIGNED_IN` a ogni rientro di focus sulla scheda: ci serve
+    // sapere se l'utente era GIÀ autenticato per distinguere un login vero da un re-emit.
+    const wasAuthenticatedRef = useRef(false);
+
     useEffect(() => {
         supabase.auth.getSession().then(({ data: { session } }) => {
+            wasAuthenticatedRef.current = !!session;
             setIsAuthenticated(!!session);
             setIsLoading(false);
         });
 
         const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-            setIsAuthenticated(!!session);
-            if (event === 'SIGNED_IN') {
+            const nowAuthenticated = !!session;
+            setIsAuthenticated(nowAuthenticated);
+
+            // "Bentornato!" SOLO su un login vero (transizione non-autenticato → autenticato).
+            // Supabase ri-emette `SIGNED_IN` anche quando la scheda riprende il focus: in quei
+            // casi l'utente è già autenticato → niente notifica, così non viene rubata la
+            // Live Activity di un upload in corso.
+            if (event === 'SIGNED_IN' && nowAuthenticated && !wasAuthenticatedRef.current) {
                 const now = new Date();
                 setTimeout(() => {
                     showNotification(
@@ -31,6 +42,7 @@ export const useAuth = (setViewMode: (mode: 'home' | 'simple' | 'complex' | 'sta
                     );
                 }, 1000);
             }
+            wasAuthenticatedRef.current = nowAuthenticated;
         });
 
         return () => subscription.unsubscribe();

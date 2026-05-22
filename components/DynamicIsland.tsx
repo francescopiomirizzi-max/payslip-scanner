@@ -139,12 +139,15 @@ const DynamicIsland = ({ workers = [] }: { workers?: { id: string | number; nome
         typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
     );
 
-    // Quando l'upload è minimized, l'isola principale rilascia il mode `uploading` e
-    // segue il localMode (idle/calc/ai/menu). Gli altri global mode (notification, stats,
-    // quick_actions) continuano ad avere priorità sul local.
-    const uploadingActive = globalMode === 'uploading' && !uploadState.minimized;
+    // L'upload in corso (non minimizzato) ha SEMPRE la priorità sull'isola: la sua
+    // visibilità è ancorata a `uploadState.isUploading` (lo stato reale del caricamento),
+    // NON a `globalMode`. Così nessuna notifica — nemmeno un evento di auth che rientra
+    // quando si torna sulla scheda — può rubargli la Live Activity.
+    // Quando l'upload è minimized, l'isola segue il localMode; gli altri global mode
+    // (notification, stats, quick_actions) restano prioritari sul local.
+    const uploadingActive = uploadState.isUploading && !uploadState.minimized;
     const mode = uploadingActive
-        ? globalMode
+        ? 'uploading'
         : (globalMode !== 'idle' && globalMode !== 'uploading')
             ? globalMode
             : localMode;
