@@ -305,16 +305,24 @@ export const handler: Handler = async (event) => {
     const monthSummary = JSON.stringify(monthData, null, 2);
     const fullPrompt = `${prompt}\n\n### DATI ESTRATTI DA VERIFICARE\n${monthSummary}`;
 
-    // 3. Call Gemini
+    // 3. Call Gemini — timeout esplicito così la Function non viene uccisa di colpo dal
+    // suo limite di esecuzione. Budget ~50s in produzione (netlify.toml timeout=60) e ~26s
+    // in locale (`netlify dev` gira con lambda-local a 30s). Override con AI_BUDGET_MS.
+    const isLocalDev = process.env.NETLIFY_DEV === "true";
+    const aiBudgetMs = Number(process.env.AI_BUDGET_MS) || (isLocalDev ? 26000 : 50000);
+
     const model = genAI.getGenerativeModel({
       model: GEMINI_MODEL,
       generationConfig: { responseMimeType: "application/json", temperature: 0.0 },
     });
 
-    const result = await model.generateContent([
-      fullPrompt,
-      { inlineData: { data: fileBase64, mimeType: fileMimeType } },
-    ]);
+    const result = await model.generateContent(
+      [
+        fullPrompt,
+        { inlineData: { data: fileBase64, mimeType: fileMimeType } },
+      ],
+      { timeout: aiBudgetMs }
+    );
 
     const raw = result.response.text().replace(/```json/g, "").replace(/```/g, "").trim();
     let parsed: { status: string; discrepancies: any[] };

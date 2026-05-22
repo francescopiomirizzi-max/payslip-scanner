@@ -1,3 +1,36 @@
+# Sessione 2026-05-22 (d) — Fix timeout Gemini (scan + verify)
+
+> **Problema:** errori frequenti "Request aborted" (scan-payslip, ~24s) e "Task timed
+> out after 30s" (verify-payslip).
+>
+> **Causa:** (1) il budget del retry in scan-payslip era fisso a 25s, tarato per una
+> Function da ~30s — ma `netlify.toml` dà 60s in produzione → le chiamate Gemini
+> venivano abortite a 24s pur avendo tempo. (2) verify-payslip non aveva alcun timeout
+> sulla chiamata Gemini → veniva uccisa di colpo dal limite della Function.
+>
+> Nota: in locale `netlify dev` gira con lambda-local a 30s (non rispetta netlify.toml).
+
+## Plan — fix timeout
+
+- [x] scan-payslip: budget del retry env-aware — ~50s in prod, ~26s in locale
+      (NETLIFY_DEV), override con `AI_BUDGET_MS`.
+- [x] verify-payslip: aggiunto timeout esplicito alla chiamata Gemini (stesso budget).
+- [x] `tsc` + build verdi.
+
+## Review — fix timeout
+
+`scan-payslip` `generateContentWithRetry`: il budget non è più fisso a 25s ma deriva
+dall'ambiente — 50s in produzione (netlify.toml timeout=60), 26s in locale. Così in
+produzione una chiamata lenta (30-45s) RIESCE invece di essere abortita a 24s.
+`verify-payslip`: la chiamata Gemini ha ora `{ timeout }` → fallisce in modo pulito
+invece di far scattare il kill secco della Function. Entrambi override con `AI_BUDGET_MS`.
+
+Limite: in locale resta il tetto di 30s di `netlify dev` (lambda-local). Il test reale va
+fatto sul sito in produzione. Se anche lì si va in timeout: il modello è troppo lento
+(provare `GEMINI_MODEL=gemini-2.5-flash`) o serve passare a Netlify Background Functions.
+
+---
+
 # Sessione 2026-05-22 (c) — Fix UX: Dynamic Island perde l'upload al refocus
 
 > **Problema 1:** uscendo dalla scheda durante un upload (per controllare altro sul PC)

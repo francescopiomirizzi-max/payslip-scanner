@@ -91,10 +91,11 @@ function cleanAndParseJSON(text: string): any {
 
 // --- RETRY GEMINI BUDGET-AWARE ---
 // La latenza dell'API Gemini è molto variabile (osservato 13s vs 249s sullo stesso file).
-// La vecchia logica faceva 3×16s = 48s e sforava il budget della Function (≈30s) abortendo
-// ogni chiamata "normale ma lenta" (~22s) senza mai completarla. Ora:
-//  - si tiene un budget totale e si dà al 1° tentativo quasi tutto il tempo (una chiamata
-//    di ~22s deve poter RIUSCIRE, non essere abortita al 16° secondo);
+// Il budget totale è dimensionato sul timeout REALE della Function: ~50s in produzione
+// (netlify.toml: timeout=60) e ~26s in locale, dove `netlify dev` gira con lambda-local
+// a 30s e ignora netlify.toml. Override con la env var AI_BUDGET_MS. Logica:
+//  - si dà al 1° tentativo quasi tutto il budget (una chiamata lenta deve poter RIUSCIRE,
+//    non essere abortita troppo presto);
 //  - si ritenta solo se resta budget reale, ruotando su una chiave diversa;
 //  - se il budget è finito si lancia un errore pulito PRIMA del kill secco della Function.
 async function generateContentWithRetry(
@@ -103,8 +104,10 @@ async function generateContentWithRetry(
   parts: any,
   opts: { totalBudgetMs?: number; perAttemptCapMs?: number } = {}
 ): Promise<any> {
-  const totalBudgetMs = opts.totalBudgetMs ?? 25000;
-  const perAttemptCapMs = opts.perAttemptCapMs ?? 24000;
+  const isLocalDev = process.env.NETLIFY_DEV === "true";
+  const defaultBudgetMs = Number(process.env.AI_BUDGET_MS) || (isLocalDev ? 26000 : 50000);
+  const totalBudgetMs = opts.totalBudgetMs ?? defaultBudgetMs;
+  const perAttemptCapMs = opts.perAttemptCapMs ?? (totalBudgetMs - 1000);
   const startKey = Math.floor(Math.random() * keys.length);
   const start = Date.now();
   let lastErr: any;
