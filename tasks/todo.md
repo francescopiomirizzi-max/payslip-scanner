@@ -1,3 +1,70 @@
+# Sessione 2026-05-22 (b) — Fix slittamento Presenze: caso "mese sparso" (Aprile 2008)
+
+> **Problema:** `TRENITALIA/CATANEO PASQUALE/2008/Aprile 2008.PDF` — cella "Presenze"
+> vuota, l'8 è nella colonna Riposi, daysWorked corretto = 0. Il sistema estrae 8.
+> La rete `reconcileRailwayAttendance` NON lo prende: scatta solo se la riga sfora i
+> 32,5 gg, ma Aprile somma ~29 (8 Riposi + 21 Assenze retribuite) → sotto soglia.
+> Anche la "verifica AI" ricasca nello stesso errore (ri-OCR dello stesso PDF).
+>
+> **Causa radice:** dai SOLI numeri il caso è indistinguibile da un mese lavorato
+> davvero poco (cfr. test reale "Giugno 2021": presenze=10, assenze=21 → giusto 10).
+> Il dato dirimente — "cella Presenze vuota?" — vive solo nell'immagine: va recuperato
+> all'OCR, non con una soglia numerica.
+
+## Plan
+
+- [x] Step 1 — Prompt RFI/TRENITALIA §2: nuovo campo top-level `presenzeVuota` (booleano),
+      lettura geometrica del 1° riquadro della tabella. Aggiornati esempi §2/§8/§9.
+- [x] Step 2 — `reconcileRailwayAttendance` a 3 livelli: (1) `presenzeVuota` = segnale
+      primario; (2) invariante numerica asimmetrica come rete; (3) caso ambiguo
+      (presenze piccolo + mese implausibilmente pieno) → daysWorked tenuto + avviso
+      "verifica manuale" invece di un numero sbagliato silenzioso (scelta utente).
+- [x] Step 3 — `verify-payslip.ts`: framing geometrico della cella Presenze vuota.
+- [x] Step 4 — Test: 4 casi reali Aprile 2008 (presenzeVuota true/false/assente +
+      precedenza del segnale); i 10 test esistenti restano verdi.
+- [x] Step 5 — `tsc --noEmit` + `npm test` verdi.
+
+## Review
+
+Implementato e verificato. Modifiche:
+- `scan-payslip.ts` — prompt RFI + TRENITALIA §2: aggiunto il booleano top-level
+  `presenzeVuota` con lettura geometrica del 1° riquadro della tabella; esempi §2/§8/§9
+  aggiornati.
+- `scan-payslip.ts` — `reconcileRailwayAttendance` riscritto a 3 livelli (segnale
+  `presenzeVuota` → rete numerica asimmetrica → segnalazione del dubbio). Nuova costante
+  `SOGLIA_MESE_PIENO = 26`. La vecchia logica a sola soglia 32,5 (che lasciava passare
+  Aprile 2008) è ora solo la rete di backup, non più l'unico meccanismo.
+- `verify-payslip.ts` — regola RFI/TRENITALIA daysWorked: aggiunto il controllo
+  geometrico esplicito della cella "Presenze" vuota.
+- `__tests__/reconcileAttendance.test.ts` — helper `j()` esteso con `extra`; nuovo blocco
+  di 4 test sul caso reale Aprile 2008.
+
+Verifica: `tsc --noEmit` exit 0 · `vitest run` 71/71 verdi (14 reconcile, di cui 4 nuovi) ·
+`npm run build` OK.
+
+Esito per Aprile 2008:
+- con prompt che produce `presenzeVuota:true` → daysWorked = 0 (corretto, nessun avviso).
+- se il prompt fallisse (`presenzeVuota:false`/assente) → daysWorked resta 8 MA con avviso
+  "⚠️ Giorni lavorati da verificare a mano" visibile in griglia e nelle note del mese:
+  niente più errore silenzioso sul divisore.
+
+Limite noto: il caso "presenze piccolo + mese pieno" è intrinsecamente ambiguo dai soli
+numeri (es. Giugno 2021, daysWorked=10 reale, ora riceve lo stesso avviso benigno). Per
+scelta esplicita dell'utente si preferisce un dubbio segnalato a un numero sbagliato
+nascosto.
+
+### Addendum — passaggio a gemini-3.5-flash (modello configurabile)
+
+Richiesta: passare da `gemini-2.5-flash` a un modello più recente. Il modello è ora
+centralizzato nella env var `GEMINI_MODEL` in tutte e 4 le Netlify function (scan-payslip,
+verify-payslip, scan-worker, ask-ai). Verificata via API ListModels la lista reale dei
+modelli sulla chiave: `gemini-3.5-flash` esiste ed è il flash stabile più recente
+(progressione 3 → 3.1 → 3.5; le 3.x precedenti sono "-preview"). Default in codice portato
+a `gemini-3.5-flash`; `GEMINI_MODEL` resta come override/rollback istantaneo (es.
+`GEMINI_MODEL=gemini-2.5-flash`). `tsc` exit 0. Da validare su buste reali dopo il deploy.
+
+---
+
 # Sessione 2026-05-21 — Fix swap Presenze/Riposi + timeout Gemini
 
 > **Problema 1 (priorità):** in estrazione l'IA confonde i giorni lavorati (Presenze)

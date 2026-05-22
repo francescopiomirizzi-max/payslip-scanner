@@ -20,6 +20,11 @@ const EXPLAINER_API_KEYS = dedupKeys(
   process.env.GOOGLE_API_KEY_AI
 );
 
+// --- MODELLO GEMINI CENTRALIZZATO ---
+// Override con la env var GEMINI_MODEL (es. da Netlify) per sperimentare un modello
+// diverso senza modificare il codice. Default: gemini-3.5-flash.
+const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-3.5-flash";
+
 // --- HELPER PULIZIA E UNIONE JSON (V20 - Somma Automatica Pagine) ---
 function cleanAndParseJSON(text: string): any {
   try {
@@ -127,29 +132,33 @@ async function generateContentWithRetry(
 // =========================================================================
 // 🔧 RICONCILIATORE RIGA PRESENZE (RFI / TRENITALIA)
 //
-// Verificato empiricamente su 8 cedolini reali (4 Trenitalia + 4 RFI):
-//  • l'IA legge CORRETTAMENTE una cella "Presenze" VALORIZZATA (1 / 8 / 10 / 18 / 18.5 /
-//    20 / 44 → tutti esatti) e la colonna "Ferie";
-//  • sbaglia SOLO quando la cella "Presenze" è VUOTA: in quel caso mette nel campo
-//    "presenze" il primo numero visibile, che fisicamente è la colonna RIPOSI (è il bug
-//    "giorni lavorati = riposi" segnalato dall'utente). Nessun prompt lo risolve: l'IA,
-//    interrogata direttamente, sostiene comunque che la cella non è vuota.
+// Problema: quando la cella "Presenze" del cedolino è VUOTA (il dipendente non ha
+// lavorato quel mese: solo riposi/ferie/permessi) l'OCR prende il primo numero della
+// riga — che fisicamente è la colonna RIPOSI — e lo scrive in `presenze`. daysWorked è
+// il divisore dei calcoli indennità: l'errore corrompe l'intera pratica.
 //
-// Correzione DETERMINISTICA. daysVacation e daysPaidLeave si leggono direttamente (colonne
-// con intestazione propria). Per daysWorked vale un'invariante ASIMMETRICA: una riga
-// presenze onesta di un singolo mese somma a ~28-31, mai oltre ~32 (può star sotto: giorni
-// non rendicontati; può star sopra solo nei conguagli multi-mese, che però hanno "presenze"
-// grande). Il bug invece inserisce un valore-presenze FANTASMA → sovra-conteggio.
-// → È il bug se: "presenze" è compatibile con un n° di riposi (4-16), la riga supera la
-//   soglia di un mese singolo, E azzerare "presenze" (= cella vuota) riporta la somma sotto
-//   soglia. Quest'ultima condizione distingue il bug da un conguaglio multi-mese (dove
-//   azzerare non basta). Una busta onesta non attiva mai la regola → MAI un falso
-//   azzeramento. NB: non si usano i giorni di calendario del mese come soglia — verificato
-//   che febbraio può sommare 31 > 29 giorni reali: la soglia è fissa.
+// Dai SOLI numeri il caso è IRRISOLVIBILE: una riga "presenze=8, assenze=21" è identica
+// sia che l'8 siano giorni lavorati veri sia che sia un Riposi mal letto (verificato su
+// cedolini reali con esito opposto: Aprile 2008 → 0, Giugno 2021 → 10). L'unico dato
+// dirimente — "la cella Presenze è vuota?" — vive solo nell'immagine. Strategia a 3 livelli:
+//  1. SEGNALE PRIMARIO: il prompt chiede all'IA un booleano esplicito `presenzeVuota`
+//     (lettura geometrica del primo riquadro della tabella). Se c'è, comanda lui.
+//  2. RETE NUMERICA: invariante asimmetrica. Una riga onesta di un mese singolo somma a
+//     ~28-32; un valore-presenze FANTASMA crea sovra-conteggio. Se "presenze" è
+//     compatibile con un Riposi (4-16), la riga supera la soglia e azzerare "presenze" la
+//     riporta sotto → è uno slittamento → daysWorked = 0. (NB: la soglia è fissa, non i
+//     giorni di calendario — febbraio può sommare 31 > 29 reali.)
+//  3. SEGNALAZIONE DEL DUBBIO: se nessuno dei due è conclusivo ma "presenze" è piccolo
+//     (plausibile Riposi) e il mese risulterebbe implausibilmente pieno, NON si indovina
+//     in silenzio: daysWorked tiene il valore estratto e si alza un avviso esplicito di
+//     verifica manuale (meglio un dubbio segnalato che un divisore sbagliato nascosto).
 // =========================================================================
 const SOGLIA_MESE_SINGOLO = 32.5;
 const RIPOSI_MIN = 4;
 const RIPOSI_MAX = 16;
+// Oltre questa somma (giorni lavorati + ferie + assenze retribuite) per un mese non
+// resterebbe spazio per i ~8 riposi di un full-time: un "presenze" piccolo è sospetto.
+const SOGLIA_MESE_PIENO = 26;
 
 export function reconcileRailwayAttendance(finalJson: any): void {
   const att = finalJson.attendance;
@@ -178,44 +187,67 @@ export function reconcileRailwayAttendance(finalJson: any): void {
   const daysVacation = z(ferie);
   const daysPaidLeave = z(num(att.assenzeRetribuite));
 
-  // Somma delle 8 colonne del mese così come letta dall'IA.
+  // 1. Segnale primario: l'IA dichiara se la cella "Presenze" è fisicamente vuota.
+  const cellaPresenzeVuota =
+    finalJson.presenzeVuota === true || finalJson.presenzeVuota === "true";
+
+  // 2. Rete numerica: invariante asimmetrica del mese singolo.
   const sommaAsIs =
     z(presenze) + z(riposi) + z(ferie) + z(num(att.ptv26)) +
     z(num(att.malattie)) + z(num(att.infortuni)) +
     z(num(att.assenzeRetribuite)) + z(num(att.assenzeNonRetribuite));
-  // Somma se reinterpretiamo [presenze, riposi] come [0, presenze] (cella Presenze vuota).
-  const sommaCorretta = sommaAsIs - z(riposi);
-
-  // È il bug solo se TUTTE e tre le condizioni valgono insieme:
+  const sommaSenzaPresenze = sommaAsIs - z(riposi);
   const presenzePlausibileComeRiposi =
     presenze !== null && presenze >= RIPOSI_MIN && presenze <= RIPOSI_MAX;
-  const sovraConteggio = sommaAsIs > SOGLIA_MESE_SINGOLO;
-  const azzerareRisolve = sommaCorretta <= SOGLIA_MESE_SINGOLO;
+  const slittamentoNumerico =
+    presenzePlausibileComeRiposi &&
+    sommaAsIs > SOGLIA_MESE_SINGOLO &&
+    sommaSenzaPresenze <= SOGLIA_MESE_SINGOLO;
 
-  const bug = presenzePlausibileComeRiposi && sovraConteggio && azzerareRisolve;
-
+  // --- daysWorked, in ordine di affidabilità del segnale ---
   let daysWorked: number;
-  if (bug) {
+  let correzioneAutomatica = false;
+
+  if (cellaPresenzeVuota) {
+    // L'IA conferma: cella "Presenze" vuota → nessun giorno lavorato.
     daysWorked = 0;
-    console.log(
-      `🔧 RICONCILIAZIONE PRESENZE: daysWorked ${presenze} → 0 (cella Presenze vuota; ${presenze} era il valore della colonna Riposi)`
-    );
+    correzioneAutomatica = z(presenze) > 0; // l'IA aveva messo lì il valore dei Riposi
+  } else if (slittamentoNumerico) {
+    // Nessun segnale esplicito affidabile, ma i numeri tradiscono lo slittamento.
+    daysWorked = 0;
+    correzioneAutomatica = true;
   } else {
     daysWorked = z(presenze);
+  }
+
+  if (correzioneAutomatica) {
+    console.log(
+      `🔧 RICONCILIAZIONE PRESENZE: daysWorked ${z(presenze)} → 0 (cella Presenze vuota; ${z(presenze)} era il valore della colonna Riposi)`
+    );
   }
 
   finalJson.daysWorked = daysWorked;
   finalJson.daysVacation = daysVacation;
   finalJson.daysPaidLeave = daysPaidLeave;
 
-  // Messaggistica per l'utente.
+  // --- Messaggistica e segnalazione del dubbio ---
   const hasIndennita =
     finalJson.codes &&
     Object.values(finalJson.codes).some((v: any) => (num(v) ?? 0) > 0);
 
-  if (bug) {
+  // 3. Caso ambiguo: "presenze" piccolo (plausibile Riposi) e mese implausibilmente
+  // pieno, ma daysWorked NON è stato azzerato. Non si indovina: si chiede verifica.
+  const meseImplausibilmentePieno =
+    presenzePlausibileComeRiposi &&
+    daysWorked > 0 &&
+    daysWorked + daysVacation + daysPaidLeave > SOGLIA_MESE_PIENO;
+
+  if (correzioneAutomatica) {
     finalJson.aiWarning =
       "Conguaglio mese prec. (giorni lavorati corretti automaticamente: cella Presenze vuota)";
+  } else if (meseImplausibilmentePieno) {
+    finalJson.aiWarning =
+      `⚠️ Giorni lavorati da verificare a mano: la cella "Presenze" è ambigua — ${daysWorked} potrebbe essere il valore della colonna "Riposi" (in tal caso i giorni lavorati sono 0)`;
   } else if (daysWorked > 31) {
     finalJson.aiWarning = `Conguaglio: periodo con più mensilità (${daysWorked} giorni lavorati)`;
   } else if (daysWorked === 0 && hasIndennita) {
@@ -247,8 +279,21 @@ const PROMPT_RFI = `
   7=Assenze retribuite  8=Assenze non retribuite  9=Ferie anno prec.  10=Ferie anno corrente
   I dati sono nell'unica riga subito sotto le intestazioni.
 
-  Il tuo compito NON è "calcolare i giorni lavorati": è TRASCRIVERE quella riga, cella per
-  cella, nell'oggetto JSON "attendance". Per OGNI colonna:
+  ⚠️ DECISIONE CRITICA E SEPARATA — LA CELLA "PRESENZE" È VUOTA?
+  Prima di ogni altra cosa, osserva SOLO il primo riquadro a sinistra della riga dati:
+  il rettangolo delimitato a SINISTRA dal bordo esterno della tabella e a DESTRA dalla
+  prima linea verticale divisoria, esattamente sotto la parola "Presenze".
+  Guardando QUEL rettangolo e nient'altro, decidi una cosa sola:
+  - se contiene una cifra stampata  → "presenzeVuota": false
+  - se NON contiene alcuna cifra    → "presenzeVuota": true
+  È normalissimo che sia vuota: in molti cedolini ferroviari il dipendente non ha
+  lavorato quel mese (solo riposi, ferie o permessi) e la cella "Presenze" resta in
+  bianco. In quel caso il primo numero visibile della riga appartiene già alla 2ª
+  colonna "Riposi". NON dedurre il contenuto della cella dagli altri numeri della riga:
+  fidati esclusivamente di ciò che è stampato dentro quel primo rettangolo.
+  Metti "presenzeVuota" nel JSON al LIVELLO PRINCIPALE (fuori dall'oggetto "attendance").
+
+  Poi TRASCRIVI la riga, cella per cella, nell'oggetto JSON "attendance". Per OGNI colonna:
   - se nella cella c'è un numero stampato, riportalo (punto come separatore decimale);
   - se la cella è VUOTA (nessuna cifra stampata), riporta null. NON riportare 0 per una
     cella vuota: null = cella vuota, 0 = uno zero stampato ("0,00"). Sono cose diverse.
@@ -263,7 +308,7 @@ const PROMPT_RFI = `
   "ferieAnnoPrec": ..., "ferieAnnoCorrente": ... }
 
   NON inserire nel JSON le chiavi "daysWorked", "daysVacation" o "daysPaidLeave": vengono
-  ricavate automaticamente dal sistema a partire dall'oggetto "attendance".
+  ricavate automaticamente dal sistema a partire da "attendance" e da "presenzeVuota".
 
  ### 3. TICKET RESTAURANT (Codici 0E99 / 0299 / 0293)
   - Cerca questi codici in TUTTE le pagine.
@@ -315,7 +360,7 @@ const PROMPT_RFI = `
   3. Cerca la sezione "TFR" o "Trattamento di Fine Rapporto".
   4. Estrai in "imponibile_tfr_mensile" il valore totale dell'imponibile TFR dell'intero anno.
   5. Estrai in "fondo_pregresso_31_12" il TFR maturato fino al 31/12 dell'anno precedente.
-  6. Imposta tutti i codici a 0.0 e ogni campo dell'oggetto "attendance" a null.
+  6. Imposta tutti i codici a 0.0, ogni campo dell'oggetto "attendance" a null e "presenzeVuota" a false.
 
   ### 9. FORMATO DI OUTPUT STRICT (DIVIETO DI MARKDOWN)
   Restituisci ESCLUSIVAMENTE un oggetto JSON crudo. 
@@ -324,6 +369,7 @@ const PROMPT_RFI = `
   Esempio di output perfetto:
   {
     "isCUD": false, "month": 3, "year": 2019, "ticketRate": 7.0, "arretrati": 158.12, "eventNote": "[Malattia/Carenza]", "aiWarning": "Nessuna anomalia",
+    "presenzeVuota": false,
     "fondo_pregresso_31_12": 2938.55, "imponibile_tfr_mensile": 2107.91,
     "attendance": { "presenze": 18.0, "riposi": 9.0, "ferie": 1.0, "ptv26": 0.0, "malattie": null, "infortuni": null, "assenzeRetribuite": null, "assenzeNonRetribuite": null, "ferieAnnoPrec": 12.0, "ferieAnnoCorrente": 20.0 },
     "codes": {
@@ -355,8 +401,21 @@ const PROMPT_TRENITALIA = `
   7=Assenze retribuite  8=Assenze non retribuite  9=Ferie anno prec.  10=Ferie anno corrente
   I dati sono nell'unica riga subito sotto le intestazioni.
 
-  Il tuo compito NON è "calcolare i giorni lavorati": è TRASCRIVERE quella riga, cella per
-  cella, nell'oggetto JSON "attendance". Per OGNI colonna:
+  ⚠️ DECISIONE CRITICA E SEPARATA — LA CELLA "PRESENZE" È VUOTA?
+  Prima di ogni altra cosa, osserva SOLO il primo riquadro a sinistra della riga dati:
+  il rettangolo delimitato a SINISTRA dal bordo esterno della tabella e a DESTRA dalla
+  prima linea verticale divisoria, esattamente sotto la parola "Presenze".
+  Guardando QUEL rettangolo e nient'altro, decidi una cosa sola:
+  - se contiene una cifra stampata  → "presenzeVuota": false
+  - se NON contiene alcuna cifra    → "presenzeVuota": true
+  È normalissimo che sia vuota: in molti cedolini ferroviari il dipendente non ha
+  lavorato quel mese (solo riposi, ferie o permessi) e la cella "Presenze" resta in
+  bianco. In quel caso il primo numero visibile della riga appartiene già alla 2ª
+  colonna "Riposi". NON dedurre il contenuto della cella dagli altri numeri della riga:
+  fidati esclusivamente di ciò che è stampato dentro quel primo rettangolo.
+  Metti "presenzeVuota" nel JSON al LIVELLO PRINCIPALE (fuori dall'oggetto "attendance").
+
+  Poi TRASCRIVI la riga, cella per cella, nell'oggetto JSON "attendance". Per OGNI colonna:
   - se nella cella c'è un numero stampato, riportalo (punto come separatore decimale);
   - se la cella è VUOTA (nessuna cifra stampata), riporta null. NON riportare 0 per una
     cella vuota: null = cella vuota, 0 = uno zero stampato ("0,00"). Sono cose diverse.
@@ -371,7 +430,7 @@ const PROMPT_TRENITALIA = `
   "ferieAnnoPrec": ..., "ferieAnnoCorrente": ... }
 
   NON inserire nel JSON le chiavi "daysWorked", "daysVacation" o "daysPaidLeave": vengono
-  ricavate automaticamente dal sistema a partire dall'oggetto "attendance".
+  ricavate automaticamente dal sistema a partire da "attendance" e da "presenzeVuota".
 
  ### 3. TICKET RESTAURANT (Codici 0E99 / 0299 / 0293)
   - Cerca questi codici in TUTTE le pagine.
@@ -423,7 +482,7 @@ const PROMPT_TRENITALIA = `
   3. Cerca la sezione "TFR" o "Trattamento di Fine Rapporto".
   4. Estrai in "imponibile_tfr_mensile" il valore totale dell'imponibile TFR dell'intero anno.
   5. Estrai in "fondo_pregresso_31_12" il TFR maturato fino al 31/12 dell'anno precedente.
-  6. Imposta tutti i codici a 0.0 e ogni campo dell'oggetto "attendance" a null.
+  6. Imposta tutti i codici a 0.0, ogni campo dell'oggetto "attendance" a null e "presenzeVuota" a false.
 
   ### 9. FORMATO DI OUTPUT STRICT (DIVIETO DI MARKDOWN)
   Restituisci ESCLUSIVAMENTE un oggetto JSON crudo.
@@ -432,6 +491,7 @@ const PROMPT_TRENITALIA = `
   Esempio di output perfetto:
   {
     "isCUD": false, "month": 3, "year": 2019, "ticketRate": 7.0, "arretrati": 158.12, "eventNote": "[Malattia/Carenza]", "aiWarning": "Nessuna anomalia",
+    "presenzeVuota": false,
     "fondo_pregresso_31_12": 2938.55, "imponibile_tfr_mensile": 2107.91,
     "attendance": { "presenze": 18.0, "riposi": 9.0, "ferie": 1.0, "ptv26": 0.0, "malattie": null, "infortuni": null, "assenzeRetribuite": null, "assenzeNonRetribuite": null, "ferieAnnoPrec": 12.0, "ferieAnnoCorrente": 20.0 },
     "codes": {
@@ -880,7 +940,7 @@ REGOLE ASSOLUTE:
 
       const result = await generateContentWithRetry(
         SCAN_API_KEYS,
-        (g) => g.getGenerativeModel({ model: "gemini-2.5-flash", generationConfig: { temperature: 0.0 } }),
+        (g) => g.getGenerativeModel({ model: GEMINI_MODEL, generationConfig: { temperature: 0.0 } }),
         [prompt, { inlineData: { data: cleanData, mimeType: mimeType || "application/pdf" } }]
       );
 
@@ -931,7 +991,7 @@ REGOLE ASSOLUTE:
 
       const result = await generateContentWithRetry(
         EXPLAINER_API_KEYS,
-        (g) => g.getGenerativeModel({ model: "gemini-2.5-flash" }),
+        (g) => g.getGenerativeModel({ model: GEMINI_MODEL }),
         [explainPrompt, { inlineData: { data: cleanData, mimeType: mimeType || "application/pdf" } }]
       );
 
@@ -994,7 +1054,7 @@ REGOLE ASSOLUTE:
     const result = await generateContentWithRetry(
       SCAN_API_KEYS,
       (g) => g.getGenerativeModel({
-        model: "gemini-2.5-flash",
+        model: GEMINI_MODEL,
         generationConfig: { responseMimeType: "application/json", temperature: 0.0 },
         safetySettings: [
           { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },

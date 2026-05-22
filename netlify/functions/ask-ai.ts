@@ -3,6 +3,9 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY_AI || process.env.GOOGLE_API_KEY || "");
 
+// Modello Gemini centralizzato: override con la env var GEMINI_MODEL (default gemini-3.5-flash).
+const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-3.5-flash";
+
 const BASE_PROMPT = `Sei un esperto Consulente del Lavoro e Avvocato Giuslavorista italiano di altissimo livello.
 Il tuo compito è assistere un collega nell'analisi di buste paga, calcolo di differenze retributive (Cassazione 20216/2022) e interpretazione dei CCNL.
 Regole d'ingaggio: Rispondi in modo preciso, tecnico ma sintetico. Fornisci riferimenti normativi.`;
@@ -27,7 +30,7 @@ export const handler: Handler = async (event) => {
     }
     prompt += `\n\nDomanda: `;
 
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
     const result = await model.generateContent(prompt + question);
 
     return {

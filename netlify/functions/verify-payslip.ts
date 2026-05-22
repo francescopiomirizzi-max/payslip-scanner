@@ -3,6 +3,9 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY_VERIFIER || process.env.GOOGLE_API_KEY || "");
 
+// Modello Gemini centralizzato: override con la env var GEMINI_MODEL (default gemini-3.5-flash).
+const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-3.5-flash";
+
 // Builds a context-aware verification prompt based on the company/profile
 function buildVerifyPrompt(company: string, eliorType?: string, customColumns?: Array<{ id: string; label: string }>): string {
   const co = (company || "").toUpperCase();
@@ -65,8 +68,12 @@ QUANDO segnalare davvero una discrepanza su daysWorked:
 - SOLO se vedi con CERTEZZA ASSOLUTA un numero incolonnato ESATTAMENTE sotto "Presenze"
   (1ª colonna) diverso dal valore estratto. In caso di minimo dubbio, il valore estratto
   è corretto: NON segnalare.
-- Caso opposto: se daysWorked estratto è > 0 ma coincide col numero sotto "Riposi" mentre
-  "Presenze" è vuota → l'estrazione ha sbagliato: DISCREPANZA con suggested = 0.
+- Caso opposto — CONTROLLO GEOMETRICO DELLA CELLA "PRESENZE": osserva il primo riquadro a
+  sinistra della riga presenze, il rettangolo delimitato dal bordo esterno della tabella e
+  dalla prima linea verticale divisoria, sotto la parola "Presenze". Se QUEL rettangolo è
+  privo di cifre stampate, la cella è vuota: i giorni lavorati sono 0 e il primo numero
+  visibile della riga è già la colonna "Riposi". Se daysWorked estratto è > 0 ma quella
+  cella risulta vuota → l'estrazione ha sbagliato: DISCREPANZA con suggested = 0.
 - Quadratura di controllo: Presenze + Riposi + Ferie + 26mi PTV + Malattie + Infortuni +
   Assenze ≈ giorni del mese. Se per far quadrare la somma i RIPOSI risultassero 0, la tua
   lettura è sbagliata.
@@ -300,7 +307,7 @@ export const handler: Handler = async (event) => {
 
     // 3. Call Gemini
     const model = genAI.getGenerativeModel({
-      model: "gemini-2.5-flash",
+      model: GEMINI_MODEL,
       generationConfig: { responseMimeType: "application/json", temperature: 0.0 },
     });
 

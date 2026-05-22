@@ -9,8 +9,8 @@ import { reconcileRailwayAttendance } from '../netlify/functions/scan-payslip';
 // 4 Trenitalia CATANEO PASQUALE + 4 RFI). Sono test bloccanti: il fix deve reggere sui dati
 // veri, non su ipotesi.
 
-const j = (month: number, year: number, attendance: any, codes: any = {}): any => ({
-  month, year, codes, attendance,
+const j = (month: number, year: number, attendance: any, codes: any = {}, extra: any = {}): any => ({
+  month, year, codes, attendance, ...extra,
 });
 
 describe('reconcileRailwayAttendance — 8 cedolini reali (Trenitalia + RFI)', () => {
@@ -118,5 +118,45 @@ describe('reconcileRailwayAttendance — robustezza', () => {
     expect(x.daysWorked).toBe(0);
     expect(x.daysVacation).toBe(0);
     expect(x.daysPaidLeave).toBe(0);
+  });
+});
+
+describe('reconcileRailwayAttendance — segnale presenzeVuota (Aprile 2008, caso reale)', () => {
+  // Cedolino reale TRENITALIA/CATANEO PASQUALE/2008/Aprile 2008: cella "Presenze" VUOTA,
+  // 8 nella colonna Riposi, 21 Assenze retribuite. daysWorked corretto = 0. La riga somma
+  // ~29 (sotto la soglia 32.5): la sola rete numerica non la prende → serve presenzeVuota.
+  const attendanceAprile2008 = {
+    presenze: 8, riposi: null, ferie: null, ptv26: 0, malattie: null, infortuni: null,
+    assenzeRetribuite: 21, assenzeNonRetribuite: 0, ferieAnnoPrec: 16, ferieAnnoCorrente: 25,
+  };
+
+  it("presenzeVuota=true → daysWorked azzerato (l'8 era il valore Riposi)", () => {
+    const x = j(4, 2008, attendanceAprile2008, { '0576': 16.8 }, { presenzeVuota: true });
+    reconcileRailwayAttendance(x);
+    expect(x.daysWorked).toBe(0);
+    expect(x.daysVacation).toBe(0);
+    expect(x.daysPaidLeave).toBe(21);
+    expect(x.aiWarning).toContain('corretti automaticamente');
+  });
+
+  it('presenzeVuota=false (prompt fallito) → niente errore silenzioso: dubbio segnalato', () => {
+    const x = j(4, 2008, attendanceAprile2008, { '0576': 16.8 }, { presenzeVuota: false });
+    reconcileRailwayAttendance(x);
+    expect(x.daysWorked).toBe(8);              // valore estratto tenuto, NON sovrascritto
+    expect(x.daysPaidLeave).toBe(21);
+    expect(x.aiWarning).toContain('verificare'); // il dubbio è esplicitato all'utente
+  });
+
+  it('presenzeVuota assente (legacy) → rete: mese implausibilmente pieno → avviso verifica', () => {
+    const x = j(4, 2008, attendanceAprile2008, { '0576': 16.8 });
+    reconcileRailwayAttendance(x);
+    expect(x.daysWorked).toBe(8);
+    expect(x.aiWarning).toContain('verificare');
+  });
+
+  it('presenzeVuota=true comanda sul numero: anche con presenze grande → daysWorked 0', () => {
+    const x = j(4, 2008, { ...attendanceAprile2008, presenze: 18 }, {}, { presenzeVuota: true });
+    reconcileRailwayAttendance(x);
+    expect(x.daysWorked).toBe(0);
   });
 });
