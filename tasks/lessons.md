@@ -3,6 +3,60 @@
 > Pattern e errori da evitare nelle prossime sessioni.
 > Aggiornato dopo ogni correzione utente.
 
+## 2026-05-21 — scan-payslip: lo swap Presenze/Riposi NON si risolve con il prompt
+
+### Lezione: per un errore OCR sistematico, correggi nel CODICE con un'invariante — non con l'ennesima riscrittura del prompt
+
+**Bug riscontrato (segnalato dall'utente):** su RFI/Trenitalia l'IA mette "sempre" il valore
+della colonna *Riposi* dentro `daysWorked` (giorni lavorati). `daysWorked` è il DIVISORE di
+tutti i calcoli indennità → un errore qui corrompe l'intera pratica.
+
+**Perché il prompt non bastava:** il bug era già stato "blindato" 3+ volte nel prompt
+(vedi todo.md). Continuava a fallire perché è un problema di disambiguazione SPAZIALE: quando
+la cella "Presenze" è fisicamente vuota, l'OCR non ha modo di sapere che il primo numero
+appartiene alla 2ª colonna. Nessuna quantità di istruzioni testuali lo rende affidabile.
+
+**Tre design scartati (riprodotti empiricamente, NON hanno retto):**
+- *Range dei Riposi* (un full-time ha 4-16 riposi): l'IA **allucina** un `riposi` *dentro* il
+  range (es. `riposi:6`, numero inesistente sul cedolino) → il check non scatta.
+- *Quadratura `E = giorniMese − colonne di destra`*: presuppone che la riga presenze sommi
+  SEMPRE ai giorni del mese. Falso: Marzo 2010 somma 28≠31, Febbraio 2012 somma 31 > 29
+  giorni reali, i conguagli sommano 57-61. Soglia legata al calendario → falsi positivi.
+- *Check "riposi rotto" (null o < 3) come spia del bug*: smentito da Giugno 2021 RFI, che ha
+  `riposi` realmente vuoto pur essendo un mese letto correttamente → avrebbe azzerato a torto.
+
+**Fix definitivo (8 cedolini reali — 4 Trenitalia + 4 RFI — come banco di prova):**
+1. Il prompt §2 non chiede più `daysWorked`: chiede di TRASCRIVERE la riga presenze
+   nell'oggetto `attendance` (10 colonne). Compito più meccanico.
+2. Scoperta chiave: l'IA legge **perfettamente** una cella "Presenze" VALORIZZATA (1/8/10/18/
+   18.5/20/44 tutti esatti) e la colonna "Ferie". Sbaglia SOLO con la cella VUOTA.
+3. `reconcileRailwayAttendance()`: daysVacation/daysPaidLeave letti diretti. Per daysWorked,
+   invariante ASIMMETRICA con **soglia FISSA** (non i giorni di calendario): una riga onesta
+   di un singolo mese somma a ~28-31, mai oltre ~32; il bug inserisce un valore-presenze
+   FANTASMA → sovra-conteggio. → È il bug se `presenze` ∈ [4,16] (plausibile come riposi),
+   la riga sfora la soglia, E azzerare `presenze` la riporta sotto soglia (quest'ultima
+   distingue il bug da un conguaglio multi-mese, dove azzerare non basta). Le tre condizioni
+   in AND: una busta onesta non le attiva mai → MAI un falso azzeramento.
+
+**Regola generale:**
+> Quando un modello sbaglia sistematicamente un campo, NON insistere col prompt: ricava il
+> campo per via deterministica. Ma attenzione: NON costruire la validazione sul campo che il
+> modello sbaglia (può allucinare un valore "plausibile"), e NON dare per scontate invarianti
+> non verificate (qui: "la riga somma ai giorni del mese" era falsa). Riproduci il bug su PIÙ
+> casi reali: sono serviti 8 cedolini per scartare 3 design e trovarne uno robusto — un'invariante
+> *asimmetrica* ("non supera mai", non "è sempre uguale a") regge dove quella rigida cade.
+
+### Lezione collaterale: la matematica del retry deve stare nel budget della Function
+
+`generateContentWithRetry` faceva 3×16s = 48s, ma la Netlify Function muore a ~30s: ogni
+chiamata Gemini "normale ma lenta" (~22s, misurata) veniva abortita al 16° secondo e mai
+completata. Fix: retry **budget-aware** (budget totale, 1° tentativo fino a 24s così una
+chiamata da 22s RIESCE) + rotazione delle chiavi API tra i tentativi (quota bucket diversi).
+> Regola: un meccanismo di retry con timeout deve conoscere il budget totale dell'ambiente
+> in cui gira; `n_tentativi × timeout` non può eccederlo, o il retry diventa autolesionista.
+
+---
+
 ## 2026-05-20 — verify-payslip: il verificatore "ignorava i campi a 0" → cieco alle omissioni
 
 ### Lezione: un verificatore non deve MAI saltare i campi a zero

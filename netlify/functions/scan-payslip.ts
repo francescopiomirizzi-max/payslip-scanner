@@ -1,11 +1,24 @@
 import { Handler } from "@netlify/functions";
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
 
-// --- INIZIALIZZAZIONE DOPPIO MOTORE AI ---
-// 1. CHIAVE PRINCIPALE E TFR (Ora usa la chiave TFR dedicata, se non la trova usa quella base)
-const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY_TFR || process.env.GOOGLE_API_KEY || "");
-// 2. CHIAVE EXPLAINER (Per le spiegazioni testuali dettagliate - Usa la primaria come backup)
-const genAIExplainer = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY_EXPLAINER || process.env.GOOGLE_API_KEY || "");
+// --- POOL DI CHIAVI API GEMINI ---
+// Più chiavi = più bucket di quota indipendenti. Si parte da una chiave casuale (così un
+// batch di buste paga distribuisce il carico) e si ruota ad ogni retry: se una chiave è
+// throttlata/lenta, il tentativo successivo ne prova un'altra.
+const dedupKeys = (...keys: (string | undefined)[]): string[] => {
+  const list = [...new Set(keys.filter((k): k is string => !!k))];
+  return list.length > 0 ? list : [""];
+};
+const SCAN_API_KEYS = dedupKeys(
+  process.env.GOOGLE_API_KEY_TFR,
+  process.env.GOOGLE_API_KEY,
+  process.env.GOOGLE_API_KEY_AI
+);
+const EXPLAINER_API_KEYS = dedupKeys(
+  process.env.GOOGLE_API_KEY_EXPLAINER,
+  process.env.GOOGLE_API_KEY,
+  process.env.GOOGLE_API_KEY_AI
+);
 
 // --- HELPER PULIZIA E UNIONE JSON (V20 - Somma Automatica Pagine) ---
 function cleanAndParseJSON(text: string): any {
@@ -71,28 +84,145 @@ function cleanAndParseJSON(text: string): any {
   }
 }
 
-// --- RETRY CON TIMEOUT PER LE CHIAMATE GEMINI ---
-// La latenza dell'API Gemini è molto variabile (osservato 13s vs 249s sullo stesso file:
-// throttling/sovraccarico lato Google). Un tentativo lento viene abortito al timeout e
-// ritentato: il retry è quasi sempre veloce. Evita che la Function vada in timeout secco.
+// --- RETRY GEMINI BUDGET-AWARE ---
+// La latenza dell'API Gemini è molto variabile (osservato 13s vs 249s sullo stesso file).
+// La vecchia logica faceva 3×16s = 48s e sforava il budget della Function (≈30s) abortendo
+// ogni chiamata "normale ma lenta" (~22s) senza mai completarla. Ora:
+//  - si tiene un budget totale e si dà al 1° tentativo quasi tutto il tempo (una chiamata
+//    di ~22s deve poter RIUSCIRE, non essere abortita al 16° secondo);
+//  - si ritenta solo se resta budget reale, ruotando su una chiave diversa;
+//  - se il budget è finito si lancia un errore pulito PRIMA del kill secco della Function.
 async function generateContentWithRetry(
-  model: any,
+  keys: string[],
+  buildModel: (genAI: GoogleGenerativeAI) => any,
   parts: any,
-  attempts = 3,
-  perAttemptMs = 16000
+  opts: { totalBudgetMs?: number; perAttemptCapMs?: number } = {}
 ): Promise<any> {
+  const totalBudgetMs = opts.totalBudgetMs ?? 25000;
+  const perAttemptCapMs = opts.perAttemptCapMs ?? 24000;
+  const startKey = Math.floor(Math.random() * keys.length);
+  const start = Date.now();
   let lastErr: any;
-  for (let i = 1; i <= attempts; i++) {
+  let attempt = 0;
+
+  while (true) {
+    const remaining = totalBudgetMs - (Date.now() - start);
+    if (attempt > 0 && remaining < 6000) break; // niente budget per un altro tentativo serio
+    attempt++;
+    const perAttemptMs = Math.min(perAttemptCapMs, Math.max(remaining - 1000, 5000));
+    const keyIndex = (startKey + attempt - 1) % keys.length;
     try {
+      const model = buildModel(new GoogleGenerativeAI(keys[keyIndex]));
       return await model.generateContent(parts, { timeout: perAttemptMs });
     } catch (err: any) {
       lastErr = err;
-      console.warn(`⏳ Tentativo Gemini ${i}/${attempts} non riuscito (${err?.message || err})`);
+      console.warn(`⏳ Tentativo Gemini ${attempt} (chiave #${keyIndex + 1}/${keys.length}) non riuscito (${err?.message || err})`);
     }
   }
   throw new Error(
-    `Servizio AI non disponibile dopo ${attempts} tentativi (Gemini lento o sovraccarico). Riprova tra poco. [${lastErr?.message || lastErr}]`
+    `Servizio AI non disponibile dopo ${attempt} tentativi (Gemini lento o sovraccarico). Riprova tra poco. [${lastErr?.message || lastErr}]`
   );
+}
+
+// =========================================================================
+// 🔧 RICONCILIATORE RIGA PRESENZE (RFI / TRENITALIA)
+//
+// Verificato empiricamente su 8 cedolini reali (4 Trenitalia + 4 RFI):
+//  • l'IA legge CORRETTAMENTE una cella "Presenze" VALORIZZATA (1 / 8 / 10 / 18 / 18.5 /
+//    20 / 44 → tutti esatti) e la colonna "Ferie";
+//  • sbaglia SOLO quando la cella "Presenze" è VUOTA: in quel caso mette nel campo
+//    "presenze" il primo numero visibile, che fisicamente è la colonna RIPOSI (è il bug
+//    "giorni lavorati = riposi" segnalato dall'utente). Nessun prompt lo risolve: l'IA,
+//    interrogata direttamente, sostiene comunque che la cella non è vuota.
+//
+// Correzione DETERMINISTICA. daysVacation e daysPaidLeave si leggono direttamente (colonne
+// con intestazione propria). Per daysWorked vale un'invariante ASIMMETRICA: una riga
+// presenze onesta di un singolo mese somma a ~28-31, mai oltre ~32 (può star sotto: giorni
+// non rendicontati; può star sopra solo nei conguagli multi-mese, che però hanno "presenze"
+// grande). Il bug invece inserisce un valore-presenze FANTASMA → sovra-conteggio.
+// → È il bug se: "presenze" è compatibile con un n° di riposi (4-16), la riga supera la
+//   soglia di un mese singolo, E azzerare "presenze" (= cella vuota) riporta la somma sotto
+//   soglia. Quest'ultima condizione distingue il bug da un conguaglio multi-mese (dove
+//   azzerare non basta). Una busta onesta non attiva mai la regola → MAI un falso
+//   azzeramento. NB: non si usano i giorni di calendario del mese come soglia — verificato
+//   che febbraio può sommare 31 > 29 giorni reali: la soglia è fissa.
+// =========================================================================
+const SOGLIA_MESE_SINGOLO = 32.5;
+const RIPOSI_MIN = 4;
+const RIPOSI_MAX = 16;
+
+export function reconcileRailwayAttendance(finalJson: any): void {
+  const att = finalJson.attendance;
+
+  const num = (v: any): number | null => {
+    if (v === null || v === undefined || v === "") return null;
+    const n = typeof v === "number" ? v : parseFloat(String(v).replace(",", "."));
+    return isNaN(n) ? null : n;
+  };
+  const z = (v: number | null): number => v ?? 0;
+
+  if (!att || typeof att !== "object") {
+    // L'IA non ha prodotto l'oggetto attendance: fallback prudente.
+    if (finalJson.daysWorked === undefined) finalJson.daysWorked = 0;
+    if (finalJson.daysVacation === undefined) finalJson.daysVacation = 0;
+    if (finalJson.daysPaidLeave === undefined) finalJson.daysPaidLeave = 0;
+    if (!finalJson.aiWarning) finalJson.aiWarning = "Nessuna anomalia";
+    return;
+  }
+
+  const presenze = num(att.presenze);
+  const riposi = num(att.riposi);
+  const ferie = num(att.ferie);
+
+  // daysVacation / daysPaidLeave: colonne con intestazione propria → lettura affidabile.
+  const daysVacation = z(ferie);
+  const daysPaidLeave = z(num(att.assenzeRetribuite));
+
+  // Somma delle 8 colonne del mese così come letta dall'IA.
+  const sommaAsIs =
+    z(presenze) + z(riposi) + z(ferie) + z(num(att.ptv26)) +
+    z(num(att.malattie)) + z(num(att.infortuni)) +
+    z(num(att.assenzeRetribuite)) + z(num(att.assenzeNonRetribuite));
+  // Somma se reinterpretiamo [presenze, riposi] come [0, presenze] (cella Presenze vuota).
+  const sommaCorretta = sommaAsIs - z(riposi);
+
+  // È il bug solo se TUTTE e tre le condizioni valgono insieme:
+  const presenzePlausibileComeRiposi =
+    presenze !== null && presenze >= RIPOSI_MIN && presenze <= RIPOSI_MAX;
+  const sovraConteggio = sommaAsIs > SOGLIA_MESE_SINGOLO;
+  const azzerareRisolve = sommaCorretta <= SOGLIA_MESE_SINGOLO;
+
+  const bug = presenzePlausibileComeRiposi && sovraConteggio && azzerareRisolve;
+
+  let daysWorked: number;
+  if (bug) {
+    daysWorked = 0;
+    console.log(
+      `🔧 RICONCILIAZIONE PRESENZE: daysWorked ${presenze} → 0 (cella Presenze vuota; ${presenze} era il valore della colonna Riposi)`
+    );
+  } else {
+    daysWorked = z(presenze);
+  }
+
+  finalJson.daysWorked = daysWorked;
+  finalJson.daysVacation = daysVacation;
+  finalJson.daysPaidLeave = daysPaidLeave;
+
+  // Messaggistica per l'utente.
+  const hasIndennita =
+    finalJson.codes &&
+    Object.values(finalJson.codes).some((v: any) => (num(v) ?? 0) > 0);
+
+  if (bug) {
+    finalJson.aiWarning =
+      "Conguaglio mese prec. (giorni lavorati corretti automaticamente: cella Presenze vuota)";
+  } else if (daysWorked > 31) {
+    finalJson.aiWarning = `Conguaglio: periodo con più mensilità (${daysWorked} giorni lavorati)`;
+  } else if (daysWorked === 0 && hasIndennita) {
+    finalJson.aiWarning = "Nessuna anomalia (Conguaglio mese prec.)";
+  } else {
+    finalJson.aiWarning = "Nessuna anomalia";
+  }
 }
 
 // ==========================================
@@ -111,45 +241,29 @@ const PROMPT_RFI = `
   ### 1. DATI BASE
   - "month" (numero 1-12) e "year" (4 cifre). Identificali dalla testata del cedolino.
   
- ### 2. PRESENZE, RIPOSI E FERIE (RFI) — ALGORITMO ANTI-CONFUSIONE (CRITICO)
-  La tabella in alto ha 10 colonne in quest'ordine ESATTO:
-  "Presenze | Riposi | Ferie | 26mi PTV | Malattie | Infortuni | Assenze retribuite | Assenze non retribuite | Ferie anno prec. | Ferie anno corrente".
-  I dati sono nella riga immediatamente sotto le intestazioni.
+ ### 2. RIGA PRESENZE — TRASCRIZIONE INTEGRALE CELLA PER CELLA (CRITICO)
+  In alto nel cedolino c'è una tabella con ESATTAMENTE 10 colonne, in quest'ordine fisso:
+  1=Presenze  2=Riposi  3=Ferie  4=26mi PTV  5=Malattie  6=Infortuni
+  7=Assenze retribuite  8=Assenze non retribuite  9=Ferie anno prec.  10=Ferie anno corrente
+  I dati sono nell'unica riga subito sotto le intestazioni.
 
-  ⚠️ ERRORE PIÙ FREQUENTE E GRAVE: scambiare i RIPOSI per i giorni lavorati (daysWorked).
-  Quando la colonna "Presenze" è VUOTA l'OCR produce una sequenza di numeri che PARTE da
-  "Riposi": il primo numero NON è daysWorked.
-  - Esempio reale (Marzo, 31 giorni): riga "9,00  22,00  0,00" con "Presenze" VUOTA significa
-    Presenze = 0, RIPOSI = 9, FERIE = 22, 26mi PTV = 0  →  daysWorked = 0, daysVacation = 22.
-  - Esempio opposto: riga "16,00  12,00  0,00" con "Presenze" VALORIZZATA significa
-    Presenze = 16, RIPOSI = 12, FERIE = 0, 26mi PTV = 0  →  daysWorked = 16, daysVacation = 0.
+  Il tuo compito NON è "calcolare i giorni lavorati": è TRASCRIVERE quella riga, cella per
+  cella, nell'oggetto JSON "attendance". Per OGNI colonna:
+  - se nella cella c'è un numero stampato, riportalo (punto come separatore decimale);
+  - se la cella è VUOTA (nessuna cifra stampata), riporta null. NON riportare 0 per una
+    cella vuota: null = cella vuota, 0 = uno zero stampato ("0,00"). Sono cose diverse.
+  - NON spostare i numeri a sinistra per riempire le celle vuote: ogni numero resta sotto
+    la SUA intestazione. Se la cella "Presenze" è vuota → "presenze": null, e il primo
+    numero che vedi appartiene a "Riposi" (mai a "Presenze").
+  - [DIVIETO APA]: non confondere mai con questa riga il numero accanto a "N° A.P.A.".
 
-  ESEGUI SEMPRE QUESTO ALGORITMO, nell'ordine:
-  1. RIPOSI (2ª colonna): per un dipendente a tempo pieno i riposi settimanali sono SEMPRE
-     presenti, tipicamente tra 4 e 13. RIPOSI = 0 è praticamente IMPOSSIBILE. Individua quale
-     numero è Riposi: quel numero NON finirà MAI in daysWorked né in daysVacation.
-  2. daysWorked = SOLO il numero fisicamente incolonnato sotto "Presenze" (1ª colonna).
-     [REGOLA DELLA CELLA VUOTA]: se sotto "Presenze" non c'è alcun numero, daysWorked = 0.
-     NON prendere "il primo numero disponibile" spostandoti a destra: se il primo numero è
-     incolonnato sotto "Riposi", allora daysWorked = 0.
-  3. daysVacation = SOLO il numero sotto "Ferie" (3ª colonna). Cella vuota → 0.
-  4. daysPaidLeave = SOLO il numero sotto "Assenze retribuite" (7ª colonna, dopo "Infortuni"
-     e prima di "Assenze non retribuite"): permessi/distacco sindacale, congedi e simili.
-     Cella vuota → 0.
-  5. 26mi PTV (4ª colonna) è quasi sempre 0,00: non è né presenze né ferie né riposi.
-  6. CONTROLLO DI QUADRATURA (obbligatorio): Presenze + Riposi + Ferie + 26mi PTV + Malattie
-     + Infortuni + Assenze retribuite + Assenze non retribuite ≈ giorni del mese (28-31).
-     ⚠️ La somma da sola NON basta a disambiguare: "9 Presenze + 0 Riposi + 22 Ferie" e
-     "0 Presenze + 9 Riposi + 22 Ferie" fanno entrambe 31. Il discriminante è il punto 1:
-     se la tua lettura porta a RIPOSI = 0, è SBAGLIATA — il numero che hai messo in
-     daysWorked è in realtà RIPOSI, quindi daysWorked = 0. Ricomincia dal punto 1.
+  Restituisci l'oggetto "attendance" con queste 10 chiavi (ogni valore: un numero oppure null):
+  "attendance": { "presenze": ..., "riposi": ..., "ferie": ..., "ptv26": ...,
+  "malattie": ..., "infortuni": ..., "assenzeRetribuite": ..., "assenzeNonRetribuite": ...,
+  "ferieAnnoPrec": ..., "ferieAnnoCorrente": ... }
 
-  [DIVIETO ASSOLUTO]: è SEVERAMENTE VIETATO mettere in daysWorked un numero incolonnato
-  sotto "Riposi", "Malattie", "Infortuni", "Ferie anno prec." o "Ferie anno corrente"
-  (es. se c'è 31 sotto "Malattie", daysWorked = 0).
-  [DIVIETO RESIDUI FERIE]: per daysVacation non pescare le ultime due colonne "Ferie anno
-  prec./corrente": estrai SOLO le ferie del mese (3ª colonna).
-  [DIVIETO APA]: non estrarre MAI il numero accanto alla scritta "N° A.P.A." (es. il "7").
+  NON inserire nel JSON le chiavi "daysWorked", "daysVacation" o "daysPaidLeave": vengono
+  ricavate automaticamente dal sistema a partire dall'oggetto "attendance".
 
  ### 3. TICKET RESTAURANT (Codici 0E99 / 0299 / 0293)
   - Cerca questi codici in TUTTE le pagine.
@@ -187,10 +301,8 @@ const PROMPT_RFI = `
   - "eventNote": Se rilevi codici di malattia (es. 3E.., Indennità INPS) o giorni segnati sotto la colonna "Malattie", scrivi la stringa "[Malattia/Carenza]". Altrimenti lascia una stringa vuota "".
 
   ### 6. AUDITOR AI
-  - "aiWarning": 
-    * Se daysWorked > 31 -> "Anomalia: Presenze > 31"
-    * Se daysWorked = 0 ma ci sono importi variabili > 0 -> "Nessuna anomalia (Conguaglio mese prec.)"
-    * In tutti gli altri casi -> "Nessuna anomalia"
+  - "aiWarning": imposta sempre la stringa "Nessuna anomalia". Il sistema raffina
+    automaticamente questo campo dopo aver ricalcolato i giorni dall'oggetto "attendance".
   
   ### 7. TFR E FONDO PREGRESSO (⚠️ REGOLA CRITICA DEL MESE DI DICEMBRE E GRANDEZZA NUMERI ⚠️)
   - "fondo_pregresso_31_12": Cerca la tabella in basso intitolata 'TFR'. Estrai il valore sotto 'TFR al 31.12 A.P.' (TFR anno precedente). Formato numero (es. 2938.55). Se non c'è, scrivi 0.0.
@@ -203,7 +315,7 @@ const PROMPT_RFI = `
   3. Cerca la sezione "TFR" o "Trattamento di Fine Rapporto".
   4. Estrai in "imponibile_tfr_mensile" il valore totale dell'imponibile TFR dell'intero anno.
   5. Estrai in "fondo_pregresso_31_12" il TFR maturato fino al 31/12 dell'anno precedente.
-  6. Imposta tutti gli altri codici, giorni lavorati e ferie a 0.0 (se non chiaramente indicati).
+  6. Imposta tutti i codici a 0.0 e ogni campo dell'oggetto "attendance" a null.
 
   ### 9. FORMATO DI OUTPUT STRICT (DIVIETO DI MARKDOWN)
   Restituisci ESCLUSIVAMENTE un oggetto JSON crudo. 
@@ -211,8 +323,9 @@ const PROMPT_RFI = `
   
   Esempio di output perfetto:
   {
-    "isCUD": false, "month": 3, "year": 2019, "daysWorked": 18.0, "daysVacation": 1.0, "daysPaidLeave": 0.0, "ticketRate": 7.0, "arretrati": 158.12, "eventNote": "[Malattia/Carenza]", "aiWarning": "Nessuna anomalia",
+    "isCUD": false, "month": 3, "year": 2019, "ticketRate": 7.0, "arretrati": 158.12, "eventNote": "[Malattia/Carenza]", "aiWarning": "Nessuna anomalia",
     "fondo_pregresso_31_12": 2938.55, "imponibile_tfr_mensile": 2107.91,
+    "attendance": { "presenze": 18.0, "riposi": 9.0, "ferie": 1.0, "ptv26": 0.0, "malattie": null, "infortuni": null, "assenzeRetribuite": null, "assenzeNonRetribuite": null, "ferieAnnoPrec": 12.0, "ferieAnnoCorrente": 20.0 },
     "codes": {
       "0152": 576.06, "0421": 0.0, "0423": 0.0, "0457": 140.00, "0470": 0.0, "0482": 0.0, "0496": 0.0, "0687": 0.0, "0686": 0.0, "0AA1": 0.0, "0576": 0.0, "0584": 64.00, "0919": 0.0, "0920": 0.0, "0932": 0.0, "0933": 0.0, "0995": 0.0, "0996": 0.0, "0376": 0.0
     }
@@ -236,45 +349,29 @@ const PROMPT_TRENITALIA = `
   ### 1. DATI BASE
   - "month" (numero 1-12) e "year" (4 cifre). Identificali dalla testata del cedolino.
 
- ### 2. PRESENZE, RIPOSI E FERIE (TRENITALIA) — ALGORITMO ANTI-CONFUSIONE (CRITICO)
-  La tabella in alto ha 10 colonne in quest'ordine ESATTO:
-  "Presenze | Riposi | Ferie | 26mi PTV | Malattie | Infortuni | Assenze retribuite | Assenze non retribuite | Ferie anno prec. | Ferie anno corrente".
-  I dati sono nella riga immediatamente sotto le intestazioni.
+ ### 2. RIGA PRESENZE — TRASCRIZIONE INTEGRALE CELLA PER CELLA (CRITICO)
+  In alto nel cedolino c'è una tabella con ESATTAMENTE 10 colonne, in quest'ordine fisso:
+  1=Presenze  2=Riposi  3=Ferie  4=26mi PTV  5=Malattie  6=Infortuni
+  7=Assenze retribuite  8=Assenze non retribuite  9=Ferie anno prec.  10=Ferie anno corrente
+  I dati sono nell'unica riga subito sotto le intestazioni.
 
-  ⚠️ ERRORE PIÙ FREQUENTE E GRAVE: scambiare i RIPOSI per i giorni lavorati (daysWorked).
-  Quando la colonna "Presenze" è VUOTA l'OCR produce una sequenza di numeri che PARTE da
-  "Riposi": il primo numero NON è daysWorked.
-  - Esempio reale (Marzo, 31 giorni): riga "9,00  22,00  0,00" con "Presenze" VUOTA significa
-    Presenze = 0, RIPOSI = 9, FERIE = 22, 26mi PTV = 0  →  daysWorked = 0, daysVacation = 22.
-  - Esempio opposto: riga "16,00  12,00  0,00" con "Presenze" VALORIZZATA significa
-    Presenze = 16, RIPOSI = 12, FERIE = 0, 26mi PTV = 0  →  daysWorked = 16, daysVacation = 0.
+  Il tuo compito NON è "calcolare i giorni lavorati": è TRASCRIVERE quella riga, cella per
+  cella, nell'oggetto JSON "attendance". Per OGNI colonna:
+  - se nella cella c'è un numero stampato, riportalo (punto come separatore decimale);
+  - se la cella è VUOTA (nessuna cifra stampata), riporta null. NON riportare 0 per una
+    cella vuota: null = cella vuota, 0 = uno zero stampato ("0,00"). Sono cose diverse.
+  - NON spostare i numeri a sinistra per riempire le celle vuote: ogni numero resta sotto
+    la SUA intestazione. Se la cella "Presenze" è vuota → "presenze": null, e il primo
+    numero che vedi appartiene a "Riposi" (mai a "Presenze").
+  - [DIVIETO APA]: non confondere mai con questa riga il numero accanto a "N° A.P.A.".
 
-  ESEGUI SEMPRE QUESTO ALGORITMO, nell'ordine:
-  1. RIPOSI (2ª colonna): per un dipendente a tempo pieno i riposi settimanali sono SEMPRE
-     presenti, tipicamente tra 4 e 13. RIPOSI = 0 è praticamente IMPOSSIBILE. Individua quale
-     numero è Riposi: quel numero NON finirà MAI in daysWorked né in daysVacation.
-  2. daysWorked = SOLO il numero fisicamente incolonnato sotto "Presenze" (1ª colonna).
-     [REGOLA DELLA CELLA VUOTA]: se sotto "Presenze" non c'è alcun numero, daysWorked = 0.
-     NON prendere "il primo numero disponibile" spostandoti a destra: se il primo numero è
-     incolonnato sotto "Riposi", allora daysWorked = 0.
-  3. daysVacation = SOLO il numero sotto "Ferie" (3ª colonna). Cella vuota → 0.
-  4. daysPaidLeave = SOLO il numero sotto "Assenze retribuite" (7ª colonna, dopo "Infortuni"
-     e prima di "Assenze non retribuite"): permessi/distacco sindacale, congedi e simili.
-     Cella vuota → 0.
-  5. 26mi PTV (4ª colonna) è quasi sempre 0,00: non è né presenze né ferie né riposi.
-  6. CONTROLLO DI QUADRATURA (obbligatorio): Presenze + Riposi + Ferie + 26mi PTV + Malattie
-     + Infortuni + Assenze retribuite + Assenze non retribuite ≈ giorni del mese (28-31).
-     ⚠️ La somma da sola NON basta a disambiguare: "9 Presenze + 0 Riposi + 22 Ferie" e
-     "0 Presenze + 9 Riposi + 22 Ferie" fanno entrambe 31. Il discriminante è il punto 1:
-     se la tua lettura porta a RIPOSI = 0, è SBAGLIATA — il numero che hai messo in
-     daysWorked è in realtà RIPOSI, quindi daysWorked = 0. Ricomincia dal punto 1.
+  Restituisci l'oggetto "attendance" con queste 10 chiavi (ogni valore: un numero oppure null):
+  "attendance": { "presenze": ..., "riposi": ..., "ferie": ..., "ptv26": ...,
+  "malattie": ..., "infortuni": ..., "assenzeRetribuite": ..., "assenzeNonRetribuite": ...,
+  "ferieAnnoPrec": ..., "ferieAnnoCorrente": ... }
 
-  [DIVIETO ASSOLUTO]: è SEVERAMENTE VIETATO mettere in daysWorked un numero incolonnato
-  sotto "Riposi", "Malattie", "Infortuni", "Ferie anno prec." o "Ferie anno corrente"
-  (es. se c'è 31 sotto "Malattie", daysWorked = 0).
-  [DIVIETO RESIDUI FERIE]: per daysVacation non pescare le ultime due colonne "Ferie anno
-  prec./corrente": estrai SOLO le ferie del mese (3ª colonna).
-  [DIVIETO APA]: non estrarre MAI il numero accanto alla scritta "N° A.P.A." (es. il "7").
+  NON inserire nel JSON le chiavi "daysWorked", "daysVacation" o "daysPaidLeave": vengono
+  ricavate automaticamente dal sistema a partire dall'oggetto "attendance".
 
  ### 3. TICKET RESTAURANT (Codici 0E99 / 0299 / 0293)
   - Cerca questi codici in TUTTE le pagine.
@@ -312,10 +409,8 @@ const PROMPT_TRENITALIA = `
   - "eventNote": Se rilevi codici di malattia (es. 3E.., Indennità INPS) o giorni segnati sotto la colonna "Malattie", scrivi la stringa "[Malattia/Carenza]". Altrimenti lascia una stringa vuota "".
 
   ### 6. AUDITOR AI
-  - "aiWarning":
-    * Se daysWorked > 31 -> "Anomalia: Presenze > 31"
-    * Se daysWorked = 0 ma ci sono importi variabili > 0 -> "Nessuna anomalia (Conguaglio mese prec.)"
-    * In tutti gli altri casi -> "Nessuna anomalia"
+  - "aiWarning": imposta sempre la stringa "Nessuna anomalia". Il sistema raffina
+    automaticamente questo campo dopo aver ricalcolato i giorni dall'oggetto "attendance".
 
   ### 7. TFR E FONDO PREGRESSO (⚠️ REGOLA CRITICA DEL MESE DI DICEMBRE E GRANDEZZA NUMERI ⚠️)
   - "fondo_pregresso_31_12": Cerca la tabella in basso intitolata 'TFR'. Estrai il valore sotto 'TFR al 31.12 A.P.' (TFR anno precedente). Formato numero (es. 2938.55). Se non c'è, scrivi 0.0.
@@ -328,7 +423,7 @@ const PROMPT_TRENITALIA = `
   3. Cerca la sezione "TFR" o "Trattamento di Fine Rapporto".
   4. Estrai in "imponibile_tfr_mensile" il valore totale dell'imponibile TFR dell'intero anno.
   5. Estrai in "fondo_pregresso_31_12" il TFR maturato fino al 31/12 dell'anno precedente.
-  6. Imposta tutti gli altri codici, giorni lavorati e ferie a 0.0 (se non chiaramente indicati).
+  6. Imposta tutti i codici a 0.0 e ogni campo dell'oggetto "attendance" a null.
 
   ### 9. FORMATO DI OUTPUT STRICT (DIVIETO DI MARKDOWN)
   Restituisci ESCLUSIVAMENTE un oggetto JSON crudo.
@@ -336,8 +431,9 @@ const PROMPT_TRENITALIA = `
 
   Esempio di output perfetto:
   {
-    "isCUD": false, "month": 3, "year": 2019, "daysWorked": 18.0, "daysVacation": 1.0, "daysPaidLeave": 0.0, "ticketRate": 7.0, "arretrati": 158.12, "eventNote": "[Malattia/Carenza]", "aiWarning": "Nessuna anomalia",
+    "isCUD": false, "month": 3, "year": 2019, "ticketRate": 7.0, "arretrati": 158.12, "eventNote": "[Malattia/Carenza]", "aiWarning": "Nessuna anomalia",
     "fondo_pregresso_31_12": 2938.55, "imponibile_tfr_mensile": 2107.91,
+    "attendance": { "presenze": 18.0, "riposi": 9.0, "ferie": 1.0, "ptv26": 0.0, "malattie": null, "infortuni": null, "assenzeRetribuite": null, "assenzeNonRetribuite": null, "ferieAnnoPrec": 12.0, "ferieAnnoCorrente": 20.0 },
     "codes": {
       "0152": 576.06, "0421": 0.0, "0423": 0.0, "0457": 140.00, "0470": 0.0, "0482": 0.0, "0496": 0.0, "0687": 0.0, "0686": 0.0, "0AA1": 0.0, "0576": 0.0, "0584": 64.00, "0919": 0.0, "0920": 0.0, "0932": 0.0, "0933": 0.0, "0995": 0.0, "0996": 0.0, "0376": 0.0
     }
@@ -774,7 +870,6 @@ export const handler: Handler = async (event, context) => {
       const { colLabel } = body;
       if (!colLabel) throw new Error("Parametro colLabel mancante.");
 
-      const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash", generationConfig: { temperature: 0.0 } });
       const prompt = `Sei un estrattore dati preciso specializzato in buste paga italiane.
 Analizza questo documento e restituisci SOLO il valore numerico per: "${colLabel}".
 REGOLE ASSOLUTE:
@@ -783,10 +878,11 @@ REGOLE ASSOLUTE:
 - Se il valore non è presente o è zero, restituisci esattamente: 0
 - NON aggiungere testo, simboli €, unità di misura, spiegazioni o markdown.`;
 
-      const result = await generateContentWithRetry(model, [
-        prompt,
-        { inlineData: { data: cleanData, mimeType: mimeType || "application/pdf" } }
-      ]);
+      const result = await generateContentWithRetry(
+        SCAN_API_KEYS,
+        (g) => g.getGenerativeModel({ model: "gemini-2.5-flash", generationConfig: { temperature: 0.0 } }),
+        [prompt, { inlineData: { data: cleanData, mimeType: mimeType || "application/pdf" } }]
+      );
 
       return {
         statusCode: 200,
@@ -799,9 +895,6 @@ REGOLE ASSOLUTE:
     // 🧠 NUOVA MODALITÀ: AUDITOR LEGALE (SPIEGAZIONE DISCORSIVA CON GEMINI 3.1 PRO)
     // =========================================================================
     if (action === 'explain') {
-      // ECCO LA MODIFICA! L'Avvocato adesso usa la massima potenza di logica!
-      const modelExplainer = genAIExplainer.getGenerativeModel({ model: "gemini-2.5-flash" });
-
       const explainPrompt = `
         Sei un Senior HR e Consulente del Lavoro di altissimo livello. 
         Il tuo compito è tradurre questa complessa busta paga in un report discorsivo, rassicurante e cristallino per un lavoratore che non ha competenze contabili.
@@ -836,10 +929,11 @@ REGOLE ASSOLUTE:
 
       console.log(`--- 🤖 AVVIO SPIEGAZIONE AI (EXPLAINER: Gemini 3.1 Pro) ---`);
 
-      const result = await generateContentWithRetry(modelExplainer, [
-        explainPrompt,
-        { inlineData: { data: cleanData, mimeType: mimeType || "application/pdf" } }
-      ], 2, 26000);
+      const result = await generateContentWithRetry(
+        EXPLAINER_API_KEYS,
+        (g) => g.getGenerativeModel({ model: "gemini-2.5-flash" }),
+        [explainPrompt, { inlineData: { data: cleanData, mimeType: mimeType || "application/pdf" } }]
+      );
 
       return { statusCode: 200, headers, body: JSON.stringify({ explanation: result.response.text() }) };
     }
@@ -897,36 +991,30 @@ REGOLE ASSOLUTE:
     if (customColumns && customColumns.length > 0) console.log(`🧠 Attivato Prompt Mutaforma con ${customColumns.length} codici personalizzati.`);
 
     // Per l'estrazione JSON teniamo il modello veloce (Flash) per processare 12 buste paga in pochi secondi
-    const model = genAI.getGenerativeModel({
-      model: "gemini-2.5-flash",
-      generationConfig: { responseMimeType: "application/json", temperature: 0.0 },
-      safetySettings: [
-        {
-          category: HarmCategory.HARM_CATEGORY_HARASSMENT,
-          threshold: HarmBlockThreshold.BLOCK_NONE,
-        },
-        {
-          category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-          threshold: HarmBlockThreshold.BLOCK_NONE,
-        },
-        {
-          category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
-          threshold: HarmBlockThreshold.BLOCK_NONE,
-        },
-        {
-          category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
-          threshold: HarmBlockThreshold.BLOCK_NONE,
-        }
-      ]
-    });
-
-    const result = await generateContentWithRetry(model, [
-      targetPrompt,
-      { inlineData: { data: cleanData, mimeType: mimeType || "application/pdf" } }
-    ]);
+    const result = await generateContentWithRetry(
+      SCAN_API_KEYS,
+      (g) => g.getGenerativeModel({
+        model: "gemini-2.5-flash",
+        generationConfig: { responseMimeType: "application/json", temperature: 0.0 },
+        safetySettings: [
+          { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+          { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+          { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+          { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+        ],
+      }),
+      [targetPrompt, { inlineData: { data: cleanData, mimeType: mimeType || "application/pdf" } }]
+    );
 
     const finalJson = cleanAndParseJSON(await result.response.text());
     finalJson.company = companyKey;
+
+    // RFI/TRENITALIA: l'IA restituisce la riga presenze grezza in finalJson.attendance.
+    // Il riconciliatore deterministico ne ricava daysWorked/daysVacation/daysPaidLeave e
+    // corregge lo slittamento di colonna (Riposi scambiati per giorni lavorati).
+    if (companyKey === "RFI" || companyKey === "TRENITALIA") {
+      reconcileRailwayAttendance(finalJson);
+    }
 
     console.log(`✅ EXTR ${companyKey}: ${finalJson.month}/${finalJson.year} - Warning: ${finalJson.aiWarning}`);
 

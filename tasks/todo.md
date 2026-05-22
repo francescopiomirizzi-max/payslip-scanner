@@ -1,3 +1,78 @@
+# Sessione 2026-05-21 — Fix swap Presenze/Riposi + timeout Gemini
+
+> **Problema 1 (priorità):** in estrazione l'IA confonde i giorni lavorati (Presenze)
+> con i Riposi. Caso reale: `TRENITALIA/CATANEO PASQUALE/2008/Maggio 2008.PDF` — cella
+> "Presenze" vuota, l'IA mette 11 (= Riposi) in `daysWorked`. Corretto: daysWorked=0.
+> Il prompt-engineering è stato già "blindato" 3+ volte e continua a fallire → serve
+> una correzione DETERMINISTICA lato codice.
+>
+> **Problema 2:** errore Gemini "Request aborted" / timeout. La retry fa 3×16s=48s ma
+> il budget Function locale è 30s → sfora sempre.
+
+## Plan — Fix swap + timeout
+
+- [x] **Step 0 — Riproduzione empirica.** Diagnostico Gemini sul PDF reale Maggio 2008:
+      l'IA mette 11 (= Riposi) in `daysWorked` e perde i 18 di Assenze retribuite.
+      Latenza 22,5s → conferma anche il timeout (16s abortiva la chiamata).
+- [x] **Step 1 — Nuovo contratto di estrazione (RFI+TRENITALIA).** Il prompt §2 non chiede
+      più `daysWorked`: chiede l'oggetto `attendance` con le 10 colonne (null = cella vuota).
+      Effetto collaterale positivo: l'IA ora trova i 18 di Assenze retribuite.
+- [x] **Step 2 — Riconciliatore deterministico** `reconcileRailwayAttendance()`.
+      Due design scartati (range Riposi → IA allucina dentro range; quadratura rigida → la
+      riga NON somma sempre ai giorni del mese: Marzo 28≠31, Novembre 61). Design finale:
+      daysVacation/daysPaidLeave letti diretti; daysWorked azzerato solo se la riga sfora i
+      giorni del mese e azzerare `presenze` rientra nel tetto (+ guardia riposi rotto).
+- [x] **Step 3 — `verify-payslip.ts`:** nessuna modifica necessaria. Le regole RFI/TREN
+      (commit 944ea00) già dicono "daysWorked=0 corretto, non scambiare Riposi": coerenti
+      con il nuovo flusso (la verifica riceve già il `daysWorked` riconciliato).
+- [x] **Step 4 — Fix timeout Gemini.** Retry budget-aware (budget totale 25s, 1° tentativo
+      fino a 24s così una chiamata da ~22s RIESCE) + rotazione/partenza casuale tra le
+      chiavi API disponibili (SCAN_API_KEYS).
+- [x] **Step 5 — Verifica.** `npx tsc` pulito; `vitest` 67/67; `npm run build` OK. 8
+      cedolini reali (4 Trenitalia + 4 RFI) estratti con la API key e usati come test
+      bloccanti. `daysWorked` corretto 8/8, `daysVacation` 8/8.
+- [x] **Step 6 — `lessons.md` aggiornato.**
+
+## Review
+
+**Esito:** bug swap Presenze/Riposi risolto alla radice (RFI + Trenitalia) + timeout Gemini
+sistemato.
+- `scan-payslip.ts`: prompt RFI/TRENITALIA §2 riscritto (oggetto `attendance`);
+  `reconcileRailwayAttendance()` deterministico; retry budget-aware con rotazione chiavi.
+- `__tests__/reconcileAttendance.test.ts`: 10 test, gli 8 cedolini reali come verità a terra.
+- `verify-payslip.ts`: non toccato (già coerente).
+
+**Risultati sugli 8 cedolini reali (estrazione IA → riconciliatore):**
+| Cedolino | Presenze cella | daysWorked | daysVacation |
+|---|---|---|---|
+| Maggio 2008 (T) | vuota (bug) | 11 → **0** ✅ | 2 ✅ |
+| Luglio 2009 (T) | piena (8) | 8 ✅ | 7 ✅ |
+| Novembre 2009 (T) | piena (44, conguaglio) | 44 ✅ | 0 ✅ |
+| Marzo 2010 (T) | piena (18.5) | 18.5 ✅ | 0.5 ✅ |
+| Febbraio 2012 (RFI) | piena (20) | 20 ✅ | 3 ✅ |
+| Giugno 2021 (RFI) | piena (10), riposi=null | 10 ✅ | 0 ✅ |
+| Giugno 2018 (RFI) | piena (1) | 1 ✅ | 0 ✅ |
+| Giugno 2009 (RFI) | piena (18, conguaglio) | 18 ✅ | 1 ✅ |
+
+**Note oneste:**
+- *Limite residuo:* un mese-bug (Presenze vuota) la cui riga reale è già in sotto-conteggio
+  marcato E con `riposi` allucinato piccolo potrebbe sfuggire. Mai osservato sugli 8 reali.
+- *Fuori scope:* su Giugno 2009 RFI l'IA sbaglia `daysPaidLeave` (17 invece di 8) per uno
+  slittamento delle colonne di DESTRA quando "Malattie" è vuota — è un altro bug OCR, non lo
+  swap giorni/riposi richiesto, e non tocca il divisore `daysWorked`. Da valutare a parte.
+
+## Debito tecnico (da monitorare)
+
+- **Slittamento colonne di destra (RFI/Trenitalia).** Quando la cella "Malattie" (o
+  Infortuni) è vuota, l'IA può slittare a sinistra le colonne `Infortuni / Assenze
+  retribuite / Assenze non retribuite` → `daysPaidLeave` errato. Osservato su Giugno 2009
+  RFI (`daysPaidLeave` = 17 invece di 8). **Impatto basso:** `daysPaidLeave` è un campo
+  informativo, NON entra nel divisore `daysWorked` (che resta corretto). **Non correggere
+  ora** — priorità alla stabilità del divisore. Da rivalutare quando si testeranno modelli
+  più capaci (es. Gemini 3 / Pro): un modello migliore potrebbe risolverlo senza codice.
+
+---
+
 # Sessione — RAG Local-First Phase 1 (Step 1 + Step 2)
 
 > **Obiettivo:** mettere in piedi le fondamenta dell'Avvocato Virtuale RailFlow con stack 100% locale (Ollama + Supabase pgvector). Questa sessione copre solo i primi due step del piano operativo (setup ambiente + migration DB).
