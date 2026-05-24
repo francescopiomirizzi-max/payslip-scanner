@@ -2,14 +2,20 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { CheckCircle, AlertCircle, Info, X } from 'lucide-react';
 
+export interface ToastAction {
+    label: string;
+    onClick: () => void;
+}
+
 export interface ToastData {
     id: number;
     message: string;
     type: 'success' | 'error' | 'info';
+    action?: ToastAction;
 }
 
 // --- COMPONENTE TOAST NOTIFICATION ---
-export const Toast = ({ message, type, onClose }: { message: string; type: 'success' | 'error' | 'info'; onClose: () => void }) => {
+export const Toast = ({ message, type, onClose, action }: { message: string; type: 'success' | 'error' | 'info'; onClose: () => void; action?: ToastAction }) => {
     const icons = {
         success: <CheckCircle className="w-5 h-5 text-emerald-500" />,
         error: <AlertCircle className="w-5 h-5 text-red-500" />,
@@ -22,6 +28,12 @@ export const Toast = ({ message, type, onClose }: { message: string; type: 'succ
         info: 'border-blue-500/50 bg-blue-50/90 text-blue-900'
     };
 
+    const actionStyles = {
+        success: 'text-emerald-700 hover:bg-emerald-100/80 border-emerald-300',
+        error: 'text-red-700 hover:bg-red-100/80 border-red-300',
+        info: 'text-blue-700 hover:bg-blue-100/80 border-blue-300'
+    };
+
     return (
         <motion.div
             layout
@@ -32,6 +44,14 @@ export const Toast = ({ message, type, onClose }: { message: string; type: 'succ
         >
             {icons[type]}
             <span className="font-bold text-sm pr-2">{message}</span>
+            {action && (
+                <button
+                    onClick={() => { action.onClick(); onClose(); }}
+                    className={`shrink-0 px-3 py-1 rounded-lg border font-black text-[11px] uppercase tracking-widest transition-colors ${actionStyles[type]}`}
+                >
+                    {action.label}
+                </button>
+            )}
             <button onClick={onClose} className="opacity-50 hover:opacity-100 transition-opacity"><X className="w-4 h-4" /></button>
         </motion.div>
     );

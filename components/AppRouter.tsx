@@ -36,6 +36,7 @@ interface AppRouterProps {
     handleOpenComplex: (id: string) => void;
     openEditModal: (e: React.MouseEvent, id: string) => void;
     handleDeleteWorker: (id: string) => void;
+    recentlyCreatedId: string | null;
     handleOpenModal: (mode: 'create' | 'edit') => void;
     updateWorkerById: (id: string, fields: any) => void;
     fileInputRef: React.RefObject<HTMLInputElement>;
@@ -77,6 +78,7 @@ const AppRouter: React.FC<AppRouterProps> = ({
     handleOpenComplex,
     openEditModal,
     handleDeleteWorker,
+    recentlyCreatedId,
     handleOpenModal,
     updateWorkerById,
     fileInputRef,
@@ -165,6 +167,7 @@ const AppRouter: React.FC<AppRouterProps> = ({
                 handleOpenComplex={handleOpenComplex}
                 openEditModal={openEditModal}
                 handleDeleteWorker={handleDeleteWorker}
+                recentlyCreatedId={recentlyCreatedId}
                 handleOpenModal={handleOpenModal}
                 updateWorkerById={updateWorkerById}
                 fileInputRef={fileInputRef}

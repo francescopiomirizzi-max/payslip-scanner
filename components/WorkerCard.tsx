@@ -9,7 +9,8 @@ import {
   UserCircle, Trash2, Edit, FileSpreadsheet, LayoutGrid, CalendarRange,
   TrainFront, Briefcase, RotateCw, ArrowLeft, CheckCircle2, AlertCircle,
   Send, FileBarChart, Clock, Wallet, Ticket, Layers, CreditCard, Activity,
-  TrendingUp, Ban, CalendarClock, ChevronDown, Archive, MoreHorizontal,
+  TrendingUp, Ban, CalendarClock, ChevronDown, Archive, MoreHorizontal, Handshake,
+  BarChart3,
 } from 'lucide-react';
 
 // --- STILI CSS ---
@@ -23,25 +24,49 @@ const scrollbarStyles = `
 
 
 // --- COMPONENTE SPARKLINE (FRONTE) ---
+// Mostra il trend economico degli ultimi 12 mesi. Se non ci sono almeno 2 mesi
+// con valori reali > 0, non si inventano dati: si mostra un piccolo segnale
+// "in attesa" — tre puntini pulsanti nel colore accent della card.
 const Sparkline = ({ worker }: { worker: Worker }) => {
   const dataPoints = useMemo(() => {
-    if (!worker.anni || !Array.isArray(worker.anni) || worker.anni.length === 0) return [15, 16, 15, 17, 16];
+    if (!worker.anni || !Array.isArray(worker.anni) || worker.anni.length === 0) return null;
     const cols = getColumnsByProfile(worker.profilo, worker.eliorType);
 
-    // Ordiniamo cronologicamente
     const sortedData = [...worker.anni].sort((a, b) => a.year - b.year || a.monthIndex - b.monthIndex);
 
-    // Prendiamo gli ultimi 12 mesi
     const values = sortedData.slice(-12).map(anno => {
       let sum = 0;
       cols.forEach(col => {
         if (!['month', 'total', 'daysWorked', 'daysVacation', 'daysPaidLeave', 'ticket', 'note', 'arretrati', 'coeffPercepito', 'coeffTicket'].includes(col.id))
           sum += parseLocalFloat(anno[col.id]);
       });
-      return sum > 0 ? sum : (Math.random() * 200 + 300); // Fallback estetico se 0
+      return sum;
     });
-    return values.length < 2 ? [40, 45, 42, 48] : values;
+
+    return values.length >= 2 && values.some(v => v > 0) ? values : null;
   }, [worker]);
+
+  const accent = worker.accentColor || 'indigo';
+  const colorMap: any = { indigo: '#6366f1', emerald: '#10b981', orange: '#f97316', blue: '#3b82f6', rose: '#f43f5e', violet: '#8b5cf6', teal: '#14b8a6' };
+  const hexColor = colorMap[accent] || '#3b82f6';
+
+  if (!dataPoints) {
+    return (
+      <div className="absolute bottom-0 left-0 right-0 h-28 pointer-events-none flex items-end justify-center pb-5">
+        <div className="flex items-center gap-1.5 opacity-60">
+          {[0, 1, 2].map(i => (
+            <motion.div
+              key={i}
+              animate={{ opacity: [0.25, 0.75, 0.25], scale: [1, 1.25, 1] }}
+              transition={{ duration: 1.8, repeat: Infinity, delay: i * 0.3, ease: "easeInOut" }}
+              className="w-1 h-1 rounded-full"
+              style={{ backgroundColor: hexColor }}
+            />
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   const width = 300;
   const height = 80;
@@ -55,10 +80,6 @@ const Sparkline = ({ worker }: { worker: Worker }) => {
   });
   const pathD = `M 0,${height} L ${points[0]} L ${points.join(' L ')} L ${width},${height} Z`;
   const lineD = `M ${points[0]} L ${points.join(' L ')}`;
-
-  const accent = worker.accentColor || 'indigo';
-  const colorMap: any = { indigo: '#6366f1', emerald: '#10b981', orange: '#f97316', blue: '#3b82f6', rose: '#f43f5e', violet: '#8b5cf6', teal: '#14b8a6' };
-  const hexColor = colorMap[accent] || '#3b82f6';
 
   return (
     <div className="absolute bottom-0 left-0 right-0 h-28 overflow-hidden rounded-b-[2.5rem] pointer-events-none opacity-40 mix-blend-multiply" style={{ color: hexColor }}>
@@ -77,22 +98,22 @@ const Sparkline = ({ worker }: { worker: Worker }) => {
 };
 
 // --- MINI GRAFICO A BARRE DINAMICO (RETRO) ---
+// Mostra il trend economico degli ultimi 10 mesi a partire dallo startYear.
+// Per il tool di perizie legali è essenziale non inventare dati: se non c'è
+// nessun mese con valore reale > 0, si mostra uno stato vuoto esplicito invece
+// di barre fittizie. Le barre reali a valore 0 si vedono come stub minimo (4%).
 const BackChart = ({ worker, theme, startYear }: { worker: Worker, theme: any, startYear: number }) => {
   const bars = useMemo(() => {
-    if (!worker.anni || !Array.isArray(worker.anni) || worker.anni.length === 0) {
-      return [20, 30, 20, 30, 20, 30];
-    }
-    // Filtriamo dal Start Year in poi
+    if (!worker.anni || !Array.isArray(worker.anni) || worker.anni.length === 0) return null;
+
     const validData = worker.anni
       .filter(d => Number(d.year) >= startYear)
       .sort((a, b) => a.year - b.year || a.monthIndex - b.monthIndex);
 
-    const lastData = validData.slice(-10); // Ultimi 10 mesi utili
+    const lastData = validData.slice(-10);
 
+    const cols = getColumnsByProfile(worker.profilo, worker.eliorType);
     const values = lastData.map(d => {
-      // Visualizziamo il valore economico approssimativo del mese (Indennità lorde)
-      // Questo rende il grafico coerente con "soldi", non "giorni"
-      const cols = getColumnsByProfile(worker.profilo, worker.eliorType);
       let sum = 0;
       cols.forEach(col => {
         if (!['month', 'total', 'daysWorked', 'daysVacation', 'daysPaidLeave', 'ticket', 'note', 'arretrati'].includes(col.id))
@@ -101,12 +122,35 @@ const BackChart = ({ worker, theme, startYear }: { worker: Worker, theme: any, s
       return sum;
     });
 
-    const filledValues = [...values];
-    while (filledValues.length < 6) { filledValues.unshift(100); } // Dummy filler
-    const max = Math.max(...filledValues) || 1;
-    // Normalizza altezza tra 15% e 100%
-    return filledValues.map(v => Math.max(15, Math.round((v / max) * 100)));
+    if (values.length === 0 || !values.some(v => v > 0)) return null;
+
+    const max = Math.max(...values) || 1;
+    return values.map(v => v > 0 ? Math.max(15, Math.round((v / max) * 100)) : 4);
   }, [worker.anni, startYear]);
+
+  if (!bars) {
+    return (
+      <div className="w-full h-16 flex items-center justify-center my-3 px-1">
+        <motion.div
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, ease: "easeOut" }}
+          className="flex items-center gap-2.5 px-4 py-2 rounded-full bg-white/40 dark:bg-slate-900/40 border border-dashed backdrop-blur-sm shadow-sm"
+          style={{ borderColor: `${theme.rawColor.start}55` }}
+        >
+          <motion.div
+            animate={{ opacity: [0.55, 1, 0.55], scale: [1, 1.12, 1] }}
+            transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+          >
+            <BarChart3 className="w-3.5 h-3.5" style={{ color: theme.rawColor.start }} />
+          </motion.div>
+          <span className="text-[9px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">
+            In attesa di buste paga
+          </span>
+        </motion.div>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full h-16 flex items-end justify-between gap-1 px-1 my-3 opacity-90 pointer-events-none">
@@ -126,10 +170,10 @@ const BackChart = ({ worker, theme, startYear }: { worker: Worker, theme: any, s
 
 const STATUS_PICKER_OPTIONS = [
   { value: '', label: 'Da Analizzare', dot: '#94a3b8' },
-  { value: 'pronta', label: 'Pronta', dot: '#f59e0b' },
-  { value: 'trattativa', label: 'In Trattativa', dot: '#f43f5e' },
-  { value: 'inviata', label: 'PEC Inviata', dot: '#a855f7' },
-  { value: 'chiusa', label: 'Conclusa', dot: '#10b981' },
+  { value: 'pronta', label: 'Conteggi', dot: '#f59e0b' },
+  { value: 'inviata', label: 'Buste Paga Mancanti', dot: '#ef4444' },
+  { value: 'trattativa', label: 'Conclusa', dot: '#14b8a6' },
+  { value: 'chiusa', label: 'Pagata', dot: '#10b981' },
 ] as const;
 
 interface WorkerCardProps {
@@ -222,10 +266,10 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
 
   const getStatusConfig = (status?: string) => {
     switch (status) {
-      case 'chiusa': return { color: 'bg-emerald-100/80 text-emerald-700 border-emerald-200', dot: '#10b981', label: 'Conclusa', icon: CheckCircle2 };
-      case 'inviata': return { color: 'bg-purple-100/80 text-purple-700 border-purple-200', dot: '#a855f7', label: 'PEC Inviata', icon: Send };
-      case 'pronta': return { color: 'bg-amber-100/80 text-amber-700 border-amber-200', dot: '#f59e0b', label: 'Pronta', icon: FileBarChart };
-      case 'trattativa': return { color: 'bg-rose-100/80 text-rose-700 border-rose-200', dot: '#f43f5e', label: 'In Trattativa', icon: AlertCircle };
+      case 'chiusa': return { color: 'bg-emerald-100/80 text-emerald-700 border-emerald-200', dot: '#10b981', label: 'Pagata', icon: CheckCircle2 };
+      case 'inviata': return { color: 'bg-red-100/80 text-red-700 border-red-200', dot: '#ef4444', label: 'Buste Paga Mancanti', icon: AlertCircle };
+      case 'pronta': return { color: 'bg-amber-100/80 text-amber-700 border-amber-200', dot: '#f59e0b', label: 'Conteggi', icon: FileBarChart };
+      case 'trattativa': return { color: 'bg-teal-100/80 text-teal-700 border-teal-200', dot: '#14b8a6', label: 'Conclusa', icon: Handshake };
       default: return { color: 'bg-slate-100/80 text-slate-500 border-slate-200', dot: '#94a3b8', label: 'Da Analizzare', icon: Clock };
     }
   };

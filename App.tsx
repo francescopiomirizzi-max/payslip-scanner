@@ -14,8 +14,7 @@ import HiddenClasses from './HiddenClasses';
 
 // UI Utils
 import { triggerConfetti } from './utils/confetti';
-import { Toast } from './components/ui/Toast';
-import { ConfirmModal } from './components/ui/ConfirmModal';
+import { Toast, ToastData } from './components/ui/Toast';
 import { ConfirmImportModal } from './components/ui/ConfirmImportModal';
 import { ChangePasswordModal } from './components/ui/ChangePasswordModal';
 import { KeyboardShortcutsHint } from './components/ui/KeyboardShortcutsHint';
@@ -49,11 +48,16 @@ const App: React.FC = () => {
     }, []);
 
     // --- TOASTS ---
-    const [toasts, setToasts] = useState<{ id: number; message: string; type: 'success' | 'error' | 'info' }[]>([]);
-    const addToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
-        const id = Date.now();
-        setToasts(prev => [...prev, { id, message, type }]);
-        setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3000);
+    const [toasts, setToasts] = useState<ToastData[]>([]);
+    const addToast = (
+        message: string,
+        type: 'success' | 'error' | 'info' = 'success',
+        options: { action?: { label: string; onClick: () => void }; duration?: number } = {}
+    ): number => {
+        const id = Date.now() + Math.random();
+        setToasts(prev => [...prev, { id, message, type, action: options.action }]);
+        setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), options.duration ?? 3000);
+        return id;
     };
 
     // --- HOOKS CORI ---
@@ -63,7 +67,7 @@ const App: React.FC = () => {
         searchQuery, setSearchQuery, activeFilter, setActiveFilter, activeStatusFilter, setActiveStatusFilter, customFilters,
         isModalOpen, setIsModalOpen, modalMode, currentWorker,
         handleOpenModal, openEditModal, handleSaveWorker,
-        workerToDelete, setWorkerToDelete, handleDeleteWorker, confirmDelete,
+        handleDeleteWorker, recentlyCreatedId,
         handleUpdateWorkerData, handleUpdateStatus, handleUpdateWorkerFields, updateWorkerById,
         handleOpenSimple, handleOpenComplex, handleBack, archiveWorkerId, handleOpenArchive,
         fileInputRef, isImportModalOpen, setIsImportModalOpen, importPendingData, setImportPendingData,
@@ -252,6 +256,7 @@ const App: React.FC = () => {
                 handleOpenComplex={handleOpenComplex}
                 openEditModal={openEditModal}
                 handleDeleteWorker={handleDeleteWorker}
+                recentlyCreatedId={recentlyCreatedId}
                 handleOpenModal={handleOpenModal}
                 updateWorkerById={updateWorkerById}
                 fileInputRef={fileInputRef}
@@ -272,22 +277,11 @@ const App: React.FC = () => {
                 <AnimatePresence>
                     {toasts.map(toast => (
                         <div key={toast.id} className="pointer-events-auto">
-                            <Toast message={toast.message} type={toast.type} onClose={() => setToasts(prev => prev.filter(t => t.id !== toast.id))} />
+                            <Toast message={toast.message} type={toast.type} action={toast.action} onClose={() => setToasts(prev => prev.filter(t => t.id !== toast.id))} />
                         </div>
                     ))}
                 </AnimatePresence>
             </div>
-
-            <AnimatePresence>
-                {workerToDelete !== null && (
-                    <ConfirmModal
-                        isOpen={true}
-                        color={workers.find(w => w.id === workerToDelete)?.accentColor || 'red'}
-                        onClose={() => setWorkerToDelete(null)}
-                        onConfirm={confirmDelete}
-                    />
-                )}
-            </AnimatePresence>
 
             <WorkerModal
                 key={currentWorker ? `worker-${currentWorker.id}` : 'new-worker'}

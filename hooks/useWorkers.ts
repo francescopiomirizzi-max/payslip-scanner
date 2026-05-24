@@ -55,7 +55,13 @@ function workerToDb(worker: Worker, ownerId: string): object {
     };
 }
 
-export const useWorkers = (addToast: (message: string, type: 'success' | 'error' | 'info') => void) => {
+type AddToast = (
+    message: string,
+    type?: 'success' | 'error' | 'info',
+    options?: { action?: { label: string; onClick: () => void }; duration?: number }
+) => number | void;
+
+export const useWorkers = (addToast: AddToast) => {
     // --- STATO PRINCIPALE ---
     const [workers, setWorkers] = useState<Worker[]>([]);
     const [isWorkersLoading, setIsWorkersLoading] = useState(true);
@@ -73,7 +79,15 @@ export const useWorkers = (addToast: (message: string, type: 'success' | 'error'
     const [currentWorker, setCurrentWorker] = useState<any>(null);
 
     // --- STATO ELIMINAZIONE ---
-    const [workerToDelete, setWorkerToDelete] = useState<string | null>(null);
+    // Mappa id → timer dei delete ottimistici in attesa della finestra di undo (5s).
+    // Permette di annullare la cancellazione DB se l'utente clicca "Annulla" nel toast.
+    const pendingDeleteTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+
+    // --- ID DELLA PRATICA APPENA CREATA ---
+    // La Dashboard reagisce per espandere il cassetto giusto e portare la card in vista
+    // appena dopo la creazione. Si auto-azzera dopo 3s.
+    const [recentlyCreatedId, setRecentlyCreatedId] = useState<string | null>(null);
+    const recentlyCreatedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     // --- STATO RICERCA E FILTRI ---
     const [searchQuery, setSearchQuery] = useState('');
@@ -262,8 +276,17 @@ export const useWorkers = (addToast: (message: string, type: 'success' | 'error'
                 ...data,
                 accentColor: randomColor,
                 anni: JSON.parse(JSON.stringify(DEFAULT_YEARS_TEMPLATE)),
+                // created_at locale provvisorio: serve a far apparire la card in cima
+                // quando il sort è per data; Supabase poi imposta il valore definitivo
+                // server-side al primo upsert, e dbToWorker lo recupera al prossimo load.
+                created_at: new Date().toISOString(),
             };
-            setWorkers(prev => [...prev, newWorker]);
+            // Prepend: la nuova card va in cima all'array (la Dashboard ne tiene conto
+            // sia per il sort di default sia per il routing nel cassetto "Da Analizzare").
+            setWorkers(prev => [newWorker, ...prev]);
+            setRecentlyCreatedId(newWorker.id);
+            if (recentlyCreatedTimerRef.current) clearTimeout(recentlyCreatedTimerRef.current);
+            recentlyCreatedTimerRef.current = setTimeout(() => setRecentlyCreatedId(null), 3000);
             addToast('Nuovo lavoratore aggiunto!', 'success');
             triggerConfetti();
         } else {
@@ -276,26 +299,68 @@ export const useWorkers = (addToast: (message: string, type: 'success' | 'error'
         setIsModalOpen(false);
     };
 
-    const handleDeleteWorker = (id: string) => setWorkerToDelete(id);
+    // Optimistic delete con finestra di undo di 5s.
+    // Flusso: rimozione immediata dalla UI → toast con bottone "Annulla" →
+    // se l'utente annulla, ripristino e niente chiamata DB; altrimenti, scaduto
+    // il timer, cancellazione effettiva su Supabase (con restore se il DB fallisce).
+    const handleDeleteWorker = (id: string) => {
+        if (!authUser) return;
+        const worker = workers.find(w => w.id === id);
+        if (!worker) return;
 
-    const confirmDelete = async () => {
-        if (!workerToDelete || !authUser) return;
-        const { error } = await supabase
-            .from('worker_profiles')
-            .delete()
-            .eq('id', workerToDelete);
-        if (error) {
-            console.error('[Workers] Delete error:', error);
-            addToast("Errore durante l'eliminazione.", 'error');
-            return;
-        }
+        const restoreWorker = () => {
+            setWorkers(prev => {
+                if (prev.find(w => w.id === worker.id)) return prev;
+                const next = [...prev, worker].sort((a, b) => {
+                    const aT = a.created_at ? new Date(a.created_at).getTime() : 0;
+                    const bT = b.created_at ? new Date(b.created_at).getTime() : 0;
+                    return aT - bT;
+                });
+                prevWorkersRef.current = next;
+                return next;
+            });
+        };
+
+        // 1. Rimozione ottimistica dalla UI
         setWorkers(prev => {
-            const next = prev.filter(w => w.id !== workerToDelete);
+            const next = prev.filter(w => w.id !== id);
             prevWorkersRef.current = next;
             return next;
         });
-        addToast('Lavoratore eliminato con successo.', 'error');
-        setWorkerToDelete(null);
+
+        // 2. Cancellazione DB schedulata dopo la finestra di undo
+        const timer = setTimeout(async () => {
+            pendingDeleteTimersRef.current.delete(id);
+            const { error } = await supabase
+                .from('worker_profiles')
+                .delete()
+                .eq('id', id);
+            if (error) {
+                console.error('[Workers] Delete error:', error);
+                addToast("Errore durante l'eliminazione dal database. Pratica ripristinata.", 'error');
+                restoreWorker();
+            }
+        }, 5000);
+        pendingDeleteTimersRef.current.set(id, timer);
+
+        // 3. Toast con azione di annullamento
+        addToast(
+            `Pratica di ${worker.nome} ${worker.cognome} eliminata`,
+            'info',
+            {
+                duration: 5000,
+                action: {
+                    label: 'Annulla',
+                    onClick: () => {
+                        const pendingTimer = pendingDeleteTimersRef.current.get(id);
+                        if (pendingTimer) clearTimeout(pendingTimer);
+                        pendingDeleteTimersRef.current.delete(id);
+                        restoreWorker();
+                        addToast('Eliminazione annullata.', 'success');
+                    },
+                },
+            }
+        );
     };
 
     const selectedWorkerId = selectedWorker?.id;
@@ -449,10 +514,10 @@ export const useWorkers = (addToast: (message: string, type: 'success' | 'error'
         getEditingWorkerData,
 
         // Delete
-        workerToDelete,
-        setWorkerToDelete,
         handleDeleteWorker,
-        confirmDelete,
+
+        // Recently created (Dashboard reagisce per aprire il cassetto e portare in vista)
+        recentlyCreatedId,
 
         // Data Updates
         handleUpdateWorkerData,

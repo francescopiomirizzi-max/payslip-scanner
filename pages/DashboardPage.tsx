@@ -27,13 +27,178 @@ import {
     Archive,
     CheckCircle2,
     Activity,
+    FileText,
+    Clock,
+    FileBarChart,
+    AlertCircle,
+    Handshake,
 } from 'lucide-react';
 import WorkerCard from '../components/WorkerCard';
 import { AnimatedCounter } from '../components/ui/AnimatedCounter';
 import { Worker } from '../types';
 import { SYSTEM_PROFILES, SYSTEM_PROFILE_KEYS } from '../config/profiles';
 import { DashboardStats, WorkerStatItem, ModalConfig } from '../hooks/useDashboardStats';
+import { generateReport } from '../utils/reportGenerator';
 import { COLOR_VARIANTS } from '../utils/colorVariants';
+
+// ─── CONFIG DEI CASSETTI ─────────────────────────────────────────────────────
+// La griglia è strutturata come una cassettiera: ogni stato è un cassetto
+// indipendente, espandibile/comprimibile. "Da Analizzare" è sempre aperto
+// di default ed è il punto di atterraggio per ogni pratica nuova.
+type CassettoId = 'analisi' | 'pronta' | 'inviata' | 'trattativa' | 'chiusa';
+
+interface CassettoConfig {
+    id: CassettoId;
+    label: string;
+    icon: React.ComponentType<{ className?: string; strokeWidth?: number | string }>;
+    accentHex: string;
+    matches: (status: string | undefined) => boolean;
+    defaultOpen: boolean;
+}
+
+const CASSETTI: CassettoConfig[] = [
+    { id: 'analisi',    label: 'Da Analizzare',         icon: Clock,         accentHex: '#94a3b8', matches: (s) => !s || s === 'aperta' || s === 'in_corso', defaultOpen: true  },
+    { id: 'pronta',     label: 'Conteggi Pronti',       icon: FileBarChart,  accentHex: '#f59e0b', matches: (s) => s === 'pronta',                            defaultOpen: false },
+    { id: 'inviata',    label: 'Buste Paga Mancanti',   icon: AlertCircle,   accentHex: '#ef4444', matches: (s) => s === 'inviata',                           defaultOpen: false },
+    { id: 'trattativa', label: 'Concluse',              icon: Handshake,     accentHex: '#14b8a6', matches: (s) => s === 'trattativa',                        defaultOpen: false },
+    { id: 'chiusa',     label: 'Pagate',                icon: CheckCircle2,  accentHex: '#10b981', matches: (s) => s === 'chiusa',                            defaultOpen: false },
+];
+
+// ─── COMPONENTE CASSETTO ─────────────────────────────────────────────────────
+// Header con icona-app iOS (gradiente + soft glow), gerarchia title/subtitle,
+// fila di avatar dei lavoratori (iniziali colorate) per riempire la barra anche
+// a cassetto chiuso, e doppio "stack" sottostante per dare il senso di fascicoli
+// ammassati nel cassettiere. Apertura con spring iOS.
+const ACCENT_HEX_BY_COLOR: Record<string, string> = {
+    indigo: '#6366f1', emerald: '#10b981', orange: '#f97316', blue: '#3b82f6',
+    rose: '#f43f5e', violet: '#8b5cf6', teal: '#14b8a6',
+};
+
+const Cassetto: React.FC<{
+    config: CassettoConfig;
+    workers: Worker[];
+    isOpen: boolean;
+    onToggle: () => void;
+    children: React.ReactNode;
+}> = ({ config, workers, isOpen, onToggle, children }) => {
+    const Icon = config.icon;
+    const count = workers.length;
+    const previewWorkers = workers.slice(0, 6);
+    const remaining = count - previewWorkers.length;
+    const subtitle = count === 0 ? 'Nessuna pratica' : count === 1 ? '1 pratica' : `${count} pratiche`;
+
+    return (
+        <div className="mb-5 relative">
+            <button
+                onClick={onToggle}
+                className="w-full flex items-center gap-4 px-5 py-3.5 rounded-2xl bg-white/65 dark:bg-slate-800/65 backdrop-blur-2xl border border-white/60 dark:border-slate-700/60 shadow-[0_1px_2px_0_rgb(0,0,0,0.04)] hover:shadow-[0_8px_28px_-12px_rgb(0,0,0,0.18)] transition-all duration-300 hover:-translate-y-0.5 group relative overflow-hidden z-10"
+                style={{
+                    backgroundImage: `linear-gradient(to right, ${config.accentHex}14, transparent 38%)`,
+                    boxShadow: isOpen
+                        ? `inset 3px 0 0 0 ${config.accentHex}, 0 8px 28px -12px ${config.accentHex}aa, 0 1px 2px 0 rgb(0 0 0 / 0.04)`
+                        : undefined,
+                }}
+            >
+                {/* Glow gradiente accent sull'hover */}
+                <div
+                    className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"
+                    style={{ background: `linear-gradient(to right, ${config.accentHex}1a, transparent 55%)` }}
+                />
+
+                {/* Icona stile app iOS: gradiente, soft inner highlight, ombra colorata */}
+                <div
+                    className="w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 relative z-10 transition-transform duration-300 group-hover:scale-110 group-hover:-rotate-3"
+                    style={{
+                        background: `linear-gradient(135deg, ${config.accentHex}, ${config.accentHex}d0)`,
+                        boxShadow: `0 6px 16px -4px ${config.accentHex}80, inset 0 1px 0 0 rgb(255 255 255 / 0.25)`,
+                    }}
+                >
+                    <Icon className="w-5 h-5 text-white" strokeWidth={2.5} />
+                </div>
+
+                {/* Title + subtitle (gerarchia iOS) */}
+                <div className="flex flex-col items-start min-w-0 z-10">
+                    <span className="font-black text-sm uppercase tracking-widest text-slate-700 dark:text-slate-200 leading-tight">
+                        {config.label}
+                    </span>
+                    <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 tabular-nums mt-0.5">
+                        {subtitle}
+                    </span>
+                </div>
+
+                <div className="flex-1" />
+
+                {/* Fila di avatar — iniziali colorate con accent del worker, sovrapposte */}
+                {previewWorkers.length > 0 && (
+                    <div className="flex items-center -space-x-2 z-10">
+                        {previewWorkers.map((w, i) => {
+                            const hexColor = ACCENT_HEX_BY_COLOR[w.accentColor || 'indigo'] || '#3b82f6';
+                            const initial = (w.cognome || w.nome || '?').charAt(0).toUpperCase();
+                            return (
+                                <div
+                                    key={w.id}
+                                    className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-black text-white border-2 border-white dark:border-slate-800 shadow-sm transition-transform duration-200 hover:scale-125"
+                                    style={{
+                                        background: `linear-gradient(135deg, ${hexColor}, ${hexColor}c0)`,
+                                        zIndex: previewWorkers.length - i,
+                                    }}
+                                    title={`${w.cognome} ${w.nome}`}
+                                >
+                                    {initial}
+                                </div>
+                            );
+                        })}
+                        {remaining > 0 && (
+                            <div
+                                className="w-7 h-7 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-[9px] font-black text-slate-500 dark:text-slate-400 border-2 border-white dark:border-slate-800 shadow-sm"
+                                title={`+${remaining} altre pratiche`}
+                            >
+                                +{remaining}
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {/* Chevron in bottone rotondo (stile iOS) */}
+                <motion.div
+                    animate={{ rotate: isOpen ? 90 : 0 }}
+                    transition={{ type: 'spring', stiffness: 350, damping: 30 }}
+                    className="w-8 h-8 rounded-full bg-white/80 dark:bg-slate-900/80 flex items-center justify-center text-slate-400 dark:text-slate-500 shadow-sm z-10 ml-1"
+                >
+                    <ChevronRight className="w-4 h-4" strokeWidth={2.5} />
+                </motion.div>
+            </button>
+
+            {/* Stack hint: due "fascicoli" che sbucano sotto quando il cassetto è chiuso */}
+            {!isOpen && count > 0 && (
+                <>
+                    <div
+                        className="absolute left-2 right-2 -bottom-1.5 h-3 rounded-b-2xl bg-white/45 dark:bg-slate-800/45 backdrop-blur-xl border-x border-b border-white/40 dark:border-slate-700/40 pointer-events-none"
+                        aria-hidden="true"
+                    />
+                    <div
+                        className="absolute left-4 right-4 -bottom-3 h-3 rounded-b-2xl bg-white/25 dark:bg-slate-800/25 backdrop-blur-xl border-x border-b border-white/25 dark:border-slate-700/25 pointer-events-none"
+                        aria-hidden="true"
+                    />
+                </>
+            )}
+
+            <AnimatePresence initial={false}>
+                {isOpen && (
+                    <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ type: 'spring', stiffness: 350, damping: 30, mass: 0.9 }}
+                        style={{ overflow: 'hidden' }}
+                    >
+                        <div className="pt-5">{children}</div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+        </div>
+    );
+};
 
 interface DashboardPageProps {
     viewMode: 'home' | 'simple' | 'complex' | 'stats' | 'archive';
@@ -61,6 +226,7 @@ interface DashboardPageProps {
     handleOpenComplex: (id: string) => void;
     openEditModal: (e: React.MouseEvent, id: string) => void;
     handleDeleteWorker: (id: string) => void;
+    recentlyCreatedId: string | null;
     handleOpenModal: (mode: 'create' | 'edit') => void;
     updateWorkerById: (id: string, fields: any) => void;
     fileInputRef: React.RefObject<HTMLInputElement>;
@@ -96,6 +262,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
     handleOpenComplex,
     openEditModal,
     handleDeleteWorker,
+    recentlyCreatedId,
     handleOpenModal,
     updateWorkerById,
     fileInputRef,
@@ -107,7 +274,6 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
     type SortKey = 'cognome' | 'credito' | 'status' | 'data';
     const [sortBy, setSortBy] = useState<SortKey>('cognome');
     const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
-    const [showStatusFilters, setShowStatusFilters] = useState(false);
     const [isDataMenuOpen, setIsDataMenuOpen] = useState(false);
     const dataMenuRef = useRef<HTMLDivElement>(null);
 
@@ -159,6 +325,112 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
         if (sortBy === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
         else { setSortBy(key); setSortDir('asc'); }
     };
+
+    // --- CASSETTI: stato apertura + raggruppamento worker ---
+    const [openCassetti, setOpenCassetti] = useState<Set<CassettoId>>(() => {
+        if (typeof window === 'undefined') return new Set(['analisi']);
+        try {
+            const saved = localStorage.getItem('openCassetti');
+            if (saved) return new Set(JSON.parse(saved) as CassettoId[]);
+        } catch {}
+        return new Set(CASSETTI.filter(c => c.defaultOpen).map(c => c.id));
+    });
+
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        localStorage.setItem('openCassetti', JSON.stringify([...openCassetti]));
+    }, [openCassetti]);
+
+    const toggleCassetto = (id: CassettoId) => {
+        setOpenCassetti(prev => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id); else next.add(id);
+            return next;
+        });
+    };
+
+    const workersByCassetto = useMemo(() => {
+        const map = new Map<CassettoId, Worker[]>();
+        CASSETTI.forEach(c => map.set(c.id, []));
+        sortedWorkers.forEach(w => {
+            const found = CASSETTI.find(c => c.matches(w.status));
+            if (found) map.get(found.id)!.push(w);
+        });
+        return map;
+    }, [sortedWorkers]);
+
+    // Quando viene creata una nuova pratica: apri il cassetto giusto, sort per
+    // data desc (così la nuova card va in cima al suo cassetto) e scroll in alto.
+    useEffect(() => {
+        if (!recentlyCreatedId) return;
+        const newWorker = workers.find(w => w.id === recentlyCreatedId);
+        if (!newWorker) return;
+        const targetCassetto = CASSETTI.find(c => c.matches(newWorker.status));
+        if (targetCassetto) {
+            setOpenCassetti(prev => new Set([...prev, targetCassetto.id]));
+        }
+        setSortBy('data');
+        setSortDir('desc');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        // workers/setSortBy/setSortDir sono stabili o letti al volo: il trigger è recentlyCreatedId
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [recentlyCreatedId]);
+
+    // Helper: rendering di una card lavoratore (anello flash + overlay selezione + WorkerCard).
+    // Estratto per essere usato sia dentro i cassetti che nella vista flat di ricerca.
+    const renderWorkerCard = (w: Worker) => {
+        const isJustCreated = w.id === recentlyCreatedId;
+        return (
+            <motion.div key={w.id} variants={itemVariants} layout initial="hidden" animate="show" exit="exit" className="relative h-[420px]">
+                {isJustCreated && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: [0, 1, 1, 0] }}
+                        transition={{ duration: 2.4, times: [0, 0.08, 0.75, 1], ease: 'easeInOut' }}
+                        className="absolute -inset-1 rounded-[2.7rem] pointer-events-none z-30"
+                        style={{ boxShadow: '0 0 0 3px #10b981, 0 0 36px 6px rgba(16,185,129,0.5)' }}
+                    >
+                        <motion.div
+                            initial={{ opacity: 0.6, scale: 1 }}
+                            animate={{ opacity: 0, scale: 1.08 }}
+                            transition={{ duration: 1.5, ease: 'easeOut' }}
+                            className="absolute inset-0 rounded-[2.7rem] ring-2 ring-emerald-400"
+                        />
+                    </motion.div>
+                )}
+                {isSelectionMode && (
+                    <div
+                        onClick={() => toggleSelectWorker(w.id)}
+                        className={`absolute inset-0 z-40 rounded-[2.5rem] cursor-pointer transition-all duration-200 ${
+                            selectedIds.has(w.id)
+                                ? 'ring-2 ring-indigo-500 bg-indigo-500/10'
+                                : 'ring-1 ring-slate-300/40 dark:ring-slate-600/40 hover:bg-indigo-500/5 hover:ring-indigo-400/40'
+                        }`}
+                    >
+                        <div className={`absolute top-4 right-4 w-7 h-7 rounded-full border-2 flex items-center justify-center transition-all duration-200 shadow-md ${
+                            selectedIds.has(w.id)
+                                ? 'bg-indigo-600 border-indigo-600'
+                                : 'bg-white/90 dark:bg-slate-800/90 border-slate-300 dark:border-slate-600'
+                        }`}>
+                            {selectedIds.has(w.id) && <Check className="w-4 h-4 text-white" strokeWidth={3} />}
+                        </div>
+                    </div>
+                )}
+                <WorkerCard
+                    worker={w}
+                    onOpenSimple={handleOpenSimple}
+                    onOpenComplex={handleOpenComplex}
+                    onEdit={(e) => openEditModal(e, w.id)}
+                    onDelete={() => handleDeleteWorker(w.id)}
+                    onStatusChange={(id, status) => updateWorkerById(id, { status: status === '' ? undefined : status })}
+                    onNotesChange={(id, notes) => updateWorkerById(id, { notes })}
+                    onOpenArchive={onOpenArchive}
+                />
+            </motion.div>
+        );
+    };
+
+    const searchActive = searchQuery.trim().length > 0;
 
     // --- HANDLER TICKET RAPIDO ---
     const allTicketsOn = sortedWorkers.length > 0 && sortedWorkers.every(w => w.includeTickets !== false);
@@ -300,6 +572,14 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                                                 hoverBg: 'hover:bg-sky-50 dark:hover:bg-sky-950/60',
                                                 hoverText: 'hover:text-sky-700 dark:hover:text-sky-300',
                                                 onClick: () => { fileInputRef.current?.click(); setIsDataMenuOpen(false); },
+                                            },
+                                            {
+                                                icon: <FileText className="w-4 h-4 text-white" strokeWidth={2.5} />,
+                                                label: 'Report Stato (Word)',
+                                                iconBg: 'bg-indigo-500',
+                                                hoverBg: 'hover:bg-indigo-50 dark:hover:bg-indigo-950/60',
+                                                hoverText: 'hover:text-indigo-700 dark:hover:text-indigo-300',
+                                                onClick: () => { generateReport(workers); setIsDataMenuOpen(false); },
                                             },
                                         ].map((item, i) => (
                                             <motion.button
@@ -500,109 +780,26 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                     </div>
                 </div>
 
-                {/* 2. SMART FILTERS — AZIENDA + STATO A SCOMPARSA */}
-                {(() => {
-                    const STATUS_OPTIONS = [
-                        { id: 'ALL',        label: 'Tutti',          dot: null,      cls: 'bg-indigo-600 text-white border-indigo-500' },
-                        { id: 'analisi',    label: 'Da Analizzare',  dot: '#94a3b8', cls: 'bg-slate-600 text-white border-slate-500',   count: workers.filter(w => !w.status || w.status === 'aperta' || w.status === 'in_corso').length },
-                        { id: 'pronta',     label: 'Pronta',         dot: '#f59e0b', cls: 'bg-amber-500 text-white border-amber-400',    count: workers.filter(w => w.status === 'pronta').length },
-                        { id: 'trattativa', label: 'In Trattativa',  dot: '#f43f5e', cls: 'bg-rose-500 text-white border-rose-400',      count: workers.filter(w => w.status === 'trattativa').length },
-                        { id: 'inviata',    label: 'PEC Inviata',    dot: '#a855f7', cls: 'bg-purple-500 text-white border-purple-400',  count: workers.filter(w => w.status === 'inviata').length },
-                    ];
-                    // Queste opzioni hanno chip dedicati nella toolbar — non appaiono nella lista espandibile
-                    const EXTRA_STATUS_OPTS: typeof STATUS_OPTIONS = [
-                        { id: 'in_corso', label: 'In Corso', dot: '#f59e0b', cls: 'bg-amber-500 text-white border-amber-400',    count: workers.filter(w => w.status !== 'chiusa').length },
-                        { id: 'chiusa',   label: 'Conclusa', dot: '#10b981', cls: 'bg-emerald-500 text-white border-emerald-400', count: workers.filter(w => w.status === 'chiusa').length },
-                    ];
-                    const ALL_STATUS_OPTS = [...STATUS_OPTIONS, ...EXTRA_STATUS_OPTS];
-                    const hasStatusFilter = activeStatusFilter !== 'ALL';
-                    const activeOpt = ALL_STATUS_OPTS.find(o => o.id === activeStatusFilter) ?? STATUS_OPTIONS[0];
-                    const inactivePill = 'bg-white/40 dark:bg-slate-800/40 border border-slate-200/60 dark:border-slate-700/50 text-slate-500 dark:text-slate-400 hover:bg-white/70 dark:hover:bg-slate-700/60';
-
-                    return (
-                        <div className="mt-6 space-y-3">
-                            {/* RIGA PRINCIPALE: AZIENDE + TOGGLE STATO */}
-                            <div className="flex justify-center gap-3 flex-wrap items-center">
-                                {['ALL', ...SYSTEM_PROFILE_KEYS, ...customFilters].map((filterId) => {
-                                    const isActive = activeFilter === filterId;
-                                    return (
-                                        <button
-                                            key={filterId}
-                                            onClick={() => setActiveFilter(filterId)}
-                                            className={`px-6 py-2 rounded-2xl font-black text-xs uppercase tracking-widest transition-all duration-300 backdrop-blur-md flex items-center gap-2 ${getFilterStyle(filterId, isActive)}`}
-                                        >
-                                            {filterId === 'ALL' ? 'Tutti' : filterId.replace(/_/g, ' ')}
-                                            {filterId !== 'ALL' && (
-                                                <span className="opacity-70 font-mono text-[10px]">
-                                                    ({workers.filter(w => w.profilo === filterId).length})
-                                                </span>
-                                            )}
-                                        </button>
-                                    );
-                                })}
-
-                                <span className="w-px h-4 bg-slate-200 dark:bg-slate-700 mx-1" />
-
-                                {/* PILL TOGGLE STATO */}
-                                <button
-                                    onClick={() => setShowStatusFilters(v => !v)}
-                                    className={`px-4 py-2 rounded-2xl font-black text-xs uppercase tracking-widest transition-all duration-300 backdrop-blur-md flex items-center gap-2 border ${
-                                        hasStatusFilter
-                                            ? `${activeOpt.cls} shadow-md`
-                                            : showStatusFilters
-                                                ? 'bg-slate-100 dark:bg-slate-700 border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200'
-                                                : 'bg-white/50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-white/80 dark:hover:bg-slate-700/60'
-                                    }`}
-                                >
-                                    {hasStatusFilter && activeOpt.dot && (
-                                        <span className="w-2 h-2 rounded-full bg-white/80 shrink-0" />
-                                    )}
-                                    {hasStatusFilter ? activeOpt.label : 'Stato'}
-                                    <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${showStatusFilters ? 'rotate-180' : ''}`} />
-                                </button>
-                            </div>
-
-                            {/* RIGA STATUS (a scomparsa con animazione) */}
-                            <AnimatePresence>
-                                {showStatusFilters && (
-                                    <motion.div
-                                        initial={{ opacity: 0, height: 0 }}
-                                        animate={{ opacity: 1, height: 'auto' }}
-                                        exit={{ opacity: 0, height: 0 }}
-                                        transition={{ duration: 0.22, ease: 'easeInOut' }}
-                                        className="overflow-hidden"
-                                    >
-                                        <div className="flex justify-center gap-2 flex-wrap pt-1">
-                                            {STATUS_OPTIONS.map(opt => {
-                                                const isActive = activeStatusFilter === opt.id;
-                                                return (
-                                                    <button
-                                                        key={opt.id}
-                                                        onClick={() => {
-                                                            setActiveStatusFilter(opt.id);
-                                                            if (opt.id !== 'ALL') setShowStatusFilters(false);
-                                                        }}
-                                                        className={`px-4 py-1.5 rounded-xl font-bold text-[10px] uppercase tracking-widest transition-all duration-200 backdrop-blur-md flex items-center gap-1.5 border ${isActive ? opt.cls : inactivePill}`}
-                                                    >
-                                                        {opt.dot && (
-                                                            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isActive ? 'bg-white' : 'bg-slate-400'}`} />
-                                                        )}
-                                                        {opt.label}
-                                                        {'count' in opt && (
-                                                            <span className={`font-mono text-[9px] ${isActive ? 'opacity-80' : 'opacity-50'}`}>
-                                                                ({opt.count})
-                                                            </span>
-                                                        )}
-                                                    </button>
-                                                );
-                                            })}
-                                        </div>
-                                    </motion.div>
+                {/* 2. FILTRI AZIENDA — i filtri stato sono sostituiti dai cassetti sotto */}
+                <div className="mt-6 flex justify-center gap-3 flex-wrap items-center">
+                    {['ALL', ...SYSTEM_PROFILE_KEYS, ...customFilters].map((filterId) => {
+                        const isActive = activeFilter === filterId;
+                        return (
+                            <button
+                                key={filterId}
+                                onClick={() => setActiveFilter(filterId)}
+                                className={`px-6 py-2 rounded-2xl font-black text-xs uppercase tracking-widest transition-all duration-300 backdrop-blur-md flex items-center gap-2 ${getFilterStyle(filterId, isActive)}`}
+                            >
+                                {filterId === 'ALL' ? 'Tutti' : filterId.replace(/_/g, ' ')}
+                                {filterId !== 'ALL' && (
+                                    <span className="opacity-70 font-mono text-[10px]">
+                                        ({workers.filter(w => w.profilo === filterId).length})
+                                    </span>
                                 )}
-                            </AnimatePresence>
-                        </div>
-                    );
-                })()}
+                            </button>
+                        );
+                    })}
+                </div>
             </div>
             {/* --- 3. NO RESULTS STATE (MESSAGGIO VUOTO) --- */}
             <AnimatePresence>
@@ -669,31 +866,6 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
 
                     <span className="w-px h-5 bg-slate-200 dark:bg-slate-700 mx-1 shrink-0" />
 
-                    {/* Gruppo: Filtro rapido stato */}
-                    <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mr-0.5 shrink-0">Filtra</span>
-                    {([
-                        { id: 'in_corso', label: 'In Corso', color: 'bg-amber-500 text-white border-amber-400 shadow-amber-500/30', dot: '#f59e0b' },
-                        { id: 'chiusa',   label: 'Concluse', color: 'bg-emerald-500 text-white border-emerald-400 shadow-emerald-500/30', dot: '#10b981' },
-                    ] as const).map(f => {
-                        const isActive = activeStatusFilter === f.id;
-                        return (
-                            <button
-                                key={f.id}
-                                onClick={() => setActiveStatusFilter(isActive ? 'ALL' : f.id)}
-                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all duration-200 border ${
-                                    isActive
-                                        ? `${f.color} shadow-md`
-                                        : 'bg-white/60 dark:bg-slate-700/40 text-slate-500 dark:text-slate-400 border-slate-200/70 dark:border-slate-600/50 hover:bg-white dark:hover:bg-slate-700/70'
-                                }`}
-                            >
-                                <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: isActive ? 'white' : f.dot }} />
-                                {f.label}
-                            </button>
-                        );
-                    })}
-
-                    <span className="w-px h-5 bg-slate-200 dark:bg-slate-700 mx-1 shrink-0" />
-
                     {/* Gruppo: Ticket */}
                     <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mr-0.5 shrink-0">Ticket</span>
                     <button
@@ -729,65 +901,71 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                     </span>
                 </div>
 
-                <motion.div
-                    className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 pb-20"
-                    variants={containerVariants}
-                    initial="hidden" animate="show"
-                >
-                    <AnimatePresence mode='popLayout'>
+                {searchActive ? (
+                    /* RICERCA ATTIVA: grid piatto con tutti i risultati visibili
+                       senza dover aprire cassetti — l'obiettivo è "trovo subito". */
+                    <motion.div
+                        className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 pb-20"
+                        variants={containerVariants}
+                        initial="hidden"
+                        animate="show"
+                    >
+                        <AnimatePresence mode="popLayout">
+                            {sortedWorkers.map(renderWorkerCard)}
+                        </AnimatePresence>
+                    </motion.div>
+                ) : (
+                    /* CASSETTI — ogni stato è un drawer indipendente.
+                       "Da Analizzare" è sempre mostrato anche se vuoto: è il punto di
+                       atterraggio delle pratiche nuove e contiene la card "+ Crea". */
+                    <div className="pb-20">
+                        {CASSETTI.map(config => {
+                            const workersInCassetto = workersByCassetto.get(config.id) || [];
+                            const isOpen = openCassetti.has(config.id);
+                            if (workersInCassetto.length === 0 && config.id !== 'analisi') return null;
 
-                        {/* 1. LAVORATORI ESISTENTI */}
-                        {sortedWorkers.map(w => (
-                            <motion.div key={w.id} variants={itemVariants} layout initial="hidden" animate="show" exit="exit" className="relative h-[420px]">
-                                {isSelectionMode && (
-                                    <div
-                                        onClick={() => toggleSelectWorker(w.id)}
-                                        className={`absolute inset-0 z-40 rounded-[2.5rem] cursor-pointer transition-all duration-200 ${
-                                            selectedIds.has(w.id)
-                                                ? 'ring-2 ring-indigo-500 bg-indigo-500/10'
-                                                : 'ring-1 ring-slate-300/40 dark:ring-slate-600/40 hover:bg-indigo-500/5 hover:ring-indigo-400/40'
-                                        }`}
+                            return (
+                                <Cassetto
+                                    key={config.id}
+                                    config={config}
+                                    workers={workersInCassetto}
+                                    isOpen={isOpen}
+                                    onToggle={() => toggleCassetto(config.id)}
+                                >
+                                    <motion.div
+                                        className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8"
+                                        variants={containerVariants}
+                                        initial="hidden"
+                                        animate="show"
                                     >
-                                        <div className={`absolute top-4 right-4 w-7 h-7 rounded-full border-2 flex items-center justify-center transition-all duration-200 shadow-md ${
-                                            selectedIds.has(w.id)
-                                                ? 'bg-indigo-600 border-indigo-600'
-                                                : 'bg-white/90 dark:bg-slate-800/90 border-slate-300 dark:border-slate-600'
-                                        }`}>
-                                            {selectedIds.has(w.id) && <Check className="w-4 h-4 text-white" strokeWidth={3} />}
-                                        </div>
-                                    </div>
-                                )}
-                                <WorkerCard
-                                    worker={w}
-                                    onOpenSimple={handleOpenSimple}
-                                    onOpenComplex={handleOpenComplex}
-                                    onEdit={(e) => openEditModal(e, w.id)}
-                                    onDelete={() => handleDeleteWorker(w.id)}
-                                    onStatusChange={(id, status) => updateWorkerById(id, { status: status === '' ? undefined : status })}
-                                    onNotesChange={(id, notes) => updateWorkerById(id, { notes })}
-                                    onOpenArchive={onOpenArchive}
-                                />
-                            </motion.div>
-                        ))}
+                                        <AnimatePresence mode="popLayout">
+                                            {workersInCassetto.map(renderWorkerCard)}
 
-                        {/*  2. CARD "AGGIUNGI NUOVO" (ALLA FINE) */}
-                        {!isSelectionMode && <motion.div
-                            key="add-new-card"
-                            variants={itemVariants}
-                            layout
-                            onClick={() => handleOpenModal('create')}
-                            className="group relative w-full h-[420px] bg-white/40 dark:bg-slate-800/40 backdrop-blur-xl border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-[2.5rem] flex flex-col items-center justify-center cursor-pointer transition-all duration-500 hover:border-emerald-400 hover:bg-emerald-50/10 hover:shadow-[0_0_40px_-10px_rgba(16,185,129,0.3)] hover:-translate-y-2"
-                        >
-                            <div className="relative">
-                                <div className="absolute inset-0 bg-emerald-400/20 rounded-full blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 animate-pulse"></div>
-                                <div className="w-24 h-24 rounded-full bg-white dark:bg-slate-700 shadow-xl border border-white/80 dark:border-slate-500 flex items-center justify-center transition-all duration-500 group-hover:scale-110 group-hover:rotate-90 relative z-10">
-                                    <Plus className="w-10 h-10 text-slate-300 dark:text-slate-500 transition-colors duration-300 group-hover:text-emerald-500" strokeWidth={2.5} />
-                                </div>
-                            </div>
-                            <span className="mt-6 font-black text-slate-400 uppercase tracking-widest text-sm transition-colors duration-300 group-hover:text-emerald-600">Crea Nuova Pratica</span>
-                        </motion.div>}
-                    </AnimatePresence>
-                </motion.div>
+                                            {/* CARD "AGGIUNGI NUOVO" — solo dentro 'Da Analizzare' */}
+                                            {config.id === 'analisi' && !isSelectionMode && (
+                                                <motion.div
+                                                    key="add-new-card"
+                                                    variants={itemVariants}
+                                                    layout
+                                                    onClick={() => handleOpenModal('create')}
+                                                    className="group relative w-full h-[420px] bg-white/40 dark:bg-slate-800/40 backdrop-blur-xl border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-[2.5rem] flex flex-col items-center justify-center cursor-pointer transition-all duration-500 hover:border-emerald-400 hover:bg-emerald-50/10 hover:shadow-[0_0_40px_-10px_rgba(16,185,129,0.3)] hover:-translate-y-2"
+                                                >
+                                                    <div className="relative">
+                                                        <div className="absolute inset-0 bg-emerald-400/20 rounded-full blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 animate-pulse"></div>
+                                                        <div className="w-24 h-24 rounded-full bg-white dark:bg-slate-700 shadow-xl border border-white/80 dark:border-slate-500 flex items-center justify-center transition-all duration-500 group-hover:scale-110 group-hover:rotate-90 relative z-10">
+                                                            <Plus className="w-10 h-10 text-slate-300 dark:text-slate-500 transition-colors duration-300 group-hover:text-emerald-500" strokeWidth={2.5} />
+                                                        </div>
+                                                    </div>
+                                                    <span className="mt-6 font-black text-slate-400 uppercase tracking-widest text-sm transition-colors duration-300 group-hover:text-emerald-600">Crea Nuova Pratica</span>
+                                                </motion.div>
+                                            )}
+                                        </AnimatePresence>
+                                    </motion.div>
+                                </Cassetto>
+                            );
+                        })}
+                    </div>
+                )}
                 </>
             )}
 

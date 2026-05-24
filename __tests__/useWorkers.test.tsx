@@ -214,10 +214,10 @@ describe('handleSaveWorker — edit', () => {
     });
 });
 
-// ─── CRUD — Delete ───────────────────────────────────────────────────────────
+// ─── CRUD — Delete (optimistic + undo window) ────────────────────────────────
 
-describe('delete', () => {
-    it('handleDeleteWorker sets workerToDelete', async () => {
+describe('delete (optimistic + undo)', () => {
+    it('handleDeleteWorker removes the worker from the UI immediately', async () => {
         mockSelect.mockResolvedValueOnce({ data: [makeDbWorker()], error: null });
 
         const { result } = renderHook(() => useWorkers(mockToast));
@@ -225,29 +225,78 @@ describe('delete', () => {
 
         const id = result.current.workers[0].id;
         act(() => { result.current.handleDeleteWorker(id); });
-        expect(result.current.workerToDelete).toBe(id);
-    });
-
-    it('confirmDelete removes the worker and clears workerToDelete', async () => {
-        mockSelect.mockResolvedValueOnce({ data: [makeDbWorker()], error: null });
-
-        const { result } = renderHook(() => useWorkers(mockToast));
-        await waitFor(() => expect(result.current.isWorkersLoading).toBe(false));
-
-        const id = result.current.workers[0].id;
-        act(() => { result.current.handleDeleteWorker(id); });
-        await act(async () => { await result.current.confirmDelete(); });
-
         expect(result.current.workers.find(w => w.id === id)).toBeUndefined();
-        expect(result.current.workerToDelete).toBeNull();
     });
 
-    it('confirmDelete is a no-op when workerToDelete is null', async () => {
+    it('handleDeleteWorker shows an info toast with an "Annulla" action', async () => {
+        mockSelect.mockResolvedValueOnce({ data: [makeDbWorker()], error: null });
+
         const { result } = renderHook(() => useWorkers(mockToast));
         await waitFor(() => expect(result.current.isWorkersLoading).toBe(false));
 
-        const initialCount = result.current.workers.length;
-        await act(async () => { await result.current.confirmDelete(); });
-        expect(result.current.workers.length).toBe(initialCount);
+        const id = result.current.workers[0].id;
+        act(() => { result.current.handleDeleteWorker(id); });
+
+        expect(mockToast).toHaveBeenCalledWith(
+            expect.stringContaining('eliminata'),
+            'info',
+            expect.objectContaining({
+                action: expect.objectContaining({ label: 'Annulla' }),
+            }),
+        );
+    });
+
+    it('undo restores the worker and skips the DB delete', async () => {
+        vi.useFakeTimers();
+        try {
+            mockSelect.mockResolvedValueOnce({ data: [makeDbWorker()], error: null });
+
+            const { result } = renderHook(() => useWorkers(mockToast));
+            await vi.waitFor(() => expect(result.current.isWorkersLoading).toBe(false));
+
+            const id = result.current.workers[0].id;
+            act(() => { result.current.handleDeleteWorker(id); });
+
+            // Worker rimosso dalla UI
+            expect(result.current.workers.find(w => w.id === id)).toBeUndefined();
+
+            // Recupero la callback "Annulla" dal toast appena emesso
+            const deleteCall = mockToast.mock.calls.find(c => c[2]?.action);
+            expect(deleteCall).toBeDefined();
+            const undo = (deleteCall![2] as any).action.onClick as () => void;
+
+            act(() => { undo(); });
+
+            // Worker ripristinato
+            expect(result.current.workers.find(w => w.id === id)).toBeDefined();
+
+            // Anche oltre la finestra di undo, niente cancellazione DB
+            await act(async () => { await vi.advanceTimersByTimeAsync(6000); });
+            expect(mockDelete).not.toHaveBeenCalled();
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('after the undo window expires the DB delete is committed', async () => {
+        vi.useFakeTimers();
+        try {
+            mockSelect.mockResolvedValueOnce({ data: [makeDbWorker()], error: null });
+
+            const { result } = renderHook(() => useWorkers(mockToast));
+            await vi.waitFor(() => expect(result.current.isWorkersLoading).toBe(false));
+
+            const id = result.current.workers[0].id;
+            act(() => { result.current.handleDeleteWorker(id); });
+
+            expect(mockDelete).not.toHaveBeenCalled();
+
+            await act(async () => { await vi.advanceTimersByTimeAsync(5100); });
+
+            expect(mockDelete).toHaveBeenCalledTimes(1);
+            expect(result.current.workers.find(w => w.id === id)).toBeUndefined();
+        } finally {
+            vi.useRealTimers();
+        }
     });
 });

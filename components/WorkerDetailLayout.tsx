@@ -210,8 +210,10 @@ const WorkerDetailLayout: React.FC<WorkerDetailLayoutProps> = ({
     const isPast = steps.indexOf(activeStatus) > steps.indexOf(step);
     let colorClass = 'text-slate-400 dark:text-slate-200 border-slate-300 dark:text-slate-500 dark:text-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800';
     if (isActive || isPast) {
-      if (step === 'analisi' || step === 'trattativa') colorClass = 'text-white bg-red-500 border-red-500 dark:bg-red-600 dark:border-red-500 dark:shadow-[0_0_10px_rgba(220,38,38,0.5)]';
-      else if (step === 'pronta' || step === 'inviata') colorClass = 'text-white bg-amber-500 border-amber-500 dark:bg-amber-600 dark:border-amber-500 dark:shadow-[0_0_10px_rgba(217,119,6,0.5)]';
+      if (step === 'analisi') colorClass = 'text-white bg-slate-500 border-slate-500 dark:bg-slate-600 dark:border-slate-500 dark:shadow-[0_0_10px_rgba(100,116,139,0.5)]';
+      else if (step === 'pronta') colorClass = 'text-white bg-amber-500 border-amber-500 dark:bg-amber-600 dark:border-amber-500 dark:shadow-[0_0_10px_rgba(217,119,6,0.5)]';
+      else if (step === 'inviata') colorClass = 'text-white bg-red-500 border-red-500 dark:bg-red-600 dark:border-red-500 dark:shadow-[0_0_10px_rgba(220,38,38,0.5)]';
+      else if (step === 'trattativa') colorClass = 'text-white bg-teal-500 border-teal-500 dark:bg-teal-600 dark:border-teal-500 dark:shadow-[0_0_10px_rgba(20,184,166,0.5)]';
       else if (step === 'chiusa') colorClass = 'text-white bg-emerald-500 border-emerald-500 dark:bg-emerald-600 dark:border-emerald-500 dark:shadow-[0_0_10px_rgba(5,150,105,0.5)]';
     }
     return (
@@ -538,11 +540,11 @@ const WorkerDetailLayout: React.FC<WorkerDetailLayoutProps> = ({
               >
                 <div className="mt-6 mb-2 relative flex justify-between items-center z-10 px-4">
                   <div className="absolute top-5 left-0 w-full h-0.5 bg-slate-200 dark:bg-slate-700 -z-10 transition-colors"></div>
-                  <TimelineStep step="analisi" label="Analisi" icon={Search} activeStatus={legalStatus} />
+                  <TimelineStep step="analisi" label="Da Analizzare" icon={Search} activeStatus={legalStatus} />
                   <TimelineStep step="pronta" label="Conteggi" icon={Calculator} activeStatus={legalStatus} />
-                  <TimelineStep step="inviata" label="PEC Inviata" icon={Send} activeStatus={legalStatus} />
-                  <TimelineStep step="trattativa" label="Trattativa" icon={Handshake} activeStatus={legalStatus} />
-                  <TimelineStep step="chiusa" label="Chiusa" icon={CheckCircle2} activeStatus={legalStatus} />
+                  <TimelineStep step="inviata" label="Buste Paga Mancanti" icon={Send} activeStatus={legalStatus} />
+                  <TimelineStep step="trattativa" label="Conclusa" icon={Handshake} activeStatus={legalStatus} />
+                  <TimelineStep step="chiusa" label="Pagata" icon={CheckCircle2} activeStatus={legalStatus} />
                 </div>
               </motion.div>
             )}
