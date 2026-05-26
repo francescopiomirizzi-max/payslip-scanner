@@ -390,6 +390,7 @@ const WorkerDetailLayout: React.FC<WorkerDetailLayoutProps> = ({
                       <LineChart className="w-4 h-4 text-amber-500" strokeWidth={2.5} />
                       Calcolo interessi (ISTAT)
                     </button>
+                    {!isReadOnly && (
                     <button
                       onClick={() => { onSendPec(); setIsActionsOpen(false); }}
                       className="w-full flex items-center gap-3 px-4 py-3 text-sm font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors border-t border-slate-100 dark:border-slate-800"
@@ -397,12 +398,14 @@ const WorkerDetailLayout: React.FC<WorkerDetailLayoutProps> = ({
                       <Send className="w-4 h-4 text-fuchsia-500" strokeWidth={2.5} />
                       Invia PEC
                     </button>
+                    )}
                   </motion.div>
                 )}
               </AnimatePresence>
             </div>
 
-            {/* TASTO DOWNLOAD */}
+            {/* TASTO DOWNLOAD — nascosto in modalita' sola lettura */}
+            {!isReadOnly && (
             <button
               onClick={onPrintTables}
               className="group relative px-6 py-2.5 rounded-xl font-bold text-white shadow-lg hover:shadow-xl hover:-translate-y-0.5 active:scale-95 transition-all duration-300 border border-white/10 overflow-hidden flex items-center gap-2"
@@ -412,8 +415,10 @@ const WorkerDetailLayout: React.FC<WorkerDetailLayoutProps> = ({
               <Download className="w-4 h-4 transition-transform duration-300 group-hover:translate-y-1" strokeWidth={2.5} />
               <span className="hidden xl:inline">Download</span>
             </button>
+            )}
 
-            {/* TASTO VAI AL REPORT */}
+            {/* TASTO VAI AL REPORT — nascosto in modalita' sola lettura */}
+            {!isReadOnly && (
             <button
               onClick={onShowReport}
               className="group relative px-6 py-2.5 rounded-xl font-bold text-white shadow-lg hover:shadow-xl hover:-translate-y-0.5 active:scale-95 transition-all duration-300 border border-white/10 overflow-hidden flex items-center gap-2"
@@ -423,6 +428,7 @@ const WorkerDetailLayout: React.FC<WorkerDetailLayoutProps> = ({
               <FileSpreadsheet className="w-4 h-4 transition-transform duration-500 group-hover:rotate-12" strokeWidth={2.5} />
               <span className="hidden xl:inline">Vai al Report</span>
             </button>
+            )}
 
             {/* TASTO ARCHIVIO PDF */}
             <button

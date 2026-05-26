@@ -6,6 +6,7 @@ import { motion } from 'framer-motion';
 import { YEARS, AnnoDati, getColumnsByProfile } from './types';
 import { parseLocalFloat, getProfiloBadgeLabel } from './utils/formatters';
 import { EXCLUDED_INDEMNITY_COLS } from './utils/calculationEngine';
+import { useIsReadOnly } from './lib/readonly';
 
 // --- HELPER DI FORMATTAZIONE SICURA ---
 const fmt = (val: any) => {
@@ -186,6 +187,7 @@ TOTALE CREDITO ${(!showPercepito && !includeTickets) ? 'LORDO' : 'NETTO'} SPETTA
 export const RelazioneModal = ({ isOpen, onClose, worker, totals, includeExFest = false, includeTickets = true, showPercepito = true, startClaimYear = 2008 }: any) => {
 
     const [copiato, setCopiato] = useState(false);
+    const isReadOnly = useIsReadOnly();
 
     if (!isOpen) return null;
 
@@ -792,7 +794,9 @@ export const RelazioneModal = ({ isOpen, onClose, worker, totals, includeExFest 
                     </motion.div>
                 </div>
 
-                {/* FOOTER - Staggered Animations & Micro-Interactions */}
+                {/* FOOTER export/azioni — nascosto in modalita' sola lettura (tutti i bottoni
+                    sono esportazioni di documenti sensibili: Copia testo, Word, Excel, Stampa PDF) */}
+                {!isReadOnly && (
                 <div className="px-8 py-5 border-t border-slate-200/50 dark:border-slate-800/50 bg-white/50 dark:bg-slate-900/50 flex flex-col sm:flex-row gap-4 justify-between items-center shrink-0">
 
                     {/* Utility Button (Sinistra) */}
@@ -849,6 +853,7 @@ export const RelazioneModal = ({ isOpen, onClose, worker, totals, includeExFest 
                         </motion.button>
                     </div>
                 </div>
+                )}
             </motion.div>
         </motion.div>
     );

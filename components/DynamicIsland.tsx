@@ -7,6 +7,7 @@ import {
     ScrollText, ExternalLink
 } from 'lucide-react';
 import { useIsland } from '../IslandContext';
+import { useIsReadOnly } from '../lib/readonly';
 import { FRAMER_PHYSICS, APPLE_EASE } from '../framerConfig';
 import { useRagAvvocato } from '../hooks/useRagAvvocato';
 import RagAdminPanel from './RagAdminPanel';
@@ -99,6 +100,8 @@ const DynamicIsland = ({ workers = [] }: { workers?: { id: string | number; nome
         minimizeUpload,
         restoreUpload
     } = useIsland();
+
+    const isReadOnly = useIsReadOnly();
 
     // ✨ BISTURI 1A: STATO CONTESTO ISOLA
     const [islandContext, setIslandContext] = useState<'detail' | 'report'>('detail');
@@ -2012,16 +2015,20 @@ const DynamicIsland = ({ workers = [] }: { workers?: { id: string | number; nome
                                     <button onClick={() => window.dispatchEvent(new CustomEvent('trigger-dashboard'))} className="p-1.5 text-slate-400 hover:text-blue-400 hover:bg-blue-500/10 rounded-full transition-colors group relative" title="Torna alla Dashboard"><ArrowLeft size={18} strokeWidth={2.5} /></button>
                                     <div className="w-px h-5 bg-slate-700/50"></div>
                                     <button onClick={() => window.dispatchEvent(new CustomEvent('trigger-edit'))} className="p-1.5 text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-full transition-colors group relative" title="Torna alla Gestione Dati"><LayoutGrid size={18} strokeWidth={2.5} /></button>
+                                    {!isReadOnly && (<>
                                     <div className="w-px h-5 bg-slate-700/50"></div>
                                     <button onClick={() => window.dispatchEvent(new CustomEvent('trigger-print'))} className="p-1.5 text-slate-400 hover:text-violet-400 hover:bg-violet-500/10 rounded-full transition-colors group relative" title="Stampa Immediata"><Printer size={18} strokeWidth={2.5} /></button>
+                                    </>)}
                                 </>
                             ) : (
                                 <>
                                     <button onClick={() => window.dispatchEvent(new CustomEvent('trigger-dashboard'))} className="p-1.5 text-slate-400 hover:text-blue-400 hover:bg-blue-500/10 rounded-full transition-colors group relative" title="Torna alla Dashboard"><ArrowLeft size={18} strokeWidth={2.5} /></button>
+                                    {!isReadOnly && (<>
                                     <div className="w-px h-5 bg-slate-700/50"></div>
                                     <button onClick={() => window.dispatchEvent(new CustomEvent('trigger-download'))} className="p-1.5 text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-full transition-colors group relative" title="Scarica Tabelle Dati (PDF)"><Download size={18} strokeWidth={2.5} /></button>
                                     <div className="w-px h-5 bg-slate-700/50"></div>
                                     <button onClick={() => window.dispatchEvent(new CustomEvent('trigger-report'))} className="p-1.5 text-slate-400 hover:text-violet-400 hover:bg-violet-500/10 rounded-full transition-colors group relative" title="Vai al Report Ufficiale"><FileSpreadsheet size={18} strokeWidth={2.5} /></button>
+                                    </>)}
                                 </>
                             )}
                         </motion.div>
