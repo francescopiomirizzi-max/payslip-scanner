@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useEffect } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useLayoutEffect } from 'react';
 import { motion, AnimatePresence, LayoutGroup } from 'framer-motion';
 import {
     Search,
@@ -35,6 +35,7 @@ import {
 } from 'lucide-react';
 import WorkerCard from '../components/WorkerCard';
 import { AnimatedCounter } from '../components/ui/AnimatedCounter';
+import { useIsReadOnly } from '../lib/readonly';
 import { Worker } from '../types';
 import { SYSTEM_PROFILES, SYSTEM_PROFILE_KEYS } from '../config/profiles';
 import { DashboardStats, WorkerStatItem, ModalConfig } from '../hooks/useDashboardStats';
@@ -65,121 +66,116 @@ const CASSETTI: CassettoConfig[] = [
 ];
 
 // ─── COMPONENTE CASSETTO ─────────────────────────────────────────────────────
-// Header con icona-app iOS (gradiente + soft glow), gerarchia title/subtitle,
-// fila di avatar dei lavoratori (iniziali colorate) per riempire la barra anche
-// a cassetto chiuso, e doppio "stack" sottostante per dare il senso di fascicoli
-// ammassati nel cassettiere. Apertura con spring iOS.
-const ACCENT_HEX_BY_COLOR: Record<string, string> = {
-    indigo: '#6366f1', emerald: '#10b981', orange: '#f97316', blue: '#3b82f6',
-    rose: '#f43f5e', violet: '#8b5cf6', teal: '#14b8a6',
-};
-
+// Bar compatta in singola riga: icona + label + count + badge cliccabili
+// (uno per lavoratore, colorati per azienda) + chevron. I badge appaiono solo
+// a cassetto chiuso: cliccarli apre direttamente la WorkerDetailPage. Quando il
+// cassetto è aperto, le card sostituiscono i badge nello spazio sotto.
+//
+// Overflow del pannello aperto: parte hidden per animare la height, passa a
+// visible a fine apertura → così le WorkerCard non vengono tagliate ai lati
+// quando si inclinano in hover.
 const Cassetto: React.FC<{
     config: CassettoConfig;
     workers: Worker[];
     isOpen: boolean;
     onToggle: () => void;
+    onOpenWorker: (id: string) => void;
     children: React.ReactNode;
-}> = ({ config, workers, isOpen, onToggle, children }) => {
+}> = ({ config, workers, isOpen, onToggle, onOpenWorker, children }) => {
     const Icon = config.icon;
     const count = workers.length;
-    const previewWorkers = workers.slice(0, 6);
-    const remaining = count - previewWorkers.length;
-    const subtitle = count === 0 ? 'Nessuna pratica' : count === 1 ? '1 pratica' : `${count} pratiche`;
+
+    // Overflow visible solo dopo apertura completa (anti-clip card in hover).
+    const [overflowVisible, setOverflowVisible] = useState(false);
+    useLayoutEffect(() => {
+        if (!isOpen) setOverflowVisible(false);
+    }, [isOpen]);
 
     return (
-        <div className="mb-5 relative">
-            <button
+        <div className="mb-3 relative">
+            {/* Outer è <div role="button"> per poter contenere i <button> dei badge
+                (nested button non è valido in HTML). Toggle via click/Enter/Space. */}
+            <div
                 onClick={onToggle}
-                className="w-full flex items-center gap-4 px-5 py-3.5 rounded-2xl bg-white/65 dark:bg-slate-800/65 backdrop-blur-2xl border border-white/60 dark:border-slate-700/60 shadow-[0_1px_2px_0_rgb(0,0,0,0.04)] hover:shadow-[0_8px_28px_-12px_rgb(0,0,0,0.18)] transition-all duration-300 hover:-translate-y-0.5 group relative overflow-hidden z-10"
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggle(); }
+                }}
+                className="w-full flex items-center gap-3 px-3.5 py-2 rounded-xl bg-white/65 dark:bg-slate-800/65 backdrop-blur-xl border border-white/60 dark:border-slate-700/60 shadow-[0_1px_2px_0_rgb(0,0,0,0.04)] hover:shadow-[0_6px_20px_-10px_rgb(0,0,0,0.15)] transition-all duration-200 hover:-translate-y-px group relative z-10 cursor-pointer"
                 style={{
-                    backgroundImage: `linear-gradient(to right, ${config.accentHex}14, transparent 38%)`,
-                    boxShadow: isOpen
-                        ? `inset 3px 0 0 0 ${config.accentHex}, 0 8px 28px -12px ${config.accentHex}aa, 0 1px 2px 0 rgb(0 0 0 / 0.04)`
-                        : undefined,
+                    backgroundImage: `linear-gradient(to right, ${config.accentHex}10, transparent 32%)`,
                 }}
             >
-                {/* Glow gradiente accent sull'hover */}
+                {/* Icona compatta del cassetto */}
                 <div
-                    className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"
-                    style={{ background: `linear-gradient(to right, ${config.accentHex}1a, transparent 55%)` }}
-                />
-
-                {/* Icona stile app iOS: gradiente, soft inner highlight, ombra colorata */}
-                <div
-                    className="w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 relative z-10 transition-transform duration-300 group-hover:scale-110 group-hover:-rotate-3"
+                    className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-transform duration-200 group-hover:scale-105"
                     style={{
                         background: `linear-gradient(135deg, ${config.accentHex}, ${config.accentHex}d0)`,
-                        boxShadow: `0 6px 16px -4px ${config.accentHex}80, inset 0 1px 0 0 rgb(255 255 255 / 0.25)`,
+                        boxShadow: `0 3px 10px -3px ${config.accentHex}80, inset 0 1px 0 0 rgb(255 255 255 / 0.25)`,
                     }}
                 >
-                    <Icon className="w-5 h-5 text-white" strokeWidth={2.5} />
+                    <Icon className="w-4 h-4 text-white" strokeWidth={2.5} />
                 </div>
 
-                {/* Title + subtitle (gerarchia iOS) */}
-                <div className="flex flex-col items-start min-w-0 z-10">
-                    <span className="font-black text-sm uppercase tracking-widest text-slate-700 dark:text-slate-200 leading-tight">
-                        {config.label}
-                    </span>
-                    <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 tabular-nums mt-0.5">
-                        {subtitle}
-                    </span>
-                </div>
+                {/* Label + count inline */}
+                <span className="font-black text-[11px] uppercase tracking-widest text-slate-700 dark:text-slate-200 shrink-0">
+                    {config.label}
+                </span>
+                <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 tabular-nums shrink-0 -ml-1">
+                    · {count}
+                </span>
 
-                <div className="flex-1" />
-
-                {/* Fila di avatar — iniziali colorate con accent del worker, sovrapposte */}
-                {previewWorkers.length > 0 && (
-                    <div className="flex items-center -space-x-2 z-10">
-                        {previewWorkers.map((w, i) => {
-                            const hexColor = ACCENT_HEX_BY_COLOR[w.accentColor || 'indigo'] || '#3b82f6';
-                            const initial = (w.cognome || w.nome || '?').charAt(0).toUpperCase();
-                            return (
-                                <div
-                                    key={w.id}
-                                    className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-black text-white border-2 border-white dark:border-slate-800 shadow-sm transition-transform duration-200 hover:scale-125"
-                                    style={{
-                                        background: `linear-gradient(135deg, ${hexColor}, ${hexColor}c0)`,
-                                        zIndex: previewWorkers.length - i,
-                                    }}
-                                    title={`${w.cognome} ${w.nome}`}
-                                >
-                                    {initial}
+                {/* Badge lavoratori cliccabili — solo a cassetto chiuso. Scrollabili
+                    orizzontalmente (trackpad swipe / shift+wheel) quando non ci stanno.
+                    Colore preso da SYSTEM_PROFILES.footer; fallback slate per custom.
+                    Il wrapper flex-1 occupa sempre lo spazio centrale così il chevron
+                    resta ancorato a destra anche quando i badge non sono mostrati. */}
+                <div className="flex-1 min-w-0 ml-2 relative">
+                    {!isOpen && count > 0 && (
+                        <>
+                            <div className="overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                                <div className="flex items-center gap-1.5 py-0.5">
+                                    {workers.map(w => {
+                                        const profilo = SYSTEM_PROFILES[w.profilo];
+                                        const wrapCls = profilo?.footer.wrap ?? 'bg-slate-100 dark:bg-slate-700/40 border-slate-200 dark:border-slate-600/50';
+                                        const dotCls  = profilo?.footer.dot  ?? 'bg-slate-400';
+                                        const nameCls = profilo?.footer.name ?? 'text-slate-700 dark:text-slate-300';
+                                        return (
+                                            <button
+                                                key={w.id}
+                                                onClick={(e) => { e.stopPropagation(); onOpenWorker(w.id); }}
+                                                title={`Apri scheda ${w.nome} ${w.cognome}`}
+                                                className={`shrink-0 flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-bold border transition-all duration-150 hover:scale-[1.06] hover:shadow-sm ${wrapCls}`}
+                                            >
+                                                <span className={`w-1.5 h-1.5 rounded-full ${dotCls}`} />
+                                                <span className={`tracking-tight ${nameCls}`}>{w.cognome}</span>
+                                            </button>
+                                        );
+                                    })}
                                 </div>
-                            );
-                        })}
-                        {remaining > 0 && (
-                            <div
-                                className="w-7 h-7 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-[9px] font-black text-slate-500 dark:text-slate-400 border-2 border-white dark:border-slate-800 shadow-sm"
-                                title={`+${remaining} altre pratiche`}
-                            >
-                                +{remaining}
                             </div>
-                        )}
-                    </div>
-                )}
+                            {/* fade-right: hint visivo che ci sono altri badge oltre il bordo */}
+                            <div className="absolute inset-y-0 right-0 w-8 pointer-events-none bg-gradient-to-l from-white/65 dark:from-slate-800/65 to-transparent" />
+                        </>
+                    )}
+                </div>
 
-                {/* Chevron in bottone rotondo (stile iOS) */}
+                {/* Chevron — nudge "apri/chiudi" */}
                 <motion.div
                     animate={{ rotate: isOpen ? 90 : 0 }}
                     transition={{ type: 'spring', stiffness: 350, damping: 30 }}
-                    className="w-8 h-8 rounded-full bg-white/80 dark:bg-slate-900/80 flex items-center justify-center text-slate-400 dark:text-slate-500 shadow-sm z-10 ml-1"
+                    className="text-slate-400 dark:text-slate-500 shrink-0"
                 >
                     <ChevronRight className="w-4 h-4" strokeWidth={2.5} />
                 </motion.div>
-            </button>
+            </div>
 
-            {/* Stack hint: due "fascicoli" che sbucano sotto quando il cassetto è chiuso */}
+            {/* Stack hint: due fascicoli sottili sbucano sotto a cassetto chiuso */}
             {!isOpen && count > 0 && (
                 <>
-                    <div
-                        className="absolute left-2 right-2 -bottom-1.5 h-3 rounded-b-2xl bg-white/45 dark:bg-slate-800/45 backdrop-blur-xl border-x border-b border-white/40 dark:border-slate-700/40 pointer-events-none"
-                        aria-hidden="true"
-                    />
-                    <div
-                        className="absolute left-4 right-4 -bottom-3 h-3 rounded-b-2xl bg-white/25 dark:bg-slate-800/25 backdrop-blur-xl border-x border-b border-white/25 dark:border-slate-700/25 pointer-events-none"
-                        aria-hidden="true"
-                    />
+                    <div className="absolute left-2 right-2 -bottom-1 h-2 rounded-b-xl bg-white/45 dark:bg-slate-800/45 backdrop-blur-xl border-x border-b border-white/40 dark:border-slate-700/40 pointer-events-none" aria-hidden="true" />
+                    <div className="absolute left-4 right-4 -bottom-2 h-2 rounded-b-xl bg-white/25 dark:bg-slate-800/25 backdrop-blur-xl border-x border-b border-white/25 dark:border-slate-700/25 pointer-events-none" aria-hidden="true" />
                 </>
             )}
 
@@ -190,9 +186,10 @@ const Cassetto: React.FC<{
                         animate={{ height: 'auto', opacity: 1 }}
                         exit={{ height: 0, opacity: 0 }}
                         transition={{ type: 'spring', stiffness: 350, damping: 30, mass: 0.9 }}
-                        style={{ overflow: 'hidden' }}
+                        onAnimationComplete={() => { if (isOpen) setOverflowVisible(true); }}
+                        style={{ overflow: overflowVisible ? 'visible' : 'hidden' }}
                     >
-                        <div className="pt-5">{children}</div>
+                        <div className="pt-4 px-1">{children}</div>
                     </motion.div>
                 )}
             </AnimatePresence>
@@ -271,6 +268,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
     setViewMode,
     onOpenArchive,
 }) => {
+    const isReadOnly = useIsReadOnly();
     type SortKey = 'cognome' | 'credito' | 'status' | 'data';
     const [sortBy, setSortBy] = useState<SortKey>('cognome');
     const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
@@ -565,14 +563,14 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                                                 hoverText: 'hover:text-violet-700 dark:hover:text-violet-300',
                                                 onClick: () => { handleExportData(); setIsDataMenuOpen(false); },
                                             },
-                                            {
+                                            ...(isReadOnly ? [] : [{
                                                 icon: <Upload className="w-4 h-4 text-white" strokeWidth={2.5} />,
                                                 label: 'Importa JSON',
                                                 iconBg: 'bg-sky-500',
                                                 hoverBg: 'hover:bg-sky-50 dark:hover:bg-sky-950/60',
                                                 hoverText: 'hover:text-sky-700 dark:hover:text-sky-300',
                                                 onClick: () => { fileInputRef.current?.click(); setIsDataMenuOpen(false); },
-                                            },
+                                            }]),
                                             {
                                                 icon: <FileText className="w-4 h-4 text-white" strokeWidth={2.5} />,
                                                 label: 'Report Stato (Word)',
@@ -603,7 +601,8 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                         <input type="file" accept=".json" ref={fileInputRef} onChange={handleImportData} className="hidden" />
                     </div>
 
-                    {/* GRUPPO AZIONE PRINCIPALE */}
+                    {/* GRUPPO AZIONE PRINCIPALE — nascosto in modalita' sola lettura */}
+                    {!isReadOnly && (
                     <button
                         onClick={() => handleOpenModal('create')}
                         className="group relative px-8 py-3 rounded-xl font-bold text-white shadow-[0_10px_30px_-10px_rgba(16,185,129,0.5)] hover:shadow-[0_20px_40px_-10px_rgba(16,185,129,0.7)] hover:-translate-y-1 active:scale-95 transition-all duration-300 border border-white/20 overflow-hidden flex gap-2 items-center"
@@ -613,6 +612,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                         <Plus className="w-5 h-5 transition-transform duration-500 group-hover:rotate-180" strokeWidth={3} />
                         <span>Nuovo Lavoratore</span>
                     </button>
+                    )}
                 </div>
             </div>
 
@@ -882,7 +882,8 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
 
                     <span className="w-px h-5 bg-slate-200 dark:bg-slate-700 mx-1 shrink-0" />
 
-                    {/* Gruppo: Selezione */}
+                    {/* Gruppo: Selezione — nascosto in modalita' sola lettura (le bulk action sono tutte scritture) */}
+                    {!isReadOnly && (
                     <button
                         onClick={() => isSelectionMode ? exitSelectionMode() : setIsSelectionMode(true)}
                         className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all duration-200 border ${
@@ -894,6 +895,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                         <MousePointer2 className="w-3 h-3" />
                         {isSelectionMode ? `${selectedIds.size} selezionate` : 'Seleziona'}
                     </button>
+                    )}
 
                     {/* Conteggio allineato a destra */}
                     <span className="ml-auto text-[10px] font-bold text-slate-400 dark:text-slate-500 shrink-0">
@@ -931,6 +933,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                                     workers={workersInCassetto}
                                     isOpen={isOpen}
                                     onToggle={() => toggleCassetto(config.id)}
+                                    onOpenWorker={handleOpenComplex}
                                 >
                                     <motion.div
                                         className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8"
@@ -941,8 +944,8 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                                         <AnimatePresence mode="popLayout">
                                             {workersInCassetto.map(renderWorkerCard)}
 
-                                            {/* CARD "AGGIUNGI NUOVO" — solo dentro 'Da Analizzare' */}
-                                            {config.id === 'analisi' && !isSelectionMode && (
+                                            {/* CARD "AGGIUNGI NUOVO" — solo dentro 'Da Analizzare', nascosta in modalita' sola lettura */}
+                                            {config.id === 'analisi' && !isSelectionMode && !isReadOnly && (
                                                 <motion.div
                                                     key="add-new-card"
                                                     variants={itemVariants}
