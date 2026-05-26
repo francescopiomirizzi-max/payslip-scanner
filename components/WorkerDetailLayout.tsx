@@ -13,6 +13,7 @@ import QRScannerModal from './QRScannerModal';
 import IstatDashboardModal from './WorkerTables/IstatDashboardModal';
 import { Worker, AnnoDati, YEARS } from '../types';
 import { getProfiloBadgeLabel } from '../utils/formatters';
+import { useIsReadOnly } from '../lib/readonly';
 import { FRAMER_PHYSICS } from '../framerConfig';
 
 const MovingGrid = () => (
@@ -193,6 +194,7 @@ const WorkerDetailLayout: React.FC<WorkerDetailLayoutProps> = ({
   const commandBarRef = useRef<HTMLDivElement>(null);
   const [isActionsOpen, setIsActionsOpen] = useState(false);
   const actionsMenuRef = useRef<HTMLDivElement>(null);
+  const isReadOnly = useIsReadOnly();
 
   useEffect(() => {
     if (!isActionsOpen) return;
@@ -635,7 +637,8 @@ const WorkerDetailLayout: React.FC<WorkerDetailLayoutProps> = ({
               </div>
             </button>
 
-            {/* TASTO SCAN AI */}
+            {/* TASTO SCAN AI — nascosto in modalita' sola lettura */}
+            {!isReadOnly && (
             <button
               onClick={() => scanRef.current?.click()}
               disabled={isAnalyzing}
@@ -675,11 +678,13 @@ const WorkerDetailLayout: React.FC<WorkerDetailLayoutProps> = ({
                 )}
               </div>
             </button>
+            )}
 
             {/* INPUT FILE SCAN */}
             <input type="file" accept="image/*,.pdf" ref={scanRef} className="hidden" onChange={onFileUpload} />
 
-            {/* TASTO MOBILE SCAN */}
+            {/* TASTO MOBILE SCAN — nascosto in modalita' sola lettura */}
+            {!isReadOnly && (
             <button
               onClick={onOpenQR}
               className="group relative flex items-center gap-3 px-4 py-2 ml-2 bg-white/40 dark:bg-slate-800/40 border-2 border-transparent hover:bg-slate-900 hover:border-indigo-500 rounded-2xl transition-all duration-300 hover:shadow-[0_0_20px_rgba(79,70,229,0.3)] overflow-hidden shrink-0"
@@ -702,6 +707,7 @@ const WorkerDetailLayout: React.FC<WorkerDetailLayoutProps> = ({
                 <span className="relative inline-flex rounded-full w-2 h-2 bg-slate-400 dark:bg-slate-600 group-hover:bg-emerald-500 transition-colors duration-300"></span>
               </div>
             </button>
+            )}
 
             <div className="w-px bg-slate-300 dark:bg-slate-700 mx-1"></div>
 

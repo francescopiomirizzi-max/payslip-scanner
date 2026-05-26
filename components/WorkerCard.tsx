@@ -4,6 +4,7 @@ import { Worker, getColumnsByProfile } from '../types';
 import { SYSTEM_PROFILES, getCustomColorIndex } from '../config/profiles';
 import { parseLocalFloat, getProfiloBadgeLabel } from '../utils/formatters';
 import { computeHolidayIndemnity } from '../utils/calculationEngine';
+import { useIsReadOnly } from '../lib/readonly';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   UserCircle, Trash2, Edit, FileSpreadsheet, LayoutGrid, CalendarRange,
@@ -188,6 +189,7 @@ interface WorkerCardProps {
 }
 
 const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenComplex, onEdit, onDelete, onStatusChange, onNotesChange, onOpenArchive }) => {
+  const isReadOnly = useIsReadOnly();
   const [isFlipped, setIsFlipped] = useState(false);
   const [isStatusOpen, setIsStatusOpen] = useState(false);
   const [isActionsOpen, setIsActionsOpen] = useState(false);
@@ -473,14 +475,14 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
                                   hoverText: 'hover:text-violet-700 dark:hover:text-violet-300',
                                   onClick: (e: React.MouseEvent) => { e.stopPropagation(); onOpenArchive(worker.id); setIsActionsOpen(false); },
                                 }] : []),
-                                {
+                                ...(isReadOnly ? [] : [{
                                   icon: <Edit className="w-4 h-4 text-white" />,
                                   label: 'Modifica pratica',
                                   iconBg: 'bg-sky-500',
                                   hoverBg: 'hover:bg-sky-50 dark:hover:bg-sky-950/60',
                                   hoverText: 'hover:text-sky-700 dark:hover:text-sky-300',
                                   onClick: (e: React.MouseEvent) => { e.stopPropagation(); onEdit(e); setIsActionsOpen(false); },
-                                },
+                                }]),
                               ].map((item, i) => (
                                 <motion.button
                                   key={i}
@@ -497,6 +499,8 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
                                 </motion.button>
                               ))}
 
+                              {!isReadOnly && (
+                              <>
                               <div className="mx-2 h-px bg-slate-100 dark:bg-slate-800 my-1.5" />
 
                               {/* Elimina — separato e rosso */}
@@ -512,6 +516,8 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
                                 </div>
                                 <span className="text-[13px] font-bold text-red-500/80 group-hover/del:text-red-600 dark:group-hover/del:text-red-400 transition-colors">Elimina pratica</span>
                               </motion.button>
+                              </>
+                              )}
                             </div>
                           </motion.div>
                         )}

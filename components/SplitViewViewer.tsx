@@ -1,5 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
+import { useIsReadOnly } from '../lib/readonly';
 import {
   Loader2,
   ChevronLeft, ChevronRight,
@@ -93,14 +94,16 @@ const SplitViewViewer: React.FC<SplitViewViewerProps> = ({
   onZoom,
   onResetView,
   onExplainPayslip,
-}) => (
+}) => {
+  const isReadOnly = useIsReadOnly();
+  return (
   <motion.div
     initial={{ width: 0, opacity: 0, x: -50 }}
     animate={{ width: '45%', opacity: 1, x: 0 }}
     exit={{ width: 0, opacity: 0, x: -50 }}
     className="bg-slate-900 rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col border border-slate-700 shrink-0 z-40"
-    onDragOver={onDragOver}
-    onDrop={onDrop}
+    onDragOver={isReadOnly ? undefined : onDragOver}
+    onDrop={isReadOnly ? undefined : onDrop}
   >
     {/* Hidden inputs */}
     <input
@@ -174,12 +177,14 @@ const SplitViewViewer: React.FC<SplitViewViewerProps> = ({
               <ZoomIn className="w-4 h-4" />
             </button>
 
+            {!isReadOnly && (
             <button
               onClick={onDeleteCurrentFile}
               className="p-2 bg-red-900/50 hover:bg-red-900/80 text-red-400 rounded-lg ml-2 transition-colors"
             >
               <Trash2 className="w-4 h-4" />
             </button>
+            )}
           </>
         )}
         <button onClick={onClose} className="p-2 hover:bg-slate-700 rounded-lg text-slate-400 dark:text-slate-200 hover:text-white ml-2" title="Chiudi Visore">
@@ -258,6 +263,10 @@ const SplitViewViewer: React.FC<SplitViewViewerProps> = ({
             {isSniperMode ? 'DISEGNA UN RETTANGOLO SUL NUMERO' : 'Trascina per spostare • Usa i tasti per lo zoom'}
           </div>
         </div>
+      ) : isReadOnly ? (
+        <div className="flex items-center justify-center text-slate-500 dark:text-slate-300 p-8 w-64 h-64">
+          <p className="text-sm text-center opacity-60">Nessuna busta paga<br />disponibile</p>
+        </div>
       ) : (
         // Empty upload area
         <div
@@ -276,6 +285,7 @@ const SplitViewViewer: React.FC<SplitViewViewerProps> = ({
       )}
     </div>
   </motion.div>
-);
+  );
+};
 
 export default SplitViewViewer;
