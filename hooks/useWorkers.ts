@@ -143,10 +143,12 @@ export const useWorkers = (addToast: AddToast) => {
         const migrated = await migrateLocalToCloud(userId);
         if (migrated) addToast('Dati migrati nel cloud con successo!', 'success');
 
+        // Niente filtro client su owner_id: le RLS limitano gia' la visibilita' (proprietario
+        // + eventuali viewer autorizzati a livello DB), filtrare di nuovo qui escluderebbe i
+        // dati condivisi in sola lettura.
         const { data, error } = await supabase
             .from('worker_profiles')
             .select('*')
-            .eq('owner_id', userId)
             .order('created_at', { ascending: true });
 
         if (error) {
