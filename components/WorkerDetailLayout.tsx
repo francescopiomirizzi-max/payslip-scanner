@@ -590,7 +590,8 @@ const WorkerDetailLayout: React.FC<WorkerDetailLayoutProps> = ({
               disabled={isBatchProcessing}
             />
 
-            {/* TASTO AI AGENT */}
+            {/* TASTO AI AGENT — nascosto in modalita' sola lettura */}
+            {!isReadOnly && (
             <button
               onClick={() => document.getElementById('dashboard-ai-upload')?.click()}
               disabled={isBatchProcessing}
@@ -619,6 +620,7 @@ const WorkerDetailLayout: React.FC<WorkerDetailLayoutProps> = ({
                 </div>
               </div>
             </button>
+            )}
 
             {/* TASTO CARICA BUSTA */}
             <button
