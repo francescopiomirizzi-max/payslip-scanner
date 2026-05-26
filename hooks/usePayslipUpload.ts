@@ -309,40 +309,59 @@ export function usePayslipUpload({
       try {
         const base64String = await toBase64(file);
 
-        const response = await fetch('/.netlify/functions/scan-payslip', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            fileData: base64String,
-            mimeType: file.type || 'application/pdf',
-            company: worker.profilo,
-            eliorType: worker.eliorType,
-            customColumns: getCustomColumnsForAI(),
-          }),
+        // Retry automatico contro la coda lunga di Gemini: 1 retry silenzioso se la prima
+        // chiamata fallisce per timeout/abort. Nuova rotazione delle chiavi → quasi sempre
+        // passa al secondo giro. Costo zero se la prima va.
+        const MAX_ATTEMPTS = 2;
+        const scanBody = JSON.stringify({
+          fileData: base64String,
+          mimeType: file.type || 'application/pdf',
+          company: worker.profilo,
+          eliorType: worker.eliorType,
+          customColumns: getCustomColumnsForAI(),
         });
 
-        const responseText = await response.text();
-        let aiResult;
+        let response: Response | null = null;
+        let responseText = '';
+        let aiResult: any = null;
+        let success = false;
 
-        try {
-          let parsed = JSON.parse(responseText);
+        for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+          response = await fetch('/.netlify/functions/scan-payslip', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: scanBody,
+          });
+          responseText = await response.text();
 
-          // Scudo anti-allucinazioni strutturali dell'IA
-          if (Array.isArray(parsed)) parsed = parsed[0];
-          if (parsed && parsed.data) parsed = parsed.data;
-          if (parsed && parsed.payslip) parsed = parsed.payslip;
-          if (parsed && parsed.risultato) parsed = parsed.risultato;
+          try {
+            let parsed = JSON.parse(responseText);
+            // Scudo anti-allucinazioni strutturali dell'IA
+            if (Array.isArray(parsed)) parsed = parsed[0];
+            if (parsed && parsed.data) parsed = parsed.data;
+            if (parsed && parsed.payslip) parsed = parsed.payslip;
+            if (parsed && parsed.risultato) parsed = parsed.risultato;
+            aiResult = parsed;
+          } catch (e) {
+            aiResult = null;
+          }
 
-          aiResult = parsed;
-        } catch (e) {
-          console.error(`❌ Il server ha fallito sul file ${file.name}. Risposta:`, responseText);
-          errorCount++;
-          failedFiles.push(label);
-          continue;
+          if (response.ok && aiResult && !aiResult.error) {
+            success = true;
+            break;
+          }
+
+          if (attempt < MAX_ATTEMPTS) {
+            console.warn(`⏳ Retry automatico per ${file.name} (${attempt + 1}/${MAX_ATTEMPTS}) dopo fallimento`);
+          }
         }
 
-        if (!response.ok || !aiResult || aiResult.error) {
-          console.error(`Errore file ${file.name}`, aiResult?.error || 'Nessun dato valido');
+        if (!success) {
+          if (aiResult === null) {
+            console.error(`❌ Il server ha fallito sul file ${file.name}. Risposta:`, responseText);
+          } else {
+            console.error(`Errore file ${file.name}`, aiResult?.error || 'Nessun dato valido');
+          }
           errorCount++;
           failedFiles.push(label);
           continue;

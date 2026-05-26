@@ -25,6 +25,13 @@ const EXPLAINER_API_KEYS = dedupKeys(
 // diverso senza modificare il codice. Default: gemini-3.5-flash.
 const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-3.5-flash";
 
+// --- THINKING BUDGET ---
+// I modelli "thinking" (3.5-flash, 2.5-flash) di default pensano illimitatamente e su prompt
+// complessi (PDF inline + regole RFI/Mercitalia) sforavano i timeout (>60s). Mettiamo un cap:
+// il modello pensa fino a N token e poi è obbligato a rispondere. 1024 è sufficiente per i
+// task strutturati di estrazione; alzare via env se l'accuratezza cala.
+const THINKING_BUDGET = Number(process.env.GEMINI_THINKING_BUDGET) || 1024;
+
 // --- HELPER PULIZIA E UNIONE JSON (V20 - Somma Automatica Pagine) ---
 function cleanAndParseJSON(text: string): any {
   try {
@@ -94,10 +101,14 @@ function cleanAndParseJSON(text: string): any {
 // Il budget totale è dimensionato sul timeout REALE della Function: ~50s in produzione
 // (netlify.toml: timeout=60) e ~26s in locale, dove `netlify dev` gira con lambda-local
 // a 30s e ignora netlify.toml. Override con la env var AI_BUDGET_MS. Logica:
-//  - si dà al 1° tentativo quasi tutto il budget (una chiamata lenta deve poter RIUSCIRE,
-//    non essere abortita troppo presto);
-//  - si ritenta solo se resta budget reale, ruotando su una chiave diversa;
+//  - cap per-tentativo aggressivo (PER_ATTEMPT_CAP_MS, default 14s): se Gemini va in coda
+//    lunga, fail-fast e ritenta su un'altra chiave (3 progetti GCP indipendenti = code
+//    diverse) invece di bruciare tutto il budget su una singola chiave lenta. Statisticamente
+//    serve che TUTTE le chiavi siano lente nello stesso istante per fallire la scansione.
+//  - ritenta solo se resta budget reale, ruotando su una chiave diversa;
 //  - se il budget è finito si lancia un errore pulito PRIMA del kill secco della Function.
+const PER_ATTEMPT_CAP_MS = Number(process.env.AI_PER_ATTEMPT_CAP_MS) || 14000;
+
 async function generateContentWithRetry(
   keys: string[],
   buildModel: (genAI: GoogleGenerativeAI) => any,
@@ -107,7 +118,7 @@ async function generateContentWithRetry(
   const isLocalDev = process.env.NETLIFY_DEV === "true";
   const defaultBudgetMs = Number(process.env.AI_BUDGET_MS) || (isLocalDev ? 26000 : 50000);
   const totalBudgetMs = opts.totalBudgetMs ?? defaultBudgetMs;
-  const perAttemptCapMs = opts.perAttemptCapMs ?? (totalBudgetMs - 1000);
+  const perAttemptCapMs = opts.perAttemptCapMs ?? PER_ATTEMPT_CAP_MS;
   const startKey = Math.floor(Math.random() * keys.length);
   const start = Date.now();
   let lastErr: any;
@@ -943,7 +954,7 @@ REGOLE ASSOLUTE:
 
       const result = await generateContentWithRetry(
         SCAN_API_KEYS,
-        (g) => g.getGenerativeModel({ model: GEMINI_MODEL, generationConfig: { temperature: 0.0 } }),
+        (g) => g.getGenerativeModel({ model: GEMINI_MODEL, generationConfig: { temperature: 0.0, thinkingConfig: { thinkingBudget: THINKING_BUDGET } } as any }),
         [prompt, { inlineData: { data: cleanData, mimeType: mimeType || "application/pdf" } }]
       );
 
@@ -994,7 +1005,7 @@ REGOLE ASSOLUTE:
 
       const result = await generateContentWithRetry(
         EXPLAINER_API_KEYS,
-        (g) => g.getGenerativeModel({ model: GEMINI_MODEL }),
+        (g) => g.getGenerativeModel({ model: GEMINI_MODEL, generationConfig: { thinkingConfig: { thinkingBudget: THINKING_BUDGET } } as any }),
         [explainPrompt, { inlineData: { data: cleanData, mimeType: mimeType || "application/pdf" } }]
       );
 
@@ -1058,7 +1069,7 @@ REGOLE ASSOLUTE:
       SCAN_API_KEYS,
       (g) => g.getGenerativeModel({
         model: GEMINI_MODEL,
-        generationConfig: { responseMimeType: "application/json", temperature: 0.0 },
+        generationConfig: { responseMimeType: "application/json", temperature: 0.0, thinkingConfig: { thinkingBudget: THINKING_BUDGET } } as any,
         safetySettings: [
           { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
           { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },

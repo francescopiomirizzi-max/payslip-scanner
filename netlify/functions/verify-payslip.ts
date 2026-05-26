@@ -6,6 +6,9 @@ const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY_VERIFIER || proc
 // Modello Gemini centralizzato: override con la env var GEMINI_MODEL (default gemini-3.5-flash).
 const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-3.5-flash";
 
+// Cap al thinking del modello (vedi scan-payslip.ts per il razionale). Override via env.
+const THINKING_BUDGET = Number(process.env.GEMINI_THINKING_BUDGET) || 1024;
+
 // Builds a context-aware verification prompt based on the company/profile
 function buildVerifyPrompt(company: string, eliorType?: string, customColumns?: Array<{ id: string; label: string }>): string {
   const co = (company || "").toUpperCase();
@@ -313,7 +316,7 @@ export const handler: Handler = async (event) => {
 
     const model = genAI.getGenerativeModel({
       model: GEMINI_MODEL,
-      generationConfig: { responseMimeType: "application/json", temperature: 0.0 },
+      generationConfig: { responseMimeType: "application/json", temperature: 0.0, thinkingConfig: { thinkingBudget: THINKING_BUDGET } } as any,
     });
 
     const result = await model.generateContent(

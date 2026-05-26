@@ -8,6 +8,9 @@ const genAI = new GoogleGenerativeAI(apiKey);
 // Modello Gemini centralizzato: override con la env var GEMINI_MODEL (default gemini-3.5-flash).
 const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-3.5-flash";
 
+// Cap al thinking del modello (vedi scan-payslip.ts per il razionale). Override via env.
+const THINKING_BUDGET = Number(process.env.GEMINI_THINKING_BUDGET) || 1024;
+
 const PROMPT_ANAGRAFICA = `
   Sei un assistente HR specializzato nell'estrazione di dati anagrafici da buste paga e cedolini italiani.
   Il tuo UNICO compito è leggere il documento fornito (che può essere storto o fotografato male) ed estrarre i dati del lavoratore.
@@ -81,7 +84,7 @@ export const handler: Handler = async (event, context) => {
         // Usiamo il modello veloce (flash) perché l'operazione è semplicissima
         const model = genAI.getGenerativeModel({
             model: GEMINI_MODEL,
-            generationConfig: { responseMimeType: "application/json", temperature: 0.0 }
+            generationConfig: { responseMimeType: "application/json", temperature: 0.0, thinkingConfig: { thinkingBudget: THINKING_BUDGET } } as any
         });
 
         const result = await model.generateContent([
