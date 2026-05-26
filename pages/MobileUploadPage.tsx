@@ -4,6 +4,7 @@ import { supabase } from '../supabaseClient';
 import { motion, AnimatePresence } from 'framer-motion';
 import Tesseract from 'tesseract.js'; // ✨ IMPORTANTE: Il motore OCR per leggere i mesi
 import { useIsland } from '../IslandContext';
+import { useIsReadOnly } from '../lib/readonly';
 
 // Struttura dati per la Fascicolazione Intelligente
 type DocumentFolder = {
@@ -55,6 +56,7 @@ const guessTitleFromText = (text: string) => {
 
 const MobileUploadPage = ({ sessionId }: { sessionId: string }) => {
     const { showNotification } = useIsland();
+    const isReadOnly = useIsReadOnly();
     const searchParams = new URLSearchParams(window.location.search);
     const company = searchParams.get('company') || 'Azienda';
     const workerName = searchParams.get('name') || 'Lavoratore';
@@ -350,6 +352,17 @@ const MobileUploadPage = ({ sessionId }: { sessionId: string }) => {
                 <h1 className="text-2xl font-black tracking-widest uppercase text-emerald-400 drop-shadow-md mb-2">Trasferimento<br />Completato</h1>
                 <p className="text-emerald-500/80 font-mono text-xs uppercase tracking-widest mt-2">Terminale pronto per nuovo uplink</p>
             </motion.div>
+        );
+    }
+
+    if (isReadOnly) {
+        return (
+            <div className="min-h-screen flex items-center justify-center p-6 bg-slate-50 dark:bg-slate-950 text-center">
+                <div className="max-w-xs">
+                    <h1 className="text-xl font-bold text-slate-700 dark:text-slate-200 mb-2">Modalita' sola lettura</h1>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">Il tuo account puo' consultare i dati ma non e' autorizzato a caricare buste paga.</p>
+                </div>
+            </div>
         );
     }
 

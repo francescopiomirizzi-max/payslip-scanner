@@ -36,6 +36,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useIsReadOnly } from '../../lib/readonly';
 
 // --- CONFIGURAZIONE TAG RAPIDI ---
 const QUICK_TAGS = ["Infortunio", "Malattia", "Congedo", "Sciopero", "Assenza Ingiust.", "Permesso 104"];
@@ -227,6 +228,7 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
   activeMonthIndex = null,
   activeYear = null,
 }) => {
+  const isReadOnly = useIsReadOnly();
   const [selectedYear, setSelectedYear] = useState<number>(initialYear);
 
   // Stati Modali
@@ -1424,7 +1426,7 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
                                   type="text"
                                   inputMode="decimal"
                                   autoComplete="off"
-                                  disabled={col.type === 'formula'}
+                                  disabled={col.type === 'formula' || isReadOnly}
                                   className={`
                                         w-full h-full bg-transparent px-2 text-right outline-none transition-colors duration-75 tabular-nums text-xs placeholder:text-transparent
                                         ${col.type === 'formula'
@@ -1616,12 +1618,12 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
                 </div>
                 <div className="p-6">
                   <label className="block text-sm font-semibold text-slate-600 dark:text-slate-300 mb-2">Descrizione Evento</label>
-                  <textarea value={noteModal.text} onChange={(e) => setNoteModal(prev => ({ ...prev, text: e.target.value }))} className="w-full h-32 px-4 py-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 focus:border-indigo-500 dark:focus:border-cyan-500 focus:ring-2 focus:ring-indigo-200 dark:focus:ring-cyan-900 outline-none resize-none text-slate-700 dark:text-slate-200 text-sm transition-all placeholder-slate-400 dark:placeholder-slate-600" placeholder="Scrivi qui il motivo..." autoFocus />
+                  <textarea readOnly={isReadOnly} value={noteModal.text} onChange={(e) => setNoteModal(prev => ({ ...prev, text: e.target.value }))} className="w-full h-32 px-4 py-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 focus:border-indigo-500 dark:focus:border-cyan-500 focus:ring-2 focus:ring-indigo-200 dark:focus:ring-cyan-900 outline-none resize-none text-slate-700 dark:text-slate-200 text-sm transition-all placeholder-slate-400 dark:placeholder-slate-600" placeholder="Scrivi qui il motivo..." autoFocus />
                   <div className="mt-4"><p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Inserimento Rapido</p><div className="flex flex-wrap gap-2">{QUICK_TAGS.map(tag => (<button key={tag} onClick={() => addTag(tag)} className="flex items-center gap-1 px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-cyan-900/30 text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-cyan-400 rounded-lg text-xs font-medium transition-colors border border-slate-200 dark:border-slate-700 hover:border-indigo-200 dark:hover:border-cyan-800"><Tag className="w-3 h-3" />{tag}</button>))}</div></div>
                 </div>
                 <div className="px-6 py-4 bg-slate-50 dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 flex justify-between items-center">
-                  <button onClick={clearNote} className="flex items-center gap-2 px-4 py-2 text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-xl text-sm font-bold transition-colors"><Eraser className="w-4 h-4" /> Pulisci</button>
-                  <div className="flex gap-3"><button onClick={closeNoteModal} className="px-4 py-2 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-white font-bold text-sm transition-colors">Annulla</button><button onClick={saveNote} className="flex items-center gap-2 px-6 py-2 bg-indigo-600 dark:bg-cyan-600 hover:bg-indigo-700 dark:hover:bg-cyan-500 text-white rounded-xl font-bold shadow-lg shadow-indigo-500/30 dark:shadow-cyan-900/40 transition-all active:scale-95"><Save className="w-4 h-4" /> Salva Nota</button></div>
+                  {!isReadOnly && <button onClick={clearNote} className="flex items-center gap-2 px-4 py-2 text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-xl text-sm font-bold transition-colors"><Eraser className="w-4 h-4" /> Pulisci</button>}
+                  <div className="flex gap-3 ml-auto"><button onClick={closeNoteModal} className="px-4 py-2 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-white font-bold text-sm transition-colors">{isReadOnly ? 'Chiudi' : 'Annulla'}</button>{!isReadOnly && <button onClick={saveNote} className="flex items-center gap-2 px-6 py-2 bg-indigo-600 dark:bg-cyan-600 hover:bg-indigo-700 dark:hover:bg-cyan-500 text-white rounded-xl font-bold shadow-lg shadow-indigo-500/30 dark:shadow-cyan-900/40 transition-all active:scale-95"><Save className="w-4 h-4" /> Salva Nota</button>}</div>
                 </div>
               </motion.div>
             </div>
