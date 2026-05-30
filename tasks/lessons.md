@@ -477,3 +477,45 @@ c'era ancora il pulsante "Smart Upload", la tagliava. Rimosso quel pulsante (dop
 dell'"AI Agent" — stesso `handleBatchUpload`), lo spazio si è liberato e il badge ci sta.
 Anche: un primo highlight `bg-indigo-50` era troppo chiaro → quasi invisibile; servono
 tinte piene (`bg-indigo-200` / `dark:bg-indigo-500/30`) perché una selezione si veda.
+
+### Lezione 13 (2026-05-28): "aprire i file dal visore" → chiarire il MODELLO DI INTERAZIONE, non solo l'ambito
+
+Richiesta: far aprire al visore (sola lettura) le buste paga salvate sul DB, non solo
+quelle caricate da PC. Prima di implementare ho chiarito l'**ambito** (solo visore vs anche
+owner) ma ho assunto l'**interazione**: auto-caricamento di TUTTE le buste nel SplitView
+all'apertura del lavoratore. L'utente voleva invece la **scelta manuale**: SplitView vuoto,
+si clicca una busta dal tab Archivio e quella si carica nel pannello laterale (non window.open
+in nuova scheda).
+
+**Lezione:** quando il verbo è generico ("aprire", "caricare", "mostrare"), il punto da
+chiarire non è solo *chi/cosa* ma *come avviene l'azione*: automatica vs su richiesta, una vs
+tutte, in-place vs nuova scheda. Sono scelte UX che cambiano l'implementazione. Chiedere
+entrambe le dimensioni (ambito + interazione) prima di scrivere codice.
+
+**Nota tecnica riusabile:** le RLS Supabase consentivano già al viewer la SELECT su
+`payslip_metadata` + `storage.objects` (policy con `OR auth.uid() = '<viewer-uid>'`), quindi
+zero modifiche DB. Bastava il client. Per mostrare un URL firmato Supabase in `<object>` PDF
+serve spogliare la query string prima del check `.endsWith('.pdf')` (l'URL finisce con
+`?token=…` ma il path conserva l'estensione). Il bottone "Spiega" (Gemini) va nascosto al
+viewer anche nel SplitView, ora che può avere file caricati.
+
+**Aggiornamento (stessa feature):** due bug emersi nella seconda iterazione:
+1. **Estensione `.PDF` maiuscola.** I file archiviati hanno filename tipo `Agosto 2025.PDF`.
+   Il check `url.split('?')[0].endsWith('.pdf')` per decidere se mostrare il PDF nell'`<object>`
+   falliva (case-sensitive) → object `display:none` → fallback `<img>` che non renderizza un PDF
+   → pannello vuoto. Fix: `.toLowerCase().endsWith('.pdf')`. Lezione: mai assumere il case delle
+   estensioni dei file caricati dall'utente.
+2. **TDZ nella dependency array di useEffect.** Un `useEffect(..., [isReadOnly, archivedPicks, …])`
+   piazzato PRIMA delle `const isReadOnly = …` / `const [archivedPicks] = useState(…)` compila con
+   vite ma crasha a runtime (e tsc dà TS2448): la **deps array è valutata subito** alla chiamata di
+   useEffect, non dopo. Il corpo del callback invece può referenziare const dichiarate più sotto
+   (gira dopo il render). Lezione: se un effetto ha variabili nella deps array, va collocato DOPO le
+   loro dichiarazioni; `tsc --noEmit` lo cattura, `vite build` no.
+
+**Aggiornamento 2 (stessa feature):** lista lunga in una colonna flex `items-stretch` →
+faceva crescere la pagina. Il contenitore riga prende l'altezza del figlio più alto: se il
+picker (molti anni) supera la tabella accanto, la riga si allunga e la pagina si espande.
+Fix: rendere il contenuto scrollabile `absolute inset-0` dentro un body `relative
+overflow-hidden`, così NON contribuisce all'altezza intrinseca e scrolla entro l'altezza
+guidata dal sibling (la tabella). Pattern riusabile per "pannello affiancato sempre alto
+quanto il vicino".

@@ -1,3 +1,4 @@
+import { v4 as uuidv4 } from 'uuid';
 import { supabase } from '../supabaseClient';
 
 const MIGRATION_LOCK_KEY = 'workers_migration_in_progress';
@@ -47,7 +48,7 @@ async function _doMigrate(ownerId: string): Promise<boolean> {
 
     // 3. Map to DB format with fresh UUIDs
     const rows = localWorkers.map((w: any) => ({
-        id: crypto.randomUUID(),
+        id: uuidv4(),
         owner_id: ownerId,
         nome: w.nome ?? '',
         cognome: w.cognome ?? '',

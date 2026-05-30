@@ -39,7 +39,7 @@ import { useIsReadOnly } from '../lib/readonly';
 import { Worker } from '../types';
 import { SYSTEM_PROFILES, SYSTEM_PROFILE_KEYS } from '../config/profiles';
 import { DashboardStats, WorkerStatItem, ModalConfig } from '../hooks/useDashboardStats';
-import { generateReport } from '../utils/reportGenerator';
+import { generateReport, generateRegistroPagate } from '../utils/reportGenerator';
 import { COLOR_VARIANTS } from '../utils/colorVariants';
 
 // ─── CONFIG DEI CASSETTI ─────────────────────────────────────────────────────
@@ -578,6 +578,14 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                                                 hoverBg: 'hover:bg-indigo-50 dark:hover:bg-indigo-950/60',
                                                 hoverText: 'hover:text-indigo-700 dark:hover:text-indigo-300',
                                                 onClick: () => { generateReport(workers); setIsDataMenuOpen(false); },
+                                            },
+                                            {
+                                                icon: <CheckCircle2 className="w-4 h-4 text-white" strokeWidth={2.5} />,
+                                                label: 'Registro Pagate (Word)',
+                                                iconBg: 'bg-emerald-500',
+                                                hoverBg: 'hover:bg-emerald-50 dark:hover:bg-emerald-950/60',
+                                                hoverText: 'hover:text-emerald-700 dark:hover:text-emerald-300',
+                                                onClick: () => { generateRegistroPagate(workers); setIsDataMenuOpen(false); },
                                             },
                                         ].map((item, i) => (
                                             <motion.button

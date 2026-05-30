@@ -1,5 +1,6 @@
 import { Handler } from "@netlify/functions";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { checkScanRateLimit, clientIp } from "./_rateLimit";
 
 // MAGIA: Usa la nuova variabile d'ambiente (con fallback a quella vecchia se non l'hai ancora impostata)
 const apiKey = process.env.GOOGLE_API_KEY_ONBOARDING || process.env.GOOGLE_API_KEY || "";
@@ -47,15 +48,17 @@ const PROMPT_ANAGRAFICA = `
   ❌ SBAGLIATO → "ruolo": "Professional",                "profiloProfessionale": ""               (livello scivolato in ruolo)
   ❌ SBAGLIATO → "ruolo": "Quadro",                      "profiloProfessionale": ""
 
-  5. "azienda": Identifica l'azienda dalla testata o dal logo (es. "RFI", "TRENITALIA", "ELIOR", "CLEAN_SERVICE", "MERCITALIA"). Se trovi "Rete Ferroviaria Italiana" o "RFI", scrivi "RFI". Se trovi "Trenitalia", scrivi "TRENITALIA". Se trovi "Mercitalia", "Mercitalia Shunting", "Mercitalia Shunting & Terminal" oppure il framework/logo del gestionale ADP (it-adp.com), scrivi "MERCITALIA". Se trovi "Ferrovie dello Stato" o "FS" senza altra specificazione, scrivi "RFI" come fallback storico. Se trovi "Clean Service", "Clean Service SRL" o varianti, scrivi "CLEAN_SERVICE".
+  5. "azienda": Identifica l'azienda dalla testata o dal logo (valori validi: "RFI", "TRENITALIA", "ELIOR", "CLEAN_SERVICE", "MERCITALIA"). Se trovi "Rete Ferroviaria Italiana" o "RFI", scrivi "RFI". Se trovi "Trenitalia", scrivi "TRENITALIA". Se trovi "Mercitalia", "Mercitalia Shunting", "Mercitalia Shunting & Terminal" oppure il framework/logo del gestionale ADP (it-adp.com), scrivi "MERCITALIA". Se trovi "Ferrovie dello Stato" o "FS" senza altra specificazione, scrivi "RFI" come fallback storico. Se trovi "Clean Service", "Clean Service SRL" o varianti, scrivi "CLEAN_SERVICE".
 
-  Restituisci ESATTAMENTE ED ESCLUSIVAMENTE un file JSON valido con questa struttura, senza codice markdown o testo aggiuntivo:
+  🚨 REGOLA ANTI-INVENZIONE AZIENDA: Se nella testata/logo NON vedi chiaramente una delle aziende sopra elencate, restituisci "azienda": "" (stringa vuota). È SEVERAMENTE VIETATO scegliere un'azienda "a caso" da quelle elencate solo perché citate nel prompt — preferisci sempre lasciare vuoto piuttosto che indovinare.
+
+  Restituisci ESATTAMENTE ED ESCLUSIVAMENTE un file JSON valido con questa struttura, senza codice markdown o testo aggiuntivo. NOTA: i valori qui sotto sono solo placeholder generici, NON usarli come default.
   {
-    "nome": "Mario",
-    "cognome": "Rossi",
-    "ruolo": "Macchinista",
-    "profiloProfessionale": "Professional",
-    "azienda": "TRENITALIA"
+    "nome": "<NOME_RILEVATO>",
+    "cognome": "<COGNOME_RILEVATO>",
+    "ruolo": "<MANSIONE_RILEVATA>",
+    "profiloProfessionale": "<LIVELLO_RILEVATO>",
+    "azienda": "<AZIENDA_RILEVATA>"
   }
 `;
 
@@ -72,9 +75,14 @@ export const handler: Handler = async (event, context) => {
 
     try {
         const body = JSON.parse(event.body || "{}");
-        const { fileData, mimeType } = body;
+        const { fileData, mimeType, sessionId } = body;
 
         if (!fileData) throw new Error("File mancante per l'autocompilazione.");
+
+        const rate = checkScanRateLimit(sessionId, clientIp(event as any));
+        if (!rate.allowed) {
+            return { statusCode: 429, headers, body: JSON.stringify({ error: rate.reason }) };
+        }
 
         // Pulisce il base64 se necessario
         const cleanData = fileData.includes("base64,") ? fileData.split("base64,")[1] : fileData;

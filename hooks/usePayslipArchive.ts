@@ -47,6 +47,13 @@ export function usePayslipArchive() {
             return;
         }
 
+        // Non persistere il base64 dell'immagine (fileData/mimeType) dentro la riga:
+        // è ridondante (la foto è già nello Storage, caricata qui sopra) e gonfiava
+        // il DB di ~300-700KB per busta. La ri-analisi riscarica l'immagine dallo
+        // Storage via signed URL, quindi non serve tenerla anche nel record.
+        const { fileData: _omitFileData, mimeType: _omitMimeType, ...leanExtracted } =
+            (extractedData && typeof extractedData === 'object') ? extractedData : {};
+
         const { error: insertError } = await supabase
             .from('payslip_metadata')
             .insert({
@@ -56,7 +63,7 @@ export function usePayslipArchive() {
                 filename: file.name,
                 year,
                 month,
-                extracted_data: extractedData,
+                extracted_data: leanExtracted,
             });
 
         if (insertError) {
@@ -66,9 +73,13 @@ export function usePayslipArchive() {
     };
 
     const getPayslipsByWorker = async (workerId: string): Promise<PayslipRecord[]> => {
+        // NB: si selezionano SOLO le colonne usate dalla lista. Si ESCLUDE
+        // di proposito "extracted_data" perché contiene il base64 dell'immagine
+        // (fileData, ~300-700KB per riga): tirarlo giù per ogni busta saturava
+        // il DB free-tier. L'immagine arriva già dallo storage via signed URL.
         const { data, error } = await supabase
             .from('payslip_metadata')
-            .select('*')
+            .select('id, owner_id, worker_id, storage_path, filename, year, month, uploaded_at, verify_history')
             .eq('worker_id', workerId)
             .order('year', { ascending: false })
             .order('uploaded_at', { ascending: false });

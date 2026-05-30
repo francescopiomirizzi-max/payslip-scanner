@@ -5,7 +5,6 @@ import { AnimatePresence } from 'framer-motion';
 import DynamicIsland from './components/DynamicIsland';
 import WorkerModal from './components/WorkerModal';
 import QRScannerModal from './components/QRScannerModal';
-import MobileUploadPage from './pages/MobileUploadPage';
 import LoginPage from './pages/LoginPage';
 import CompanyBuilder from './components/CompanyBuilder';
 import Background from './components/Background';
@@ -32,20 +31,8 @@ import { useDashboardStats } from './hooks/useDashboardStats';
 const App: React.FC = () => {
     const { isDarkMode, toggleTheme } = useTheme();
 
-    // --- ROUTING MOBILE ---
-    const [isMobileMode, setIsMobileMode] = useState(false);
-    const [mobileSessionId, setMobileSessionId] = useState('');
-
-    useEffect(() => {
-        const params = new URLSearchParams(window.location.search);
-        const isMobile = params.get('mobile') === 'true';
-        const session = params.get('session');
-
-        if (isMobile && session) {
-            setIsMobileMode(true);
-            setMobileSessionId(session);
-        }
-    }, []);
+    // (Routing mobile gestito in index.tsx con lazy split, così il telefono non
+    // scarica l'intera App.)
 
     // --- TOASTS ---
     const [toasts, setToasts] = useState<ToastData[]>([]);
@@ -162,7 +149,6 @@ const App: React.FC = () => {
     };
 
     // --- MAIN RENDER LOGIC ---
-    if (isMobileMode) return <MobileUploadPage sessionId={mobileSessionId} />;
     if (isLoading || isWorkersLoading) return (
         <>
         <DynamicIsland workers={[]} />

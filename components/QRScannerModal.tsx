@@ -52,8 +52,14 @@ const QRScannerModal: React.FC<QRScannerModalProps> = ({
     const latestOnScanSuccess = useRef(onScanSuccess);
     const latestOnClose = useRef(onClose);
     const inactivityTimer = useRef<NodeJS.Timeout | null>(null);
-    const pollingTimer = useRef<NodeJS.Timeout | null>(null);
+    const watchdogTimer = useRef<NodeJS.Timeout | null>(null);
+    const lastProgressAt = useRef<number>(0);
     const [currentTime, setCurrentTime] = useState('');
+
+    // Se il telefono va in crash/timeout DURANTE l'upload, prima il PC restava su
+    // "Sincronizzazione" all'infinito. Watchdog: se siamo in processing e non arriva
+    // nessun update per WATCHDOG_MS, mostriamo errore e chiudiamo.
+    const WATCHDOG_MS = 75000;
 
     useEffect(() => {
         latestOnScanSuccess.current = onScanSuccess;
@@ -107,7 +113,7 @@ const QRScannerModal: React.FC<QRScannerModalProps> = ({
     const triggerClose = async () => {
         if (isPoweringOff || isDropping) return;
         if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
-        if (pollingTimer.current) clearTimeout(pollingTimer.current);
+        if (watchdogTimer.current) clearTimeout(watchdogTimer.current);
 
         if (globalSessionId) await supabase.from('scan_sessions').delete().eq('id', globalSessionId);
 
@@ -117,6 +123,7 @@ const QRScannerModal: React.FC<QRScannerModalProps> = ({
             setTimeout(() => {
                 globalSessionId = '';
                 globalProcessedIds.clear();
+                hasStartedUpload.current = false;
                 latestOnClose.current();
                 setIsPoweringOff(false);
                 setIsDropping(false);
@@ -125,6 +132,16 @@ const QRScannerModal: React.FC<QRScannerModalProps> = ({
                 setSyncProgress({ current: 0, total: 0 });
             }, 300);
         }, 200);
+    };
+
+    const triggerWatchdogError = (reason: string) => {
+        setErrorMessage(reason);
+        setStatus('error');
+        playErrorBuzz();
+        if (hasStartedUpload.current) {
+            finishUpload(globalProcessedIds.size, 1, 'mobile', reason);
+        }
+        setTimeout(() => triggerClose(), 2500);
     };
 
     const resetInactivityTimer = () => {
@@ -147,142 +164,233 @@ const QRScannerModal: React.FC<QRScannerModalProps> = ({
         setIsPoweringOff(false); setIsDropping(false); setIsScreenOff(false);
         resetInactivityTimer();
 
-        let isPolling = true;
+        let isActive = true;
+        const currentSession = globalSessionId;
 
-        const initDb = async () => {
-            try { await supabase.from('scan_sessions').insert([{ id: globalSessionId, status: 'waiting' }]); } catch (err) { console.error('QRScanner: errore insert scan_session', err); }
-            startPolling();
+        const onPhoneFileReady = (item: any, sessionMode?: string | null) => {
+            if (!item || !item._batchId || globalProcessedIds.has(item._batchId)) return;
+            globalProcessedIds.add(item._batchId);
+
+            // Step 4: la modalità è quella dichiarata dal telefono al primo upload.
+            // Fallback su scanModeRef (vecchio comportamento) solo se il telefono non l'ha
+            // ancora scritta (sessione molto vecchia o degradata).
+            const effectiveMode = sessionMode ?? scanModeRef.current;
+
+            if (effectiveMode === 'archive') {
+                if (item.fileData) {
+                    try {
+                        const link = document.createElement('a');
+                        link.href = `data:${item.mimeType};base64,${item.fileData}`;
+                        const sanitizedName = workerName.replace(/[^a-zA-Z0-9]/g, '_');
+                        const monthTitle = item.title ? item.title.replace(/[^a-zA-Z0-9]/g, '_') : 'Documento';
+                        const ext = item.mimeType === 'application/pdf' ? 'pdf' : 'jpg';
+                        link.download = `${company}_${sanitizedName}_${monthTitle}.${ext}`;
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                        window.dispatchEvent(new CustomEvent('island-scan-label', { detail: `SCARICATO: ${item.title}` }));
+                    } catch (downloadErr) { console.error("Errore download:", downloadErr); }
+                }
+            } else {
+                latestOnScanSuccess.current(item);
+                window.dispatchEvent(new CustomEvent('mobile-onboarding-data', { detail: item }));
+            }
+
+            playSuccessBeep();
+            resetInactivityTimer();
+            lastProgressAt.current = Date.now();
+            setScannedCount(globalProcessedIds.size);
+            updateUploadProgress(globalProcessedIds.size);
+            setStatus('file_done');
+            setTimeout(() => {
+                setStatus(prev => prev === 'all_done' ? 'all_done' : 'processing');
+            }, 800);
         };
 
-        const startPolling = async () => {
-            if (!isPolling) return;
-            try {
-                const { data } = await supabase.from('scan_sessions').select('*').eq('id', globalSessionId).single();
-                if (data) {
-                    if (data.status === 'all_done') {
-                        setStatus('all_done');
-                        playFinalSuccessChime();
-                        isPolling = false;
-                        if (pollingTimer.current) clearTimeout(pollingTimer.current);
+        const onSessionUpdate = (session: any) => {
+            if (!session || !isActive) return;
 
-                        finishUpload(globalProcessedIds.size, 0, 'mobile');
-                        setTimeout(() => triggerClose(), 1200);
-                        return;
-                    }
+            if (session.mode && session.mode !== scanModeRef.current && (session.mode === 'ai' || session.mode === 'archive')) {
+                // Step 4: PC si allinea alla modalità decisa dal telefono.
+                scanModeRef.current = session.mode;
+                setLocalScanMode(session.mode);
+            }
 
-                    if (data.status === 'processing') {
-                        setStatus(prev => prev === 'all_done' ? 'all_done' : 'processing');
+            if (session.status === 'all_done') {
+                setStatus('all_done');
+                playFinalSuccessChime();
+                finishUpload(globalProcessedIds.size, 0, 'mobile');
+                // Sessione persistente: dopo aver mostrato "Fatto", torniamo in waiting
+                // SENZA chiudere e SENZA cancellare la riga DB. L'utente può scattare
+                // altre buste paga dal telefono e inviarle subito, sullo stesso QR.
+                // La chiusura/cleanup avviene solo su X esplicito o expires_at.
+                setTimeout(async () => {
+                    if (!isActive) return;
+                    globalProcessedIds.clear();
+                    hasStartedUpload.current = false;
+                    setScannedCount(0);
+                    setSyncProgress({ current: 0, total: 0 });
+                    setIsScreenOff(false);
+                    setIsDropping(false);
+                    setStatus('waiting');
+                    lastProgressAt.current = 0;
+                    resetInactivityTimer();
+                    try {
+                        await supabase
+                            .from('scan_sessions')
+                            .update({ status: 'waiting', data: null })
+                            .eq('id', currentSession);
+                    } catch (e) { console.error('QRScanner: reset sessione fallito', e); }
+                }, 2000);
+                return;
+            }
 
-                        if (!hasStartedUpload.current) {
-                            hasStartedUpload.current = true;
-                            setIsScreenOff(true);
+            if (session.status === 'processing') {
+                setStatus(prev => prev === 'all_done' ? 'all_done' : 'processing');
+                lastProgressAt.current = Date.now();
 
-                            setTimeout(() => {
-                                setIsDropping(true);
-                                let totalFiles = 1;
-                                try {
-                                    if (data.data) {
-                                        const p = typeof data.data === 'string' ? JSON.parse(data.data) : data.data;
-                                        if (p.total) totalFiles = p.total;
-                                    }
-                                } catch (e) { console.error('QRScanner: errore parsing data.data (totalFiles)', e); }
-                                startUpload('mobile', totalFiles);
-                            }, 500);
-                        }
-
-                        if (data.data) {
-                            try {
-                                const parsed = typeof data.data === 'string' ? JSON.parse(data.data) : data.data;
-                                if (parsed.total) {
-                                    setSyncProgress({ current: parsed.current, total: parsed.total });
-                                    updateUploadProgress(parsed.current);
-                                }
-                            } catch (e) { console.error('QRScanner: errore parsing data.data (progress)', e); }
-                        }
-                    }
-                    else if (data.status === 'completed' && data.data) {
-                        let resultsArray: any[] = [];
+                if (!hasStartedUpload.current) {
+                    hasStartedUpload.current = true;
+                    setIsScreenOff(true);
+                    setTimeout(() => {
+                        setIsDropping(true);
+                        let totalFiles = 1;
                         try {
-                            const parsed = typeof data.data === 'string' ? JSON.parse(data.data) : data.data;
-                            resultsArray = Array.isArray(parsed) ? parsed : [parsed];
-                        } catch (err) { console.error("Errore parsing array", err); }
-
-                        let addedNewFile = false;
-
-                        resultsArray.forEach((item: any) => {
-                            if (item && item._batchId && !globalProcessedIds.has(item._batchId)) {
-                                globalProcessedIds.add(item._batchId);
-
-                                // ✨ LA MAGIA: Qui usiamo la Memoria Fotografica (scanModeRef.current) 
-                                // così è sempre aggiornata all'ultima mossa dell'utente!
-                                if (scanModeRef.current === 'archive') {
-                                    if (item.fileData) {
-                                        try {
-                                            const link = document.createElement('a');
-                                            link.href = `data:${item.mimeType};base64,${item.fileData}`;
-                                            const sanitizedName = workerName.replace(/[^a-zA-Z0-9]/g, '_');
-                                            const monthTitle = item.title ? item.title.replace(/[^a-zA-Z0-9]/g, '_') : 'Documento';
-                                            const ext = item.mimeType === 'application/pdf' ? 'pdf' : 'jpg';
-                                            link.download = `${company}_${sanitizedName}_${monthTitle}.${ext}`;
-                                            document.body.appendChild(link);
-                                            link.click();
-                                            document.body.removeChild(link);
-
-                                            window.dispatchEvent(new CustomEvent('island-scan-label', { detail: `SCARICATO: ${item.title}` }));
-                                        } catch (downloadErr) {
-                                            console.error("Errore download:", downloadErr);
-                                        }
-                                    }
-                                } else {
-                                    // Modalità AI
-                                    latestOnScanSuccess.current(item);
-                                    window.dispatchEvent(new CustomEvent('mobile-onboarding-data', { detail: item }));
-                                }
-
-                                addedNewFile = true;
-                            }
-                        });
-
-                        if (addedNewFile) {
-                            playSuccessBeep();
-                            resetInactivityTimer();
-                            setScannedCount(globalProcessedIds.size);
-                            updateUploadProgress(globalProcessedIds.size);
-                            setStatus('file_done');
-                            setTimeout(() => {
-                                setStatus(prev => prev === 'all_done' ? 'all_done' : 'processing');
-                            }, 800);
-                        }
-                    }
-                    else if (data.status === 'error') {
-                        const errorReason = data.data || "Immagine illeggibile o sfocata.";
-                        setErrorMessage(errorReason);
-                        setStatus('error');
-                        playErrorBuzz();
-
-                        if (hasStartedUpload.current) {
-                            finishUpload(0, 1, 'mobile', errorReason);
-                            setTimeout(() => triggerClose(), 2000);
-                        } else {
-                            await supabase.from('scan_sessions').update({ data: null, status: 'waiting' }).eq('id', globalSessionId);
-                            setTimeout(() => { if (isPolling) setStatus('waiting'); }, 3000);
-                        }
-                    }
+                            const p = typeof session.data === 'string' ? JSON.parse(session.data) : session.data;
+                            if (p?.total) totalFiles = p.total;
+                        } catch (e) { /* data malformato: parto con 1 */ }
+                        startUpload('mobile', totalFiles);
+                    }, 500);
                 }
-            } catch (e) { console.error('QRScanner: errore polling loop', e); }
 
-            if (isPolling) {
-                pollingTimer.current = setTimeout(startPolling, 400);
+                try {
+                    const parsed = typeof session.data === 'string' ? JSON.parse(session.data) : session.data;
+                    if (parsed?.total) {
+                        setSyncProgress({ current: parsed.current, total: parsed.total });
+                        updateUploadProgress(parsed.current);
+                    }
+                } catch { /* idem */ }
+                return;
+            }
+
+            if (session.status === 'error') {
+                let errorReason = "Immagine illeggibile o sfocata.";
+                try {
+                    const parsed = typeof session.data === 'string' ? JSON.parse(session.data) : session.data;
+                    if (parsed?.error) errorReason = parsed.error;
+                    else if (typeof session.data === 'string') errorReason = session.data;
+                } catch { /* fallback al default */ }
+
+                setErrorMessage(errorReason);
+                setStatus('error');
+                playErrorBuzz();
+
+                if (hasStartedUpload.current) {
+                    finishUpload(0, 1, 'mobile', errorReason);
+                    setTimeout(() => triggerClose(), 2000);
+                } else {
+                    supabase.from('scan_sessions').update({ data: null, status: 'waiting' }).eq('id', currentSession).then();
+                    setTimeout(() => { if (isActive) setStatus('waiting'); }, 3000);
+                }
             }
         };
 
-        initDb();
-        return () => {
-            isPolling = false;
-            if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
-            if (pollingTimer.current) clearTimeout(pollingTimer.current);
+        let sessionChannel: any = null;
+        let resultsChannel: any = null;
+
+        const initSession = async () => {
+            // Cleanup opportunistico delle sessioni scadute (sostituisce un cron).
+            supabase.rpc('cleanup_expired_scan_sessions').then(({ error }) => {
+                if (error) console.warn('QRScanner: cleanup_expired_scan_sessions fallito (RPC mancante?):', error.message);
+            });
+
+            // Crea la riga di questa sessione con owner_id = auth.uid() (RLS).
+            try {
+                const { data: { user } } = await supabase.auth.getUser();
+                if (!user) {
+                    console.warn('QRScanner: utente non autenticato, sessione non creata');
+                    return;
+                }
+                await supabase.from('scan_sessions').upsert({
+                    id: currentSession,
+                    status: 'waiting',
+                    owner_id: user.id,
+                });
+            } catch (err) {
+                console.error('QRScanner: errore upsert scan_session', err);
+            }
+
+            // Snapshot iniziale (riconnessione/refresh: recupera tutto ciò che è già successo).
+            try {
+                const [{ data: sessionData }, { data: resultsData }] = await Promise.all([
+                    supabase.from('scan_sessions').select('*').eq('id', currentSession).maybeSingle(),
+                    supabase.from('scan_results').select('*').eq('session_id', currentSession).order('id', { ascending: true }),
+                ]);
+                const sessionMode = sessionData?.mode ?? null;
+                if (resultsData?.length) {
+                    resultsData.forEach((row: any) => onPhoneFileReady(row.payload, sessionMode));
+                }
+                if (sessionData) onSessionUpdate(sessionData);
+            } catch (e) { console.error('QRScanner: snapshot iniziale fallito', e); }
+
+            if (!isActive) return;
+
+            // Realtime: niente più polling. Push diretti.
+            sessionChannel = supabase
+                .channel(`scan_session:${currentSession}`)
+                .on('postgres_changes', {
+                    event: 'UPDATE', schema: 'public', table: 'scan_sessions',
+                    filter: `id=eq.${currentSession}`,
+                }, (payload: any) => onSessionUpdate(payload.new))
+                .subscribe();
+
+            resultsChannel = supabase
+                .channel(`scan_results:${currentSession}`)
+                .on('postgres_changes', {
+                    event: 'INSERT', schema: 'public', table: 'scan_results',
+                    filter: `session_id=eq.${currentSession}`,
+                }, async (payload: any) => {
+                    // Per la modalità ne abbiamo bisogno coerente con quello che il mobile
+                    // ha appena scritto su scan_sessions. Una select singola è economica.
+                    let sessionMode: string | null = null;
+                    try {
+                        const { data: sess } = await supabase.from('scan_sessions').select('mode').eq('id', currentSession).maybeSingle();
+                        sessionMode = sess?.mode ?? null;
+                    } catch { /* fallback su scanModeRef */ }
+                    onPhoneFileReady(payload.new?.payload, sessionMode);
+                })
+                .subscribe();
         };
-    }, [isOpen, company, workerName]); // <--- Rimosso scanMode dalle dipendenze per evitare riavvii del polling
+
+        // Watchdog: se siamo in processing e non vediamo update per > WATCHDOG_MS,
+        // il telefono ha crashato/perso connessione DURANTE l'upload. Senza, il modale
+        // resta su "Sincronizzazione" all'infinito.
+        const checkWatchdog = () => {
+            if (!isActive) return;
+            if (hasStartedUpload.current && lastProgressAt.current > 0) {
+                const silenceMs = Date.now() - lastProgressAt.current;
+                if (silenceMs > WATCHDOG_MS) {
+                    isActive = false;
+                    triggerWatchdogError("Il telefono non risponde da oltre un minuto. Riprova.");
+                    return;
+                }
+            }
+            watchdogTimer.current = setTimeout(checkWatchdog, 5000);
+        };
+        watchdogTimer.current = setTimeout(checkWatchdog, 5000);
+
+        initSession();
+
+        return () => {
+            isActive = false;
+            if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
+            if (watchdogTimer.current) clearTimeout(watchdogTimer.current);
+            if (sessionChannel) supabase.removeChannel(sessionChannel);
+            if (resultsChannel) supabase.removeChannel(resultsChannel);
+            // Reset hasStartedUpload se la sessione globale è stata cancellata.
+            if (!globalSessionId) hasStartedUpload.current = false;
+        };
+    }, [isOpen, company, workerName]);
 
     if (!isOpen) return null;
 

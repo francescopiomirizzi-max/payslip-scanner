@@ -1,5 +1,6 @@
 import { Handler } from "@netlify/functions";
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
+import { checkScanRateLimit, clientIp } from "./_rateLimit";
 
 // --- POOL DI CHIAVI API GEMINI ---
 // Più chiavi = più bucket di quota indipendenti. Si parte da una chiave casuale (così un
@@ -107,7 +108,12 @@ function cleanAndParseJSON(text: string): any {
 //    serve che TUTTE le chiavi siano lente nello stesso istante per fallire la scansione.
 //  - ritenta solo se resta budget reale, ruotando su una chiave diversa;
 //  - se il budget è finito si lancia un errore pulito PRIMA del kill secco della Function.
-const PER_ATTEMPT_CAP_MS = Number(process.env.AI_PER_ATTEMPT_CAP_MS) || 14000;
+// In dev (netlify dev) il timeout effettivo è ~30s, non 50s come in prod: con cap
+// 14s si fanno 2 tentativi che bruciano l'intero budget e abortiscono entrambi
+// (osservato: "Request aborted" dopo ~25s). In dev preferiamo un singolo tentativo
+// con cap largo (24s) che lascia a Gemini il tempo di rispondere su prompt RFI lunghi.
+const PER_ATTEMPT_CAP_MS = Number(process.env.AI_PER_ATTEMPT_CAP_MS)
+    || (process.env.NETLIFY_DEV === "true" ? 24000 : 14000);
 
 async function generateContentWithRetry(
   keys: string[],
@@ -546,46 +552,81 @@ const PROMPT_CLEAN_SERVICE = `
   ### 1. DATI BASE
   - "month" (numero 1-12) e "year" (4 cifre): estraili dalla testata del cedolino (mese/anno di competenza).
 
-  ### 2. PRESENZE E FERIE
-  - "daysWorked" (Giorni Lavorati): cerca "Presenze", "Giorni Lavorati" o "GG INPS" nella sezione anagrafica/riepilogo in alto. Estrai il valore numerico.
-  - "daysVacation" (Ferie godute nel mese): cerca "Ferie godute", "Ferie", o codice 5000 / descrizione "FERIE GODUTE". Se il valore è espresso in ore (> 12), dividi per 8 e arrotonda a 2 decimali. Se non trovi nulla, restituisci 0.
+  ### 2. PRESENZE E FERIE (POLICY ANTI-INVENZIONE + FORMULA TASSATIVA)
+  - "daysWorked" (Giorni effettivamente lavorati) — FORMULA OBBLIGATORIA:
+      **daysWorked = [GG_RETRIBUITI] − [daysVacation]**
+    dove [GG_RETRIBUITI] è il "divisore mensile" del cedolino, cercato in questo ordine:
+      (a) Cella esplicita "GG INPS" / "GG.LAV." / "GIORNI LAV." / "PRESENZE" nella sezione anagrafica/riepilogo in alto.
+      (b) Se (a) non c'è, usa la quantità della riga 6001 RETRIBUZIONE ORDINARIA (di norma 26).
+      (c) Se nessuna è leggibile → daysWorked = 0 e segnala in "aiWarning".
+    🚨 ATTENZIONE CRITICA: il valore "26" (o simili) di RETRIBUZIONE ORDINARIA include ANCHE i giorni di ferie godute (vengono pagati alla tariffa ordinaria). Per i veri giorni LAVORATI bisogna SOTTRARRE le ferie del §2.daysVacation. Non scrivere mai daysWorked ≥ daysWorked + daysVacation > 31 sullo stesso mese.
+    Esempi:
+      • GG_RETRIBUITI=26, daysVacation=0 → daysWorked = 26 − 0 = 26.0
+      • GG_RETRIBUITI=26, daysVacation=1.19 → daysWorked = 26 − 1.19 = 24.81
+      • GG_RETRIBUITI=26, daysVacation=11.55 → daysWorked = 26 − 11.55 = 14.45
+  - "daysVacation" (Ferie godute nel mese) — REGOLA TASSATIVA CON CONVERSIONE ORE→GIORNI:
+    1) Cerca SOLO la riga con codice esattamente "**8101**" e descrizione contenente "**FERIE GODUTE**" nel corpo centrale (la tabella delle voci variabili).
+       ⚠️ DIVIETO ASSOLUTO: NON usare ratei "AT FERIE / AT PERS / AD PERS" del box a destra (cumulativi), NON usare valori "FERIE RESIDUE / FERIE SPETTANTI / FERIE MATURATE" (sono saldi annuali), NON usare percentuali, importi in euro o quote orarie. Se NON vedi LETTERALMENTE il codice "8101" insieme alle parole "FERIE GODUTE" → "daysVacation": 0.0.
+    2) Se la voce 8101 esiste, estrai SOLO il valore numerico della colonna "ORE/GIORNI" (colonna "quantità", NON la tariffa e NON l'importo).
+    3) Conversione ore↔giorni:
+       • Se valore > 7 → sono ORE → DEVI dividere per 8 e arrotondare a 2 decimali. Es. 9.52 / 8 = 1.19. Es. 92.4 / 8 = 11.55.
+       • Se valore ≤ 7 → sono GIORNI → mantieni com'è. Es. 5.0 → 5.0.
+       • Conferma di sanità: se la riga ha anche tariffa unitaria ~7-15 €/unità → quasi certamente ore (Multiservizi paga ferie alla tariffa oraria).
+    4) Sanità check sul risultato finale: il valore "daysVacation" dopo l'eventuale conversione DEVE essere ≤ 26 (mese massimo). Se ottieni > 26, hai sbagliato cella → "daysVacation": 0.0 e segnala in "aiWarning".
+
+  Esempi:
+    • Letto "8101 FERIE GODUTE 12.79318 9.52 121.79" → 9.52 > 7 → ore → 9.52 / 8 = 1.19. "daysVacation": 1.19.
+    • Letto "8101 FERIE GODUTE 12.79 92.40 1182.40" → 92.4 > 7 → ore → 92.4 / 8 = 11.55. "daysVacation": 11.55.
+    • Letto "8101 FERIE GODUTE 1.00 5.00 ..." → 5.00 ≤ 7 → giorni. "daysVacation": 5.0.
+    • Nessuna riga 8101 visibile → "daysVacation": 0.0 (NON cercare altrove, NON inventare).
 
   ### 3. TICKET RESTAURANT
   - Individua la voce con codice 311 (descrizione "TICKET"). Estrai il valore unitario (colonna "Valore Unitario" o "Base/Aliquota", NON la quantità) e mettilo in "ticketRate".
   - Il codice 311 NON deve comparire nella mappa "codes" (è gestito esclusivamente come "ticketRate", come per RFI/Elior).
   - Se il codice 311 è assente, "ticketRate" è 0.0.
 
-  ### 4. CODICI VARIABILI (MASTER LIST)
+  ### 4. CODICI VARIABILI (MASTER LIST CLEAN SERVICE)
   Cerca i seguenti codici in TUTTE le pagine, estraendo il valore ESCLUSIVAMENTE dalla colonna "Competenze" (importi positivi).
-  REGOLA D'ORO: Il JSON finale DEVE contenere TUTTE le chiavi elencate qui sotto in "codes". Se un codice non è presente nella busta paga, il suo valore DEVE essere 0.0. Non omettere mai nessuna chiave.
+  REGOLA D'ORO: Il JSON finale DEVE contenere TUTTE le chiavi elencate qui sotto in "codes". Se un codice non è presente nella busta paga, il suo valore DEVE essere 0.0. Non omettere mai nessuna chiave. NON inventare codici che non sono in questa lista.
   Ricorda di applicare la REGOLA FERREA #1 (asterischi) e #3 (UNA TANTUM/ARRETRATI) durante l'estrazione.
 
-  Maggiorazioni Turni e Festività:
-  - 8037 (INDENNITA' LAV. NOTTURNO)
-  - 8057 (IND. TURNO NON CADENZ.)
-  - 8029 (IND. LAV. DOMEN. > 2 h)
-  - 8019 (LAVORO FESTIVO 35%)
-  - 565  (ORE FEST. LAVORATE 35%)
-  - 8032 (IND. LAV. DOMEN. PASQUA > 2 h)
-  - 442  (FESTIVITA' S. PASQUA)
+  ATTENZIONE: leggi sempre la DESCRIZIONE testuale di ogni riga. Se contiene parole come "MALATTIA", "INFORTUNIO", "STRAORDINARIO", "TRASFERTA" → estrai l'importo nel codice corretto qui sotto anche se il codice numerico è di lettura incerta.
 
-  Lavoro Straordinario / Supplementare:
-  - 8007 (LAVORO STRAORDINARIO 18%)
-  - 18   (LAVORO SUPPLEM. 18%)
+  Voci da NON includere in "codes" (sono base/tredicesima/ferie):
+  - 6001 RETRIBUZIONE ORDINARIA → base
+  - 313  13MA TRANS RIMB ACCORDO → quota tredicesima
+  - 8101 FERIE GODUTE → va in "daysVacation" (vedi §2), NON in "codes"
+  - 8301 ASSEGNI FAM. NUCLEO ARRETR. → va sommato in "arretrati"
 
-  Indennità Flessibilità Oraria:
-  - 437  (IND. FLESS. > 13 < 24)
-  - 440  (IND. FLESS. > 13 > 24 < 30)
-  - 441  (IND. FLESS. > 13 > 30)
+  Voci da includere in "codes":
+  - 315  IND. TRASFERTA
+  - 316  GIORNI FESTIVITÀ
+  - 380  IND. MENSILE PROFESSIONALITÀ
+  - 8001 ASSEGN. FAM. NUCLEO (TOT.)
+  - 8005 FESTIVITÀ NON GODUTA
+  - 8007 LAVORO STRAORDINARIO
+  - 8019 MAGG. LAVORO FESTIVO 35% / LAVORO FESTIVO 35% (⚠️ NON è il notturno: il notturno va SEMPRE in 8037. Qui va SOLO il lavoro/maggiorazione festivo 35%. Se 8019 compare in più righe/sottocasi sulla stessa busta, SOMMA tutti gli importi 8019 in un unico valore)
+  - 8029 IND. LAV. DOMEN. > 2 h
+  - 8032 IND. LAV. DOMEN. PASQUA (domenica di Pasqua, voce dedicata: NON sommarla a 8029)
+  - 8037 INDENNITA' LAV. NOTTURNO (⚠️ il notturno va SEMPRE qui, MAI in 8019)
+  - 8038 CREDITO DA M/CA SCALATO/ASSORTO
+  - 8053 BIN MENSILE INPS
+  - 8057 IND. PRESTAZIONE / PRECUSTODIA
+  - 18   LAVORO SUPPLEMENTARE 18% (ore supplementari part-time)
+  - 437  IND. FLESSIBILITÀ ORARIA 13-24 ("IND. FLESS. > 13 > 24")
+  - 440  IND. FLESSIBILITÀ ORARIA 24-30 ("IND. FLESS. > 13 > 24 <30")
+  - 441  IND. FLESSIBILITÀ ORARIA > 30 ("IND. FLESS. > 13 > 30")
+  - 565  ORE FESTIVE 35% (lavoro su giorni festivi)
+  - 739  IND. DISPONIBILITÀ / DISPOSIZIONE
+  - 820  IND. DI PRESENZA
+  - 8191 QUOTA TFR MESE INPS
+  - 8258 CREDITO DI 66/14 EROGATO (bonus Renzi/€80 — NON è un arretrato)
+  - 8350 MALATTIA (totale) → SOMMA in questo UNICO codice tutti gli importi POSITIVI in Competenze delle righe la cui descrizione contiene "MALATTIA" o "CARENZA" (es. IND. MALATTIA C/INPS + CARENZA MALATTIA + IND. MALATTIA C/DITTA possono coesistere sullo stesso cedolino: vanno sommate qui). Cerca SEMPRE queste righe.
+  - 9117 RATA ADDIZ. REGIONALE A.P.
+  - 9119 RATA ADD. COMUNALE A.P.
+  - 7173 ACCONTO ADD. COMUNALE A.P.
 
-  Indennità Specifiche (Trasferte, Presenza):
-  - 820  (IND. PRESENZA)
-  - 739  (IND. DISPOSIZIONE)
-  - 380  (IND. TRENO IN GIORNATA)
-  - 315  (IND. TRASFERTA)
-  - 392  (TRASFERTA ITALIA)
-  - 8038 (IND. DI PERNOTTAZIONE)
-  - 8053 (IND. MANEGGIO DENARO)
+  REGOLA ANTI-DUPLICAZIONE: il valore di una stessa voce deve comparire UNA SOLA volta. Se hai messo X nel codice 8191, NON metterlo anche in "arretrati". Se hai messo X in "arretrati", NON metterlo in nessun codice.
 
   ### 5. ARRETRATI E NOTE
   - "arretrati": somma SOLO gli importi POSITIVI delle voci la cui DESCRIZIONE contiene "UNA TANTUM", "ARRETRATI", "CONGUAGLIO", "ARR." (case-insensitive). IGNORA categoricamente la colonna Trattenute.
@@ -616,15 +657,16 @@ const PROMPT_CLEAN_SERVICE = `
   ### 9. FORMATO DI OUTPUT STRICT (DIVIETO DI MARKDOWN)
   Restituisci ESCLUSIVAMENTE un oggetto JSON crudo. È SEVERAMENTE VIETATO usare formattazioni markdown come \`\`\`json o \`\`\`.
 
-  Esempio di output perfetto:
+  Esempio di output perfetto (valori a titolo di esempio — NON usarli come default):
   {
-    "isCUD": false, "month": 5, "year": 2023, "daysWorked": 22.0, "daysVacation": 2.0, "ticketRate": 5.29, "arretrati": 128.40, "eventNote": "[Arretrati/UnaTantum]", "aiWarning": "Nessuna anomalia",
-    "fondo_pregresso_31_12": 1850.30, "imponibile_tfr_mensile": 0.0,
+    "isCUD": false, "month": 5, "year": 2023, "daysWorked": 26.0, "daysVacation": 0.0, "ticketRate": 0.0, "arretrati": 0.0, "eventNote": "", "aiWarning": "Nessuna anomalia",
+    "fondo_pregresso_31_12": 0.0, "imponibile_tfr_mensile": 0.0,
     "codes": {
-      "8037": 145.20, "8057": 0.0, "8029": 0.0, "8019": 0.0, "565": 0.0, "8032": 0.0, "442": 0.0,
-      "8007": 88.50, "18": 0.0,
-      "437": 0.0, "440": 0.0, "441": 0.0,
-      "820": 25.00, "739": 0.0, "380": 0.0, "315": 0.0, "392": 0.0, "8038": 0.0, "8053": 0.0
+      "18": 0.0, "315": 0.0, "316": 0.0, "380": 36.16, "437": 0.0, "440": 0.0, "441": 0.0,
+      "565": 0.0, "739": 0.0, "820": 0.0, "8001": 0.0, "8005": 0.0,
+      "8007": 0.0, "8019": 31.11, "8029": 38.0, "8032": 0.0, "8037": 38.78, "8038": 28.0,
+      "8053": 26.4, "8057": 45.0, "8191": 99.62, "8258": 0.0, "8350": 0.0,
+      "9117": 0.0, "9119": 0.0, "7173": 0.0
     }
   }
 `;
@@ -932,9 +974,17 @@ export const handler: Handler = async (event, context) => {
     const body = JSON.parse(event.body || "{}");
 
     // 👇 Ora estraiamo anche customColumns per il Motore Mutaforma
-    const { fileData, mimeType, company, action, customColumns, eliorType } = body;
+    const { fileData, mimeType, company, action, customColumns, eliorType, sessionId } = body;
 
     if (!fileData) throw new Error("File mancante.");
+
+    // Rate limit (Step 5): freno contro abuso di quota Gemini se il QR viene sniffato
+    // o se un IP brutalizza session_id casuali. Vedi netlify/functions/_rateLimit.ts.
+    const rate = checkScanRateLimit(sessionId, clientIp(event as any));
+    if (!rate.allowed) {
+      return { statusCode: 429, headers, body: JSON.stringify({ error: rate.reason }) };
+    }
+
     const cleanData = fileData.includes("base64,") ? fileData.split("base64,")[1] : fileData;
 
     // =========================================================================

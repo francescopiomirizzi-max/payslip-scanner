@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { v4 as uuidv4 } from 'uuid';
 import { Worker, AnnoDati } from '../types';
 import { DEFAULT_YEARS_TEMPLATE } from '../constants';
 import { triggerConfetti } from '../utils/confetti';
@@ -274,7 +275,7 @@ export const useWorkers = (addToast: AddToast) => {
         if (modalMode === 'create') {
             const randomColor = CARD_COLORS[Math.floor(Math.random() * CARD_COLORS.length)];
             const newWorker: Worker = {
-                id: crypto.randomUUID(),
+                id: uuidv4(),
                 ...data,
                 accentColor: randomColor,
                 anni: JSON.parse(JSON.stringify(DEFAULT_YEARS_TEMPLATE)),
@@ -459,7 +460,7 @@ export const useWorkers = (addToast: AddToast) => {
             const source: any[] = importPendingData.workers || importPendingData;
             const withUUIDs: Worker[] = source.map((w: any) => ({
                 ...w,
-                id: crypto.randomUUID(),
+                id: uuidv4(),
                 anni: w.anni || [],
             }));
             const { error } = await supabase

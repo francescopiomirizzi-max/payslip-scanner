@@ -8,7 +8,7 @@ import {
   QrCode, Download, Bot, Cpu, FileText, Save, CheckCircle, AlertTriangle, Archive, Zap,
 } from 'lucide-react';
 import { LineChart } from 'lucide-react';
-import SplitViewViewer from './SplitViewViewer';
+import SplitViewViewer, { type ArchivedPick } from './SplitViewViewer';
 import QRScannerModal from './QRScannerModal';
 import IstatDashboardModal from './WorkerTables/IstatDashboardModal';
 import { Worker, AnnoDati, YEARS } from '../types';
@@ -69,6 +69,9 @@ interface WorkerDetailLayoutProps {
   explanationData: string | null;
   onContainerScroll: (e: React.UIEvent<HTMLDivElement>) => void;
   payslipFiles: string[];
+  archivedPicks?: ArchivedPick[];
+  onOpenArchivedPicks?: (ids: string[]) => void;
+  onBackToArchivePicker?: () => void;
   currentFileIndex: number;
   currentFileMonthLabel: string | null;
   isSniperMode: boolean;
@@ -178,7 +181,7 @@ const WorkerDetailLayout: React.FC<WorkerDetailLayoutProps> = ({
   isQRModalOpen, onOpenQR, onCloseQR, onQRData,
   activeTab, onSetActiveTab, archiveCount,
   isExplainerOpen, onCloseExplainer, isExplaining, explanationData, onContainerScroll,
-  payslipFiles, currentFileIndex, currentFileMonthLabel, isSniperMode, onToggleSniper, isProcessing,
+  payslipFiles, archivedPicks, onOpenArchivedPicks, onBackToArchivePicker, currentFileIndex, currentFileMonthLabel, isSniperMode, onToggleSniper, isProcessing,
   selectionBox, imgRef, containerRef, fileInputRef,
   imgScale, imgPos, imgRotation, imgFilter, isDragging,
   onPrevFile, onNextFile, onDeleteCurrentFile, onImageUpload,
@@ -220,8 +223,8 @@ const WorkerDetailLayout: React.FC<WorkerDetailLayoutProps> = ({
     }
     return (
       <div
-        onClick={() => { onLegalStatusChange(step); if (onUpdateStatus) onUpdateStatus(step); }}
-        className={`flex flex-col items-center gap-2 cursor-pointer transition-all ${isActive ? 'scale-110' : 'opacity-70 hover:opacity-100'}`}
+        onClick={isReadOnly ? undefined : () => { onLegalStatusChange(step); if (onUpdateStatus) onUpdateStatus(step); }}
+        className={`flex flex-col items-center gap-2 transition-all ${isReadOnly ? 'cursor-default' : 'cursor-pointer'} ${isActive ? 'scale-110' : isReadOnly ? 'opacity-70' : 'opacity-70 hover:opacity-100'}`}
       >
         <div className={`w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all shadow-sm ${colorClass}`}>
           <Icon className="w-5 h-5" />
@@ -884,6 +887,9 @@ const WorkerDetailLayout: React.FC<WorkerDetailLayoutProps> = ({
             {showSplit && (
               <SplitViewViewer
                 payslipFiles={payslipFiles}
+                archivedPicks={archivedPicks}
+                onOpenArchivedPicks={onOpenArchivedPicks}
+                onBackToArchivePicker={onBackToArchivePicker}
                 currentFileIndex={currentFileIndex}
                 currentFileMonthLabel={currentFileMonthLabel}
                 isSniperMode={isSniperMode}

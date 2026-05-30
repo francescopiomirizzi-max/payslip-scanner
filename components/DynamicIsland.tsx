@@ -1404,10 +1404,12 @@ const DynamicIsland = ({ workers = [] }: { workers?: { id: string | number; nome
                                     <Moon className="w-4 h-4 hidden dark:block text-indigo-400 group-hover/btn:-rotate-12 group-hover/btn:scale-110 transition-transform duration-500 ease-out drop-shadow-[0_0_3px_currentColor]" />
                                 </motion.button>
 
-                                {/* Aziende Custom — Database: scale + glow cyan */}
+                                {/* Aziende Custom — Database: scale + glow cyan. Nascosto al viewer (sola lettura). */}
+                                {!isReadOnly && (
                                 <motion.button variants={{ hidden: { scale: 0, opacity: 0 }, show: { scale: 1, opacity: 1 } }} onClick={() => { window.dispatchEvent(new Event('island-company')); setMode('idle'); }} className="group/btn p-2.5 bg-slate-200 dark:bg-slate-800 hover:bg-cyan-100 dark:hover:bg-cyan-900/50 rounded-xl transition-[transform,background-color,box-shadow] duration-300 hover:scale-110 text-cyan-600 dark:text-cyan-400 hover:shadow-[0_0_12px_rgba(6,182,212,0.5)]" title="Aziende Custom">
                                     <Database className="w-4 h-4 group-hover/btn:scale-110 transition-transform duration-300 drop-shadow-[0_0_3px_currentColor] group-hover/btn:drop-shadow-[0_0_5px_currentColor]" />
                                 </motion.button>
+                                )}
 
                                 {/* Export Backup — Cloud bounce y + freccia in giù che pulsa */}
                                 <motion.button variants={{ hidden: { scale: 0, opacity: 0 }, show: { scale: 1, opacity: 1 } }} onClick={(e) => { e.stopPropagation(); window.dispatchEvent(new CustomEvent('island-export')); setMode('idle'); }} className="group/btn relative p-2.5 bg-slate-200 dark:bg-slate-800 hover:bg-purple-100 dark:hover:bg-purple-900/50 rounded-xl transition-[transform,background-color,box-shadow] duration-300 hover:scale-110 text-purple-600 dark:text-purple-400 hover:shadow-[0_0_12px_rgba(168,85,247,0.5)]" title="Esporta JSON (copia locale)">
@@ -1426,10 +1428,12 @@ const DynamicIsland = ({ workers = [] }: { workers?: { id: string | number; nome
                                     <Bot className="w-4 h-4 group-hover/btn:scale-110 transition-transform duration-300 drop-shadow-[0_0_3px_currentColor] group-hover/btn:drop-shadow-[0_0_5px_currentColor]" />
                                 </motion.button>
 
-                                {/* Libreria Legale — Avvocato Virtuale: scroll che srotola + glow violet */}
+                                {/* Libreria Legale — Avvocato Virtuale: scroll che srotola + glow violet. Nascosto al viewer (admin corpus RAG). */}
+                                {!isReadOnly && (
                                 <motion.button variants={{ hidden: { scale: 0, opacity: 0 }, show: { scale: 1, opacity: 1 } }} onClick={(e) => { e.stopPropagation(); setIsRagAdminOpen(true); setMode('idle'); }} className="group/btn p-2.5 bg-slate-200 dark:bg-slate-800 hover:bg-violet-100 dark:hover:bg-violet-900/50 rounded-xl transition-[transform,background-color,box-shadow] duration-300 hover:scale-110 text-violet-600 dark:text-violet-400 hover:shadow-[0_0_12px_rgba(139,92,246,0.5)]" title="Libreria Legale · Avvocato Virtuale">
                                     <ScrollText className="w-4 h-4 group-hover/btn:scale-110 group-hover/btn:-rotate-3 transition-transform duration-300 drop-shadow-[0_0_3px_currentColor] group-hover/btn:drop-shadow-[0_0_5px_currentColor]" />
                                 </motion.button>
+                                )}
 
                                 {/* Password/Settings — Rotate continuo lento al hover */}
                                 <motion.button variants={{ hidden: { scale: 0, opacity: 0 }, show: { scale: 1, opacity: 1 } }} onClick={() => { window.dispatchEvent(new Event('island-settings')); setMode('idle'); }} className="group/btn p-2.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 rounded-xl transition-[transform,background-color,box-shadow] duration-300 hover:scale-110 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:shadow-[0_0_12px_rgba(148,163,184,0.5)]" title="Password di sicurezza">

@@ -9,11 +9,28 @@ import {
   Trash2, X, Bot, Upload, CalendarDays,
 } from 'lucide-react';
 
+// Una busta selezionabile dal picker archivio (visore in sola lettura).
+export interface ArchivedPick {
+  id: string;
+  storage_path: string;
+  filename: string;
+  year: number;
+  month: string;
+  monthIdx: number;
+}
+
+const MONTH_SHORT = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC'];
+
 interface SplitViewViewerProps {
   // File state
   payslipFiles: string[];
   currentFileIndex: number;
   currentFileMonthLabel: string | null;
+
+  // Picker archivio (solo visore in sola lettura, quando non ci sono file caricati)
+  archivedPicks?: ArchivedPick[];
+  onOpenArchivedPicks?: (ids: string[]) => void;
+  onBackToArchivePicker?: () => void;
 
   // OCR sniper
   isSniperMode: boolean;
@@ -66,6 +83,9 @@ const SplitViewViewer: React.FC<SplitViewViewerProps> = ({
   payslipFiles,
   currentFileIndex,
   currentFileMonthLabel,
+  archivedPicks,
+  onOpenArchivedPicks,
+  onBackToArchivePicker,
   isSniperMode,
   isProcessing,
   selectionBox,
@@ -96,6 +116,25 @@ const SplitViewViewer: React.FC<SplitViewViewerProps> = ({
   onExplainPayslip,
 }) => {
   const isReadOnly = useIsReadOnly();
+  // Selezione multipla del picker archivio (visore): permette di aprire alcune buste
+  // specifiche, oltre al caricamento di un anno intero col bottone dedicato.
+  const [selectedPickIds, setSelectedPickIds] = React.useState<Set<string>>(new Set());
+  const togglePick = (id: string) => setSelectedPickIds(prev => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
+  const pickYears = archivedPicks
+    ? Array.from(new Set(archivedPicks.map(p => p.year))).sort((a, b) => b - a)
+    : [];
+
+  // Tipo del file mostrato. Gli URL firmati Supabase conservano l'estensione reale
+  // prima del ?token=… (…/2024_01_busta.jpg?token=…), così distinguiamo immagini da PDF.
+  // I blob: locali (upload owner) non hanno estensione: ricadono nel ramo <object>
+  // che prova il PDF e altrimenti ripiega sull'<img> di fallback.
+  const currentUrl = payslipFiles[currentFileIndex];
+  const isImageFile = !!currentUrl &&
+    /\.(jpe?g|png|gif|webp|bmp|heic|heif|tiff?)$/.test(currentUrl.split('?')[0].toLowerCase());
   return (
   <motion.div
     initial={{ width: 0, opacity: 0, x: -50 }}
@@ -118,6 +157,16 @@ const SplitViewViewer: React.FC<SplitViewViewerProps> = ({
     {/* HEADER */}
     <div className="p-4 bg-slate-800/80 backdrop-blur border-b border-slate-700 flex justify-between items-center z-20">
       <div className="flex items-center gap-3">
+        {/* VISORE: torna al picker dell'archivio per scegliere altre buste */}
+        {isReadOnly && payslipFiles.length > 0 && onBackToArchivePicker && (
+          <button
+            onClick={onBackToArchivePicker}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-700 hover:bg-cyan-600 text-white transition-colors"
+            title="Torna all'archivio per scegliere altre buste"
+          >
+            <ChevronLeft className="w-4 h-4" /> Archivio
+          </button>
+        )}
         {/* File navigator or mode label */}
         {payslipFiles.length > 1 ? (
           <div className="flex items-center gap-2 bg-slate-950/50 rounded-lg p-1 border border-slate-700">
@@ -204,18 +253,13 @@ const SplitViewViewer: React.FC<SplitViewViewerProps> = ({
     >
       {payslipFiles.length > 0 ? (
         <div className="relative w-full h-full flex items-center justify-center">
-          <object
-            data={payslipFiles[currentFileIndex]}
-            type="application/pdf"
-            className="w-full h-full rounded-none"
-            style={{
-              pointerEvents: isSniperMode ? 'none' : 'auto',
-              display: payslipFiles[currentFileIndex].endsWith('.pdf') || payslipFiles[currentFileIndex].startsWith('blob:') ? 'block' : 'none',
-            }}
-          >
+          {isImageFile ? (
+            // Buste archiviate in JPG/PNG (foto): renderizziamo direttamente l'<img>.
+            // Mettere l'immagine come contenuto di fallback dentro un <object> nascosto
+            // (display:none) la nascondeva insieme all'object → visore scuro.
             <img
               ref={imgRef}
-              src={payslipFiles[currentFileIndex]}
+              src={currentUrl}
               alt="Busta Paga"
               draggable={false}
               style={{
@@ -226,10 +270,32 @@ const SplitViewViewer: React.FC<SplitViewViewerProps> = ({
               }}
               className={`max-w-full max-h-full object-contain select-none ${isSniperMode ? '' : 'cursor-grab active:cursor-grabbing'}`}
             />
-          </object>
+          ) : (
+            <object
+              data={currentUrl}
+              type="application/pdf"
+              className="w-full h-full rounded-none"
+              style={{ pointerEvents: isSniperMode ? 'none' : 'auto' }}
+            >
+              {/* Fallback per i blob: locali senza estensione che non sono PDF */}
+              <img
+                ref={imgRef}
+                src={currentUrl}
+                alt="Busta Paga"
+                draggable={false}
+                style={{
+                  transform: `scale(${imgScale}) translate(${imgPos.x}px, ${imgPos.y}px) rotate(${imgRotation}deg)`,
+                  transition: isDragging ? 'none' : 'transform 0.2s ease-out',
+                  pointerEvents: 'auto',
+                  filter: imgFilter === 'contrast' ? 'contrast(150%) grayscale(100%)' : 'none',
+                }}
+                className={`max-w-full max-h-full object-contain select-none ${isSniperMode ? '' : 'cursor-grab active:cursor-grabbing'}`}
+              />
+            </object>
+          )}
 
-          {/* AI explain button */}
-          {payslipFiles.length > 0 && !isExplainerOpen && (
+          {/* AI explain button — nascosto al visore: eviterebbe chiamate Gemini sprecate */}
+          {payslipFiles.length > 0 && !isExplainerOpen && !isReadOnly && (
             <button
               onClick={onExplainPayslip}
               className="absolute bottom-6 right-6 z-50 p-4 bg-slate-900 border border-slate-700 hover:border-fuchsia-500 rounded-full shadow-[0_0_20px_rgba(192,38,211,0.3)] hover:shadow-[0_0_30px_rgba(192,38,211,0.6)] transition-all duration-300 group hover:-translate-y-1"
@@ -264,9 +330,78 @@ const SplitViewViewer: React.FC<SplitViewViewerProps> = ({
           </div>
         </div>
       ) : isReadOnly ? (
-        <div className="flex items-center justify-center text-slate-500 dark:text-slate-300 p-8 w-64 h-64">
-          <p className="text-sm text-center opacity-60">Nessuna busta paga<br />disponibile</p>
-        </div>
+        // VISORE: niente upload. Mostra il picker delle buste archiviate sul DB cosi'
+        // il sindacalista apre una busta senza passare dal tab Archivio.
+        // `absolute inset-0`: il picker scrolla DENTRO l'altezza del body (guidata dalla
+        // tabella di fianco) invece di far crescere la pagina quando ci sono molti anni.
+        archivedPicks && archivedPicks.length > 0 ? (
+          <div className="absolute inset-0 overflow-y-auto custom-scrollbar p-4 pb-20">
+            <p className="text-[11px] font-black uppercase tracking-widest text-slate-400 mb-4 text-center">
+              Buste paga archiviate
+            </p>
+            {pickYears.map(year => {
+              const yearPicks = archivedPicks
+                .filter(p => p.year === year)
+                .sort((a, b) => a.monthIdx - b.monthIdx);
+              return (
+                <div key={year} className="mb-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-sm font-bold text-cyan-400">{year}</span>
+                    <span className="flex-1 h-px bg-slate-700/60" />
+                    <button
+                      onClick={() => onOpenArchivedPicks?.(yearPicks.map(p => p.id))}
+                      className="px-2 py-1 rounded-md text-[10px] font-black uppercase tracking-wider bg-cyan-600/20 hover:bg-cyan-600 text-cyan-300 hover:text-white border border-cyan-500/40 hover:border-cyan-500 transition-colors"
+                      title={`Apri tutte le ${yearPicks.length} buste del ${year}`}
+                    >
+                      Tutto l'anno
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {yearPicks.map(p => {
+                      const selected = selectedPickIds.has(p.id);
+                      return (
+                        <button
+                          key={p.id}
+                          onClick={() => togglePick(p.id)}
+                          className={`px-2.5 py-1.5 rounded-lg text-[11px] font-black border transition-colors ${
+                            selected
+                              ? 'bg-cyan-500 text-white border-cyan-400 shadow-[0_0_12px_rgba(6,182,212,0.5)]'
+                              : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700 hover:border-cyan-500'
+                          }`}
+                          title={`${p.month} ${p.year} — ${p.filename}`}
+                        >
+                          {MONTH_SHORT[p.monthIdx] ?? p.month.slice(0, 3)}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+
+            {/* Barra di conferma: appare quando ci sono buste selezionate */}
+            {selectedPickIds.size > 0 && (
+              <div className="sticky bottom-0 -mx-4 -mb-20 px-4 py-3 bg-slate-900/95 backdrop-blur border-t border-slate-700 flex items-center gap-2">
+                <button
+                  onClick={() => setSelectedPickIds(new Set())}
+                  className="px-3 py-2 rounded-lg text-xs font-bold text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 transition-colors"
+                >
+                  Annulla
+                </button>
+                <button
+                  onClick={() => { onOpenArchivedPicks?.([...selectedPickIds]); setSelectedPickIds(new Set()); }}
+                  className="flex-1 px-3 py-2 rounded-lg text-xs font-black uppercase tracking-wider bg-cyan-500 hover:bg-cyan-400 text-white transition-colors"
+                >
+                  Apri {selectedPickIds.size} {selectedPickIds.size === 1 ? 'busta' : 'buste'}
+                </button>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="flex items-center justify-center text-slate-500 dark:text-slate-300 p-8 w-64 h-64">
+            <p className="text-sm text-center opacity-60">Nessuna busta paga<br />disponibile</p>
+          </div>
+        )
       ) : (
         // Empty upload area
         <div

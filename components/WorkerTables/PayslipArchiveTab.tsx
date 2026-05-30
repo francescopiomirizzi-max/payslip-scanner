@@ -8,6 +8,7 @@ import {
 import { zip } from 'fflate';
 import { usePayslipArchive, PayslipRecord, VerifyLogEntry } from '../../hooks/usePayslipArchive';
 import { notifyIsland } from '../DynamicIsland';
+import { useIsReadOnly } from '../../lib/readonly';
 
 interface PayslipArchiveTabProps {
     workerId: string;
@@ -15,6 +16,9 @@ interface PayslipArchiveTabProps {
     workerEliorType?: string;
     workerName?: string;
     onCountChange?: (count: number) => void;
+    // Se fornita, il visore in sola lettura apre la busta scelta nel SplitView
+    // laterale invece che in una nuova scheda del browser.
+    onOpenInViewer?: (url: string, name: string) => void;
 }
 
 const MONTH_ORDER: Record<string, number> = {
@@ -46,8 +50,9 @@ const MONTH_COLOR: Record<string, string> = {
 const formatDate = (iso: string) =>
     new Date(iso).toLocaleDateString('it-IT', { day: '2-digit', month: 'short', year: 'numeric' });
 
-export default function PayslipArchiveTab({ workerId, workerProfilo, workerEliorType, workerName, onCountChange }: PayslipArchiveTabProps) {
+export default function PayslipArchiveTab({ workerId, workerProfilo, workerEliorType, workerName, onCountChange, onOpenInViewer }: PayslipArchiveTabProps) {
     const { getPayslipsByWorker, deletePayslip, getSignedUrl, getSignedUrls, updateExtractedData } = usePayslipArchive();
+    const isReadOnly = useIsReadOnly();
 
     const [records, setRecords] = useState<PayslipRecord[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -121,7 +126,14 @@ export default function PayslipArchiveTab({ workerId, workerProfilo, workerElior
         setOpeningId(record.id);
         const url = await getSignedUrl(record.storage_path);
         setOpeningId(null);
-        if (url) window.open(url, '_blank', 'noopener,noreferrer');
+        if (!url) return;
+        // Visore in sola lettura: carica la busta nel SplitView laterale (nome con
+        // mese+anno cosi' il badge mese e la sincronizzazione tabella funzionano).
+        if (isReadOnly && onOpenInViewer) {
+            onOpenInViewer(url, `${record.month} ${record.year} - ${record.filename}`);
+            return;
+        }
+        window.open(url, '_blank', 'noopener,noreferrer');
     };
 
     const handleDelete = async (record: PayslipRecord) => {

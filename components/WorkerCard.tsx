@@ -528,6 +528,16 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
 
                   <div className="flex-1 min-h-0 space-y-4">
                     <div className="relative">
+                      {isReadOnly ? (
+                        /* Sola lettura: badge stato statico, non cliccabile (le RLS bloccano comunque la scrittura) */
+                        <div
+                          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border shadow-sm w-fit backdrop-blur-md ${statusConfig.color} dark:bg-opacity-20 dark:border-opacity-30`}
+                        >
+                          <span className="w-2 h-2 rounded-full shadow-[0_0_8px_currentColor]" style={{ backgroundColor: statusConfig.dot }} />
+                          <StatusIcon className="w-3.5 h-3.5" />
+                          <span className="text-[10px] font-bold uppercase tracking-wide">{statusConfig.label}</span>
+                        </div>
+                      ) : (
                       <button
                         ref={statusBtnRef}
                         onClick={(e) => {
@@ -545,8 +555,9 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
                         <span className="text-[10px] font-bold uppercase tracking-wide">{statusConfig.label}</span>
                         <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${isStatusOpen ? 'rotate-180' : ''}`} />
                       </button>
+                      )}
 
-                      {isStatusOpen && statusPortalPos && ReactDOM.createPortal(
+                      {!isReadOnly && isStatusOpen && statusPortalPos && ReactDOM.createPortal(
                         <div
                           ref={statusPortalRef}
                           style={{ position: 'fixed', top: statusPortalPos.top, left: statusPortalPos.left, zIndex: 9999 }}

@@ -2,6 +2,7 @@ import {
   Document, Packer, Paragraph, Table, TableCell, TableRow,
   TextRun, HeadingLevel, AlignmentType, WidthType, BorderStyle, ShadingType,
 } from 'docx';
+import { unzipSync, zipSync, strToU8, strFromU8 } from 'fflate';
 import { saveAs } from 'file-saver';
 import type { Worker } from '../types';
 import {
@@ -9,6 +10,8 @@ import {
   formatInsertedRange, formatMissingMonths, isPaid,
 } from './workerStatus';
 import { SYSTEM_PROFILES, SYSTEM_PROFILE_KEYS } from '../config/profiles';
+import { computeHolidayIndemnity } from './calculationEngine';
+import { formatCurrency } from './formatters';
 
 const sortByCognome = (a: Worker, b: Worker) =>
   (a.cognome || '').localeCompare(b.cognome || '', 'it') || (a.nome || '').localeCompare(b.nome || '', 'it');
@@ -137,4 +140,103 @@ export const generateReport = async (workers: Worker[]): Promise<void> => {
   const blob = await Packer.toBlob(doc);
   const fname = `Report_Stato_Pratiche_${new Date().toISOString().slice(0, 10)}.docx`;
   saveAs(blob, fname);
+};
+
+// ── REGISTRO MONITORAGGIO PRATICHE PAGATE (formato Ufficio Legale FAST CONFSAL) ──
+
+/** Credito stimato del lavoratore — stesso numero della Dashboard (somma sumNetto). */
+const computeWorkerCredit = (w: Worker): number => {
+  const storedTicketPref = localStorage.getItem(`tickets_${w.id}`);
+  const includeTickets = storedTicketPref !== null ? JSON.parse(storedTicketPref) : true;
+  const storedExFestPref = localStorage.getItem(`exFest_${w.id}`);
+  const includeExFest = storedExFestPref !== null ? JSON.parse(storedExFestPref) : false;
+  const storedStartYear = localStorage.getItem(`startYear_${w.id}`);
+  const startClaimYear = storedStartYear ? parseInt(storedStartYear) : 2008;
+
+  const safeAnni = (Array.isArray(w.anni) ? w.anni : []) as any[];
+  const allYears = Array.from(new Set(safeAnni.map((r: any) => Number(r.year))))
+    .filter(y => !isNaN(y as number))
+    .sort((a, b) => (a as number) - (b as number)) as number[];
+
+  const yearResults = computeHolidayIndemnity({
+    data: safeAnni,
+    profilo: w.profilo || 'RFI',
+    eliorType: w.eliorType,
+    includeExFest,
+    includeTickets,
+    startClaimYear,
+    years: allYears,
+  });
+
+  const grandTotalNetto = yearResults
+    .filter(r => !r.isReferenceYear)
+    .reduce((sum, r) => sum + r.sumNetto, 0);
+  return grandTotalNetto > 0 ? grandTotalNetto : 0;
+};
+
+const escapeXml = (s: string): string =>
+  (s || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+
+/**
+ * Registro interno delle pratiche CONCLUSE E PAGATE (status 'chiusa').
+ * Usa il file originale del sindacalista come TEMPLATE (public/registro_template.docx):
+ * mantiene loghi, intestazione, stili e formattazione IDENTICI; clona la riga
+ * segnaposto (con token {{...}}) una volta per ogni lavoratore pagato.
+ */
+export const generateRegistroPagate = async (workers: Worker[]): Promise<void> => {
+  const pagate = workers.filter(isPaid).slice().sort(sortByCognome);
+
+  // 1) Carico il template .docx e ne estraggo il document.xml
+  const res = await fetch(`${import.meta.env.BASE_URL}registro_template.docx`);
+  if (!res.ok) { console.error('[Registro] template non trovato:', res.status); return; }
+  const files = unzipSync(new Uint8Array(await res.arrayBuffer()));
+  let docXml = strFromU8(files['word/document.xml']);
+
+  // 2) Individuo la riga-template (l'unica con i token {{...}}). La lookahead
+  //    negativa evita di partire dal primo <w:tr> del documento attraversando
+  //    i confini di riga.
+  const rowMatch = docXml.match(/<w:tr\b(?:(?!<\/w:tr>)[\s\S])*?\{\{COGNOME\}\}(?:(?!<\/w:tr>)[\s\S])*?<\/w:tr>/);
+  if (!rowMatch) { console.error('[Registro] riga segnaposto non trovata nel template'); return; }
+  const templateRow = rowMatch[0];
+
+  // 3) Clono la riga per ogni lavoratore, sostituendo i token
+  const valuesFor = (w: Worker, i: number): Record<string, string> => ({
+    N: String(i + 1),
+    COGNOME: w.cognome || '',
+    NOME: w.nome || '',
+    SOCIETA: profileLabel(w.profilo),
+    CONTATTI: '',
+    VERTENZA: 'RETRIBUZIONE FERIALE',
+    RICORSO: '',
+    CALCOLI: formatCurrency(computeWorkerCredit(w)),
+    BUSTE: formatInsertedRange(w),
+    MATURITA: '',
+    REFERENTE: '',
+    STATO: 'Pagata',
+    NOTE: w.notes || '',
+  });
+
+  const rowsXml = pagate.map((w, i) => {
+    let row = templateRow;
+    for (const [token, value] of Object.entries(valuesFor(w, i))) {
+      row = row.split(`{{${token}}}`).join(escapeXml(value));
+    }
+    return row;
+  }).join('');
+
+  // 4) Sostituisco la riga segnaposto con le righe generate (split/join: niente
+  //    interpretazione di $ come in String.replace)
+  docXml = docXml.split(templateRow).join(rowsXml);
+
+  // 5) Re-zippo mantenendo TUTTO il resto identico (loghi, stili, header/footer)
+  files['word/document.xml'] = strToU8(docXml);
+  const zipped = zipSync(files);
+  const blob = new Blob([zipped as BlobPart], {
+    type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  });
+  saveAs(blob, `Registro_Pratiche_Pagate_${new Date().toISOString().slice(0, 10)}.docx`);
 };

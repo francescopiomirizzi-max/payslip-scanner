@@ -15,6 +15,8 @@ import { printPayslipTables } from '../utils/printTables';
 import { Worker, AnnoDati, getColumnsByProfile, MONTH_NAMES } from '../types';
 import { SYSTEM_PROFILES, SYSTEM_PROFILE_KEYS, getCustomColorIndex } from '../config/profiles';
 import { parseMonthFromFilename } from '../constants';
+import { useIsReadOnly } from '../lib/readonly';
+import type { ArchivedPick } from './SplitViewViewer';
 
 // --- CONFIGURAZIONE PROFILI PEC (derivata dal registro centralizzato) ---
 const PROFILE_CONFIG: Record<string, { label: string; pec: string }> = Object.fromEntries(
@@ -53,15 +55,19 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
     getPayslipsByWorker(worker.id).then(records => {
       const map: Record<string, string> = {};
       const idMap: Record<string, string> = {};
+      const picks: ArchivedPick[] = [];
       records.forEach(r => {
         const monthIdx = MONTH_NAMES.indexOf(r.month.toUpperCase());
         if (monthIdx !== -1) {
           map[`${r.year}-${monthIdx}`] = r.storage_path;
           idMap[`${r.year}-${monthIdx}`] = r.id;
+          picks.push({ id: r.id, storage_path: r.storage_path, filename: r.filename, year: r.year, month: r.month, monthIdx });
         }
       });
+      picks.sort((a, b) => a.year - b.year || a.monthIdx - b.monthIdx);
       setArchiveEntries(map);
       setArchiveIdMap(idMap);
+      setArchivedPicks(picks);
     });
   }, [worker.id, archiveCount]);
 
@@ -182,11 +188,14 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
     return initialYear - 1;
   });
 
-  const { addPayslip, getPayslipsByWorker, getSignedUrl, addVerifyLog } = usePayslipArchive();
+  const { addPayslip, getPayslipsByWorker, getSignedUrl, getSignedUrls, addVerifyLog } = usePayslipArchive();
 
   // --- VERIFICA AI ---
   const [archiveEntries, setArchiveEntries] = useState<Record<string, string>>({});
   const [archiveIdMap, setArchiveIdMap] = useState<Record<string, string>>({});
+  // Lista buste archiviate per il picker del visore (ordinata cronologicamente).
+  const [archivedPicks, setArchivedPicks] = useState<ArchivedPick[]>([]);
+  const isReadOnly = useIsReadOnly();
   const [verifyStates, setVerifyStates] = useState<Record<string, VerifyState>>({});
 
   const {
@@ -431,6 +440,67 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
     worker, monthlyInputs, includeExFest, includeTickets, startClaimYear,
   });
 
+  // Carica una busta scelta dal tab Archivio dentro il visore laterale (SplitView)
+  // invece di aprirla in una nuova scheda. Usata dal visore in sola lettura, che
+  // non puo' caricare file localmente. Torna alla vista tabella per il confronto.
+  const handleOpenArchivedInSplit = (url: string, name: string) => {
+    setPayslipFiles([url]);
+    setPayslipFileNames([name]);
+    setCurrentFileIndex(0);
+    setImgScale(1); setImgPos({ x: 0, y: 0 }); setImgRotation(0); setImgFilter('none');
+    setShowSplit(true);
+    setActiveTab('input');
+  };
+
+  // Apre nel visore un insieme di buste scelte dal picker (uno, alcune, o un anno
+  // intero). Una sola chiamata createSignedUrls per tutte; ordina cronologicamente
+  // cosi' la navigazione ‹ › è coerente.
+  const handleOpenArchivedPicks = async (ids: string[]) => {
+    const picks = ids
+      .map(id => archivedPicks.find(p => p.id === id))
+      .filter((p): p is ArchivedPick => !!p)
+      .sort((a, b) => a.year - b.year || a.monthIdx - b.monthIdx);
+    if (picks.length === 0) return;
+
+    const urlMap = await getSignedUrls(picks.map(p => p.storage_path));
+    const files: string[] = [];
+    const names: string[] = [];
+    picks.forEach(p => {
+      const url = urlMap[p.storage_path];
+      if (!url) return;
+      files.push(url);
+      names.push(`${p.month} ${p.year} - ${p.filename}`);
+    });
+    if (files.length === 0) return;
+
+    setPayslipFiles(files);
+    setPayslipFileNames(names);
+    setCurrentFileIndex(0);
+    setImgScale(1); setImgPos({ x: 0, y: 0 }); setImgRotation(0); setImgFilter('none');
+    setShowSplit(true);
+    setActiveTab('input');
+  };
+
+  // VISORE: svuota le buste caricate per tornare al picker dell'archivio e
+  // sceglierne altre, senza chiudere il pannello laterale.
+  const handleBackToArchivePicker = () => {
+    setPayslipFiles([]);
+    setPayslipFileNames([]);
+    setCurrentFileIndex(0);
+    setImgScale(1); setImgPos({ x: 0, y: 0 }); setImgRotation(0); setImgFilter('none');
+  };
+
+  // VISORE: all'apertura del lavoratore apre il pannello laterale (una volta per
+  // lavoratore) cosi' il sindacalista vede subito il picker delle buste archiviate
+  // senza dover passare dal tab Archivio. Il guard evita di riaprirlo se lo chiude.
+  const splitAutoOpenedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!isReadOnly || archivedPicks.length === 0 || payslipFiles.length > 0) return;
+    if (splitAutoOpenedRef.current === worker.id) return;
+    splitAutoOpenedRef.current = worker.id;
+    setShowSplit(true);
+  }, [isReadOnly, archivedPicks, worker.id]);
+
   // --- HELPER ORDINAMENTO CRONOLOGICO BUSTE PAGA ---
   const getFilenameDateScore = (filename: string) => {
     const name = filename.toLowerCase();
@@ -654,6 +724,9 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
       explanationData={explanationData}
       onContainerScroll={handleContainerScroll}
       payslipFiles={payslipFiles}
+      archivedPicks={archivedPicks}
+      onOpenArchivedPicks={handleOpenArchivedPicks}
+      onBackToArchivePicker={handleBackToArchivePicker}
       currentFileIndex={currentFileIndex}
       currentFileMonthLabel={currentFileMonthLabel}
       isSniperMode={isSniperMode}
@@ -762,6 +835,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
           workerEliorType={worker.eliorType}
           workerName={`${worker.cognome} ${worker.nome}`}
           onCountChange={setArchiveCount}
+          onOpenInViewer={handleOpenArchivedInSplit}
         />
       )}
     </WorkerDetailLayout>

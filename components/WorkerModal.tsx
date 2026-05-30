@@ -234,15 +234,8 @@ const WorkerModal: React.FC<WorkerModalProps> = ({ isOpen, onClose, onConfirm, i
     // --- NUOVI STATI PER QR CODE ---
     const [qrSessionId, setQrSessionId] = useState('');
     const [isQrActive, setIsQrActive] = useState(false);
-    // Refs
-    const pollingRef = useRef<boolean>(false);
-
-    // --- CLEANUP GLOBALE POLLING (Anti-Memory Leak) ---
-    useEffect(() => {
-        return () => {
-            pollingRef.current = false;
-        };
-    }, []);
+    // Canale Realtime per scan_results (sostituisce il vecchio polling).
+    const resultsChannelRef = useRef<any>(null);
 
     const nomeRef = useRef<HTMLInputElement>(null);
     const cognomeRef = useRef<HTMLInputElement>(null);
@@ -263,8 +256,11 @@ const WorkerModal: React.FC<WorkerModalProps> = ({ isOpen, onClose, onConfirm, i
             // 1. Recupera dinamicamente tutte le aziende valide (Sistema + Custom)
             const validCompanies = [...SYSTEM_PROFILE_KEYS, ...Object.keys(customCompanies)];
 
-            // 2. Normalizza il nome letto dall'AI (tutto maiuscolo)
-            const detectedCompany = data.azienda ? data.azienda.toUpperCase().trim() : '';
+            // 2. Normalizza il nome letto dall'AI: uppercase + spazi/dash convertiti in
+            //    underscore. L'AI a volte scrive "CLEAN SERVICE" invece di "CLEAN_SERVICE"
+            //    e senza questo step il match contro le chiavi di sistema fallirebbe.
+            const rawCompany = data.azienda ? String(data.azienda).toUpperCase().trim() : '';
+            const detectedCompany = rawCompany.replace(/[\s\-]+/g, '_');
 
             // 3. SAFETY NET: l'AI a volte mette il livello contrattuale (es. "Professional")
             //    nel campo "ruolo" invece che in "profiloProfessionale". Lo correggiamo qui.
@@ -279,8 +275,9 @@ const WorkerModal: React.FC<WorkerModalProps> = ({ isOpen, onClose, onConfirm, i
                 cognome: data.cognome || prev.cognome,
                 ruolo: ruolo || prev.ruolo,
                 profiloProfessionale: profiloProfessionale || prev.profiloProfessionale,
-                // 4. Se l'azienda trovata è tra quelle valide, la seleziona in automatico!
-                profilo: validCompanies.includes(detectedCompany) ? detectedCompany : prev.profilo
+                // 4. Se l'azienda trovata è tra quelle valide, la seleziona in automatico.
+                //    Stringa vuota / non riconosciuta → lasciamo che l'utente scelga manualmente.
+                profilo: detectedCompany && validCompanies.includes(detectedCompany) ? detectedCompany : prev.profilo
             };
         });
     };
@@ -310,45 +307,71 @@ const WorkerModal: React.FC<WorkerModalProps> = ({ isOpen, onClose, onConfirm, i
     };
 
     // --- LOGICA SMARTPHONE (QR) ---
+    // Il telefono scrive il risultato AI in scan_results (outbox), non in scan_sessions.data:
+    // ci sottoscriviamo via Realtime al posto del vecchio polling.
+    const handleAiResult = (aiResult: any) => {
+        if (!aiResult) return;
+        if (aiResult.nome || aiResult.cognome || aiResult.azienda || aiResult.ruolo) {
+            compileDataFromAI(aiResult);
+            cancelQrSession();
+            window.dispatchEvent(new CustomEvent('island-scan-label', { detail: 'ANAGRAFICA COMPILATA ✅' }));
+        }
+    };
+
     const startQrSession = async () => {
         const newSession = uuidv4();
+
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+            showNotification("Sessione scaduta", "Effettua di nuovo il login per usare il QR.", "error", 4000);
+            return;
+        }
+
+        // owner_id è obbligatorio per la RLS scan_sessions_insert_owner (migration 008).
+        const { error: upsertErr } = await supabase.from('scan_sessions').upsert({
+            id: newSession,
+            status: 'waiting',
+            owner_id: user.id,
+        });
+        if (upsertErr) {
+            console.error('WorkerModal: upsert scan_session fallito', upsertErr);
+            showNotification("Errore QR", "Non sono riuscito ad aprire la sessione.", "error", 4000);
+            return;
+        }
+
         setQrSessionId(newSession);
         setIsQrActive(true);
-        pollingRef.current = true;
-        await supabase.from('scan_sessions').insert([{ id: newSession, status: 'waiting' }]);
-        pollSupabase(newSession);
+
+        // Snapshot iniziale: copre la (rara) race in cui il telefono inserisce prima
+        // che la subscription Realtime sia attiva.
+        try {
+            const { data: existing } = await supabase
+                .from('scan_results')
+                .select('payload')
+                .eq('session_id', newSession)
+                .order('id', { ascending: true })
+                .limit(1);
+            if (existing?.length) handleAiResult(existing[0].payload);
+        } catch (e) { console.error('WorkerModal: snapshot iniziale fallito', e); }
+
+        resultsChannelRef.current = supabase
+            .channel(`worker_onboarding:${newSession}`)
+            .on('postgres_changes', {
+                event: 'INSERT', schema: 'public', table: 'scan_results',
+                filter: `session_id=eq.${newSession}`,
+            }, (payload: any) => handleAiResult(payload.new?.payload))
+            .subscribe();
     };
 
     const cancelQrSession = async () => {
         setIsQrActive(false);
-        pollingRef.current = false;
-        if (qrSessionId) await supabase.from('scan_sessions').delete().eq('id', qrSessionId);
-    };
-
-    const pollSupabase = async (sessionId: string) => {
-        if (!pollingRef.current) return;
-        try {
-            const { data } = await supabase.from('scan_sessions').select('*').eq('id', sessionId).single();
-
-            // ✨ FIX CHIRURGICO: Aspettiamo ESPLICITAMENTE che lo status sia "completed" o "all_done"
-            // Ignoriamo i messaggi intermedi di "processing"!
-            if (data && (data.status === 'completed' || data.status === 'all_done') && data.data) {
-                const parsedData = typeof data.data === 'string' ? JSON.parse(data.data) : data.data;
-                const aiResult = Array.isArray(parsedData) ? parsedData[0] : parsedData;
-
-                // Assicuriamoci che ci siano i dati veri dell'AI prima di chiudere tutto
-                if (aiResult && (aiResult.nome || aiResult.cognome || aiResult.azienda || aiResult.ruolo)) {
-                    compileDataFromAI(aiResult);
-                    cancelQrSession(); // Chiude il QR e ferma la ricerca
-
-                    window.dispatchEvent(new CustomEvent('island-scan-label', { detail: 'ANAGRAFICA COMPILATA ✅' }));
-                    return; // Fermiamo il ciclo
-                }
-            }
-        } catch (e) { console.error('WorkerModal: errore polling Supabase per autocompilazione AI', e); }
-
-        // Se non ha ancora finito, riprova tra 1 secondo
-        if (pollingRef.current) setTimeout(() => pollSupabase(sessionId), 1000);
+        if (resultsChannelRef.current) {
+            supabase.removeChannel(resultsChannelRef.current);
+            resultsChannelRef.current = null;
+        }
+        const oldId = qrSessionId;
+        setQrSessionId('');
+        if (oldId) await supabase.from('scan_sessions').delete().eq('id', oldId);
     };
 
     // Se si chiude la finestra, spenge il QR
@@ -383,22 +406,6 @@ const WorkerModal: React.FC<WorkerModalProps> = ({ isOpen, onClose, onConfirm, i
         }
     }, [isOpen, mode, initialData]);
     // 👆 FINE BLOCCO DA AGGIUNGERE 👆
-    // ✨ ASCOLTATORE MAGICO: Cattura i dati dal telefono via Evento Globale!
-    useEffect(() => {
-        if (!isOpen || mode !== 'create') return;
-
-        const handleMobileData = (e: any) => {
-            const aiData = e.detail;
-            if (aiData) {
-                compileDataFromAI(aiData);
-                // Aggiorna l'Isola per dirle che è andato tutto bene
-                window.dispatchEvent(new CustomEvent('island-scan-label', { detail: 'AUTOCOMPILAZIONE COMPLETATA ✅' }));
-            }
-        };
-
-        window.addEventListener('mobile-onboarding-data', handleMobileData);
-        return () => window.removeEventListener('mobile-onboarding-data', handleMobileData);
-    }, [isOpen, mode]);
     const handleSubmit = (e?: React.FormEvent) => {
         if (e) e.preventDefault();
         if (formData.profilo && isFormValid) {
@@ -1004,6 +1011,7 @@ const WorkerModal: React.FC<WorkerModalProps> = ({ isOpen, onClose, onConfirm, i
                                     </button>
                                     <motion.button
                                         ref={submitBtnRef}
+                                        type="button"
                                         onClick={(e) => handleSubmit(e)}
                                         disabled={!isFormValid}
                                         animate={isFormValid ? { scale: 1, opacity: 1 } : { scale: 0.98, opacity: 1 }}
