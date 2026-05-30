@@ -2,9 +2,10 @@ import { useState } from 'react';
 import { X, Printer, Copy, CheckCircle, PenTool, FileText, FileSpreadsheet } from 'lucide-react';
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
+import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, HeadingLevel, AlignmentType, WidthType, BorderStyle, ShadingType } from 'docx';
 import { motion } from 'framer-motion';
 import { YEARS, AnnoDati, getColumnsByProfile } from './types';
-import { parseLocalFloat, getProfiloBadgeLabel } from './utils/formatters';
+import { parseLocalFloat, getProfiloBadgeLabel, formatDay } from './utils/formatters';
 import { EXCLUDED_INDEMNITY_COLS } from './utils/calculationEngine';
 import { useIsReadOnly } from './lib/readonly';
 
@@ -76,14 +77,14 @@ const generaEsempioDinamico = (worker: any, startClaimYear: number, tettoGiorni:
         if (candidati.length > 0) {
             const { annoCorrente, annoPrec, totVariabiliPrec, ggLavPrec, ferieUsate, lordoEsempio, mediaGiornaliera } = candidati[Math.floor(candidati.length / 2)];
 
-            testo = `A titolo illustrativo, riportiamo il calcolo matematico applicato esattamente per l'anno ${annoCorrente} dei conteggi allegati:\n- Passo A (Totale Voci): Nell'anno di riferimento (${annoPrec}), il lavoratore ha percepito indennità variabili ricorrenti per un totale di € ${fmt(totVariabiliPrec)}.\n- Passo B (Media Giornaliera): Dividendo tale somma per i giorni effettivamente lavorati nel ${annoPrec} (${ggLavPrec} gg), si ottiene una media giornaliera pari a € ${fmt(mediaGiornaliera)}.\n- Passo C (Moltiplicazione): Nell'anno ${annoCorrente}, il lavoratore ha fruito di ${ferieUsate} giorni di ferie validi ai fini del calcolo (entro il tetto legale applicato). Moltiplicando la media di € ${fmt(mediaGiornaliera)} per i ${ferieUsate} giorni, si certifica una differenza lorda maturata pari a € ${fmt(lordoEsempio)} per quel singolo anno.`;
+            testo = `A titolo illustrativo, riportiamo il calcolo matematico applicato esattamente per l'anno ${annoCorrente} dei conteggi allegati:\n- Passo A (Totale Voci): Nell'anno di riferimento (${annoPrec}), il lavoratore ha percepito indennità variabili ricorrenti per un totale di € ${fmt(totVariabiliPrec)}.\n- Passo B (Media Giornaliera): Dividendo tale somma per i giorni effettivamente lavorati nel ${annoPrec} (${formatDay(ggLavPrec)} gg), si ottiene una media giornaliera pari a € ${fmt(mediaGiornaliera)}.\n- Passo C (Moltiplicazione): Nell'anno ${annoCorrente}, il lavoratore ha fruito di ${formatDay(ferieUsate)} giorni di ferie validi ai fini del calcolo (entro il tetto legale applicato). Moltiplicando la media di € ${fmt(mediaGiornaliera)} per i ${formatDay(ferieUsate)} giorni, si certifica una differenza lorda maturata pari a € ${fmt(lordoEsempio)} per quel singolo anno.`;
 
             html = `
                 <p>A titolo illustrativo, riportiamo il calcolo matematico applicato esattamente per l'anno <b>${annoCorrente}</b> dei conteggi allegati:</p>
                 <ul>
                     <li><b>Passo A (Totale Voci):</b> Nell'anno di riferimento (<b>${annoPrec}</b>), il lavoratore ha percepito indennità variabili ricorrenti per un totale di <b>€ ${fmt(totVariabiliPrec)}</b>.</li>
-                    <li><b>Passo B (Media Giornaliera):</b> Dividendo tale somma per i giorni effettivamente lavorati nel ${annoPrec} (<b>${ggLavPrec} gg</b>), si ottiene una media giornaliera pari a <b>€ ${fmt(mediaGiornaliera)}</b>.</li>
-                    <li><b>Passo C (Moltiplicazione):</b> Nell'anno <b>${annoCorrente}</b>, il lavoratore ha fruito di <b>${ferieUsate}</b> giorni di ferie validi ai fini del calcolo (entro il tetto legale applicato). Moltiplicando la media di € ${fmt(mediaGiornaliera)} per i ${ferieUsate} giorni, si certifica una differenza lorda maturata pari a <b>€ ${fmt(lordoEsempio)}</b> per quel singolo anno.</li>
+                    <li><b>Passo B (Media Giornaliera):</b> Dividendo tale somma per i giorni effettivamente lavorati nel ${annoPrec} (<b>${formatDay(ggLavPrec)} gg</b>), si ottiene una media giornaliera pari a <b>€ ${fmt(mediaGiornaliera)}</b>.</li>
+                    <li><b>Passo C (Moltiplicazione):</b> Nell'anno <b>${annoCorrente}</b>, il lavoratore ha fruito di <b>${formatDay(ferieUsate)}</b> giorni di ferie validi ai fini del calcolo (entro il tetto legale applicato). Moltiplicando la media di € ${fmt(mediaGiornaliera)} per i ${formatDay(ferieUsate)} giorni, si certifica una differenza lorda maturata pari a <b>€ ${fmt(lordoEsempio)}</b> per quel singolo anno.</li>
                 </ul>`;
         }
     }
@@ -317,8 +318,8 @@ export const RelazioneModal = ({ isOpen, onClose, worker, totals, includeExFest 
         printWindow.document.close();
         printWindow.print();
     };
-    const handleExportWord = () => {
-        // --- 1. Ricalcolo Variabili ---
+    const handleExportWord = async () => {
+        // --- 1. Ricalcolo Variabili (identico a prima) ---
         const tettoGiorni = includeExFest ? 32 : 28;
         const gt = totals?.grandTotal || totals || {};
         const lordoVal = gt.incidenzaTotale ?? gt.totalLordo ?? gt.grossClaim ?? 0;
@@ -335,100 +336,115 @@ export const RelazioneModal = ({ isOpen, onClose, worker, totals, includeExFest 
         const inizioPeriodo = startClaimYear;
         const finePeriodo = anniAttivi[anniAttivi.length - 1];
 
-        // --- 2. Utilizzo Helpers Centralizzati per HTML Word ---
         const voci = generaVociRaggruppate(worker);
         const esempio = generaEsempioDinamico(worker, startClaimYear, tettoGiorni);
         const spiegazione = generaSpiegazioneRisultato(includeTickets, showPercepito);
 
-        // --- 3. STRUTTURA XML WORD IMPAGINATA IN STILE ATTO ---
-        const wordHtml = `
-            <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
-            <head>
-                <meta charset='utf-8'>
-                <title>Relazione Tecnica</title>
-                <style>
-                    @page { size: 21cm 29.7cm; margin: 3cm 2.5cm 3cm 2.5cm; mso-page-orientation: portrait; }
-                    body { font-family: 'Times New Roman', Times, serif; font-size: 12pt; color: #000000; line-height: 1.5; }
-                    p { margin-top: 0; margin-bottom: 12pt; text-align: justify; }
-                    h2 { text-align: center; font-size: 15pt; font-weight: bold; text-transform: uppercase; margin-bottom: 5pt; }
-                    .subtitle { text-align: center; font-size: 12pt; font-weight: bold; margin-bottom: 30pt; border-bottom: 1px solid #000; padding-bottom: 10pt; }
-                    .section-title { font-weight: bold; text-transform: uppercase; margin-top: 20pt; margin-bottom: 10pt; font-size: 12pt; color: #1e293b; border-bottom: 1px solid #ccc; padding-bottom: 3px; }
-                    ul { margin-top: 5pt; margin-bottom: 15pt; padding-left: 30pt; text-align: justify; }
-                    li { margin-bottom: 5pt; text-align: justify; }
-                    table { width: 100%; border-collapse: collapse; }
-                </style>
-            </head>
-            <body>
-                <h2>RELAZIONE TECNICA DESCRITTIVA - SINTESI E METODOLOGIA</h2>
-                <div class="subtitle">CONTRATTO DI RIFERIMENTO: ${getProfiloBadgeLabel(worker?.profilo, worker?.eliorType) || 'ND'}</div>
-                
-                <table style="width: 100%; margin-bottom: 20px; border: 1px solid #000; padding: 10px;">
-                    <tr><td style="width: 150px; font-weight: bold;">Pratica di:</td><td>${worker?.cognome || ''} ${worker?.nome || ''}</td></tr>
-                    <tr><td style="font-weight: bold;">Periodo Esaminato:</td><td>Dal ${inizioPeriodo} al ${finePeriodo}</td></tr>
-                </table>
+        // --- 2. Helper docx locali (look "atto": Times New Roman, titoli con filetto) ---
+        const para = (text: string) => new Paragraph({
+            alignment: AlignmentType.JUSTIFIED, spacing: { after: 140 },
+            children: [new TextRun({ text })],
+        });
+        const bullet = (text: string) => new Paragraph({
+            bullet: { level: 0 }, alignment: AlignmentType.JUSTIFIED, spacing: { after: 40 },
+            children: [new TextRun({ text })],
+        });
+        const sezTitle = (text: string) => new Paragraph({
+            spacing: { before: 360, after: 160, line: 240 },
+            border: { bottom: { style: BorderStyle.SINGLE, size: 4, color: 'CCCCCC', space: 3 } },
+            children: [new TextRun({ text, bold: true, size: 24 })],
+        });
+        const fromTesto = (testo: string): Paragraph[] => testo
+            .split('\n').map(l => l.trim()).filter(Boolean)
+            .map(l => l.startsWith('-') ? bullet(l.replace(/^-\s*/, '')) : para(l));
 
-                <p class="section-title">1. LA PREMESSA: PERCHÉ CHIEDIAMO QUESTE SOMME</p>
-                <p>La legge europea (Direttiva 2003/88/CE) e la Suprema Corte di Cassazione (Sentenza n. 20216/2022) stabiliscono un principio fondamentale: quando un lavoratore va in ferie, ha il diritto di riposarsi senza subire alcuna penalizzazione economica rispetto al normale svolgimento dell'attività lavorativa.</p>
-                <p>Durante l'anno, il lavoratore in esame percepisce regolarmente indennità connesse a disagi, turni notturni, festivi e altre voci legate al proprio profilo. La mancata erogazione di tali indennità in costanza di ferie determina un'evidente sperequazione economica, oggetto della presente richiesta di integrazione.</p>
+        // Tabella info (Pratica / Periodo): bordo leggero
+        const infoBorders = {
+            top: { style: BorderStyle.SINGLE, size: 4, color: 'BBBBBB' },
+            bottom: { style: BorderStyle.SINGLE, size: 4, color: 'BBBBBB' },
+            left: { style: BorderStyle.SINGLE, size: 4, color: 'BBBBBB' },
+            right: { style: BorderStyle.SINGLE, size: 4, color: 'BBBBBB' },
+            insideHorizontal: { style: BorderStyle.SINGLE, size: 4, color: 'DDDDDD' },
+            insideVertical: { style: BorderStyle.SINGLE, size: 4, color: 'DDDDDD' },
+        };
+        const infoRow = (label: string, value: string) => new TableRow({ children: [
+            new TableCell({ width: { size: 30, type: WidthType.PERCENTAGE }, margins: { top: 60, bottom: 60, left: 140, right: 100 }, children: [new Paragraph({ spacing: { line: 240 }, children: [new TextRun({ text: label, bold: true })] })] }),
+            new TableCell({ margins: { top: 60, bottom: 60, left: 100, right: 140 }, children: [new Paragraph({ spacing: { line: 240 }, children: [new TextRun({ text: value })] })] }),
+        ] });
 
-                <p class="section-title">2. LE VOCI ANALIZZATE (Rif. Allegato "Tabella 2 - Riepilogo Voci Variabili")</p>
-                <p>Per quantificare il credito, sono stati esaminati minuziosamente i cedolini paga forniti. Come dettagliato nella "Tabella 2" dei conteggi, sono state isolate esclusivamente le "voci ricorrenti e continuative", escludendo tassativamente rimborsi spese, elargizioni una tantum o arretrati non pertinenti.</p>
-                <p>Nello specifico del profilo lavorativo, sono state computate le seguenti indennità:</p>
-                <ul>${voci.html}</ul>
+        // Specchietto riepilogo: centrato, bordo esterno spesso, valori grandi in grassetto,
+        // riga totale evidenziata in grigio con filetto superiore marcato.
+        const summaryBorders = {
+            top: { style: BorderStyle.SINGLE, size: 12, color: '000000' },
+            bottom: { style: BorderStyle.SINGLE, size: 12, color: '000000' },
+            left: { style: BorderStyle.SINGLE, size: 12, color: '000000' },
+            right: { style: BorderStyle.SINGLE, size: 12, color: '000000' },
+            insideHorizontal: { style: BorderStyle.SINGLE, size: 4, color: 'CCCCCC' },
+            insideVertical: { style: BorderStyle.NONE, size: 0, color: 'auto' },
+        };
+        const moneyRow = (label: string, value: string, isTotal = false) => new TableRow({ children: [
+            new TableCell({
+                margins: { top: 120, bottom: 120, left: 200, right: 120 },
+                shading: isTotal ? { type: ShadingType.CLEAR, color: 'auto', fill: 'F2F2F2' } : undefined,
+                borders: isTotal ? { top: { style: BorderStyle.SINGLE, size: 18, color: '000000' } } : undefined,
+                children: [new Paragraph({ spacing: { line: 240 }, children: [new TextRun({ text: label, bold: true, size: isTotal ? 28 : 24 })] })],
+            }),
+            new TableCell({
+                margins: { top: 120, bottom: 120, left: 120, right: 200 },
+                shading: isTotal ? { type: ShadingType.CLEAR, color: 'auto', fill: 'F2F2F2' } : undefined,
+                borders: isTotal ? { top: { style: BorderStyle.SINGLE, size: 18, color: '000000' } } : undefined,
+                children: [new Paragraph({ alignment: AlignmentType.RIGHT, spacing: { line: 240 }, children: [new TextRun({ text: `€ ${value}`, bold: true, size: isTotal ? 28 : 26 })] })],
+            }),
+        ] });
 
-                <p class="section-title">3. IL METODO DI CALCOLO (Rif. Allegato "Tabella 1 - Calcolo Differenze")</p>
-                <p>A garanzia di inattaccabilità contabile, il sistema ha applicato il <b>"Criterio della Media Storica"</b> (Rif. Cass. 20216/2022). Il valore di una giornata feriale è stato calcolato estraendo la media matematica dell'anno solare precedente.</p>
-                ${esempio.html}
+        // --- 3. Contenuto del documento ---
+        const children: (Paragraph | Table)[] = [];
+        children.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 80, line: 240 }, children: [new TextRun({ text: `RELAZIONE TECNICA DESCRITTIVA — SINTESI E METODOLOGIA`, bold: true, size: 30 })] }));
+        children.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 360, line: 240 }, border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: '000000', space: 6 } }, children: [new TextRun({ text: `CONTRATTO DI RIFERIMENTO: ${getProfiloBadgeLabel(worker?.profilo, worker?.eliorType) || 'ND'}`, bold: true, size: 24 })] }));
 
-                <p class="section-title">4. L'APPLICAZIONE MENSILE (Rif. Allegato "Tabella 3 - Dettaglio Analitico")</p>
-                <p>Come documentato analiticamente nella "Tabella 3", il procedimento è stato reiterato per ogni singolo mese in cui il dipendente ha fruito di ferie.</p>
-                ${spiegazione.html}
+        children.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, borders: infoBorders, rows: [
+            infoRow(`Pratica di:`, `${worker?.cognome || ''} ${worker?.nome || ''}`.trim()),
+            infoRow(`Periodo Esaminato:`, `Dal ${inizioPeriodo} al ${finePeriodo}`),
+        ] }));
 
-                <p class="section-title">5. CONCLUSIONI (Rif. Allegato "Prospetto Ufficiale di Ricalcolo")</p>
-                <p>Le risultanze delle elaborazioni analitiche di cui sopra convergono nel documento conclusivo denominato "Riepilogo Somme Richieste", che certifica senza ombra di dubbio gli importi esatti riportati nello specchietto sottostante.</p>
+        children.push(sezTitle(`1. LA PREMESSA: PERCHÉ CHIEDIAMO QUESTE SOMME`));
+        children.push(para(`La legge europea (Direttiva 2003/88/CE) e la Suprema Corte di Cassazione (Sentenza n. 20216/2022) stabiliscono un principio fondamentale: quando un lavoratore va in ferie, ha il diritto di riposarsi senza subire alcuna penalizzazione economica rispetto al normale svolgimento dell'attività lavorativa.`));
+        children.push(para(`Durante l'anno, il lavoratore in esame percepisce regolarmente indennità connesse a disagi, turni notturni, festivi e altre voci legate al proprio profilo. La mancata erogazione di tali indennità in costanza di ferie determina un'evidente sperequazione economica, oggetto della presente richiesta di integrazione.`));
 
-                <br clear="all" style="page-break-before:always" />
+        children.push(sezTitle(`2. LE VOCI ANALIZZATE (Rif. Allegato "Tabella 2 - Riepilogo Voci Variabili")`));
+        children.push(para(`Per quantificare il credito, sono stati esaminati minuziosamente i cedolini paga forniti. Come dettagliato nella "Tabella 2" dei conteggi, sono state isolate esclusivamente le "voci ricorrenti e continuative", escludendo tassativamente rimborsi spese, elargizioni una tantum o arretrati non pertinenti.`));
+        children.push(para(`Nello specifico del profilo lavorativo, sono state computate le seguenti indennità:`));
+        voci.testo.split('\n').map((l: string) => l.trim()).filter(Boolean).forEach((l: string) => children.push(bullet(l.replace(/^-\s*/, ''))));
 
-                <p class="section-title" style="text-align: center; font-size: 14pt; margin-top: 40pt;">RIEPILOGO DEGLI IMPORTI</p>
-                
-                <table style="width: 80%; margin: 0 auto; border: 2px solid #000; padding: 10pt;">
-                    <tr>
-                        <td style="padding: 15pt; width: 70%;"><b>+ DIFFERENZE LORDE MATURATE:</b></td>
-                        <td style="text-align: right; padding: 15pt; font-weight: bold; font-size: 13pt;">€ ${fmt(lordoVal)}</td>
-                    </tr>
-                    ${showPercepito ? `
-                    <tr>
-                        <td style="padding: 15pt; border-top: 1px solid #ccc;"><b>- IMPORTO GIÀ PERCEPITO IN BUSTA:</b></td>
-                        <td style="text-align: right; padding: 15pt; font-weight: bold; font-size: 13pt;">€ ${fmt(percepitoVal)}</td>
-                    </tr>` : ''}
-                    ${includeTickets ? `
-                    <tr>
-                        <td style="padding: 15pt; border-top: 1px solid #ccc;"><b>+ CREDITO BUONI PASTO NON EROGATI:</b></td>
-                        <td style="text-align: right; padding: 15pt; font-weight: bold; font-size: 13pt;">€ ${fmt(ticketVal)}</td>
-                    </tr>` : ''}
-                    <tr>
-                        <td style="padding: 15pt; border-top: 2px solid #000; background-color: #f2f2f2;">
-                            <b style="font-size: 14pt;">TOTALE CREDITO ${(!showPercepito && !includeTickets) ? 'LORDO' : 'NETTO'} SPETTANTE:</b>
-                        </td>
-                        <td style="text-align: right; padding: 15pt; border-top: 2px solid #000; background-color: #f2f2f2; font-weight: bold; font-size: 14pt;">
-                            € ${fmt(nettoVal)}
-                        </td>
-                    </tr>
-                </table>
+        children.push(sezTitle(`3. IL METODO DI CALCOLO (Rif. Allegato "Tabella 1 - Calcolo Differenze")`));
+        children.push(para(`A garanzia di inattaccabilità contabile, il sistema ha applicato il "Criterio della Media Storica" (Rif. Cass. 20216/2022). Il valore di una giornata feriale è stato calcolato estraendo la media matematica dell'anno solare precedente.`));
+        fromTesto(esempio.testo).forEach((p: Paragraph) => children.push(p));
 
-            </body>
-            </html>
-        `;
+        children.push(sezTitle(`4. L'APPLICAZIONE MENSILE (Rif. Allegato "Tabella 3 - Dettaglio Analitico")`));
+        children.push(para(`Come documentato analiticamente nella "Tabella 3", il procedimento è stato reiterato per ogni singolo mese in cui il dipendente ha fruito di ferie.`));
+        fromTesto(spiegazione.testo).forEach((p: Paragraph) => children.push(p));
 
-        const blob = new Blob(['\ufeff', wordHtml], { type: 'application/msword' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `Relazione_Tecnica_${worker?.cognome || 'Ricorrente'}.doc`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
+        children.push(sezTitle(`5. CONCLUSIONI (Rif. Allegato "Prospetto Ufficiale di Ricalcolo")`));
+        children.push(para(`Le risultanze delle elaborazioni analitiche di cui sopra convergono nel documento conclusivo denominato "Riepilogo Somme Richieste", che certifica senza ombra di dubbio gli importi esatti riportati nello specchietto sottostante.`));
+
+        children.push(new Paragraph({ pageBreakBefore: true, alignment: AlignmentType.CENTER, spacing: { before: 240, after: 280, line: 240 }, children: [new TextRun({ text: `RIEPILOGO DEGLI IMPORTI`, bold: true, size: 28 })] }));
+
+        const totalLabel = `TOTALE CREDITO ${(!showPercepito && !includeTickets) ? 'LORDO' : 'NETTO'} SPETTANTE:`;
+        const summaryRows: TableRow[] = [ moneyRow(`+ DIFFERENZE LORDE MATURATE:`, fmt(lordoVal)) ];
+        if (showPercepito) summaryRows.push(moneyRow(`- IMPORTO GIÀ PERCEPITO IN BUSTA:`, fmt(percepitoVal)));
+        if (includeTickets) summaryRows.push(moneyRow(`+ CREDITO BUONI PASTO NON EROGATI:`, fmt(ticketVal)));
+        summaryRows.push(moneyRow(totalLabel, fmt(nettoVal), true));
+        children.push(new Table({ alignment: AlignmentType.CENTER, width: { size: 78, type: WidthType.PERCENTAGE }, borders: summaryBorders, rows: summaryRows }));
+
+        // --- 4. Genera e salva un VERO .docx (editabile e salvabile in Word) ---
+        const doc = new Document({
+            creator: 'RailFlow',
+            title: `Relazione Tecnica - ${worker?.cognome || 'Ricorrente'}`,
+            styles: { default: { document: { run: { font: 'Times New Roman', size: 24 }, paragraph: { spacing: { line: 360 } } } } },
+            sections: [{ properties: { page: { margin: { top: 1700, right: 1417, bottom: 1700, left: 1417 } } }, children }],
+        });
+        const blob = await Packer.toBlob(doc);
+        saveAs(blob, `Relazione_Tecnica_${worker?.cognome || 'Ricorrente'}.docx`);
     };
 
     const handleExportExcel = async () => {
@@ -606,6 +622,7 @@ export const RelazioneModal = ({ isOpen, onClose, worker, totals, includeExFest 
                 sheet.getCell(rigaSummary, startColRight + 1).numFmt = numEuroContabile;
 
                 sheet.getCell(rigaSummary, startColRight + 2).value = ggLavN1;
+                sheet.getCell(rigaSummary, startColRight + 2).numFmt = '0.##'; // max 2 decimali: evita code floating-point (es. 253,20000000005)
                 sheet.getCell(rigaSummary, startColRight + 2).alignment = { horizontal: 'center' };
 
                 const cellMedia = sheet.getCell(rigaSummary, startColRight + 3);
@@ -613,6 +630,7 @@ export const RelazioneModal = ({ isOpen, onClose, worker, totals, includeExFest 
                 cellMedia.numFmt = numEuroContabile;
 
                 sheet.getCell(rigaSummary, startColRight + 4).value = ferieCalcolate;
+                sheet.getCell(rigaSummary, startColRight + 4).numFmt = '0.##'; // max 2 decimali: evita code floating-point sulle ferie
                 sheet.getCell(rigaSummary, startColRight + 4).alignment = { horizontal: 'center' };
 
                 const cellCredito = sheet.getCell(rigaSummary, startColRight + 5);

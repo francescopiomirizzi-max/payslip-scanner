@@ -573,7 +573,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                                             }]),
                                             {
                                                 icon: <FileText className="w-4 h-4 text-white" strokeWidth={2.5} />,
-                                                label: 'Report Stato (Word)',
+                                                label: 'Buste Paga Mancanti (Word)',
                                                 iconBg: 'bg-indigo-500',
                                                 hoverBg: 'hover:bg-indigo-50 dark:hover:bg-indigo-950/60',
                                                 hoverText: 'hover:text-indigo-700 dark:hover:text-indigo-300',

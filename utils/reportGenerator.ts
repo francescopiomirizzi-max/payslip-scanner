@@ -35,24 +35,18 @@ const headerCell = (text: string): TableCell =>
 const dataCell = (text: string): TableCell =>
   new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: text || '—' })] })] });
 
-const buildAreaTable = (workers: Worker[]): Table => {
+const buildMissingTable = (workers: Worker[]): Table => {
   const rows: TableRow[] = [
     new TableRow({
       tableHeader: true,
-      children: [headerCell('Nominativo'), headerCell('Periodo Inserito'), headerCell('Stato'), headerCell('Note / Mancanti')],
+      children: [headerCell('Nominativo'), headerCell('Buste Paga Mancanti')],
     }),
     ...workers.map(w => {
       const missing = formatMissingMonths(w);
-      const stato = isConcluded(w) ? 'CONCLUSA' : 'BUSTE PAGA MANCANTI';
-      const note = isConcluded(w)
-        ? (missing || 'Pratica conclusa — in attesa di pagamento')
-        : (missing || 'Nessuna anomalia rilevata');
       return new TableRow({
         children: [
           dataCell(fullName(w)),
-          dataCell(formatInsertedRange(w)),
-          dataCell(stato),
-          dataCell(note),
+          dataCell(missing || '—'),
         ],
       });
     }),
@@ -86,7 +80,9 @@ const sortProfiles = (profiles: string[]): string[] => {
 };
 
 export const generateReport = async (workers: Worker[]): Promise<void> => {
-  const eligible = workers.filter(w => !isPaid(w) && (isMissingPayslips(w) || isConcluded(w)));
+  // Solo le pratiche con buste paga mancanti (status 'inviata'): il documento serve al
+  // sindacalista per sapere quali buste mancano per completare le pratiche. Nient'altro.
+  const eligible = workers.filter(isMissingPayslips);
 
   // Raggruppo per profilo
   const byProfile = new Map<string, Worker[]>();
@@ -104,7 +100,12 @@ export const generateReport = async (workers: Worker[]): Promise<void> => {
     new Paragraph({
       alignment: AlignmentType.CENTER,
       heading: HeadingLevel.HEADING_1,
-      children: [new TextRun({ text: 'Report Stato Avanzamento Pratiche', bold: true })],
+      children: [new TextRun({ text: 'Report Buste Paga Mancanti', bold: true })],
+    }),
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 60 },
+      children: [new TextRun({ text: 'Buste paga ancora da acquisire per completare le pratiche', italics: true })],
     }),
     new Paragraph({
       alignment: AlignmentType.CENTER,
@@ -115,30 +116,28 @@ export const generateReport = async (workers: Worker[]): Promise<void> => {
 
   if (orderedProfiles.length === 0) {
     children.push(new Paragraph({
-      children: [new TextRun({ text: 'Nessuna pratica in lavorazione.', italics: true })],
+      children: [new TextRun({ text: 'Nessuna busta paga mancante: tutte le pratiche risultano complete.', italics: true })],
     }));
   } else {
     orderedProfiles.forEach((profilo, idx) => {
       const list = byProfile.get(profilo)!.slice().sort(sortByCognome);
-      const concluse = list.filter(isConcluded).length;
-      const buste = list.filter(isMissingPayslips).length;
-      const summary = `${list.length} pratiche — ${buste} con buste paga mancanti, ${concluse} concluse in attesa di pagamento.`;
+      const summary = `${list.length} lavorator${list.length === 1 ? 'e' : 'i'} con buste paga mancanti.`;
 
       children.push(sectionHeading(`${idx + 1}. AREA ${profileLabel(profilo)}`, HeadingLevel.HEADING_2));
       children.push(new Paragraph({ children: [new TextRun({ text: summary, italics: true })] }));
       children.push(new Paragraph({ children: [new TextRun({ text: '' })] }));
-      children.push(buildAreaTable(list));
+      children.push(buildMissingTable(list));
     });
   }
 
   const doc = new Document({
     creator: 'RailFlow',
-    title: 'Report Stato Avanzamento Pratiche',
+    title: 'Report Buste Paga Mancanti',
     sections: [{ children }],
   });
 
   const blob = await Packer.toBlob(doc);
-  const fname = `Report_Stato_Pratiche_${new Date().toISOString().slice(0, 10)}.docx`;
+  const fname = `Report_Buste_Mancanti_${new Date().toISOString().slice(0, 10)}.docx`;
   saveAs(blob, fname);
 };
 
