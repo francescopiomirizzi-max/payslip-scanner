@@ -9,8 +9,41 @@ const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-3.5-flash";
 // Cap al thinking del modello (vedi scan-payslip.ts per il razionale). Override via env.
 const THINKING_BUDGET = Number(process.env.GEMINI_THINKING_BUDGET) || 1024;
 
+export interface VerifyDiscrepancy {
+  field: string;
+  extracted: number;
+  suggested: number;
+  message: string;
+}
+
+// Normalizza la risposta grezza del modello in { status, discrepancies } robusti.
+// Estratta dall'handler per essere testabile senza chiamare Gemini: scarta le
+// discrepanze malformate, forza i numeri e ripiega su uno status sicuro.
+export function normalizeVerifyResponse(
+  parsed: { status?: unknown; discrepancies?: unknown },
+): { status: "success" | "warning" | "error"; discrepancies: VerifyDiscrepancy[] } {
+  const status = ["success", "warning", "error"].includes(parsed.status as string)
+    ? (parsed.status as "success" | "warning" | "error")
+    : "warning";
+
+  const discrepancies = Array.isArray(parsed.discrepancies)
+    ? parsed.discrepancies
+        .filter((d: any) => d && typeof d === "object" && typeof d.field === "string")
+        .map((d: any) => ({
+          field: String(d.field),
+          extracted: Number(d.extracted ?? 0),
+          suggested: Number(d.suggested ?? 0),
+          message: typeof d.message === "string"
+            ? d.message
+            : `${d.field}: estratto ${d.extracted}, suggerito ${d.suggested}`,
+        }))
+    : [];
+
+  return { status, discrepancies };
+}
+
 // Builds a context-aware verification prompt based on the company/profile
-function buildVerifyPrompt(company: string, eliorType?: string, customColumns?: Array<{ id: string; label: string }>): string {
+export function buildVerifyPrompt(company: string, eliorType?: string, customColumns?: Array<{ id: string; label: string }>): string {
   const co = (company || "").toUpperCase();
 
   // ── BLOCCO REGOLE AZIENDALI ────────────────────────────────────────────────
@@ -335,22 +368,7 @@ export const handler: Handler = async (event) => {
       throw new Error("Risposta AI non valida: " + raw.slice(0, 200));
     }
 
-    const status = ["success", "warning", "error"].includes(parsed.status)
-      ? (parsed.status as "success" | "warning" | "error")
-      : "warning";
-
-    const discrepancies = Array.isArray(parsed.discrepancies)
-      ? parsed.discrepancies
-          .filter((d: any) => d && typeof d === "object" && typeof d.field === "string")
-          .map((d: any) => ({
-            field: String(d.field),
-            extracted: Number(d.extracted ?? 0),
-            suggested: Number(d.suggested ?? 0),
-            message: typeof d.message === "string"
-              ? d.message
-              : `${d.field}: estratto ${d.extracted}, suggerito ${d.suggested}`,
-          }))
-      : [];
+    const { status, discrepancies } = normalizeVerifyResponse(parsed);
 
     console.log(`✅ verify-payslip [${(company || "RFI").toUpperCase()}]: status=${status}, discrepancies=${discrepancies.length}`);
 

@@ -11,6 +11,7 @@ import TfrCalculationTable from './WorkerTables/TfrCalculationTable';
 import PayslipArchiveTab from './WorkerTables/PayslipArchiveTab';
 import TableComponent from './TableComponent';
 import WorkerDetailLayout from './WorkerDetailLayout';
+import { WorkerDetailProvider } from './WorkerDetail/WorkerDetailContext';
 import { printPayslipTables } from '../utils/printTables';
 import { Worker, AnnoDati, getColumnsByProfile, MONTH_NAMES } from '../types';
 import { SYSTEM_PROFILES, SYSTEM_PROFILE_KEYS, getCustomColorIndex } from '../config/profiles';
@@ -680,98 +681,99 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
   }
 
   return (
-    <WorkerDetailLayout
-      worker={worker}
-      badgeStyles={badgeStyles}
-      onBack={onBack}
-      onShowReport={() => setShowReport(true)}
-      onSendPec={handleSendPec}
-      onPrintTables={handlePrintTables}
-      onOpenIstat={() => setIsIstatModalOpen(true)}
-      startClaimYear={startClaimYear}
-      onStartClaimYearChange={setStartClaimYear}
-      isGlobalDragging={isGlobalDragging}
-      onSetIsGlobalDragging={setIsGlobalDragging}
-      onBatchUpload={handleBatchUpload}
-      isTimelineOpen={isTimelineOpen}
-      onToggleTimeline={() => setIsTimelineOpen(!isTimelineOpen)}
-      legalStatus={legalStatus}
-      onLegalStatusChange={(s: string) => setLegalStatus(s as LegalStatus)}
-      onUpdateStatus={onUpdateStatus}
-      tickerItems={tickerItems}
-      activeTickerModal={activeTickerModal}
-      onSetActiveTickerModal={setActiveTickerModal}
-      includeExFest={includeExFest}
-      onToggleExFest={() => setIncludeExFest(!includeExFest)}
-      includeTickets={includeTickets}
-      onToggleTickets={() => setIncludeTickets(!includeTickets)}
-      isBatchProcessing={isBatchProcessing}
-      isAnalyzing={isAnalyzing}
-      scanRef={scanRef}
-      onFileUpload={handleFileUpload}
-      showSplit={showSplit}
-      onSetShowSplit={setShowSplit}
-      isQRModalOpen={isQRModalOpen}
-      onOpenQR={() => setIsQRModalOpen(true)}
-      onCloseQR={() => setIsQRModalOpen(false)}
-      onQRData={handleQRData}
-      activeTab={activeTab}
-      onSetActiveTab={setActiveTab}
-      archiveCount={archiveCount}
-      isExplainerOpen={isExplainerOpen}
-      onCloseExplainer={() => setIsExplainerOpen(false)}
-      isExplaining={isExplaining}
-      explanationData={explanationData}
-      onContainerScroll={handleContainerScroll}
-      payslipFiles={payslipFiles}
-      archivedPicks={archivedPicks}
-      onOpenArchivedPicks={handleOpenArchivedPicks}
-      onBackToArchivePicker={handleBackToArchivePicker}
-      currentFileIndex={currentFileIndex}
-      currentFileMonthLabel={currentFileMonthLabel}
-      isSniperMode={isSniperMode}
-      onToggleSniper={() => setIsSniperMode(!isSniperMode)}
-      isProcessing={isProcessing}
-      selectionBox={selectionBox}
-      imgRef={imgRef}
-      containerRef={containerRef}
-      fileInputRef={fileInputRef}
-      imgScale={imgScale}
-      imgPos={imgPos}
-      imgRotation={imgRotation}
-      imgFilter={imgFilter}
-      isDragging={isDragging}
-      onPrevFile={prevFile}
-      onNextFile={nextFile}
-      onDeleteCurrentFile={handleDeleteCurrentFile}
-      onImageUpload={handleImageUpload}
-      onDragOver={handleDragOver}
-      onDrop={handleDrop}
-      onMouseDown={handleMouseDown}
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
-      onToggleFilter={handleToggleFilter}
-      onRotate={handleRotate}
-      onZoom={handleZoom}
-      onResetView={handleResetView}
-      onExplainPayslip={handleExplainPayslip}
-      batchProgress={batchProgress}
-      batchTotal={batchTotal}
-      showSupernova={showSupernova}
-      batchNotification={batchNotification}
-      onCloseBatchNotification={() => setBatchNotification(null)}
-      isIstatModalOpen={isIstatModalOpen}
-      onCloseIstat={() => setIsIstatModalOpen(false)}
-      monthlyInputs={monthlyInputs}
-      isAiTfrModalOpen={isAiTfrModalOpen}
-      onCloseAiTfr={() => setIsAiTfrModalOpen(false)}
-      aiTfrAmount={aiTfrAmount}
-      onSetAiTfrAmount={setAiTfrAmount}
-      aiTfrYear={aiTfrYear}
-      onSetAiTfrYear={setAiTfrYear}
-      onSaveAiTfr={handleSaveAiTfr}
-      onIgnoreAiTfr={handleIgnoreAiTfr}
-    >
+    <WorkerDetailProvider value={{
+      worker,
+      badgeStyles,
+      onBack,
+      onShowReport: () => setShowReport(true),
+      onSendPec: handleSendPec,
+      onPrintTables: handlePrintTables,
+      onOpenIstat: () => setIsIstatModalOpen(true),
+      startClaimYear,
+      onStartClaimYearChange: setStartClaimYear,
+      isGlobalDragging,
+      onSetIsGlobalDragging: setIsGlobalDragging,
+      onBatchUpload: handleBatchUpload,
+      isTimelineOpen,
+      onToggleTimeline: () => setIsTimelineOpen(!isTimelineOpen),
+      legalStatus,
+      onLegalStatusChange: (s: string) => setLegalStatus(s as LegalStatus),
+      onUpdateStatus,
+      tickerItems,
+      activeTickerModal,
+      onSetActiveTickerModal: setActiveTickerModal,
+      includeExFest,
+      onToggleExFest: () => setIncludeExFest(!includeExFest),
+      includeTickets,
+      onToggleTickets: () => setIncludeTickets(!includeTickets),
+      isBatchProcessing,
+      isAnalyzing,
+      scanRef,
+      onFileUpload: handleFileUpload,
+      showSplit,
+      onSetShowSplit: setShowSplit,
+      isQRModalOpen,
+      onOpenQR: () => setIsQRModalOpen(true),
+      onCloseQR: () => setIsQRModalOpen(false),
+      onQRData: handleQRData,
+      activeTab,
+      onSetActiveTab: setActiveTab,
+      archiveCount,
+      isExplainerOpen,
+      onCloseExplainer: () => setIsExplainerOpen(false),
+      isExplaining,
+      explanationData,
+      onContainerScroll: handleContainerScroll,
+      payslipFiles,
+      archivedPicks,
+      onOpenArchivedPicks: handleOpenArchivedPicks,
+      onBackToArchivePicker: handleBackToArchivePicker,
+      currentFileIndex,
+      currentFileMonthLabel,
+      isSniperMode,
+      onToggleSniper: () => setIsSniperMode(!isSniperMode),
+      isProcessing,
+      selectionBox,
+      imgRef,
+      containerRef,
+      fileInputRef,
+      imgScale,
+      imgPos,
+      imgRotation,
+      imgFilter,
+      isDragging,
+      onPrevFile: prevFile,
+      onNextFile: nextFile,
+      onDeleteCurrentFile: handleDeleteCurrentFile,
+      onImageUpload: handleImageUpload,
+      onDragOver: handleDragOver,
+      onDrop: handleDrop,
+      onMouseDown: handleMouseDown,
+      onMouseMove: handleMouseMove,
+      onMouseUp: handleMouseUp,
+      onToggleFilter: handleToggleFilter,
+      onRotate: handleRotate,
+      onZoom: handleZoom,
+      onResetView: handleResetView,
+      onExplainPayslip: handleExplainPayslip,
+      batchProgress,
+      batchTotal,
+      showSupernova,
+      batchNotification,
+      onCloseBatchNotification: () => setBatchNotification(null),
+      isIstatModalOpen,
+      onCloseIstat: () => setIsIstatModalOpen(false),
+      monthlyInputs,
+      isAiTfrModalOpen,
+      onCloseAiTfr: () => setIsAiTfrModalOpen(false),
+      aiTfrAmount,
+      onSetAiTfrAmount: setAiTfrAmount,
+      aiTfrYear,
+      onSetAiTfrYear: setAiTfrYear,
+      onSaveAiTfr: handleSaveAiTfr,
+      onIgnoreAiTfr: handleIgnoreAiTfr,
+    }}>
+    <WorkerDetailLayout>
       {activeTab === 'input' && (
         <div className="h-full flex flex-col overflow-auto custom-scrollbar">
           <MonthlyDataGrid
@@ -839,6 +841,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
         />
       )}
     </WorkerDetailLayout>
+    </WorkerDetailProvider>
   );
 };
 

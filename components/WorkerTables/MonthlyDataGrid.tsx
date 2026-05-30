@@ -37,9 +37,12 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useIsReadOnly } from '../../lib/readonly';
+import NoteModal from './NoteModal';
+import CellContextMenu from './CellContextMenu';
+import LegalManualModal from './LegalManualModal';
+import ClearMonthConfirmModal from './ClearMonthConfirmModal';
+import UndoToast from './UndoToast';
 
-// --- CONFIGURAZIONE TAG RAPIDI ---
-const QUICK_TAGS = ["Infortunio", "Malattia", "Congedo", "Sciopero", "Assenza Ingiust.", "Permesso 104"];
 
 // --- MAPPATURA DETTAGLIATA ---
 interface IndennitaDetail {
@@ -895,7 +898,6 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
   const closeNoteModal = () => setNoteModal(prev => ({ ...prev, isOpen: false }));
   const saveNote = () => { if (noteModal.monthIndex !== -1) handleCellChange(noteModal.monthIndex, 'note', noteModal.text); closeNoteModal(); };
   const clearNote = () => setNoteModal(prev => ({ ...prev, text: '' }));
-  const addTag = (tag: string) => setNoteModal(prev => ({ ...prev, text: prev.text ? `${prev.text}, ${tag}` : tag }));
 
   return (
     <>
@@ -1607,235 +1609,22 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
           </div>
         </div>
 
-        {/* MODALE NOTE */}
-        <AnimatePresence>
-          {noteModal.isOpen && (
-            <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" onClick={closeNoteModal}>
-              <motion.div initial={{ scale: 0.9, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0 }} className="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-700" onClick={(e) => e.stopPropagation()}>
-                <div className="px-6 py-4 bg-slate-50 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center">
-                  <div className="flex items-center gap-3"><div className="p-2 bg-amber-100 dark:bg-amber-900/40 rounded-lg text-amber-600 dark:text-amber-400"><MessageSquareText className="w-5 h-5" /></div><div><h3 className="font-bold text-slate-800 dark:text-white">Nota Mensile</h3><p className="text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wider">{noteModal.monthIndex >= 0 ? MONTH_NAMES[noteModal.monthIndex] : ''} {selectedYear}</p></div></div>
-                  <button onClick={closeNoteModal} className="p-2 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-white transition-colors"><X className="w-5 h-5" /></button>
-                </div>
-                <div className="p-6">
-                  <label className="block text-sm font-semibold text-slate-600 dark:text-slate-300 mb-2">Descrizione Evento</label>
-                  <textarea readOnly={isReadOnly} value={noteModal.text} onChange={(e) => setNoteModal(prev => ({ ...prev, text: e.target.value }))} className="w-full h-32 px-4 py-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 focus:border-indigo-500 dark:focus:border-cyan-500 focus:ring-2 focus:ring-indigo-200 dark:focus:ring-cyan-900 outline-none resize-none text-slate-700 dark:text-slate-200 text-sm transition-all placeholder-slate-400 dark:placeholder-slate-600" placeholder="Scrivi qui il motivo..." autoFocus />
-                  <div className="mt-4"><p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Inserimento Rapido</p><div className="flex flex-wrap gap-2">{QUICK_TAGS.map(tag => (<button key={tag} onClick={() => addTag(tag)} className="flex items-center gap-1 px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-cyan-900/30 text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-cyan-400 rounded-lg text-xs font-medium transition-colors border border-slate-200 dark:border-slate-700 hover:border-indigo-200 dark:hover:border-cyan-800"><Tag className="w-3 h-3" />{tag}</button>))}</div></div>
-                </div>
-                <div className="px-6 py-4 bg-slate-50 dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 flex justify-between items-center">
-                  {!isReadOnly && <button onClick={clearNote} className="flex items-center gap-2 px-4 py-2 text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-xl text-sm font-bold transition-colors"><Eraser className="w-4 h-4" /> Pulisci</button>}
-                  <div className="flex gap-3 ml-auto"><button onClick={closeNoteModal} className="px-4 py-2 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-white font-bold text-sm transition-colors">{isReadOnly ? 'Chiudi' : 'Annulla'}</button>{!isReadOnly && <button onClick={saveNote} className="flex items-center gap-2 px-6 py-2 bg-indigo-600 dark:bg-cyan-600 hover:bg-indigo-700 dark:hover:bg-cyan-500 text-white rounded-xl font-bold shadow-lg shadow-indigo-500/30 dark:shadow-cyan-900/40 transition-all active:scale-95"><Save className="w-4 h-4" /> Salva Nota</button>}</div>
-                </div>
-              </motion.div>
-            </div>
-          )}
-        </AnimatePresence>
+        <NoteModal
+          state={noteModal} year={selectedYear} isReadOnly={isReadOnly}
+          onChangeText={(text) => setNoteModal(prev => ({ ...prev, text }))}
+          onClose={closeNoteModal} onClear={clearNote} onSave={saveNote}
+        />
 
-        {/* --- MODALE MANUALE LEGALE --- */}
-        <AnimatePresence>
-          {legalModalOpen && (
-            <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" onClick={() => setLegalModalOpen(false)}>
-              <motion.div initial={{ scale: 0.9, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0 }} className="bg-white dark:bg-slate-900 w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-700 flex flex-col max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
-
-                {/* Header Modale */}
-                <div className="px-6 py-4 bg-slate-50 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center shrink-0 transition-colors">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-indigo-100 dark:bg-indigo-900/50 rounded-lg text-indigo-600 dark:text-indigo-400"><Scale className="w-6 h-6" /></div>
-                    <div>
-                      <h3 className="font-bold text-slate-800 dark:text-white text-lg">Manuale Legale & Riferimenti</h3>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wider">Perizia Tecnica Ferie non Godute</p>
-                    </div>
-                  </div>
-                  <button onClick={() => setLegalModalOpen(false)} className="p-2 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-white transition-colors"><X className="w-6 h-6" /></button>
-                </div>
-
-                {/* Contenuto Scrollabile */}
-                <div className="p-8 overflow-y-auto space-y-8">
-
-                  {/* Sezione 1: Art. 64 */}
-                  <div className="bg-slate-50 dark:bg-slate-800/50 p-6 rounded-xl border border-slate-200 dark:border-slate-700 transition-colors">
-                    <div className="flex items-center gap-2 mb-3 text-indigo-700 dark:text-indigo-400">
-                      <BookOpen size={20} />
-                      <h4 className="font-bold text-sm uppercase tracking-wider">Articolo 64 CCNL Mobilità</h4>
-                    </div>
-                    <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed text-justify mb-4">
-                      "Durante le ferie il lavoratore ha diritto alla retribuzione che avrebbe percepito se avesse lavorato,
-                      comprensiva delle indennità fisse e variabili legate alla modalità di esecuzione della prestazione."
-                    </p>
-                    <div className="text-xs text-slate-500 dark:text-slate-400 border-t border-slate-200 dark:border-slate-700 pt-3 italic">
-                      Nota: Questo principio è stato rafforzato dalla giurisprudenza europea e dalla Corte di Cassazione,
-                      impedendo che il lavoratore subisca svantaggi economici durante il riposo.
-                    </div>
-                  </div>
-
-                  {/* Sezione 2: Il Divisore */}
-                  <div className="bg-amber-50 dark:bg-amber-900/10 p-6 rounded-xl border border-amber-200 dark:border-amber-900/30 transition-colors">
-                    <div className="flex items-center gap-2 mb-3 text-amber-700 dark:text-amber-500">
-                      <TrendingUp size={20} />
-                      <h4 className="font-bold text-sm uppercase tracking-wider">Il Calcolo del Divisore</h4>
-                    </div>
-                    <div className="space-y-4">
-                      <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed text-justify">
-                        Il <strong>divisore</strong> è il numero utilizzato per trasformare il totale delle indennità mensili in una quota giornaliera media.
-                      </p>
-                      <ul className="list-disc pl-5 space-y-2 text-sm text-slate-700 dark:text-slate-300">
-                        <li>
-                          <strong className="dark:text-white">Divisore Convenzionale (26):</strong> Spesso usato dalle aziende per semplicità, ma penalizzante se si lavorano meno giorni.
-                        </li>
-                        <li>
-                          <strong className="dark:text-white">Divisore Effettivo (Consigliato):</strong> Si utilizza il numero reale di giorni lavorati nel mese (es. 20, 21, 22). Questo metodo alza il valore medio giornaliero ed è quello preferito nei ricorsi (Cass. 20216/2022).
-                        </li>
-                      </ul>
-                      <div className="bg-white dark:bg-slate-950 p-3 rounded border border-amber-100 dark:border-amber-900/50 text-xs font-mono text-slate-600 dark:text-slate-400 transition-colors">
-                        Formula: Totale Indennità / Giorni Lavorati = Media Giornaliera
-                      </div>
-                    </div>
-                  </div>
-
-                </div>
-
-                {/* Footer */}
-                <div className="px-6 py-4 bg-slate-50 dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 text-right shrink-0 transition-colors">
-                  <button onClick={() => setLegalModalOpen(false)} className="px-6 py-2 bg-slate-800 dark:bg-slate-700 hover:bg-slate-700 dark:hover:bg-slate-600 text-white rounded-xl font-bold transition-all shadow-lg">Chiudi Manuale</button>
-                </div>
-
-              </motion.div>
-            </div>
-          )}
-        </AnimatePresence>
-        {/* --- MODALE CONFERMA AZZERAMENTO MESE --- */}
-        <AnimatePresence>
-          {rowToClear !== null && (
-            <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" onClick={() => setRowToClear(null)}>
-              <motion.div
-                initial={{ scale: 0.9, opacity: 0, y: 20 }}
-                animate={{ scale: 1, opacity: 1, y: 0 }}
-                exit={{ scale: 0.95, opacity: 0 }}
-                className="bg-white w-full max-w-sm rounded-3xl shadow-2xl border border-slate-200 overflow-hidden"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <div className="p-8 text-center relative overflow-hidden">
-                  {/* Effetto luce rossa dietro */}
-                  <div className="absolute top-[-50%] left-[50%] -translate-x-1/2 w-48 h-48 bg-red-500/10 rounded-full blur-2xl pointer-events-none"></div>
-
-                  <div className="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-5 bg-gradient-to-br from-red-100 to-rose-100 text-red-500 shadow-inner ring-4 ring-white relative z-10">
-                    <Eraser className="w-10 h-10" strokeWidth={2} />
-                  </div>
-
-                  <h3 className="text-xl font-black text-slate-800 mb-2 relative z-10">Svuotare il mese?</h3>
-                  <p className="text-slate-500 text-sm mb-8 leading-relaxed relative z-10">
-                    Stai per azzerare tutti i valori inseriti per il mese di <br />
-                    <b className="text-slate-700 text-base">{MONTH_NAMES[rowToClear]} {selectedYear}</b>.
-                  </p>
-
-                  <div className="flex gap-3 justify-center relative z-10">
-                    <button onClick={() => setRowToClear(null)} className="px-6 py-3 rounded-xl font-bold text-slate-500 bg-slate-100 hover:bg-slate-200 hover:text-slate-700 transition-colors">
-                      Annulla
-                    </button>
-                    <button onClick={confirmClearRow} className="px-6 py-3 rounded-xl font-bold text-white bg-gradient-to-r from-red-500 to-rose-600 hover:scale-105 transition-all shadow-[0_10px_25px_-5px_rgba(239,68,68,0.5)]">
-                      Sì, Svuota Dati
-                    </button>
-                  </div>
-                </div>
-              </motion.div>
-            </div>
-          )}
-        </AnimatePresence>
-        {/* --- MENU CONTESTUALE (TASTO DESTRO) TRAMITE PORTAL - VERSIONE GOD TIER --- */}
-        {typeof document !== 'undefined' && createPortal(
-          <AnimatePresence>
-            {contextMenu && contextMenu.visible && (
-              <motion.div
-                initial={{ opacity: 0, scale: 0.9, filter: 'blur(5px)' }}
-                animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }}
-                exit={{ opacity: 0, scale: 0.9, filter: 'blur(5px)' }}
-                transition={{ duration: 0.15, ease: "easeOut" }}
-                style={{ top: contextMenu.y, left: contextMenu.x }}
-                className="fixed z-[99999] w-64 bg-white/90 dark:bg-slate-900/80 backdrop-blur-2xl border border-slate-200/50 dark:border-slate-700/60 rounded-2xl shadow-[0_20px_40px_-10px_rgba(0,0,0,0.2)] dark:shadow-[0_20px_40px_-10px_rgba(0,0,0,0.8)] p-1.5 overflow-hidden text-sm font-medium flex flex-col gap-0.5"
-                onClick={(e) => e.stopPropagation()}
-              >
-                {/* Header Menu */}
-                <div className="px-3 py-2.5 text-[10px] uppercase tracking-widest font-black text-slate-400 dark:text-slate-500 mb-1 flex justify-between items-center select-none">
-                  <span>Azioni Cella</span>
-                  <span className="text-indigo-600 dark:text-cyan-400 bg-indigo-100/50 dark:bg-cyan-900/30 px-2 py-0.5 rounded-md border border-indigo-200/50 dark:border-cyan-800/50">
-                    {MONTH_NAMES[contextMenu.rowIndex]}
-                  </span>
-                </div>
-
-                {/* Bottone Copia */}
-                <button onClick={() => { handleCopyCell(); setContextMenu(null); }} className="group relative w-full text-left px-3 py-2.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800/80 text-slate-700 dark:text-slate-200 flex items-center gap-3 transition-all duration-200">
-                  <div className="p-1.5 rounded-lg bg-slate-200/50 dark:bg-slate-800/50 group-hover:bg-white dark:group-hover:bg-slate-700 shadow-sm border border-transparent group-hover:border-slate-200 dark:group-hover:border-slate-600 transition-colors">
-                    <Copy size={14} className="text-slate-500 dark:text-slate-400 group-hover:text-indigo-600 dark:group-hover:text-cyan-400 transition-colors" />
-                  </div>
-                  <span className="group-hover:translate-x-0.5 transition-transform duration-200">Copia Valore</span>
-                </button>
-
-                {/* Bottone Incolla */}
-                <button onClick={() => { handlePasteCell(); setContextMenu(null); }} className="group relative w-full text-left px-3 py-2.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800/80 text-slate-700 dark:text-slate-200 flex items-center gap-3 transition-all duration-200">
-                  <div className="p-1.5 rounded-lg bg-slate-200/50 dark:bg-slate-800/50 group-hover:bg-white dark:group-hover:bg-slate-700 shadow-sm border border-transparent group-hover:border-slate-200 dark:group-hover:border-slate-600 transition-colors">
-                    <ClipboardPaste size={14} className="text-slate-500 dark:text-slate-400 group-hover:text-indigo-600 dark:group-hover:text-cyan-400 transition-colors" />
-                  </div>
-                  <span className="group-hover:translate-x-0.5 transition-transform duration-200">Incolla Numero</span>
-                </button>
-
-                <div className="h-px bg-slate-200 dark:bg-slate-700/50 my-1 mx-3 rounded-full"></div>
-
-                {/* Bottone Svuota */}
-                <button
-                  onClick={() => { setRowToClear(contextMenu.rowIndex); setContextMenu(null); }}
-                  className="group relative w-full text-left px-3 py-2.5 rounded-xl hover:bg-red-50 dark:hover:bg-red-900/20 text-slate-700 dark:text-slate-200 hover:text-red-600 dark:hover:text-red-400 flex items-center gap-3 transition-all duration-200"
-                >
-                  <div className="p-1.5 rounded-lg bg-slate-200/50 dark:bg-slate-800/50 group-hover:bg-red-100 dark:group-hover:bg-red-900/50 shadow-sm border border-transparent group-hover:border-red-200 dark:group-hover:border-red-800/50 transition-colors">
-                    <Eraser size={14} className="text-slate-500 dark:text-slate-400 group-hover:text-red-600 dark:group-hover:text-red-400 transition-colors" />
-                  </div>
-                  <span className="group-hover:translate-x-0.5 transition-transform duration-200 font-semibold">Svuota Intero Mese</span>
-                </button>
-
-                {/* Bottone Note */}
-                <button
-                  onClick={() => {
-                    const row = currentYearData.find(d => d.monthIndex === contextMenu.rowIndex);
-                    openNoteModal(contextMenu.rowIndex, (row as any)?.note);
-                    setContextMenu(null);
-                  }}
-                  className="group relative w-full text-left px-3 py-2.5 rounded-xl hover:bg-amber-50 dark:hover:bg-amber-900/20 text-slate-700 dark:text-slate-200 hover:text-amber-600 dark:hover:text-amber-400 flex items-center gap-3 transition-all duration-200"
-                >
-                  <div className="p-1.5 rounded-lg bg-slate-200/50 dark:bg-slate-800/50 group-hover:bg-amber-100 dark:group-hover:bg-amber-900/50 shadow-sm border border-transparent group-hover:border-amber-200 dark:group-hover:border-amber-800/50 transition-colors">
-                    <MessageSquareText size={14} className="text-slate-500 dark:text-slate-400 group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors" />
-                  </div>
-                  <span className="group-hover:translate-x-0.5 transition-transform duration-200">Gestisci Note / Eventi</span>
-                </button>
-              </motion.div>
-            )}
-          </AnimatePresence>,
-          document.body
-        )}
-        {/* ✨ TOAST UNDO RAPIDO (GMAIL STYLE) */}
-        <AnimatePresence>
-          {undoToast.show && (
-            <motion.div
-              initial={{ y: 50, opacity: 0, scale: 0.9 }}
-              animate={{ y: 0, opacity: 1, scale: 1 }}
-              exit={{ y: 20, opacity: 0, scale: 0.9 }}
-              transition={{ type: "spring", damping: 25, stiffness: 300 }}
-              className="absolute bottom-8 left-1/2 -translate-x-1/2 z-[300] flex items-center gap-3 px-5 py-3 bg-slate-900 dark:bg-slate-800 text-white rounded-2xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.5)] border border-slate-700/50"
-            >
-              <span className="text-sm font-medium text-slate-200">{undoToast.msg}</span>
-              <div className="w-px h-4 bg-slate-700 mx-1"></div>
-              <button
-                onClick={performQuickUndo}
-                className="flex items-center gap-1.5 text-indigo-400 hover:text-indigo-300 font-black text-sm transition-colors tracking-wide active:scale-95"
-              >
-                <Undo2 size={16} strokeWidth={2.5} /> Ripristina
-              </button>
-              <button
-                onClick={() => setUndoToast({ show: false, msg: '' })}
-                className="ml-1 p-1 text-slate-500 hover:text-slate-300 transition-colors bg-white/5 hover:bg-white/10 rounded-full"
-              >
-                <X size={14} />
-              </button>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        <LegalManualModal isOpen={legalModalOpen} onClose={() => setLegalModalOpen(false)} />
+        <ClearMonthConfirmModal rowToClear={rowToClear} year={selectedYear} onCancel={() => setRowToClear(null)} onConfirm={confirmClearRow} />
+        <CellContextMenu
+          menu={contextMenu}
+          onCopy={handleCopyCell} onPaste={handlePasteCell}
+          onClearMonth={(rowIndex) => setRowToClear(rowIndex)}
+          onOpenNote={(rowIndex) => { const row = currentYearData.find(d => d.monthIndex === rowIndex); openNoteModal(rowIndex, (row as any)?.note); }}
+          onClose={() => setContextMenu(null)}
+        />
+        <UndoToast toast={undoToast} onUndo={performQuickUndo} onClose={() => setUndoToast({ show: false, msg: '' })} />
       </div>
     </>
   );

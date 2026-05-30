@@ -12,6 +12,10 @@ const { mockSelect, mockDelete, mockFrom } = vi.hoisted(() => {
 
     const mockFrom = vi.fn(() => ({
         select: vi.fn(() => ({
+            // loadWorkers ora fa select('*').order(...) diretto: il filtro client
+            // owner_id è stato rimosso (lo coprono le RLS). Manteniamo anche il ramo
+            // .eq().order()/.limit() per eventuali query owner-scoped residue.
+            order: vi.fn(() => mockSelect()),
             eq: vi.fn(() => ({
                 order: vi.fn(() => mockSelect()),
                 limit: vi.fn(() => mockSelect()),
