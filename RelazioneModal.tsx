@@ -185,7 +185,154 @@ TOTALE CREDITO ${(!showPercepito && !includeTickets) ? 'LORDO' : 'NETTO'} SPETTA
 // ... Il resto del componente (RelazioneModal) rimane identico ...
 // ... Copia tutto il resto dal tuo codice originale (handleStampa, JSX return, etc.) ...
 
-export const RelazioneModal = ({ isOpen, onClose, worker, totals, includeExFest = false, includeTickets = true, showPercepito = true, startClaimYear = 2008 }: any) => {
+// Costruisce un VERO .docx (editabile/salvabile in Word) della relazione tecnica.
+// Estratto da handleExportWord per essere riusato sia dalla modale sia dall'export
+// batch dei Conclusi. Restituisce il Blob; il chiamante decide se salvarlo o zipparlo.
+export interface RelazioneDocxParams {
+    worker: any;
+    totals: any;
+    includeExFest?: boolean;
+    includeTickets?: boolean;
+    showPercepito?: boolean;
+    startClaimYear?: number;
+}
+
+export async function buildRelazioneDocxBlob({
+    worker,
+    totals,
+    includeExFest = false,
+    includeTickets = false,
+    showPercepito = false,
+    startClaimYear = 2008,
+}: RelazioneDocxParams): Promise<Blob> {
+    // --- 1. Ricalcolo Variabili ---
+    const tettoGiorni = includeExFest ? 32 : 28;
+    const gt = totals?.grandTotal || totals || {};
+    const lordoVal = gt.incidenzaTotale ?? gt.totalLordo ?? gt.grossClaim ?? 0;
+    const percepitoVal = gt.indennitaPercepita ?? gt.totalPercepito ?? 0;
+    const ticketVal = gt.indennitaPasto ?? gt.totalTicket ?? 0;
+    const nettoVal = (Number(lordoVal) - (showPercepito ? Number(percepitoVal) : 0)) + (includeTickets ? Number(ticketVal) : 0);
+
+    let anniAttivi = (worker?.anni || [])
+        .filter((a: AnnoDati) => Number(a.daysWorked) > 0 && Number(a.year) >= startClaimYear)
+        .map((a: AnnoDati) => Number(a.year))
+        .sort((a: number, b: number) => a - b);
+    anniAttivi = [...new Set(anniAttivi)];
+    if (anniAttivi.length === 0) anniAttivi = [startClaimYear, new Date().getFullYear()];
+    const inizioPeriodo = startClaimYear;
+    const finePeriodo = anniAttivi[anniAttivi.length - 1];
+
+    const voci = generaVociRaggruppate(worker);
+    const esempio = generaEsempioDinamico(worker, startClaimYear, tettoGiorni);
+    const spiegazione = generaSpiegazioneRisultato(includeTickets, showPercepito);
+
+    // --- 2. Helper docx locali (look "atto": Times New Roman, titoli con filetto) ---
+    const para = (text: string) => new Paragraph({
+        alignment: AlignmentType.JUSTIFIED, spacing: { after: 140 },
+        children: [new TextRun({ text })],
+    });
+    const bullet = (text: string) => new Paragraph({
+        bullet: { level: 0 }, alignment: AlignmentType.JUSTIFIED, spacing: { after: 40 },
+        children: [new TextRun({ text })],
+    });
+    const sezTitle = (text: string) => new Paragraph({
+        spacing: { before: 360, after: 160, line: 240 },
+        border: { bottom: { style: BorderStyle.SINGLE, size: 4, color: 'CCCCCC', space: 3 } },
+        children: [new TextRun({ text, bold: true, size: 24 })],
+    });
+    const fromTesto = (testo: string): Paragraph[] => testo
+        .split('\n').map(l => l.trim()).filter(Boolean)
+        .map(l => l.startsWith('-') ? bullet(l.replace(/^-\s*/, '')) : para(l));
+
+    // Tabella info (Pratica / Periodo): bordo leggero
+    const infoBorders = {
+        top: { style: BorderStyle.SINGLE, size: 4, color: 'BBBBBB' },
+        bottom: { style: BorderStyle.SINGLE, size: 4, color: 'BBBBBB' },
+        left: { style: BorderStyle.SINGLE, size: 4, color: 'BBBBBB' },
+        right: { style: BorderStyle.SINGLE, size: 4, color: 'BBBBBB' },
+        insideHorizontal: { style: BorderStyle.SINGLE, size: 4, color: 'DDDDDD' },
+        insideVertical: { style: BorderStyle.SINGLE, size: 4, color: 'DDDDDD' },
+    };
+    const infoRow = (label: string, value: string) => new TableRow({ children: [
+        new TableCell({ width: { size: 30, type: WidthType.PERCENTAGE }, margins: { top: 60, bottom: 60, left: 140, right: 100 }, children: [new Paragraph({ spacing: { line: 240 }, children: [new TextRun({ text: label, bold: true })] })] }),
+        new TableCell({ margins: { top: 60, bottom: 60, left: 100, right: 140 }, children: [new Paragraph({ spacing: { line: 240 }, children: [new TextRun({ text: value })] })] }),
+    ] });
+
+    // Specchietto riepilogo: centrato, bordo esterno spesso, valori grandi in grassetto,
+    // riga totale evidenziata in grigio con filetto superiore marcato.
+    const summaryBorders = {
+        top: { style: BorderStyle.SINGLE, size: 12, color: '000000' },
+        bottom: { style: BorderStyle.SINGLE, size: 12, color: '000000' },
+        left: { style: BorderStyle.SINGLE, size: 12, color: '000000' },
+        right: { style: BorderStyle.SINGLE, size: 12, color: '000000' },
+        insideHorizontal: { style: BorderStyle.SINGLE, size: 4, color: 'CCCCCC' },
+        insideVertical: { style: BorderStyle.NONE, size: 0, color: 'auto' },
+    };
+    const moneyRow = (label: string, value: string, isTotal = false) => new TableRow({ children: [
+        new TableCell({
+            margins: { top: 120, bottom: 120, left: 200, right: 120 },
+            shading: isTotal ? { type: ShadingType.CLEAR, color: 'auto', fill: 'F2F2F2' } : undefined,
+            borders: isTotal ? { top: { style: BorderStyle.SINGLE, size: 18, color: '000000' } } : undefined,
+            children: [new Paragraph({ spacing: { line: 240 }, children: [new TextRun({ text: label, bold: true, size: isTotal ? 28 : 24 })] })],
+        }),
+        new TableCell({
+            margins: { top: 120, bottom: 120, left: 120, right: 200 },
+            shading: isTotal ? { type: ShadingType.CLEAR, color: 'auto', fill: 'F2F2F2' } : undefined,
+            borders: isTotal ? { top: { style: BorderStyle.SINGLE, size: 18, color: '000000' } } : undefined,
+            children: [new Paragraph({ alignment: AlignmentType.RIGHT, spacing: { line: 240 }, children: [new TextRun({ text: `€ ${value}`, bold: true, size: isTotal ? 28 : 26 })] })],
+        }),
+    ] });
+
+    // --- 3. Contenuto del documento ---
+    const children: (Paragraph | Table)[] = [];
+    children.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 80, line: 240 }, children: [new TextRun({ text: `RELAZIONE TECNICA DESCRITTIVA — SINTESI E METODOLOGIA`, bold: true, size: 30 })] }));
+    children.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 360, line: 240 }, border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: '000000', space: 6 } }, children: [new TextRun({ text: `CONTRATTO DI RIFERIMENTO: ${getProfiloBadgeLabel(worker?.profilo, worker?.eliorType) || 'ND'}`, bold: true, size: 24 })] }));
+
+    children.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, borders: infoBorders, rows: [
+        infoRow(`Pratica di:`, `${worker?.cognome || ''} ${worker?.nome || ''}`.trim()),
+        infoRow(`Periodo Esaminato:`, `Dal ${inizioPeriodo} al ${finePeriodo}`),
+    ] }));
+
+    children.push(sezTitle(`1. LA PREMESSA: PERCHÉ CHIEDIAMO QUESTE SOMME`));
+    children.push(para(`La legge europea (Direttiva 2003/88/CE) e la Suprema Corte di Cassazione (Sentenza n. 20216/2022) stabiliscono un principio fondamentale: quando un lavoratore va in ferie, ha il diritto di riposarsi senza subire alcuna penalizzazione economica rispetto al normale svolgimento dell'attività lavorativa.`));
+    children.push(para(`Durante l'anno, il lavoratore in esame percepisce regolarmente indennità connesse a disagi, turni notturni, festivi e altre voci legate al proprio profilo. La mancata erogazione di tali indennità in costanza di ferie determina un'evidente sperequazione economica, oggetto della presente richiesta di integrazione.`));
+
+    children.push(sezTitle(`2. LE VOCI ANALIZZATE (Rif. Allegato "Tabella 2 - Riepilogo Voci Variabili")`));
+    children.push(para(`Per quantificare il credito, sono stati esaminati minuziosamente i cedolini paga forniti. Come dettagliato nella "Tabella 2" dei conteggi, sono state isolate esclusivamente le "voci ricorrenti e continuative", escludendo tassativamente rimborsi spese, elargizioni una tantum o arretrati non pertinenti.`));
+    children.push(para(`Nello specifico del profilo lavorativo, sono state computate le seguenti indennità:`));
+    voci.testo.split('\n').map((l: string) => l.trim()).filter(Boolean).forEach((l: string) => children.push(bullet(l.replace(/^-\s*/, ''))));
+
+    children.push(sezTitle(`3. IL METODO DI CALCOLO (Rif. Allegato "Tabella 1 - Calcolo Differenze")`));
+    children.push(para(`A garanzia di inattaccabilità contabile, il sistema ha applicato il "Criterio della Media Storica" (Rif. Cass. 20216/2022). Il valore di una giornata feriale è stato calcolato estraendo la media matematica dell'anno solare precedente.`));
+    fromTesto(esempio.testo).forEach((p: Paragraph) => children.push(p));
+
+    children.push(sezTitle(`4. L'APPLICAZIONE MENSILE (Rif. Allegato "Tabella 3 - Dettaglio Analitico")`));
+    children.push(para(`Come documentato analiticamente nella "Tabella 3", il procedimento è stato reiterato per ogni singolo mese in cui il dipendente ha fruito di ferie.`));
+    fromTesto(spiegazione.testo).forEach((p: Paragraph) => children.push(p));
+
+    children.push(sezTitle(`5. CONCLUSIONI (Rif. Allegato "Prospetto Ufficiale di Ricalcolo")`));
+    children.push(para(`Le risultanze delle elaborazioni analitiche di cui sopra convergono nel documento conclusivo denominato "Riepilogo Somme Richieste", che certifica senza ombra di dubbio gli importi esatti riportati nello specchietto sottostante.`));
+
+    children.push(new Paragraph({ pageBreakBefore: true, alignment: AlignmentType.CENTER, spacing: { before: 240, after: 280, line: 240 }, children: [new TextRun({ text: `RIEPILOGO DEGLI IMPORTI`, bold: true, size: 28 })] }));
+
+    const totalLabel = `TOTALE CREDITO ${(!showPercepito && !includeTickets) ? 'LORDO' : 'NETTO'} SPETTANTE:`;
+    const summaryRows: TableRow[] = [ moneyRow(`+ DIFFERENZE LORDE MATURATE:`, fmt(lordoVal)) ];
+    if (showPercepito) summaryRows.push(moneyRow(`- IMPORTO GIÀ PERCEPITO IN BUSTA:`, fmt(percepitoVal)));
+    if (includeTickets) summaryRows.push(moneyRow(`+ CREDITO BUONI PASTO NON EROGATI:`, fmt(ticketVal)));
+    summaryRows.push(moneyRow(totalLabel, fmt(nettoVal), true));
+    children.push(new Table({ alignment: AlignmentType.CENTER, width: { size: 78, type: WidthType.PERCENTAGE }, borders: summaryBorders, rows: summaryRows }));
+
+    // --- 4. Genera il VERO .docx ---
+    const doc = new Document({
+        creator: 'RailFlow',
+        title: `Relazione Tecnica - ${worker?.cognome || 'Ricorrente'}`,
+        styles: { default: { document: { run: { font: 'Times New Roman', size: 24 }, paragraph: { spacing: { line: 360 } } } } },
+        sections: [{ properties: { page: { margin: { top: 1700, right: 1417, bottom: 1700, left: 1417 } } }, children }],
+    });
+    return await Packer.toBlob(doc);
+}
+
+export const RelazioneModal = ({ isOpen, onClose, worker, totals, includeExFest = false, includeTickets = false, showPercepito = false, startClaimYear = 2008 }: any) => {
 
     const [copiato, setCopiato] = useState(false);
     const isReadOnly = useIsReadOnly();
@@ -319,131 +466,7 @@ export const RelazioneModal = ({ isOpen, onClose, worker, totals, includeExFest 
         printWindow.print();
     };
     const handleExportWord = async () => {
-        // --- 1. Ricalcolo Variabili (identico a prima) ---
-        const tettoGiorni = includeExFest ? 32 : 28;
-        const gt = totals?.grandTotal || totals || {};
-        const lordoVal = gt.incidenzaTotale ?? gt.totalLordo ?? gt.grossClaim ?? 0;
-        const percepitoVal = gt.indennitaPercepita ?? gt.totalPercepito ?? 0;
-        const ticketVal = gt.indennitaPasto ?? gt.totalTicket ?? 0;
-        const nettoVal = (Number(lordoVal) - (showPercepito ? Number(percepitoVal) : 0)) + (includeTickets ? Number(ticketVal) : 0);
-
-        let anniAttivi = (worker?.anni || [])
-            .filter((a: AnnoDati) => Number(a.daysWorked) > 0 && Number(a.year) >= startClaimYear)
-            .map((a: AnnoDati) => Number(a.year))
-            .sort((a: number, b: number) => a - b);
-        anniAttivi = [...new Set(anniAttivi)];
-        if (anniAttivi.length === 0) anniAttivi = [startClaimYear, new Date().getFullYear()];
-        const inizioPeriodo = startClaimYear;
-        const finePeriodo = anniAttivi[anniAttivi.length - 1];
-
-        const voci = generaVociRaggruppate(worker);
-        const esempio = generaEsempioDinamico(worker, startClaimYear, tettoGiorni);
-        const spiegazione = generaSpiegazioneRisultato(includeTickets, showPercepito);
-
-        // --- 2. Helper docx locali (look "atto": Times New Roman, titoli con filetto) ---
-        const para = (text: string) => new Paragraph({
-            alignment: AlignmentType.JUSTIFIED, spacing: { after: 140 },
-            children: [new TextRun({ text })],
-        });
-        const bullet = (text: string) => new Paragraph({
-            bullet: { level: 0 }, alignment: AlignmentType.JUSTIFIED, spacing: { after: 40 },
-            children: [new TextRun({ text })],
-        });
-        const sezTitle = (text: string) => new Paragraph({
-            spacing: { before: 360, after: 160, line: 240 },
-            border: { bottom: { style: BorderStyle.SINGLE, size: 4, color: 'CCCCCC', space: 3 } },
-            children: [new TextRun({ text, bold: true, size: 24 })],
-        });
-        const fromTesto = (testo: string): Paragraph[] => testo
-            .split('\n').map(l => l.trim()).filter(Boolean)
-            .map(l => l.startsWith('-') ? bullet(l.replace(/^-\s*/, '')) : para(l));
-
-        // Tabella info (Pratica / Periodo): bordo leggero
-        const infoBorders = {
-            top: { style: BorderStyle.SINGLE, size: 4, color: 'BBBBBB' },
-            bottom: { style: BorderStyle.SINGLE, size: 4, color: 'BBBBBB' },
-            left: { style: BorderStyle.SINGLE, size: 4, color: 'BBBBBB' },
-            right: { style: BorderStyle.SINGLE, size: 4, color: 'BBBBBB' },
-            insideHorizontal: { style: BorderStyle.SINGLE, size: 4, color: 'DDDDDD' },
-            insideVertical: { style: BorderStyle.SINGLE, size: 4, color: 'DDDDDD' },
-        };
-        const infoRow = (label: string, value: string) => new TableRow({ children: [
-            new TableCell({ width: { size: 30, type: WidthType.PERCENTAGE }, margins: { top: 60, bottom: 60, left: 140, right: 100 }, children: [new Paragraph({ spacing: { line: 240 }, children: [new TextRun({ text: label, bold: true })] })] }),
-            new TableCell({ margins: { top: 60, bottom: 60, left: 100, right: 140 }, children: [new Paragraph({ spacing: { line: 240 }, children: [new TextRun({ text: value })] })] }),
-        ] });
-
-        // Specchietto riepilogo: centrato, bordo esterno spesso, valori grandi in grassetto,
-        // riga totale evidenziata in grigio con filetto superiore marcato.
-        const summaryBorders = {
-            top: { style: BorderStyle.SINGLE, size: 12, color: '000000' },
-            bottom: { style: BorderStyle.SINGLE, size: 12, color: '000000' },
-            left: { style: BorderStyle.SINGLE, size: 12, color: '000000' },
-            right: { style: BorderStyle.SINGLE, size: 12, color: '000000' },
-            insideHorizontal: { style: BorderStyle.SINGLE, size: 4, color: 'CCCCCC' },
-            insideVertical: { style: BorderStyle.NONE, size: 0, color: 'auto' },
-        };
-        const moneyRow = (label: string, value: string, isTotal = false) => new TableRow({ children: [
-            new TableCell({
-                margins: { top: 120, bottom: 120, left: 200, right: 120 },
-                shading: isTotal ? { type: ShadingType.CLEAR, color: 'auto', fill: 'F2F2F2' } : undefined,
-                borders: isTotal ? { top: { style: BorderStyle.SINGLE, size: 18, color: '000000' } } : undefined,
-                children: [new Paragraph({ spacing: { line: 240 }, children: [new TextRun({ text: label, bold: true, size: isTotal ? 28 : 24 })] })],
-            }),
-            new TableCell({
-                margins: { top: 120, bottom: 120, left: 120, right: 200 },
-                shading: isTotal ? { type: ShadingType.CLEAR, color: 'auto', fill: 'F2F2F2' } : undefined,
-                borders: isTotal ? { top: { style: BorderStyle.SINGLE, size: 18, color: '000000' } } : undefined,
-                children: [new Paragraph({ alignment: AlignmentType.RIGHT, spacing: { line: 240 }, children: [new TextRun({ text: `€ ${value}`, bold: true, size: isTotal ? 28 : 26 })] })],
-            }),
-        ] });
-
-        // --- 3. Contenuto del documento ---
-        const children: (Paragraph | Table)[] = [];
-        children.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 80, line: 240 }, children: [new TextRun({ text: `RELAZIONE TECNICA DESCRITTIVA — SINTESI E METODOLOGIA`, bold: true, size: 30 })] }));
-        children.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 360, line: 240 }, border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: '000000', space: 6 } }, children: [new TextRun({ text: `CONTRATTO DI RIFERIMENTO: ${getProfiloBadgeLabel(worker?.profilo, worker?.eliorType) || 'ND'}`, bold: true, size: 24 })] }));
-
-        children.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, borders: infoBorders, rows: [
-            infoRow(`Pratica di:`, `${worker?.cognome || ''} ${worker?.nome || ''}`.trim()),
-            infoRow(`Periodo Esaminato:`, `Dal ${inizioPeriodo} al ${finePeriodo}`),
-        ] }));
-
-        children.push(sezTitle(`1. LA PREMESSA: PERCHÉ CHIEDIAMO QUESTE SOMME`));
-        children.push(para(`La legge europea (Direttiva 2003/88/CE) e la Suprema Corte di Cassazione (Sentenza n. 20216/2022) stabiliscono un principio fondamentale: quando un lavoratore va in ferie, ha il diritto di riposarsi senza subire alcuna penalizzazione economica rispetto al normale svolgimento dell'attività lavorativa.`));
-        children.push(para(`Durante l'anno, il lavoratore in esame percepisce regolarmente indennità connesse a disagi, turni notturni, festivi e altre voci legate al proprio profilo. La mancata erogazione di tali indennità in costanza di ferie determina un'evidente sperequazione economica, oggetto della presente richiesta di integrazione.`));
-
-        children.push(sezTitle(`2. LE VOCI ANALIZZATE (Rif. Allegato "Tabella 2 - Riepilogo Voci Variabili")`));
-        children.push(para(`Per quantificare il credito, sono stati esaminati minuziosamente i cedolini paga forniti. Come dettagliato nella "Tabella 2" dei conteggi, sono state isolate esclusivamente le "voci ricorrenti e continuative", escludendo tassativamente rimborsi spese, elargizioni una tantum o arretrati non pertinenti.`));
-        children.push(para(`Nello specifico del profilo lavorativo, sono state computate le seguenti indennità:`));
-        voci.testo.split('\n').map((l: string) => l.trim()).filter(Boolean).forEach((l: string) => children.push(bullet(l.replace(/^-\s*/, ''))));
-
-        children.push(sezTitle(`3. IL METODO DI CALCOLO (Rif. Allegato "Tabella 1 - Calcolo Differenze")`));
-        children.push(para(`A garanzia di inattaccabilità contabile, il sistema ha applicato il "Criterio della Media Storica" (Rif. Cass. 20216/2022). Il valore di una giornata feriale è stato calcolato estraendo la media matematica dell'anno solare precedente.`));
-        fromTesto(esempio.testo).forEach((p: Paragraph) => children.push(p));
-
-        children.push(sezTitle(`4. L'APPLICAZIONE MENSILE (Rif. Allegato "Tabella 3 - Dettaglio Analitico")`));
-        children.push(para(`Come documentato analiticamente nella "Tabella 3", il procedimento è stato reiterato per ogni singolo mese in cui il dipendente ha fruito di ferie.`));
-        fromTesto(spiegazione.testo).forEach((p: Paragraph) => children.push(p));
-
-        children.push(sezTitle(`5. CONCLUSIONI (Rif. Allegato "Prospetto Ufficiale di Ricalcolo")`));
-        children.push(para(`Le risultanze delle elaborazioni analitiche di cui sopra convergono nel documento conclusivo denominato "Riepilogo Somme Richieste", che certifica senza ombra di dubbio gli importi esatti riportati nello specchietto sottostante.`));
-
-        children.push(new Paragraph({ pageBreakBefore: true, alignment: AlignmentType.CENTER, spacing: { before: 240, after: 280, line: 240 }, children: [new TextRun({ text: `RIEPILOGO DEGLI IMPORTI`, bold: true, size: 28 })] }));
-
-        const totalLabel = `TOTALE CREDITO ${(!showPercepito && !includeTickets) ? 'LORDO' : 'NETTO'} SPETTANTE:`;
-        const summaryRows: TableRow[] = [ moneyRow(`+ DIFFERENZE LORDE MATURATE:`, fmt(lordoVal)) ];
-        if (showPercepito) summaryRows.push(moneyRow(`- IMPORTO GIÀ PERCEPITO IN BUSTA:`, fmt(percepitoVal)));
-        if (includeTickets) summaryRows.push(moneyRow(`+ CREDITO BUONI PASTO NON EROGATI:`, fmt(ticketVal)));
-        summaryRows.push(moneyRow(totalLabel, fmt(nettoVal), true));
-        children.push(new Table({ alignment: AlignmentType.CENTER, width: { size: 78, type: WidthType.PERCENTAGE }, borders: summaryBorders, rows: summaryRows }));
-
-        // --- 4. Genera e salva un VERO .docx (editabile e salvabile in Word) ---
-        const doc = new Document({
-            creator: 'RailFlow',
-            title: `Relazione Tecnica - ${worker?.cognome || 'Ricorrente'}`,
-            styles: { default: { document: { run: { font: 'Times New Roman', size: 24 }, paragraph: { spacing: { line: 360 } } } } },
-            sections: [{ properties: { page: { margin: { top: 1700, right: 1417, bottom: 1700, left: 1417 } } }, children }],
-        });
-        const blob = await Packer.toBlob(doc);
+        const blob = await buildRelazioneDocxBlob({ worker, totals, includeExFest, includeTickets, showPercepito, startClaimYear });
         saveAs(blob, `Relazione_Tecnica_${worker?.cognome || 'Ricorrente'}.docx`);
     };
 

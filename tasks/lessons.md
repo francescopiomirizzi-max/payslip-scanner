@@ -519,3 +519,19 @@ Fix: rendere il contenuto scrollabile `absolute inset-0` dentro un body `relativ
 overflow-hidden`, così NON contribuisce all'altezza intrinseca e scrolla entro l'altezza
 guidata dal sibling (la tabella). Pattern riusabile per "pannello affiancato sempre alto
 quanto il vicino".
+
+---
+
+## 2026-05-31 — Nuove voci di UI/export vanno gabbiate dietro `isReadOnly` di default
+
+**Contesto:** ho aggiunto la voce di menu "Esporta Concluse (ZIP)" senza gabbiarla
+dietro `isReadOnly` → sarebbe stata visibile anche all'account in sola lettura del
+sindacalista. L'utente l'ha notato prima del deploy.
+
+**Lezione:** quando aggiungo un'azione alla dashboard (specie nel menu Dati o azioni
+sulle pratiche), il default è **nasconderla al viewer readonly** con il pattern già in
+uso lì: `...(isReadOnly ? [] : [{ …item… }])`. La readonly del sindacalista è una vista
+di consultazione: strumenti di workflow interno (export verso il mio Desktop, import,
+ecc.) NON devono comparirle. Cfr. memoria `auth-readonly-viewer` (lì è lato dati/RLS;
+qui è lato UI — vale lo stesso principio). Verificare SEMPRE "questa cosa la deve vedere
+il sindacalista?" prima di considerare finita una feature di dashboard.

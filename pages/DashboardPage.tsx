@@ -357,6 +357,37 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
         return map;
     }, [sortedWorkers]);
 
+    // --- ESPORTA CONCLUSE (ZIP) ---
+    // Per ogni pratica nel cassetto "Concluse" (status 'trattativa') genera i 3
+    // documenti (Conteggi PDF, Riepilogo PDF, Relazione .docx) e li impacchetta in
+    // uno zip con la struttura cartelle {AZIENDA}/{COGNOME NOME}/conteggi/.
+    // jszip è caricato on-demand per non gonfiare il bundle principale.
+    const [concluseStatus, setConcluseStatus] = useState<string | null>(null);
+    const handleExportConcluse = async () => {
+        setIsDataMenuOpen(false);
+        const conclusi = workersByCassetto.get('trattativa') ?? [];
+        if (conclusi.length === 0) {
+            alert('Nessuna pratica nel cassetto "Concluse" da esportare.');
+            return;
+        }
+        setConcluseStatus(`0 / ${conclusi.length}`);
+        try {
+            const { exportConcluseZip } = await import('../utils/concluseExport');
+            const res = await exportConcluseZip(conclusi, (done, total) => {
+                setConcluseStatus(`${done} / ${total}`);
+            });
+            let msg = `Esportate ${res.exported} pratiche su ${res.total}.`;
+            if (res.failed.length > 0) {
+                msg += `\n\nNon riuscite:\n` + res.failed.map(f => `• ${f.worker}: ${f.error}`).join('\n');
+            }
+            alert(msg);
+        } catch (err: any) {
+            alert(`Errore durante l'export: ${err?.message || err}`);
+        } finally {
+            setConcluseStatus(null);
+        }
+    };
+
     // Quando viene creata una nuova pratica: apri il cassetto giusto, sort per
     // data desc (così la nuova card va in cima al suo cassetto) e scroll in alto.
     useEffect(() => {
@@ -587,6 +618,16 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                                                 hoverText: 'hover:text-emerald-700 dark:hover:text-emerald-300',
                                                 onClick: () => { generateRegistroPagate(workers); setIsDataMenuOpen(false); },
                                             },
+                                            // Strumento interno di workflow: nascosto al viewer
+                                            // readonly (sindacalista).
+                                            ...(isReadOnly ? [] : [{
+                                                icon: <Handshake className="w-4 h-4 text-white" strokeWidth={2.5} />,
+                                                label: concluseStatus ? `Esporto… ${concluseStatus}` : 'Esporta Concluse (ZIP)',
+                                                iconBg: 'bg-teal-500',
+                                                hoverBg: 'hover:bg-teal-50 dark:hover:bg-teal-950/60',
+                                                hoverText: 'hover:text-teal-700 dark:hover:text-teal-300',
+                                                onClick: () => { if (!concluseStatus) handleExportConcluse(); },
+                                            }]),
                                         ].map((item, i) => (
                                             <motion.button
                                                 key={i}
