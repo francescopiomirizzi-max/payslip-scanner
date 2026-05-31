@@ -11,6 +11,8 @@ interface PrintTablesParams {
   includeExFest: boolean;
   includeTickets: boolean;
   startClaimYear: number;
+  /** 'save' (default) scarica il PDF; 'blob' lo restituisce per l'export batch. */
+  output?: 'save' | 'blob';
 }
 
 export function printPayslipTables({
@@ -19,10 +21,11 @@ export function printPayslipTables({
   includeExFest,
   includeTickets,
   startClaimYear,
-}: PrintTablesParams): void {
+  output = 'save',
+}: PrintTablesParams): Blob | void {
   // 0. RECUPERO PREFERENZE: Legge se l'utente ha nascosto la colonna nel Report
   const savedPercepito = localStorage.getItem(`report_percepito_${worker.id}`);
-  const showPercepito = savedPercepito !== null ? JSON.parse(savedPercepito) : true;
+  const showPercepito = savedPercepito !== null ? JSON.parse(savedPercepito) : false;
 
   // 1. SETUP E CONFIGURAZIONE (Orientamento Landscape per farci stare tutto)
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
@@ -434,5 +437,6 @@ export function printPayslipTables({
   doc.text(notaFinale, 105, currentY, { align: 'center', maxWidth: 150 });
 
   if (typeof doc.putTotalPages === 'function') { doc.putTotalPages(totalPagesExp); }
+  if (output === 'blob') return doc.output('blob');
   doc.save(`Conteggi_${worker.cognome}_${worker.nome}.pdf`);
 }

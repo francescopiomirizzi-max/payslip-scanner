@@ -1,3 +1,103 @@
+# Sessione 2026-05-31 — Esporta Concluse (ZIP) + helper locale
+
+> **Obiettivo:** portare automaticamente nelle cartelle Desktop i 3 documenti di
+> ogni pratica **Conclusa** (stato `trattativa`). Strada scelta: **A** — un bottone
+> sul sito genera tutto in UNO zip con la struttura cartelle; un helper locale (fatto
+> DOPO, senza deploy) scompatta nel Desktop.
+>
+> **Vincolo di sequenza:** il bottone è una modifica al sito → deve entrare
+> nell'ULTIMO deploy Netlify previsto. L'helper è 100% locale → nessun deploy.
+>
+> **Scoperte dal codice:**
+> - "Concluse" = lavoratori con `status === 'trattativa'` (`DashboardPage.tsx:64`).
+> - Azienda → cartella = campo `worker.profilo` (cartelle: ELIOR/RFI/CLEAN SERVICE/…).
+> - I dati mensili sono già caricati in `worker.anni` → nessuna fetch extra per il calcolo.
+> - I 3 documenti NON esistono sul server: si generano nel browser e si scaricano.
+>   - `Conteggi_{cognome}_{nome}.pdf` — jsPDF, `utils/printTables.ts:437` (fa `doc.save()`).
+>   - `Riepilogo_somme_richieste_{cognome}_{nome}.pdf` — jsPDF, `components/TableComponent.tsx:177`.
+>   - `Relazione_Tecnica_{cognome}.docx` — **GIÀ ESISTE**: `RelazioneModal.tsx` (root),
+>     `handleExportWord` (riga 321-447) costruisce un .docx vero con la lib `docx` e fa
+>     `saveAs(..., 'Relazione_Tecnica_{cognome}.docx')`. NON va costruito da zero, va estratto.
+>   - NB: il `components/WorkerTables/RelazioneModal.tsx` è la versione VECCHIA (testo+print),
+>     codice morto — l'attivo è quello di root, importato da `components/TableComponent.tsx:24`.
+> - Calcolo totali = funzione pura `computeHolidayIndemnity` (`utils/calculationEngine`),
+>   richiamabile in batch su `worker.anni` senza React (oggi avvolta in `useStatsData`).
+> - La relazione esistente NON ha data né riga firma (confermato dal file di Mastropasqua) → ok così.
+> - Decisioni utente: Nota Spese **fuori** per ora; relazione **.docx editabile**
+>   (auto-generata, niente ritocco manuale nel batch — il sindacalista la modifica dopo).
+
+## Plan — Esporta Concluse (bottone, da includere nel deploy)
+
+- [x] **Refactor generatori → blob.** `printPayslipTables` ora ha `output?: 'save'|'blob'`
+      (default 'save', restituisce `Blob` in modalità blob). Riepilogo idem via
+      `renderRiepilogoPdf` (il chiamante fa `doc.save` o `doc.output('blob')`).
+- [x] **Estrarre il calcolo Riepilogo** in `utils/riepilogoReport.ts`
+      (`computeRiepilogoData` + `renderRiepilogoPdf`), richiamato sia da `TableComponent`
+      (single source of truth, niente più duplicazione) sia dal batch.
+- [x] **Estrarre il generatore Relazione .docx** da `RelazioneModal.handleExportWord`
+      in `buildRelazioneDocxBlob(...)` esportata; la modale e il batch la riusano.
+      Stesso identico contenuto del file di Mastropasqua.
+- [x] **`utils/concluseExport.ts`** (`exportConcluseZip`): per ogni worker `trattativa`
+      → calcola totali → 3 blob → zip al path `{AZIENDA}/{COGNOME NOME}/conteggi/{file}`.
+      `jszip` aggiunto e caricato via `import()` dinamico (chunk separato, ~lazy).
+- [x] **Opzioni per-lavoratore (NON default globale).** `resolveOptions` replica la
+      risoluzione del singolo export: `worker.X ?? localStorage 'report_*_{id}' ?? default`.
+      Default di codice allineati a escludere ticket+percepito (scelta utente):
+      `report_tickets`/`report_percepito` ora default `false` in TableComponent/printTables;
+      props RelazioneModal `includeTickets`/`showPercepito` default `false`.
+- [x] **Path azienda** = `SYSTEM_PROFILES[worker.profilo].label` (ELIOR/RFI/CLEAN SERVICE…),
+      cartella worker = `COGNOME NOME` in MAIUSCOLO. Fallback al profilo se azienda custom.
+- [x] **Bottone UI** nel menu "Dati" della dashboard: "Esporta Concluse (ZIP)" con
+      avanzamento `n / tot` e riepilogo finale (esportate/non riuscite) via alert.
+- [x] **Verifica statica:** `tsc --noEmit` exit 0; `npm run build` verde; chunk
+      `concluseExport` separato (2.14 kB, lazy). **Verifica funzionale manuale ancora
+      da fare** (vedi Review): cliccare il bottone con 1-2 Conclusi, scompattare lo zip,
+      confrontare i 3 file col flusso singolo.
+
+## Plan — Helper locale (DOPO, nessun deploy)
+
+- [ ] Script Node che sorveglia ~/Downloads, riconosce `Concluse_*.zip`,
+      scompatta dentro `~/Desktop/Pratiche…/Cedolini Lavoratori/` preservando la struttura,
+      e archivia/rimuove lo zip. (Spec di dettaglio in sessione separata.)
+
+## Review — Esporta Concluse
+
+**Fatto:**
+- `utils/riepilogoReport.ts` (nuovo): `computeRiepilogoData` + `renderRiepilogoPdf`.
+  `TableComponent` ora li usa → eliminata la duplicazione (rimossa la vecchia
+  `handleDownloadPDF` + i tre useMemo locali).
+- `utils/printTables.ts`: param `output?: 'save'|'blob'`; default percepito → `false`.
+- `RelazioneModal.tsx`: estratta `buildRelazioneDocxBlob(...)` esportata; la modale
+  ora è un wrapper sottile; default props `includeTickets`/`showPercepito` → `false`.
+- `utils/concluseExport.ts` (nuovo): `exportConcluseZip(workers, onProgress)`.
+- `DashboardPage.tsx`: voce menu "Esporta Concluse (ZIP)" con avanzamento + alert
+  riepilogo; `import()` dinamico → chunk separato.
+- Default ticket/percepito allineati a `false` (scelta utente).
+
+**Verifica statica:** `tsc --noEmit` = 0; `npm run build` verde; chunk
+`concluseExport` 2.14 kB (lazy).
+
+**Verifica funzionale headless (Node, esbuild --conditions browser):** su lavoratore
+sintetico ELIOR → Conteggi PDF (103.748 b) + Riepilogo PDF (10.962 b) generati,
+calcolo eseguito (lordo 155,45 €), ZIP impacchettato con struttura ESATTA
+`ELIOR/ROSSI MARIO/conteggi/{Conteggi_*,Riepilogo_somme_richieste_*}.pdf`, riletto:
+entrambi i PDF integri (magic `%PDF-`). Nota: in Node il Blob di jspdf va convertito
+in Buffer per JSZip; nel browser JSZip accetta il Blob nativamente (nessuna modifica
+al codice necessaria).
+
+**Ancora da fare (manuale, nel browser prima del deploy):**
+- Aprire la dashboard, menu Dati → "Esporta Concluse (ZIP)" con ≥1 pratica Conclusa.
+- Scompattare lo zip e confrontare i 3 file (incl. la **Relazione .docx**, non
+  testabile headless perché in file React) con quelli del flusso singolo per lo stesso
+  lavoratore: devono essere identici.
+
+**Note / possibili evoluzioni:**
+- La Relazione `.docx` è codice esistente estratto verbatim (stesso output di prima):
+  non testata headless ma coperta da tsc/build e dal fatto che la modale la riusa.
+- Aziende custom (non in SYSTEM_PROFILES): fallback cartella = chiave `profilo`.
+
+---
+
 # Sessione 2026-05-22 (d) — Fix timeout Gemini (scan + verify)
 
 > **Problema:** errori frequenti "Request aborted" (scan-payslip, ~24s) e "Task timed
