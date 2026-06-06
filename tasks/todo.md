@@ -215,3 +215,28 @@ Base di conoscenza in piedi e già piena (non placeholder). Tre archivi con ruol
 knowledge = fatti di dominio durevoli; memory = stato del lavoro; lessons = errori da evitare.
 Le fonti grezze restano fuori da git per privacy. Niente codice toccato (solo documentazione).
 Prossimo passo della sessione: verifica pratica **Di Ponte Armando** quando l'utente la finisce.
+
+# Sessione 2026-06-06 — Valutazione progetto + 3 quick win (commit / CI / pulizia)
+
+> Origine: l'utente ha chiesto una valutazione dell'intero progetto. Salute ottima nel
+> cuore (tsc pulito, 127/127 test, motore di calcolo difensivo), ma due buchi di processo:
+> 1.432 righe non committate (6 giorni di lavoro nel solo working tree) e nessuna rete di
+> sicurezza automatica. Approvati ed eseguiti 3 passi su branch `feature/voci-fisse-incidenza`
+> (nessun deploy):
+
+- [x] **1. P0 — protezione del lavoro** (`b8baa7d`): commit del lavoro pendente (voci fisse,
+      % incidenza, Strategia B, backfill, knowledge base). Verificato che `.env`/`.claude`/
+      `knowledge/fonti` restassero fuori da git. Rischio "perdita da git checkout" azzerato.
+- [x] **2. P1 — CI** (`3defa85`): `.github/workflows/ci.yml` → `tsc --noEmit` + `vitest run`
+      a ogni push/PR, Node da `.nvmrc`, `npm ci` dal lockfile. I 127 test ora sono un gate.
+- [x] **3. P2 — pulizia** (`0a47012`): rimosse `xlsx` (0 usi, CVE storici) e `openai` (0 usi,
+      backend è Gemini) via `npm uninstall` (lockfile sincronizzato → `npm ci` valido);
+      corretto il commento stale di `daysPaidLeave` in types.ts (con Strategia B entra nel
+      divisore della media). tsc pulito, 127/127.
+
+## Da fare (non bloccante, emerso dalla valutazione)
+- Branch ancora **locale**: pushare quando opportuno (commit ≠ deploy, zero crediti Netlify).
+- Deploy del batch (prompt `fixed-voci` + % incidenza + Strategia B) quando l'avvocato sblocca.
+  NB: il backfill voci fisse funziona solo in locale finché `scan-payslip` non è deployato.
+- Debito a medio termine: spezzare i monoliti (DynamicIsland 2226, MonthlyDataGrid 1695),
+  code-splitting dei pezzi pesanti (docx/exceljs/jspdf/pdfjs/QRScanner), ridurre i 222 `any`.
