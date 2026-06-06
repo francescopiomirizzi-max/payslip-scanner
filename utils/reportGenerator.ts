@@ -5,6 +5,7 @@ import {
 import { unzipSync, zipSync, strToU8, strFromU8 } from 'fflate';
 import { saveAs } from 'file-saver';
 import type { Worker } from '../types';
+import { resolveIncludePaidLeave } from '../types';
 import {
   isConcluded, isMissingPayslips,
   formatInsertedRange, formatMissingMonths, isPaid,
@@ -149,6 +150,8 @@ const computeWorkerCredit = (w: Worker): number => {
   const includeTickets = storedTicketPref !== null ? JSON.parse(storedTicketPref) : true;
   const storedExFestPref = localStorage.getItem(`exFest_${w.id}`);
   const includeExFest = storedExFestPref !== null ? JSON.parse(storedExFestPref) : false;
+  const storedPaidLeavePref = localStorage.getItem(`paidLeave_${w.id}`);
+  const includePaidLeave = storedPaidLeavePref !== null ? JSON.parse(storedPaidLeavePref) : resolveIncludePaidLeave(w);
   const storedStartYear = localStorage.getItem(`startYear_${w.id}`);
   const startClaimYear = storedStartYear ? parseInt(storedStartYear) : 2008;
 
@@ -164,6 +167,7 @@ const computeWorkerCredit = (w: Worker): number => {
     includeExFest,
     includeTickets,
     startClaimYear,
+    includePaidLeave,
     years: allYears,
   });
 

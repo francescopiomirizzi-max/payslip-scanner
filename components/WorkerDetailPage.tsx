@@ -1,6 +1,8 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { usePayslipUpload } from '../hooks/usePayslipUpload';
 import { usePayslipArchive } from '../hooks/usePayslipArchive';
+import { useFixedVociBackfill } from '../hooks/useFixedVociBackfill';
+import { FIXED_VOCI_IDS } from '../utils/fixedVociBackfill';
 import { useOCRSniper } from '../hooks/useOCRSniper';
 import { useIslandSync } from '../hooks/useIslandSync';
 import { useStatsData } from '../hooks/useStatsData';
@@ -13,7 +15,7 @@ import TableComponent from './TableComponent';
 import WorkerDetailLayout from './WorkerDetailLayout';
 import { WorkerDetailProvider } from './WorkerDetail/WorkerDetailContext';
 import { printPayslipTables } from '../utils/printTables';
-import { Worker, AnnoDati, getColumnsByProfile, MONTH_NAMES } from '../types';
+import { Worker, AnnoDati, getColumnsByProfile, MONTH_NAMES, resolveIncludePaidLeave } from '../types';
 import { SYSTEM_PROFILES, SYSTEM_PROFILE_KEYS, getCustomColorIndex } from '../config/profiles';
 import { parseMonthFromFilename } from '../constants';
 import { useIsReadOnly } from '../lib/readonly';
@@ -29,10 +31,13 @@ interface WorkerDetailPageProps {
   onUpdateData: (data: AnnoDati[]) => void;
   onUpdateStatus: (status: string) => void;
   onUpdateWorkerFields: (fields: Partial<Worker>) => void;
+  /** Salvataggio per-ID a livello app (sopravvive alla navigazione): usato dal backfill
+   *  così l'estrazione persiste anche se l'utente lascia la pagina del lavoratore. */
+  onPersistWorkerById?: (id: string, fields: Partial<Worker>) => void;
   onBack: () => void;
 }
 
-const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateData, onUpdateStatus, onUpdateWorkerFields, onBack }) => {
+const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateData, onUpdateStatus, onUpdateWorkerFields, onPersistWorkerById, onBack }) => {
   const [monthlyInputs, setMonthlyInputs] = useState<AnnoDati[]>(Array.isArray(worker?.anni) ? worker.anni : []);
 
   // DYNAMIC SYNC: Lo stato locale comanda, il Parent riceve aggiornamenti in automatico
@@ -199,6 +204,101 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
   const isReadOnly = useIsReadOnly();
   const [verifyStates, setVerifyStates] = useState<Record<string, VerifyState>>({});
 
+  // --- BACKFILL VOCI FISSE (Quadro B) dalle buste già in archivio ---
+  // Solo profili con voci fisse definite (RFI/Trenitalia). Merge-safe: scrive SOLO i 3B...
+  const { progress: backfillProgress, run: runFixedBackfill, runFromFiles: runFixedBackfillFromFiles, stop: stopFixedBackfill } = useFixedVociBackfill();
+  const fixedUploadRef = useRef<HTMLInputElement>(null);
+  const hasFixedProfile = ['RFI', 'TRENITALIA'].includes(worker.profilo);
+  // Anni che hanno effettivamente buste in archivio (per lo scope annuale del backfill).
+  const archiveYears = useMemo(
+    () => [...new Set(archivedPicks.map(p => p.year))].sort((a, b) => a - b),
+    [archivedPicks]
+  );
+  const [backfillYear, setBackfillYear] = useState<number>(currentYear);
+  // Tieni l'anno selezionato DENTRO gli anni realmente in archivio. Col default = anno
+  // corrente (spesso non archiviato) o con un solo anno disponibile, il <select> mostrerebbe
+  // il primo anno ma lo stato resterebbe sull'anno corrente (onChange mai scattato) → il
+  // backfill filtrerebbe l'anno sbagliato e risponderebbe "nessuna busta". Allinea al più
+  // recente anno archiviato appena l'archivio è noto / cambia.
+  useEffect(() => {
+    if (archiveYears.length && !archiveYears.includes(backfillYear)) {
+      setBackfillYear(archiveYears[archiveYears.length - 1]);
+    }
+  }, [archiveYears]);
+  // Modale in-app per il backfill (al posto di window.confirm/alert del browser).
+  const [backfillModal, setBackfillModal] = useState<
+    | { kind: 'confirm'; year: number; picks: { storage_path: string; year: number; monthIdx: number }[] }
+    | { kind: 'info'; text: string }
+    | null
+  >(null);
+
+  const handleBackfillFixed = () => {
+    if (isReadOnly || backfillProgress.running || archivedPicks.length === 0) return;
+    // Scope ANNUALE + salta le buste i cui mesi hanno GIÀ voci fisse (ripristinabile).
+    const needs = archivedPicks.filter(p => {
+      if (p.year !== backfillYear) return false;
+      const row = monthlyInputs.find(r => Number(r.year) === p.year && Number(r.monthIndex) === p.monthIdx);
+      if (!row) return false; // nessuna riga dati per quel mese: niente in cui fare merge
+      return !FIXED_VOCI_IDS.some(id => Number((row as any)[id]) > 0);
+    });
+    if (needs.length === 0) {
+      setBackfillModal({ kind: 'info', text: `Anno ${backfillYear}: voci fisse già presenti (o nessuna busta in archivio per quest'anno).` });
+      return;
+    }
+    setBackfillModal({
+      kind: 'confirm',
+      year: backfillYear,
+      picks: needs.map(p => ({ storage_path: p.storage_path, year: p.year, monthIdx: p.monthIdx })),
+    });
+  };
+
+  const confirmBackfillFixed = async () => {
+    if (backfillModal?.kind !== 'confirm') return;
+    const picks = backfillModal.picks;
+    const workerId = worker.id;
+    setBackfillModal(null);
+    await runFixedBackfill({
+      picks,
+      anni: monthlyInputs,
+      company: worker.profilo,
+      getSignedUrls,
+      onResult: (anni) => {
+        setMonthlyInputs(anni);                          // griglia live (no-op se la pagina è smontata)
+        onPersistWorkerById?.(workerId, { anni });       // salvataggio app-level: sopravvive alla navigazione
+      },
+    });
+  };
+
+  // Carica buste da DISCO ed estrae SOLO le voci fisse (per i lavoratori senza archivio).
+  // Stessa estrazione leggera + merge-safe del backfill, ma la sorgente è un File, non l'archivio.
+  // Bonus: archivia anche la busta (dedup sui mesi già presenti, l'insert metadati non è idempotente).
+  const handleUploadFixedVoci = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files ? Array.from(e.target.files) : [];
+    e.target.value = ''; // consenti di riselezionare gli stessi file
+    if (isReadOnly || backfillProgress.running || files.length === 0) return;
+    const workerId = worker.id;
+    const res = await runFixedBackfillFromFiles({
+      files,
+      anni: monthlyInputs,
+      company: worker.profilo,
+      onResult: (anni) => {
+        setMonthlyInputs(anni);
+        onPersistWorkerById?.(workerId, { anni });
+      },
+      onArchive: async (file, year, monthIdx) => {
+        if (archiveEntries[`${year}-${monthIdx}`]) return; // già in archivio: niente doppioni
+        await addPayslip(workerId, file, year, MONTH_NAMES[monthIdx], monthIdx, {});
+        setArchiveCount(n => n + 1);
+      },
+    });
+    setBackfillModal({
+      kind: 'info',
+      text: `Voci fisse da file: ${res.updated} mesi aggiornati`
+        + (res.skipped ? `, ${res.skipped} saltati (nessuna riga dati per quel mese o periodo non riconosciuto)` : '')
+        + (res.errors ? `, ${res.errors} non letti` : '') + '.',
+    });
+  };
+
   const {
     isAnalyzing,
     isBatchProcessing,
@@ -329,11 +429,21 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
     return saved !== null ? JSON.parse(saved) : true;
   });
 
+  // Strategia B sindacale: assenze retribuite nel divisore. Default OFF / Strategia A per tutti
+  // (il ricorso usa le "effettive giornate lavorative"); ON come opt-in per-lavoratore via
+  // toggle "Permessi" — riservato ai distaccati sindacali a ~0 presenze (es. i 2 Cataneo).
+  const [includePaidLeave, setIncludePaidLeave] = useState(() => {
+    if (worker.includePaidLeave !== undefined) return worker.includePaidLeave;
+    const saved = localStorage.getItem(`paidLeave_${worker.id}`);
+    return saved !== null ? JSON.parse(saved) : resolveIncludePaidLeave(worker);
+  });
+
   React.useEffect(() => {
     localStorage.setItem(`exFest_${worker.id}`, JSON.stringify(includeExFest));
     localStorage.setItem(`tickets_${worker.id}`, JSON.stringify(includeTickets));
-    onUpdateWorkerFields({ includeExFest, includeTickets });
-  }, [includeExFest, includeTickets]);
+    localStorage.setItem(`paidLeave_${worker.id}`, JSON.stringify(includePaidLeave));
+    onUpdateWorkerFields({ includeExFest, includeTickets, includePaidLeave });
+  }, [includeExFest, includeTickets, includePaidLeave]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -438,7 +548,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
   };
 
   const handlePrintTables = () => printPayslipTables({
-    worker, monthlyInputs, includeExFest, includeTickets, startClaimYear,
+    worker, monthlyInputs, includeExFest, includeTickets, startClaimYear, includePaidLeave,
   });
 
   // Carica una busta scelta dal tab Archivio dentro il visore laterale (SplitView)
@@ -652,7 +762,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
   };
 
   const { statsData, tickerItems } = useStatsData({
-    monthlyInputs, worker, startClaimYear, includeExFest, includeTickets,
+    monthlyInputs, worker, startClaimYear, includeExFest, includeTickets, includePaidLeave,
   });
 
   const { handleContainerScroll } = useIslandSync({
@@ -706,6 +816,8 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
       onToggleExFest: () => setIncludeExFest(!includeExFest),
       includeTickets,
       onToggleTickets: () => setIncludeTickets(!includeTickets),
+      includePaidLeave,
+      onTogglePaidLeave: () => setIncludePaidLeave(v => !v),
       isBatchProcessing,
       isAnalyzing,
       scanRef,
@@ -787,6 +899,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
             eliorType={worker.eliorType}
             onCellFocus={handleCellFocus}
             years={dynamicYears}
+            includePaidLeave={includePaidLeave}
             archiveEntries={archiveEntries}
             verifyStates={verifyStates}
             onVerifyRequest={handleVerifyRequest}
@@ -805,6 +918,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
             includeTickets={includeTickets}
             startClaimYear={startClaimYear}
             years={dynamicYears}
+            includePaidLeave={includePaidLeave}
           />
         </div>
       )}
@@ -831,16 +945,140 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
         </div>
       )}
       {activeTab === 'archive' && (
-        <PayslipArchiveTab
-          workerId={String(worker.id)}
-          workerProfilo={worker.profilo}
-          workerEliorType={worker.eliorType}
-          workerName={`${worker.cognome} ${worker.nome}`}
-          onCountChange={setArchiveCount}
-          onOpenInViewer={handleOpenArchivedInSplit}
-        />
+        <div className="h-full flex flex-col overflow-hidden">
+          {hasFixedProfile && !isReadOnly && (
+            <div className="shrink-0 flex items-center gap-3 px-4 py-2 border-b border-slate-200 dark:border-slate-700 bg-amber-50/60 dark:bg-amber-900/10">
+              <span className="text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Voci fisse · anno</span>
+              <select
+                value={backfillYear}
+                onChange={e => setBackfillYear(Number(e.target.value))}
+                disabled={backfillProgress.running}
+                className="px-2 py-1 rounded-lg text-xs font-bold bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 disabled:opacity-50"
+              >
+                {(archiveYears.length ? archiveYears : [backfillYear]).map(y => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </select>
+              <button
+                onClick={handleBackfillFixed}
+                disabled={backfillProgress.running || archivedPicks.length === 0}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${
+                  backfillProgress.running || archivedPicks.length === 0
+                    ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 border-slate-200 dark:border-slate-700 cursor-not-allowed'
+                    : 'bg-amber-500 text-white border-amber-400 hover:bg-amber-600 shadow-sm active:scale-95'
+                }`}
+                title="Rilegge le buste archiviate dell'anno selezionato ed estrae SOLO le voci fisse (3B..). Non modifica gli altri dati."
+              >
+                {backfillProgress.running
+                  ? `Estrazione… ${backfillProgress.done}/${backfillProgress.total}`
+                  : `Estrai voci fisse — ${backfillYear}`}
+              </button>
+              <span className="text-slate-300 dark:text-slate-600">|</span>
+              <button
+                onClick={() => fixedUploadRef.current?.click()}
+                disabled={backfillProgress.running}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${
+                  backfillProgress.running
+                    ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 border-slate-200 dark:border-slate-700 cursor-not-allowed'
+                    : 'bg-white dark:bg-slate-800 text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-700 hover:bg-amber-50 dark:hover:bg-amber-900/20 active:scale-95'
+                }`}
+                title="Per le buste NON in archivio: carica i file dal disco ed estrai SOLO le voci fisse (3B..). Non tocca variabili/giorni/TFR; archivia anche le buste."
+              >
+                Carica buste → solo voci fisse
+              </button>
+              <input
+                ref={fixedUploadRef}
+                type="file"
+                accept="application/pdf,image/*"
+                multiple
+                className="hidden"
+                onChange={handleUploadFixedVoci}
+              />
+              {!backfillProgress.running && backfillProgress.total > 0 && (
+                <span className="text-xs text-slate-600 dark:text-slate-300">
+                  Fatto: {backfillProgress.updated} aggiornate
+                  {backfillProgress.errors > 0 ? `, ${backfillProgress.errors} non lette` : ''}.
+                </span>
+              )}
+              {backfillProgress.running && (
+                <>
+                  <button
+                    onClick={stopFixedBackfill}
+                    className="px-3 py-1.5 rounded-lg text-xs font-bold bg-rose-500 text-white border border-rose-400 hover:bg-rose-600 active:scale-95 transition-all"
+                    title="Ferma l'estrazione (i mesi già fatti restano salvati)"
+                  >
+                    Ferma
+                  </button>
+                  <span className="text-xs text-amber-700 dark:text-amber-300">Non chiudere la pagina…</span>
+                </>
+              )}
+            </div>
+          )}
+          <div className="flex-1 overflow-hidden">
+            <PayslipArchiveTab
+              workerId={String(worker.id)}
+              workerProfilo={worker.profilo}
+              workerEliorType={worker.eliorType}
+              workerName={`${worker.cognome} ${worker.nome}`}
+              onCountChange={setArchiveCount}
+              onOpenInViewer={handleOpenArchivedInSplit}
+            />
+          </div>
+        </div>
       )}
     </WorkerDetailLayout>
+
+    {/* Modale in-app per il backfill voci fisse (sostituisce window.confirm/alert) */}
+    {backfillModal && (
+      <div
+        className="fixed inset-0 z-[1000] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4"
+        onClick={() => setBackfillModal(null)}
+      >
+        <div
+          className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-md p-6"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {backfillModal.kind === 'confirm' ? (
+            <>
+              <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-2">
+                Estrai voci fisse &mdash; anno {backfillModal.year}
+              </h3>
+              <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed mb-6">
+                Verranno lette <b>{backfillModal.picks.length} buste</b> dall'archivio (circa {backfillModal.picks.length} letture AI, una alla volta).
+                Puoi fermarti quando vuoi: i mesi già fatti restano salvati.
+              </p>
+              <div className="flex justify-end gap-2">
+                <button
+                  onClick={() => setBackfillModal(null)}
+                  className="px-4 py-2 rounded-lg text-sm font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                >
+                  Annulla
+                </button>
+                <button
+                  onClick={confirmBackfillFixed}
+                  className="px-5 py-2 rounded-lg text-sm font-bold bg-amber-500 text-white border border-amber-400 hover:bg-amber-600 shadow-sm active:scale-95 transition-all"
+                >
+                  Estrai
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-2">Voci fisse</h3>
+              <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed mb-6">{backfillModal.text}</p>
+              <div className="flex justify-end">
+                <button
+                  onClick={() => setBackfillModal(null)}
+                  className="px-5 py-2 rounded-lg text-sm font-bold bg-slate-700 text-white hover:bg-slate-600 active:scale-95 transition-all"
+                >
+                  Ok
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    )}
     </WorkerDetailProvider>
   );
 };

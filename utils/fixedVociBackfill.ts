@@ -1,0 +1,84 @@
+import { AnnoDati } from '../types';
+
+// Codici delle VOCI FISSE continuative (Quadro B) per RFI/Trenitalia.
+// Unica fonte di verità per il backfill: SOLO questi campi possono essere scritti.
+export const FIXED_VOCI_IDS = [
+  '3B01', '3B03', '3B05', '3B10', '3B15', '3B20', '3B30', '3B35', '3B70', '3B71',
+] as const;
+
+/**
+ * Esito del merge della risposta AI sull'array `anni` di un lavoratore.
+ * `updated` è true solo se almeno un campo fisso è effettivamente cambiato.
+ */
+export interface FixedMergeResult {
+  anni: AnnoDati[];
+  updated: boolean;
+}
+
+/**
+ * MERGE-SAFE: scrive ESCLUSIVAMENTE i codici 3B.. (whitelist FIXED_VOCI_IDS) sulla riga
+ * (year, monthIndex) GIÀ esistente. Garanzie:
+ *  - non crea righe nuove (se il mese non esiste, no-op);
+ *  - non tocca NESSUN altro campo (giorni, indennità variabili, note, ticket…) →
+ *    impossibile clobberare i dati corretti a mano;
+ *  - scrive solo valori finiti e ≠ 0 (uno 0 resta implicito, non sporca la riga);
+ *  - idempotente: rilanciarlo non cambia nulla se i valori coincidono.
+ */
+export function mergeFixedVociIntoAnni(
+  anni: AnnoDati[],
+  year: number,
+  monthIndex: number,
+  fixedCodes: Record<string, unknown> | null | undefined
+): FixedMergeResult {
+  if (!Array.isArray(anni)) return { anni: [], updated: false };
+  if (!fixedCodes || typeof fixedCodes !== 'object') return { anni, updated: false };
+
+  const idx = anni.findIndex(
+    r => r && Number(r.year) === year && Number(r.monthIndex) === monthIndex
+  );
+  if (idx < 0) return { anni, updated: false }; // nessuna riga per quel mese: non creiamo nulla
+
+  const row: AnnoDati = { ...anni[idx] };
+  let changed = false;
+  for (const id of FIXED_VOCI_IDS) {
+    const v = Number((fixedCodes as Record<string, unknown>)[id]);
+    if (isFinite(v) && v !== 0 && row[id] !== v) {
+      row[id] = v;
+      changed = true;
+    }
+  }
+  if (!changed) return { anni, updated: false };
+
+  const next = anni.slice();
+  next[idx] = row;
+  return { anni: next, updated: true };
+}
+
+/**
+ * Deriva (anno, indice mese 0-11) per una busta caricata da FILE (non dall'archivio, dove il
+ * periodo è nei metadati). Priorità: periodo letto dall'AI dalla testata (`aiMonth` 1-12,
+ * `aiYear` 4 cifre); fallback sul nome del file (es. "Gennaio 2013.PDF", "01_GENNAIO_..._2019").
+ * Restituisce null se non identificabile → il chiamante salta la busta senza indovinare il mese.
+ */
+export function deriveFixedVociPeriod(
+  aiMonth: unknown,
+  aiYear: unknown,
+  fileName: string
+): { year: number; monthIdx: number } | null {
+  const name = typeof fileName === 'string' ? fileName : '';
+  let year = parseInt(String(aiYear ?? '').replace(/[^\d]/g, ''), 10);
+  if (!(year >= 2000 && year <= 2100)) {
+    const m = name.match(/(20\d{2})/);
+    year = m ? parseInt(m[1], 10) : NaN;
+  }
+  let monthIdx = -1;
+  const mNum = parseInt(String(aiMonth ?? '').replace(/[^\d]/g, ''), 10);
+  if (mNum >= 1 && mNum <= 12) monthIdx = mNum - 1;
+  if (monthIdx < 0) {
+    const abbr = ['gen', 'feb', 'mar', 'apr', 'mag', 'giu', 'lug', 'ago', 'set', 'ott', 'nov', 'dic'];
+    const fn = name.toLowerCase();
+    monthIdx = abbr.findIndex(a => fn.includes(a));
+  }
+  if (!(year >= 2000 && year <= 2100) || monthIdx < 0 || monthIdx > 11) return null;
+  return { year, monthIdx };
+}

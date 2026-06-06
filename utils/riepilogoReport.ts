@@ -1,5 +1,5 @@
 import autoTable from 'jspdf-autotable';
-import { Worker, AnnoDati } from '../types';
+import { Worker, AnnoDati, resolveIncludePaidLeave } from '../types';
 import { computeHolidayIndemnity } from './calculationEngine';
 
 // Dati del "Riepilogo / Prospetto Ufficiale di Ricalcolo" estratti dal motore
@@ -52,6 +52,7 @@ export function computeRiepilogoData(
     includeExFest,
     includeTickets,
     startClaimYear,
+    includePaidLeave: resolveIncludePaidLeave(worker),
     years: allYears,
   })
     .filter(r => !r.isReferenceYear)

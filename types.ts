@@ -71,6 +71,11 @@ export interface Worker {
   includeExFest?: boolean;
   includeTickets?: boolean;
   reportShowPercepito?: boolean;
+  /**
+   * Strategia B sindacale: somma le assenze retribuite (distacchi/permessi) ai
+   * giorni lavorati nel divisore della media. Default false (Strategia A).
+   */
+  includePaidLeave?: boolean;
 
   created_at?: string;
 }
@@ -110,6 +115,30 @@ export const INDENNITA_RFI: ColumnDef[] = [
   { id: '0933', label: 'Str. Fest/Not Rep.', subLabel: '(0933)', width: 'min-w-[120px]', type: 'currency' },
   { id: '0995', label: 'Str. Diurno Disp.', subLabel: '(0995)', width: 'min-w-[120px]', type: 'currency' },
   { id: '0996', label: 'Str. Fest/Not Disp.', subLabel: '(0996)', width: 'min-w-[120px]', type: 'currency' },
+  { id: '3B70', label: 'Sal. Produttività', subLabel: '(3B70)', width: 'min-w-[120px]', type: 'currency' },
+  { id: '3B71', label: 'Prod. Incrementale', subLabel: '(3B71)', width: 'min-w-[120px]', type: 'currency' },
+];
+
+// Colonne RFI — VOCI FISSE CONTINUATIVE ("Quadro B" del conteggio dell'avvocato)
+// Percepite SIA in giornate di lavoro CHE di ferie. Servono ESCLUSIVAMENTE come denominatore
+// delle percentuali di incidenza: %variabili = Variabili / (Fisse + Variabili).
+// NON entrano nel credito ferie (che resta calcolato sulle sole voci variabili).
+// Censite su buste RFI reali: 3B01/3B03/3B05/3B10/3B20/3B30/3B35 sempre presenti; 3B15
+// (Ind. Funzione) solo per i QUADRI (costante → fissa). NB: 3B50 "Ind. Utilizzazione
+// Professionale" è ESCLUSA: varia mese su mese ed è FUORI dalla "Retribuzione mensile"
+// della busta → è una voce variabile/accessoria, NON fissa (verificato su D'Errico 2007).
+// I 3B70/3B71 (Salario Produttività)
+// sono qui per coerenza con la collocazione che l'avvocato dà loro nel Quadro B: contano nel
+// denominatore ma restano esclusi dal credito (vedi EXCLUDED_INDEMNITY_COLS).
+export const INDENNITA_RFI_FISSE: ColumnDef[] = [
+  { id: '3B01', label: 'Minimo Contr.',    subLabel: '(3B01)', width: 'min-w-[120px]', type: 'currency' },
+  { id: '3B03', label: 'Superminimo',      subLabel: '(3B03)', width: 'min-w-[120px]', type: 'currency' },
+  { id: '3B05', label: 'ERI',              subLabel: '(3B05)', width: 'min-w-[100px]', type: 'currency' },
+  { id: '3B10', label: 'Salario Prof.',    subLabel: '(3B10)', width: 'min-w-[120px]', type: 'currency' },
+  { id: '3B15', label: 'Ind. Funzione',    subLabel: '(3B15)', width: 'min-w-[120px]', type: 'currency' },
+  { id: '3B20', label: 'APA',              subLabel: '(3B20)', width: 'min-w-[100px]', type: 'currency' },
+  { id: '3B30', label: 'EDR 8.11.95',      subLabel: '(3B30)', width: 'min-w-[120px]', type: 'currency' },
+  { id: '3B35', label: 'EDR acc. 11.9.98', subLabel: '(3B35)', width: 'min-w-[130px]', type: 'currency' },
   { id: '3B70', label: 'Sal. Produttività', subLabel: '(3B70)', width: 'min-w-[120px]', type: 'currency' },
   { id: '3B71', label: 'Prod. Incrementale', subLabel: '(3B71)', width: 'min-w-[120px]', type: 'currency' },
 ];
@@ -280,6 +309,43 @@ export const getColumnsByProfile = (profilo: ProfiloAzienda, eliorType?: 'viaggi
   }
 
   return result;
+};
+
+/**
+ * Voci FISSE continuative ("Quadro B") per profilo, usate SOLO come denominatore
+ * delle percentuali di incidenza. Restituisce [] per i profili che non le hanno
+ * ancora definite (oggi: solo RFI/TRENITALIA). NON include la colonna mese né i totali:
+ * è una lista pura di voci, da sommare per ottenere la base fissa mensile.
+ */
+/**
+ * Profili per cui la Strategia B (assenze retribuite nel divisore) è attiva DI DEFAULT.
+ * VUOTO di proposito: il ricorso RFI usa come divisore le "effettive giornate lavorative"
+ * (= Strategia A) per TUTTI. La Strategia B resta un opt-in per-lavoratore (toggle "Permessi"),
+ * riservata ai distaccati sindacali a ~0 presenze (es. i 2 Cataneo) dove A si gonfia/azzera.
+ */
+export const PROFILES_DEFAULT_PAID_LEAVE: string[] = [];
+
+/**
+ * Valore effettivo di includePaidLeave (Strategia B): preferenza esplicita del lavoratore
+ * se impostata, altrimenti il default per profilo. Default = OFF / Strategia A per tutti
+ * (coerente col ricorso "effettive giornate lavorative"); B è opt-in per-lavoratore.
+ */
+export function resolveIncludePaidLeave(
+  worker?: { profilo?: ProfiloAzienda; includePaidLeave?: boolean } | null
+): boolean {
+  if (!worker) return false;
+  if (typeof worker.includePaidLeave === 'boolean') return worker.includePaidLeave;
+  return PROFILES_DEFAULT_PAID_LEAVE.includes(worker.profilo as string);
+}
+
+export const getFixedColumnsByProfile = (profilo: ProfiloAzienda): ColumnDef[] => {
+  switch (profilo) {
+    case 'RFI':
+    case 'TRENITALIA':
+      return INDENNITA_RFI_FISSE;
+    default:
+      return [];
+  }
 };
 
 import { parseFloatSafe } from './utils/formatters';

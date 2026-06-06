@@ -25,6 +25,22 @@ const WorkerDetailHeader: React.FC = () => {
   const actionsMenuRef = useRef<HTMLDivElement>(null);
   const isReadOnly = useIsReadOnly();
 
+  // Data di assunzione: campo MANUALE (la si legge dalla busta e si scrive una volta).
+  // Persistita per-lavoratore in localStorage, come gli altri flag di scheda. Niente AI:
+  // è un valore unico per lavoratore, leggerlo da ogni busta rallenterebbe inutilmente la scansione.
+  const [dataAssunzione, setDataAssunzione] = useState('');
+  const [editingAssunzione, setEditingAssunzione] = useState(false);
+  useEffect(() => {
+    try { setDataAssunzione(localStorage.getItem(`assunzione_${worker.id}`) || ''); }
+    catch { setDataAssunzione(''); }
+    setEditingAssunzione(false);
+  }, [worker.id]);
+  const saveAssunzione = (v: string) => {
+    const val = v.trim();
+    setDataAssunzione(val);
+    try { localStorage.setItem(`assunzione_${worker.id}`, val); } catch { /* storage non disponibile */ }
+  };
+
   useEffect(() => {
     if (!isActionsOpen) return;
     const handler = (e: MouseEvent) => {
@@ -117,6 +133,36 @@ const WorkerDetailHeader: React.FC = () => {
                   <Briefcase className="w-4 h-4" />
                   <span>{worker.ruolo}</span>
                 </div>
+                <div className="flex items-center gap-2 text-xs font-bold text-slate-400 dark:text-slate-400 mt-1.5">
+                  <CalendarPlus className="w-3.5 h-3.5 shrink-0" strokeWidth={2.5} />
+                  {editingAssunzione && !isReadOnly ? (
+                    <input
+                      autoFocus
+                      type="text"
+                      defaultValue={dataAssunzione}
+                      placeholder="gg/mm/aaaa"
+                      onBlur={(e) => { saveAssunzione(e.target.value); setEditingAssunzione(false); }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') { saveAssunzione((e.target as HTMLInputElement).value); setEditingAssunzione(false); }
+                        if (e.key === 'Escape') setEditingAssunzione(false);
+                      }}
+                      className="w-28 px-2 py-0.5 rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-blue-400"
+                    />
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => { if (!isReadOnly) setEditingAssunzione(true); }}
+                      disabled={isReadOnly}
+                      className={`normal-case tracking-normal ${isReadOnly ? 'cursor-default' : 'hover:text-slate-600 dark:hover:text-slate-200 hover:underline decoration-dotted underline-offset-2'}`}
+                      title={isReadOnly ? 'Data di assunzione' : 'Clicca per inserire/correggere la data di assunzione (dalla busta)'}
+                    >
+                      Assunzione:{' '}
+                      {dataAssunzione
+                        ? <span className="text-slate-600 dark:text-slate-200">{dataAssunzione}</span>
+                        : <span className="italic font-semibold text-slate-400">{isReadOnly ? '—' : 'aggiungi'}</span>}
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -164,8 +210,7 @@ const WorkerDetailHeader: React.FC = () => {
               </AnimatePresence>
             </div>
 
-            {/* TASTO DOWNLOAD — nascosto in modalita' sola lettura */}
-            {!isReadOnly && (
+            {/* TASTO DOWNLOAD (Conteggi PDF) — visibile anche in sola lettura (scarica, non scrive) */}
             <button
               onClick={onPrintTables}
               className="group relative px-6 py-2.5 rounded-xl font-bold text-white shadow-lg hover:shadow-xl hover:-translate-y-0.5 active:scale-95 transition-all duration-300 border border-white/10 overflow-hidden flex items-center gap-2"
@@ -175,10 +220,8 @@ const WorkerDetailHeader: React.FC = () => {
               <Download className="w-4 h-4 transition-transform duration-300 group-hover:translate-y-1" strokeWidth={2.5} />
               <span className="hidden xl:inline">Download</span>
             </button>
-            )}
 
-            {/* TASTO VAI AL REPORT — nascosto in modalita' sola lettura */}
-            {!isReadOnly && (
+            {/* TASTO VAI AL REPORT — visibile anche in sola lettura (sola navigazione) */}
             <button
               onClick={onShowReport}
               className="group relative px-6 py-2.5 rounded-xl font-bold text-white shadow-lg hover:shadow-xl hover:-translate-y-0.5 active:scale-95 transition-all duration-300 border border-white/10 overflow-hidden flex items-center gap-2"
@@ -188,7 +231,6 @@ const WorkerDetailHeader: React.FC = () => {
               <FileSpreadsheet className="w-4 h-4 transition-transform duration-500 group-hover:rotate-12" strokeWidth={2.5} />
               <span className="hidden xl:inline">Vai al Report</span>
             </button>
-            )}
 
             {/* TASTO ARCHIVIO PDF */}
             <button

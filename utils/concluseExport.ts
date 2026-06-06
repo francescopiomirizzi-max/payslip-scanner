@@ -1,7 +1,7 @@
 import jsPDF from 'jspdf';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
-import { Worker } from '../types';
+import { Worker, resolveIncludePaidLeave } from '../types';
 import { SYSTEM_PROFILES } from '../config/profiles';
 import { printPayslipTables } from './printTables';
 import { computeRiepilogoData, renderRiepilogoPdf } from './riepilogoReport';
@@ -19,6 +19,7 @@ interface ResolvedOptions {
   includeTickets: boolean;
   showPercepito: boolean;
   startClaimYear: number;
+  includePaidLeave: boolean;
 }
 
 function readBool(key: string, fallback: boolean): boolean {
@@ -37,6 +38,7 @@ function resolveOptions(worker: Worker): ResolvedOptions {
   const includeExFest = worker.includeExFest ?? readBool(`report_exfest_${worker.id}`, false);
   const includeTickets = worker.includeTickets ?? readBool(`report_tickets_${worker.id}`, false);
   const showPercepito = (worker as any).reportShowPercepito ?? readBool(`report_percepito_${worker.id}`, false);
+  const includePaidLeave = worker.includePaidLeave ?? readBool(`paidLeave_${worker.id}`, resolveIncludePaidLeave(worker));
 
   let startClaimYear = worker.startClaimYear ?? DEFAULT_START_CLAIM_YEAR;
   if (worker.startClaimYear === undefined) {
@@ -47,7 +49,7 @@ function resolveOptions(worker: Worker): ResolvedOptions {
     }
   }
 
-  return { includeExFest, includeTickets, showPercepito, startClaimYear };
+  return { includeExFest, includeTickets, showPercepito, startClaimYear, includePaidLeave };
 }
 
 function companyFolder(worker: Worker): string {
@@ -91,6 +93,7 @@ export async function exportConcluseZip(
         includeExFest: opts.includeExFest,
         includeTickets: opts.includeTickets,
         startClaimYear: opts.startClaimYear,
+        includePaidLeave: opts.includePaidLeave,
         output: 'blob',
       }) as Blob;
 

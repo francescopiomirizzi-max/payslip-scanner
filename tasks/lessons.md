@@ -3,6 +3,48 @@
 > Pattern e errori da evitare nelle prossime sessioni.
 > Aggiornato dopo ogni correzione utente.
 
+## 2026-06-06 — Variabili a virgola decimale: la mia query SQL li scartava e ho inventato un bug inesistente
+
+### Lezione: normalizzare la virgola prima di sommare i valori di `anni`, e fidarsi del totale che l'utente vede nell'app
+
+**Cosa è successo:** verificando Micaletti 2025 sommavo i codici variabili da `worker_profiles.anni`
+con il filtro `(elem->>k) ~ '^-?[0-9.]+$'`. Ma molti valori sono **stringhe in formato italiano con
+la virgola** (`"390,92"`), inseriti a mano nell'app. Il mio regex (solo punto) li **scartava come 0**.
+Risultato: leggevo 2025 = 3.140 con Aprile/Nov/Dic "vuoti", mentre il totale reale era ~7.958. L'utente
+mi diceva "è 7000" e io insistevo col mio numero, arrivando a diagnosticare un **clobber da snapshot
+vecchio inesistente** e a fargli fare hard refresh + micro-modifiche inutili.
+
+**L'errore doppio:** (1) tecnico — sommare valori jsonb senza normalizzare la virgola (`replace(x,',','.')`)
+su un'app ITALIANA dove l'inserimento manuale usa la virgola; (2) di metodo — ho creduto alla mia query
+grezza più che all'osservazione diretta dell'utente sull'app, e ho costruito una teoria di bug elaborata
+su un dato falso invece di sospettare prima il caso più banale (formato decimale).
+
+**Regola per me:** quando sommo importi da `anni`, usare SEMPRE `replace(elem->>k, ',', '.')::numeric`
+e un filtro `~ '^-?[0-9.]+$'` DOPO il replace. Se l'utente vede nell'app un totale diverso dal mio,
+il sospetto n.1 è la MIA lettura (formato/parsing), non un bug di persistenza: prima di gridare al clobber,
+dump del record grezzo e verifica del formato. Le mie % "proxy" via SQL vanno marcate come tali e
+ricalcolate con la virgola gestita. Vale per tutte le pratiche verificate finora.
+
+## 2026-06-03 — Non accusare di "errore/ambiguità" un testo legale per una mia sovra-lettura
+
+### Lezione: prima di dire che il ricorso "si contraddice", verifica che le due frasi parlino DAVVERO della stessa cosa
+
+**Cosa è successo:** ho segnalato come "ambiguità grave" del ricorso due frasi sul metodo della
+media: Conclusioni = *"media ultimi 12 mesi precedenti la fruizione"*; descrizione conteggio =
+*"per ciascun anno lavorativo… media × ferie"*. Ho letto la seconda come "media dello STESSO anno"
+e costruito perfino un documento-quesito per l'avvocato.
+
+**L'errore:** sovra-interpretazione. La frase "per ciascun anno lavorativo" descrive solo la
+**meccanica** (per ogni anno si calcola una media e la si moltiplica per le ferie); NON dice quale
+periodo usare. Il periodo lo fissa **già** la frase delle Conclusioni ("12 mesi precedenti" =
+anno precedente = Metodo A). Lette insieme sono coerenti. Nessuna contraddizione, nessun errore
+dell'avvocato — che peraltro aveva sempre detto "Metodo A".
+
+**Regola per me:** quando due passaggi sembrano confliggere, chiediti se uno fissa il *cosa/quale*
+e l'altro descrive solo il *come*. Non trasformare una mia incertezza interpretativa in un "errore"
+della controparte/avvocato, e non far partire artefatti (documenti, quesiti) prima di aver
+escluso la lettura più semplice e coerente. Vale doppio sui testi legali firmati dal cliente.
+
 ## 2026-05-21 — scan-payslip: lo swap Presenze/Riposi NON si risolve con il prompt
 
 ### Lezione: per un errore OCR sistematico, correggi nel CODICE con un'invariante — non con l'ennesima riscrittura del prompt
@@ -535,3 +577,45 @@ di consultazione: strumenti di workflow interno (export verso il mio Desktop, im
 ecc.) NON devono comparirle. Cfr. memoria `auth-readonly-viewer` (lì è lato dati/RLS;
 qui è lato UI — vale lo stesso principio). Verificare SEMPRE "questa cosa la deve vedere
 il sindacalista?" prima di considerare finita una feature di dashboard.
+
+---
+
+## 2026-06-04 — In verifica pratica, controllare che l'anno di riferimento (N-1) sia completo
+
+**Contesto:** verificando Borriello ho notato `start_claim_year = 2020` ma il 2019 (anno
+di riferimento per il 2020) aveva una sola busta, 0 giorni lavorati e 0 variabili: il
+calcolo feriale del primo anno non aveva una media storica N-1 da cui attingere. L'utente
+ha corretto spostando lo start al 2021 (riferimento = 2020, anno pieno) e mi ha chiesto di
+segnalare i casi analoghi in futuro.
+
+**Lezione:** il ricalcolo feriale usa SEMPRE la media dell'anno precedente. Quindi in ogni
+verifica di pratica devo controllare che l'anno `start_claim_year - 1` abbia ~12 mesi reali
+(giorni>0 e variabili>0). Se è rado/vuoto (tipico di assunzioni a fine anno) → segnalarlo
+subito: lo start year va probabilmente spostato avanti al primo anno con un riferimento
+completo. Aggiunto ai controlli standard insieme a: backfill fisse completo, 0 duplicati
+archivio, % coerente, anni a variabili basse. Cfr. memoria `feedback-anno-riferimento-completo`.
+
+## 2026-06-04 — Rispondere SEMPRE in italiano
+
+**Contesto:** l'utente mi ha fatto notare che a volte scivolo in inglese.
+
+**Lezione:** ogni testo rivolto all'utente va in italiano, senza eccezioni (analisi,
+sintesi, sezioni tecniche, riepiloghi). Codice/commenti del repo già in italiano: mantenerli.
+Cfr. memoria `feedback-rispondere-sempre-italiano`.
+
+## 2026-06-05 — Dopo ogni verifica pratica, aggiornare la checklist sul Desktop
+
+**Contesto:** ho verificato Di Ponte Armando sul DB ma ho riportato l'esito solo a parole,
+senza aggiornare `~/Desktop/Checklist_pratiche_RFI.pdf`. L'utente mi ha detto che la checklist
+va aggiornata **ogni volta** che controlliamo una pratica.
+
+**Lezione:** la verifica di una pratica non è "finita" finché non ho aggiornato il tracciamento
+che l'utente usa per coordinarsi. È un passo della procedura, non un extra opzionale: marcare la
+riga del lavoratore (① backfill verificato sul DB; ③ documenti generati) e rigenerare il PDF.
+
+**Root cause della fragilità (risolta):** la sorgente HTML stava in `/tmp` (effimera) → tra una
+sessione e l'altra spariva e il PDF non era più aggiornabile senza ricostruirlo da zero. Spostata
+in `knowledge/fonti/checklist_pratiche_rfi.html` (durevole, gitignorata per i nomi). Regola
+generale: **un artefatto che va aggiornato ricorrentemente non può avere la sua sorgente in /tmp**;
+metterla in un percorso stabile e documentare il comando di rigenerazione.
+Cfr. memoria `feedback-aggiorna-checklist-desktop`, `knowledge/verifica-pratica.md`.

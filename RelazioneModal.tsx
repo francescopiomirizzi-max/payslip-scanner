@@ -4,9 +4,9 @@ import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, HeadingLevel, AlignmentType, WidthType, BorderStyle, ShadingType } from 'docx';
 import { motion } from 'framer-motion';
-import { YEARS, AnnoDati, getColumnsByProfile } from './types';
+import { YEARS, AnnoDati, getColumnsByProfile, getFixedColumnsByProfile, resolveIncludePaidLeave } from './types';
 import { parseLocalFloat, getProfiloBadgeLabel, formatDay } from './utils/formatters';
-import { EXCLUDED_INDEMNITY_COLS } from './utils/calculationEngine';
+import { EXCLUDED_INDEMNITY_COLS, computeHolidayIndemnity, computePeriodIncidence } from './utils/calculationEngine';
 import { useIsReadOnly } from './lib/readonly';
 
 // --- HELPER DI FORMATTAZIONE SICURA ---
@@ -25,6 +25,20 @@ const generaVociRaggruppate = (worker: any) => {
     const html = cols.map((c: any) => `<li>(${c.id}) ${c.label}</li>`).join('\n                ');
 
     return { testo, html };
+};
+
+// Voci FISSE continuative ("Quadro B") — il denominatore delle percentuali di incidenza.
+// Data-driven: una voce viene elencata SOLO se compare con valore > 0 in almeno un mese,
+// così non si attribuiscono al lavoratore voci che non ha (es. ERI/EDR assenti su alcune
+// pratiche). Mai stampare l'intero set teorico a tappeto.
+const generaVociFisseRaggruppate = (worker: any) => {
+    const cols = getFixedColumnsByProfile(worker?.profilo) || [];
+    const anni = Array.isArray(worker?.anni) ? worker.anni : [];
+    const presenti = cols.filter((c: any) =>
+        anni.some((m: any) => parseLocalFloat(m?.[c.id]) > 0)
+    );
+    const testo = presenti.map((c: any) => `- (${c.id}) ${c.label}`).join('\n');
+    return { testo, presenti };
 };
 
 const generaEsempioDinamico = (worker: any, startClaimYear: number, tettoGiorni: number) => {
@@ -306,11 +320,81 @@ export async function buildRelazioneDocxBlob({
     children.push(para(`A garanzia di inattaccabilità contabile, il sistema ha applicato il "Criterio della Media Storica" (Rif. Cass. 20216/2022). Il valore di una giornata feriale è stato calcolato estraendo la media matematica dell'anno solare precedente.`));
     fromTesto(esempio.testo).forEach((p: Paragraph) => children.push(p));
 
+    // Trattamento delle assenze retribuite — il testo dipende dalla Strategia scelta (toggle
+    // includePaidLeave). Compare solo se il lavoratore ha effettivamente assenze retribuite,
+    // con un esempio personalizzato sull'anno con più assenze (dati reali del lavoratore).
+    const usaAssenzeNelDivisore = resolveIncludePaidLeave(worker);
+    const haAssenzeRetribuite = (worker?.anni || []).some((a: AnnoDati) => parseLocalFloat(a.daysPaidLeave) > 0);
+    if (haAssenzeRetribuite) {
+      const perAnnoGg: Record<number, { w: number; p: number }> = {};
+      (worker?.anni || []).forEach((a: AnnoDati) => {
+        const y = Number(a.year);
+        if (!isFinite(y)) return;
+        if (!perAnnoGg[y]) perAnnoGg[y] = { w: 0, p: 0 };
+        perAnnoGg[y].w += parseLocalFloat(a.daysWorked);
+        perAnnoGg[y].p += parseLocalFloat(a.daysPaidLeave);
+      });
+      const annoEs = Object.keys(perAnnoGg).map(Number)
+        .filter(y => perAnnoGg[y].p > 0)
+        .sort((x, z) => perAnnoGg[z].p - perAnnoGg[x].p)[0];
+      const fmtGg = (n: number) => n.toLocaleString('it-IT', { maximumFractionDigits: 1 });
+
+      if (usaAssenzeNelDivisore) {
+        children.push(para(`Trattamento delle assenze retribuite. Le giornate di assenza retribuita — quali, a titolo esemplificativo, i permessi sindacali retribuiti (art. 23 della L. n. 300/1970), i permessi ex L. n. 104/1992 ed ulteriori permessi retribuiti — sono state computate, ai soli fini del divisore della media giornaliera, alla stregua delle giornate di effettiva prestazione lavorativa. Si tratta infatti di giornate retribuite nelle quali il lavoratore è legittimamente assente per l'esercizio di un diritto riconosciuto dall'ordinamento: la loro esclusione dal divisore determinerebbe una rappresentazione distorta della media delle voci variabili — fino ad azzerarla nei periodi di assenza prevalente — in danno del Ricorrente.`));
+        if (annoEs) {
+          const { w, p } = perAnnoGg[annoEs];
+          children.push(para(`A titolo esemplificativo, nell'anno ${annoEs} il Ricorrente ha prestato servizio per ${fmtGg(w)} giornate ed ha fruito di ${fmtGg(p)} giornate di assenza retribuita. Computando queste ultime, il divisore della media per tale anno è pari a ${fmtGg(w + p)} giornate, in luogo delle sole ${fmtGg(w)} di presenza: si evita così che i periodi di assenza retribuita alterino (o azzerino) la media delle voci variabili posta a base del ricalcolo feriale.`));
+        }
+      } else {
+        children.push(para(`Trattamento delle assenze retribuite. Le giornate di assenza retribuita non sono state computate nel divisore della media giornaliera, il quale riflette esclusivamente le giornate di effettiva prestazione lavorativa. Tale impostazione è coerente con la natura delle voci oggetto di domanda, erogate unicamente a fronte dell'effettiva prestazione resa nelle giornate di lavoro.`));
+        if (annoEs) {
+          const { w, p } = perAnnoGg[annoEs];
+          children.push(para(`A titolo esemplificativo, nell'anno ${annoEs} il divisore della media è costituito dalle sole ${fmtGg(w)} giornate di effettiva prestazione, restando escluse le ${fmtGg(p)} giornate di assenza retribuita.`));
+        }
+      }
+    }
+
     children.push(sezTitle(`4. L'APPLICAZIONE MENSILE (Rif. Allegato "Tabella 3 - Dettaglio Analitico")`));
     children.push(para(`Come documentato analiticamente nella "Tabella 3", il procedimento è stato reiterato per ogni singolo mese in cui il dipendente ha fruito di ferie.`));
     fromTesto(spiegazione.testo).forEach((p: Paragraph) => children.push(p));
 
-    children.push(sezTitle(`5. CONCLUSIONI (Rif. Allegato "Prospetto Ufficiale di Ricalcolo")`));
+    // --- Sezione incidenza % (solo profili con voci fisse definite, es. RFI/Trenitalia) ---
+    const yearResultsRel = computeHolidayIndemnity({
+        data: worker?.anni || [],
+        profilo: worker?.profilo,
+        eliorType: worker?.eliorType,
+        includeExFest, includeTickets, startClaimYear,
+        includePaidLeave: resolveIncludePaidLeave(worker),
+        years: anniAttivi,
+    });
+    // Solo anni con base fissa reale (sumQuadroFisse>0): i non-backfillati (base 0 → 100%
+    // variabili) renderebbero l'esempio assurdo ("a fronte di € 0,00 fissi") e gonfierebbero la media.
+    const periodInc = computePeriodIncidence(yearResultsRel.filter((r: any) => !r.isReferenceYear && r.sumQuadroFisse > 0));
+    if (yearResultsRel.some((r: any) => r.hasIncidence && r.sumQuadroFisse > 0) && periodInc.anni > 0) {
+        const pct = (n: number) => n.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        // Anno esemplificativo: quello a credito CON base fissa e con più voci variabili.
+        const esempioAnno = yearResultsRel
+            .filter((r: any) => r.hasIncidence && !r.isReferenceYear && r.sumQuadroFisse > 0)
+            .sort((a: any, b: any) => b.sumIndennitaTotali - a.sumIndennitaTotali)[0];
+
+        children.push(sezTitle(`5. L'INCIDENZA PERCENTUALE DELLE VOCI VARIABILI (Rif. Allegati "Tabella 4 - Riepilogo Voci Fisse" e "Tabella 5 - Incidenza %")`));
+        children.push(para(`Per rendere evidente il peso economico delle voci escluse durante le ferie, è stata calcolata la loro "incidenza percentuale" sulla retribuzione continuativa. Per ciascun mese si rapportano le voci VARIABILI (percepite solo in giornata di lavoro) al totale delle voci continuative, ossia alla somma tra Voci Fisse e Voci Variabili. La percentuale di ciascun anno è la media delle dodici incidenze mensili.`));
+        children.push(para(`Le voci fisse e continuative considerate come base (quali il minimo contrattuale, il superminimo, il salario professionale, gli scatti di anzianità ed ulteriori elementi retributivi fissi e continuativi) sono riportate, voce per voce e anno per anno, nella "Tabella 4 - Riepilogo Voci Fisse"; le percentuali che ne derivano sono esposte nella "Tabella 5 - Incidenza %". In tal modo ogni valore percentuale è verificabile a partire dai dati di dettaglio.`));
+        const vociFisse = generaVociFisseRaggruppate(worker);
+        if (vociFisse.presenti.length > 0) {
+            children.push(para(`Nel caso di specie, le voci fisse e continuative effettivamente rilevate sui cedolini del lavoratore — poste a denominatore del calcolo di incidenza — sono le seguenti:`));
+            vociFisse.testo.split('\n').map((l: string) => l.trim()).filter(Boolean)
+                .forEach((l: string) => children.push(bullet(l.replace(/^-\s*/, ''))));
+        }
+        if (esempioAnno) {
+            children.push(para(`A titolo esemplificativo, nell'anno ${esempioAnno.year} le voci variabili percepite ammontano a complessivi € ${fmt(esempioAnno.sumIndennitaTotali)}, a fronte di una retribuzione fissa continuativa di € ${fmt(esempioAnno.sumQuadroFisse)}: ne deriva un'incidenza media delle voci variabili pari al ${pct(esempioAnno.pctVariabileMediaAnnua)}% della retribuzione.`));
+        }
+        children.push(para(`Estendendo l'analisi all'intero periodo oggetto di domanda (${anniAttivi[0]} - ${finePeriodo}), l'incidenza media delle voci variabili risulta pari al ${pct(periodInc.pctVariabile)}%: tale quota della retribuzione, di natura ricorrente e continuativa, non è stata corrisposta al lavoratore durante i giorni di ferie, in violazione dei principi richiamati in premessa.`));
+
+        children.push(sezTitle(`6. CONCLUSIONI (Rif. Allegato "Prospetto Ufficiale di Ricalcolo")`));
+    } else {
+        children.push(sezTitle(`5. CONCLUSIONI (Rif. Allegato "Prospetto Ufficiale di Ricalcolo")`));
+    }
     children.push(para(`Le risultanze delle elaborazioni analitiche di cui sopra convergono nel documento conclusivo denominato "Riepilogo Somme Richieste", che certifica senza ombra di dubbio gli importi esatti riportati nello specchietto sottostante.`));
 
     children.push(new Paragraph({ pageBreakBefore: true, alignment: AlignmentType.CENTER, spacing: { before: 240, after: 280, line: 240 }, children: [new TextRun({ text: `RIEPILOGO DEGLI IMPORTI`, bold: true, size: 28 })] }));

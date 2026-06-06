@@ -30,6 +30,8 @@ export interface WorkerDetailContextValue {
   onToggleExFest: () => void;
   includeTickets: boolean;
   onToggleTickets: () => void;
+  includePaidLeave: boolean;
+  onTogglePaidLeave: () => void;
   isBatchProcessing: boolean;
   isAnalyzing: boolean;
   scanRef: React.RefObject<HTMLInputElement>;

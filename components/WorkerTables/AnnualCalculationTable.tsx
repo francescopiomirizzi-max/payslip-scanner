@@ -9,7 +9,7 @@ import {
   formatDay,
   getProfiloBadgeLabel
 } from '../../utils/formatters';
-import { computeHolidayIndemnity } from '../../utils/calculationEngine';
+import { computeHolidayIndemnity, computePeriodIncidence } from '../../utils/calculationEngine';
 import { SYSTEM_PROFILES, getCustomColorIndex } from '../../config/profiles';
 import {
   ChevronRight,
@@ -34,6 +34,7 @@ interface AnnualCalculationTableProps {
   includeTickets?: boolean;
   startClaimYear: number;
   years: number[];  // Range dinamico controllato dal parent
+  includePaidLeave?: boolean; // Strategia B: assenze retribuite nel divisore
 }
 
 const MONTH_COLORS = [
@@ -52,7 +53,8 @@ const AnnualCalculationTable: React.FC<AnnualCalculationTableProps> = ({
   onDataChange,
   includeTickets = true,
   startClaimYear,
-  years
+  years,
+  includePaidLeave = false,
 }) => {
   const [expandedYears, setExpandedYears] = useState<Set<number>>(new Set());
   const [isCopied, setIsCopied] = useState(false);
@@ -132,8 +134,9 @@ const AnnualCalculationTable: React.FC<AnnualCalculationTableProps> = ({
     includeExFest,
     includeTickets,
     startClaimYear,
+    includePaidLeave,
     years,
-  }), [data, profilo, eliorType, includeExFest, includeTickets, startClaimYear, years]);
+  }), [data, profilo, eliorType, includeExFest, includeTickets, startClaimYear, includePaidLeave, years]);
 
   // --- CORREZIONE: ESCLUDERE ANNI RIFERIMENTO DAL TOTALE ---
   const summary = useMemo(() => {
@@ -172,6 +175,19 @@ const AnnualCalculationTable: React.FC<AnnualCalculationTableProps> = ({
     annualRows.some(r => r.sumGiorniLav > 0 || r.sumGiorniFerieReali > 0 || r.sumIndennitaTotali > 0),
     [annualRows]
   );
+
+  // --- INCIDENZA % (specchietto a schermo, come nel PDF) ---
+  // La % media delle voci variabili è decisiva per il ricorso (soglia indicativa 20%).
+  const incidenza = useMemo(() => {
+    const rows = annualRows.filter(r => r.hasIncidence && r.sumQuadroFisse > 0);
+    if (rows.length === 0) return null;
+    const period = computePeriodIncidence(annualRows.filter(r => !r.isReferenceYear));
+    return { rows, period };
+  }, [annualRows]);
+  // Soglia % editabile (default 20%, come esempio): media variabili ≥ soglia = ammissibile.
+  const [sogliaInput, setSogliaInput] = useState('20');
+  const SOGLIA_VARIABILI = parseLocalFloat(sogliaInput) || 0;
+  const fmtPct = (n: number) => n.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' %';
 
   if (!data || !hasActualData) {
     return (
@@ -404,6 +420,57 @@ const AnnualCalculationTable: React.FC<AnnualCalculationTableProps> = ({
       </div>
 
       <div className="shrink-0 bg-slate-50 dark:bg-slate-950 p-6 border-t border-slate-200 dark:border-slate-700 transition-colors">
+        {incidenza && (
+          <div className="mb-5 bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-800/50 rounded-xl p-5 shadow-sm transition-colors">
+            <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+              <div className="flex items-center gap-3 flex-wrap">
+                <h3 className="text-xs font-black text-amber-800 dark:text-amber-400 uppercase tracking-widest">Incidenza % delle voci variabili</h3>
+                <div className="flex items-center gap-1 bg-white dark:bg-slate-800 px-2 py-1 rounded-lg border border-amber-200 dark:border-slate-600 shadow-sm">
+                  <span className="text-[10px] font-bold text-amber-700 dark:text-amber-300 uppercase">Soglia</span>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    className="w-10 text-right text-xs font-bold text-amber-700 dark:text-amber-300 outline-none border-b border-amber-200 dark:border-amber-500 focus:border-amber-500 bg-transparent"
+                    value={sogliaInput}
+                    onChange={(e) => setSogliaInput(e.target.value)}
+                    title="Soglia % minima delle voci variabili per il ricorso (modificabile)"
+                  />
+                  <span className="text-xs text-amber-500 dark:text-amber-400 font-bold">%</span>
+                </div>
+              </div>
+              {(() => {
+                const ok = incidenza.period.pctVariabile >= SOGLIA_VARIABILI;
+                return (
+                  <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg font-bold text-sm border ${ok ? 'bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-700' : 'bg-red-50 text-red-700 border-red-300 dark:bg-red-900/30 dark:text-red-400 dark:border-red-700'}`}>
+                    <span>Media periodo: {fmtPct(incidenza.period.pctVariabile)}</span>
+                    <span className="text-[11px] font-semibold">{ok ? `✓ supera la soglia del ${SOGLIA_VARIABILI}%` : `✗ sotto la soglia del ${SOGLIA_VARIABILI}%`}</span>
+                  </div>
+                );
+              })()}
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs border-collapse">
+                <thead>
+                  <tr className="text-slate-500 dark:text-slate-400">
+                    <th className="text-left p-1.5 border-b border-slate-200 dark:border-slate-700">Anno</th>
+                    <th className="text-right p-1.5 border-b border-slate-200 dark:border-slate-700">% Voci Variabili</th>
+                    <th className="text-right p-1.5 border-b border-slate-200 dark:border-slate-700">% Voci Fisse</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {incidenza.rows.map(r => (
+                    <tr key={r.year} className="dark:text-slate-300">
+                      <td className="p-1.5 border-b border-slate-100 dark:border-slate-800 font-bold">{r.year}{r.isReferenceYear ? ' (Rif.)' : ''}</td>
+                      <td className={`p-1.5 border-b border-slate-100 dark:border-slate-800 text-right font-bold tabular-nums ${r.pctVariabileMediaAnnua >= SOGLIA_VARIABILI ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>{fmtPct(r.pctVariabileMediaAnnua)}</td>
+                      <td className="p-1.5 border-b border-slate-100 dark:border-slate-800 text-right text-slate-500 dark:text-slate-400 tabular-nums">{fmtPct(r.pctFissaMediaAnnua)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-2">% variabili = voci variabili ÷ (voci fisse + variabili), media annua ÷12. La <b>media di periodo</b> è il riferimento per la soglia del {SOGLIA_VARIABILI}%.</p>
+          </div>
+        )}
         <div className="bg-blue-50/50 dark:bg-slate-900 border border-blue-200 dark:border-slate-700 rounded-xl p-5 shadow-sm transition-colors">
           {/* ... HEADER DEL SUMMARY ... */}
           <div className="flex items-center gap-2 mb-4 justify-between">

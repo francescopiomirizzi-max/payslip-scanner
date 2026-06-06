@@ -122,6 +122,7 @@ const AppRouter: React.FC<AppRouterProps> = ({
                             onUpdateData={handleUpdateWorkerData}
                             onUpdateStatus={handleUpdateStatus}
                             onUpdateWorkerFields={handleUpdateWorkerFields}
+                            onPersistWorkerById={updateWorkerById}
                             onBack={handleBack}
                         />
                     </motion.div>

@@ -19,7 +19,7 @@ import {
 import { motion, useSpring, useMotionValue, AnimatePresence } from 'framer-motion';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { Worker } from '../types';
+import { Worker, resolveIncludePaidLeave } from '../types';
 import { SYSTEM_PROFILES, getCustomColorIndex } from '../config/profiles';
 import { computeHolidayIndemnity } from '../utils/calculationEngine';
 
@@ -211,6 +211,9 @@ const StatsDashboard: React.FC<StatsDashboardProps> = ({ workers = [], onBack })
             const storedExFestPref = localStorage.getItem(`exFest_${w.id}`);
             const includeExFest = storedExFestPref !== null ? JSON.parse(storedExFestPref) : false;
 
+            const storedPaidLeavePref = localStorage.getItem(`paidLeave_${w.id}`);
+            const includePaidLeave = storedPaidLeavePref !== null ? JSON.parse(storedPaidLeavePref) : resolveIncludePaidLeave(w);
+
             const storedStartYear = localStorage.getItem(`startYear_${w.id}`);
             const startClaimYear = storedStartYear ? parseInt(storedStartYear) : 2008;
 
@@ -226,6 +229,7 @@ const StatsDashboard: React.FC<StatsDashboardProps> = ({ workers = [], onBack })
                 includeExFest,
                 includeTickets,
                 startClaimYear,
+                includePaidLeave,
                 years: allYears,
             });
 

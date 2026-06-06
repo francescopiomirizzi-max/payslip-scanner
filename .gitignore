@@ -27,3 +27,7 @@ dist-ssr
 .netlify
 .env
 deno.lock
+
+# Knowledge base: fonti grezze (possono contenere dati personali) — solo il README è versionato
+knowledge/fonti/*
+!knowledge/fonti/README.md

@@ -433,7 +433,7 @@ Distinti saluti.
           </button>
           )}
 
-          {!isReadOnly && (
+          {/* Relazione (.docx) — visibile anche in sola lettura (scarica, non scrive) */}
           <button
             onClick={() => setIsRelazioneOpen(true)}
             className="group relative px-6 py-3 rounded-xl font-bold text-lg text-white shadow-lg hover:-translate-y-0.5 active:scale-95 transition-all duration-300 border border-white/10 overflow-hidden flex items-center gap-3"
@@ -443,7 +443,6 @@ Distinti saluti.
             <FileText className="w-5 h-5 transition-transform duration-500 group-hover:rotate-12" strokeWidth={2.5} />
             <span>Relazione</span>
           </button>
-          )}
 
           <button
             onClick={onEdit}
@@ -455,7 +454,7 @@ Distinti saluti.
             <span>Gestione Dati</span>
           </button>
 
-          {!isReadOnly && (
+          {/* PDF Riepilogo somme — visibile anche in sola lettura (scarica, non scrive) */}
           <button
             onClick={handleDownloadPDFLocal}
             className="group relative px-6 py-3 rounded-xl font-bold text-lg text-white shadow-lg hover:-translate-y-0.5 active:scale-95 transition-all duration-300 border border-white/10 overflow-hidden flex items-center gap-3"
@@ -465,9 +464,8 @@ Distinti saluti.
             <FileDown className="w-5 h-5 transition-transform duration-500 group-hover:bounce" strokeWidth={2.5} />
             <span>PDF</span>
           </button>
-          )}
 
-          {!isReadOnly && (
+          {/* Stampa — visibile anche in sola lettura */}
           <button
             onClick={handlePrint}
             className="group relative px-8 py-3 rounded-xl font-bold text-lg text-white shadow-lg hover:-translate-y-0.5 active:scale-95 transition-all duration-300 border border-white/10 overflow-hidden flex items-center gap-3"
@@ -477,7 +475,6 @@ Distinti saluti.
             <Printer className="w-5 h-5 transition-transform duration-500 group-hover:rotate-12" strokeWidth={2.5} />
             <span>Stampa</span>
           </button>
-          )}
         </div>
       </div>
 

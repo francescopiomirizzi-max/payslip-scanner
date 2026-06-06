@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useRef, useEffect } from 'react';
 import ReactDOM from 'react-dom';
-import { Worker, getColumnsByProfile } from '../types';
+import { Worker, getColumnsByProfile, resolveIncludePaidLeave } from '../types';
 import { SYSTEM_PROFILES, getCustomColorIndex } from '../config/profiles';
 import { parseLocalFloat, getProfiloBadgeLabel } from '../utils/formatters';
 import { computeHolidayIndemnity } from '../utils/calculationEngine';
@@ -323,6 +323,7 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
       includeExFest,
       includeTickets,
       startClaimYear,
+      includePaidLeave: resolveIncludePaidLeave(worker),
       years: allYears,
     });
 

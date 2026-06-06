@@ -1,9 +1,9 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { Worker, AnnoDati, getColumnsByProfile, MONTH_NAMES } from '../types';
+import { Worker, AnnoDati, getColumnsByProfile, getFixedColumnsByProfile, MONTH_NAMES } from '../types';
 import { SYSTEM_PROFILES } from '../config/profiles';
 import { parseLocalFloat } from './formatters';
-import { computeHolidayIndemnity, EXCLUDED_INDEMNITY_COLS } from './calculationEngine';
+import { computeHolidayIndemnity, computePeriodIncidence, EXCLUDED_INDEMNITY_COLS } from './calculationEngine';
 
 interface PrintTablesParams {
   worker: Worker;
@@ -11,6 +11,8 @@ interface PrintTablesParams {
   includeExFest: boolean;
   includeTickets: boolean;
   startClaimYear: number;
+  /** Strategia B: assenze retribuite nel divisore (default false). */
+  includePaidLeave?: boolean;
   /** 'save' (default) scarica il PDF; 'blob' lo restituisce per l'export batch. */
   output?: 'save' | 'blob';
 }
@@ -21,6 +23,7 @@ export function printPayslipTables({
   includeExFest,
   includeTickets,
   startClaimYear,
+  includePaidLeave = false,
   output = 'save',
 }: PrintTablesParams): Blob | void {
   // 0. RECUPERO PREFERENZE: Legge se l'utente ha nascosto la colonna nel Report
@@ -62,6 +65,7 @@ export function printPayslipTables({
     includeExFest,
     includeTickets,
     startClaimYear,
+    includePaidLeave,
     years: yearsToPrint,
   });
 
@@ -81,6 +85,14 @@ export function printPayslipTables({
       if (!pivotData[pivotKey][y]) pivotData[pivotKey][y] = 0;
       pivotData[pivotKey][y] += parseLocalFloat(row[col.id]);
     });
+  });
+
+  // Giornate di assenza retribuita per anno (trasparenza: quante del divisore sono assenze).
+  const assenzeByYear: Record<number, number> = {};
+  monthlyInputs.forEach(row => {
+    const y = Number(row.year);
+    if (isNaN(y)) return;
+    assenzeByYear[y] = (assenzeByYear[y] || 0) + parseLocalFloat(row.daysPaidLeave);
   });
 
   // Totali generali per riga TOTALE
@@ -114,6 +126,7 @@ export function printPayslipTables({
       r.isReferenceYear ? '(Media)' : fmt(r.sumIndennitaSpettante),
       r.isReferenceYear ? '-' : fmt(r.sumBuoniPasto),
       r.isReferenceYear ? '-' : fmt(yNetto),
+      fmtInt(assenzeByYear[r.year] || 0), // [8] di cui assenze retribuite
     ];
   });
 
@@ -126,6 +139,7 @@ export function printPayslipTables({
     fmt(grandTotalLordo),
     fmt(grandTotalTicket),
     fmt(grandTotalNet),
+    '-', // [8] assenze: nessun totale
   ]);
 
   // --- C. GENERAZIONE PDF ---
@@ -143,10 +157,18 @@ export function printPayslipTables({
 
     const nomeCCNL = SYSTEM_PROFILES[worker.profilo]?.ccnl ?? 'CCNL di Categoria';
 
-    const note = `Calcolo elaborato ai sensi Cass. n. 20216/2022 e Art. 64 ${nomeCCNL}. La media giornaliera è calcolata sul totale delle voci variabili diviso i giorni di effettiva presenza. Limite giorni indennizzabili: ${TETTO}.`;
-    doc.text(note, 14, pageHeight - 10);
+    const divisoreDescr = includePaidLeave
+      ? `diviso i giorni lavorati, comprensivi delle giornate di assenza retribuita computate come tali (cfr. Tabella 1)`
+      : `diviso i giorni di effettiva presenza`;
+    const note = `Calcolo elaborato ai sensi Cass. 23/6/2022 n. 20216 e artt. 30 (Ferie) e 83 (Indennità diverse) ${nomeCCNL}/Area AF. La media giornaliera è calcolata sul totale delle voci variabili ${divisoreDescr}. Limite giorni indennizzabili: ${TETTO}.`;
+    // Wrap: il footer (più lungo con la Strategia B) deve andare a capo invece di essere
+    // tagliato dal margine destro. Riservo ~26mm a destra per "Pagina N".
+    const footerLines = doc.splitTextToSize(note, pageWidth - 14 - 26);
+    const baseY = pageHeight - 8;
+    const startY = baseY - (footerLines.length - 1) * 3;
+    doc.text(footerLines, 14, startY);
     const str = "Pagina " + doc.getNumberOfPages();
-    doc.text(str, pageWidth - 14, pageHeight - 10, { align: 'right' });
+    doc.text(str, pageWidth - 14, baseY, { align: 'right' });
   };
 
   let currentY = 30;
@@ -155,7 +177,9 @@ export function printPayslipTables({
   doc.setFontSize(12); doc.setTextColor(23, 37, 84); doc.setFont('helvetica', 'bold');
   doc.text("1. CALCOLO DIFFERENZE PER ANNO", 14, currentY);
 
-  const table1Head = ['ANNO', 'TOT. VARIABILI', 'GG LAV.', 'MEDIA UTILIZZATA', 'GG FERIE / TOT'];
+  const table1Head = ['ANNO', 'TOT. VARIABILI', 'GG LAV.'];
+  if (includePaidLeave) table1Head.push('DI CUI ASS.\nRETRIB.');
+  table1Head.push('MEDIA UTILIZZATA', 'GG FERIE / TOT');
   if (includeTickets) {
     table1Head.push('DIFF. LORDA', 'TICKET', 'NETTO DOVUTO');
   } else {
@@ -165,18 +189,27 @@ export function printPayslipTables({
   const table1Body = yearlyRows.map((row) => {
     const isReferenceYear = typeof row[0] === 'string' && row[0].includes('(Rif.)');
 
-    if (isReferenceYear) {
-      return includeTickets
-        ? [row[0], row[1], row[2], '-', '-', '-', '-', '-']
-        : [row[0], row[1], row[2], '-', '-', '-'];
-    }
+    const base = isReferenceYear
+      ? (includeTickets
+          ? [row[0], row[1], row[2], '-', '-', '-', '-', '-']
+          : [row[0], row[1], row[2], '-', '-', '-'])
+      : (includeTickets
+          ? [row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7]]
+          : [row[0], row[1], row[2], row[3], row[4], row[7]]);
 
-    if (includeTickets) {
-      return row;
-    } else {
-      return [row[0], row[1], row[2], row[3], row[4], row[7]];
-    }
+    // Inserisce "DI CUI ASS. RETRIB." subito dopo "GG LAV." (indice 3)
+    if (includePaidLeave) base.splice(3, 0, row[8]);
+    return base;
   });
+
+  const mediaColIdx = includePaidLeave ? 4 : 3;
+  const table1ColumnStyles: any = {
+    0: { fontStyle: 'bold', halign: 'center', fillColor: [248, 250, 252] },
+    [mediaColIdx]: { fontStyle: 'bold', textColor: [180, 83, 9] },
+    [table1Head.length - 1]: { fontStyle: 'bold', halign: 'right', fillColor: [220, 252, 231], textColor: [21, 128, 61] }
+  };
+  // Colonna "DI CUI ASS. RETRIB." (indice 3): grigia e centrata, è un sotto-dettaglio di GG LAV.
+  if (includePaidLeave) table1ColumnStyles[3] = { halign: 'center', textColor: [120, 120, 120], fillColor: [248, 250, 252] };
 
   autoTable(doc, {
     startY: currentY + 5,
@@ -185,11 +218,7 @@ export function printPayslipTables({
     theme: 'grid',
     styles: { fontSize: 9, cellPadding: 3, textColor: 50, lineColor: [200, 200, 200], lineWidth: 0.1 },
     headStyles: { fillColor: [241, 245, 249], textColor: [23, 37, 84], fontStyle: 'bold', halign: 'center' },
-    columnStyles: {
-      0: { fontStyle: 'bold', halign: 'center', fillColor: [248, 250, 252] },
-      3: { fontStyle: 'bold', textColor: [180, 83, 9] },
-      [table1Head.length - 1]: { fontStyle: 'bold', halign: 'right', fillColor: [220, 252, 231], textColor: [21, 128, 61] }
-    },
+    columnStyles: table1ColumnStyles,
     bodyStyles: { halign: 'right' },
     didDrawPage: drawHeaderFooter,
     margin: { top: 25, bottom: 15, left: 14, right: 14 }
@@ -198,8 +227,18 @@ export function printPayslipTables({
   currentY = (doc as any).lastAutoTable.finalY + 3;
 
   doc.setFontSize(8); doc.setTextColor(100); doc.setFont('helvetica', 'italic');
-  doc.text(`* La dicitura "GG FERIE / TOT" indica i giorni effettivamente conteggiati ai fini del calcolo rispetto a quelli goduti. In caso di superamento del limite legale (${TETTO}gg annui), l'eccedenza è stata esclusa dal conteggio economico.`, 14, currentY);
-  currentY += 12;
+  const noteWidth = doc.internal.pageSize.width - 28; // margini 14 per lato
+  const printNote = (text: string) => {
+    const lines = doc.splitTextToSize(text, noteWidth);
+    doc.text(lines, 14, currentY);
+    currentY += lines.length * 4 + 1;
+  };
+  printNote(`* "GG FERIE / TOT": giorni effettivamente conteggiati rispetto a quelli goduti; oltre il limite di ${TETTO}gg annui l'eccedenza è esclusa dal conteggio economico.`);
+  printNote(`* Anno di riferimento ("Rif."): i suoi dati servono unicamente a determinare la media applicata all'anno successivo e NON generano credito autonomo.`);
+  if (includePaidLeave) {
+    printNote(`* "GG Lav." è il totale dei giorni usati come divisore della media. La colonna "DI CUI ASS. RETRIB." ne evidenzia la quota costituita da assenze retribuite (permessi/distacco sindacale, L. 104, ecc.), computate come giornate lavorate.`);
+  }
+  currentY += 6;
 
   // --- TABELLA 2 (PIVOT) ---
   if (currentY > 150) { doc.addPage(); currentY = 30; }
@@ -207,7 +246,7 @@ export function printPayslipTables({
   doc.setFontSize(12); doc.setTextColor(23, 37, 84); doc.setFont('helvetica', 'bold');
   doc.text("2. RIEPILOGO VOCI VARIABILI DELLA RETRIBUZIONE", 14, currentY);
 
-  const pivotHead = ['CODICE E VOCE', ...yearsToPrint.map(String), 'TOTALE'];
+  const pivotHead = ['CODICE E VOCE', ...yearsToPrint.map(y => y < startClaimYear ? `${y}\n(Rif.)` : String(y)), 'TOTALE'];
 
   const yearlyTotals = new Array(yearsToPrint.length).fill(0);
   let grandPivotTotal = 0;
@@ -243,10 +282,10 @@ export function printPayslipTables({
     head: [pivotHead],
     body: pivotBody,
     theme: 'grid',
-    styles: { fontSize: 6, cellPadding: 1.5, textColor: 50 },
+    styles: { fontSize: 5.5, cellPadding: { top: 1.4, right: 0.6, bottom: 1.4, left: 0.6 }, textColor: 50 },
     headStyles: { fillColor: [234, 88, 12], textColor: 255, halign: 'center', valign: 'middle', fontStyle: 'bold' },
     bodyStyles: { halign: 'right', valign: 'middle' },
-    columnStyles: { 0: { halign: 'left', fontStyle: 'bold', cellWidth: 40 } },
+    columnStyles: { 0: { halign: 'left', fontStyle: 'bold', cellWidth: 32 } },
     didParseCell: function (data) {
       if (data.column.index > 0) {
         data.cell.styles.cellWidth = 'auto';
@@ -282,7 +321,7 @@ export function printPayslipTables({
     const media = avgAppliedByYear[year] || 0;
 
     doc.setFontSize(10); doc.setTextColor(100);
-    doc.text(`ANNO ${year} (Media: ${fmt(media)})`, 14, currentY + 8);
+    doc.text(`ANNO ${year}${year < startClaimYear ? ' — ANNO DI RIFERIMENTO (non genera credito)' : ''} (Media: ${fmt(media)})`, 14, currentY + 8);
 
     const yearRows = monthlyInputs.filter(d => Number(d.year) === year).sort((a, b) => a.monthIndex - b.monthIndex);
 
@@ -361,7 +400,7 @@ export function printPayslipTables({
       head: [tableHead],
       body: tableBody,
       theme: 'grid',
-      styles: { fontSize: 7, cellPadding: 1.5, halign: 'right', lineColor: [220, 220, 220], lineWidth: 0.1 },
+      styles: { fontSize: 6.5, cellPadding: { top: 1.3, right: 0.7, bottom: 1.3, left: 0.7 }, halign: 'right', lineColor: [220, 220, 220], lineWidth: 0.1 },
       headStyles: { fillColor: [23, 37, 84], textColor: 255, fontStyle: 'bold', halign: 'center' },
       alternateRowStyles: { fillColor: [248, 250, 252] },
       columnStyles: {
@@ -382,7 +421,138 @@ export function printPayslipTables({
     currentY = (doc as any).lastAutoTable.finalY + 10;
   });
 
-  // --- PAGINA 4: RIEPILOGO FINALE ---
+  // --- SEZIONE 4: INCIDENZA % DELLE VOCI VARIABILI (Quadro A/B/C) ---
+  // Mostrata solo per i profili con voci fisse definite (oggi RFI/Trenitalia).
+  // % variabili = Voci Variabili / (Voci Fisse + Voci Variabili), media annua ÷12.
+  // Sezione mostrata solo se ci sono DAVVERO voci fisse valorizzate (altrimenti le %
+  // sarebbero 100%/0% fuorvianti su un lavoratore non ancora "backfillato").
+  if (yearResults.some(r => r.hasIncidence && r.sumQuadroFisse > 0)) {
+    const fmtPct = (n: number) =>
+      n.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' %';
+
+    doc.addPage('a4', 'landscape');
+    drawHeaderFooter(null);
+    currentY = 30;
+
+    // --- 4. RIEPILOGO VOCI FISSE (Quadro B): rende trasparente la "base fissa" delle % ---
+    // Mostra solo le voci fisse effettivamente presenti (almeno un valore > 0).
+    const fixedCols = (getFixedColumnsByProfile(worker.profilo) || [])
+      .filter(c => c?.id && monthlyInputs.some(r => parseLocalFloat(r[c.id]) > 0));
+
+    if (fixedCols.length > 0) {
+      doc.setFontSize(12); doc.setTextColor(23, 37, 84); doc.setFont('helvetica', 'bold');
+      doc.text("4. RIEPILOGO VOCI FISSE DELLA RETRIBUZIONE (base per le percentuali)", 14, currentY);
+
+      const fHead = ['CODICE E VOCE', ...yearsToPrint.map(y => y < startClaimYear ? `${y}\n(Rif.)` : String(y)), 'TOTALE'];
+      const fYearTotals = new Array(yearsToPrint.length).fill(0);
+      let fGrand = 0;
+      const fBody = fixedCols.map(col => {
+        let rowTot = 0;
+        const row = [`[${col.id}] ${(col.label || '').substring(0, 22)}`];
+        yearsToPrint.forEach((yv, i) => {
+          const y = Number(yv);
+          let v = 0;
+          monthlyInputs.forEach(r => { if (Number(r.year) === y) v += parseLocalFloat(r[col.id]); });
+          rowTot += v; fYearTotals[i] += v;
+          row.push(fmt(v));
+        });
+        fGrand += rowTot;
+        row.push(fmt(rowTot));
+        return row;
+      });
+      const fTot = ['TOTALE BASE FISSA'];
+      fYearTotals.forEach(v => fTot.push(fmt(v)));
+      fTot.push(fmt(fGrand));
+      fBody.push(fTot);
+
+      autoTable(doc, {
+        startY: currentY + 5,
+        head: [fHead],
+        body: fBody,
+        theme: 'grid',
+        styles: { fontSize: 5.5, cellPadding: { top: 1.4, right: 0.6, bottom: 1.4, left: 0.6 }, textColor: 50 },
+        headStyles: { fillColor: [120, 113, 108], textColor: 255, halign: 'center', valign: 'middle', fontStyle: 'bold' },
+        bodyStyles: { halign: 'right', valign: 'middle' },
+        columnStyles: { 0: { halign: 'left', fontStyle: 'bold', cellWidth: 34 } },
+        didParseCell: function (data) {
+          if (data.section === 'body' && data.column.index === fHead.length - 1) {
+            data.cell.styles.fontStyle = 'bold'; data.cell.styles.fillColor = [245, 245, 245];
+          }
+          if (data.section === 'body' && data.row.index === fBody.length - 1) {
+            data.cell.styles.fontStyle = 'bold'; data.cell.styles.fillColor = [226, 232, 240]; data.cell.styles.textColor = [23, 37, 84];
+          }
+        },
+        didDrawPage: drawHeaderFooter,
+        margin: { top: 25, bottom: 15, left: 10, right: 10 },
+      });
+      currentY = (doc as any).lastAutoTable.finalY + 8;
+      if (currentY > 150) { doc.addPage(); currentY = 30; }
+    }
+
+    doc.setFontSize(12); doc.setTextColor(23, 37, 84); doc.setFont('helvetica', 'bold');
+    doc.text("5. INCIDENZA % DELLE VOCI VARIABILI SULLA RETRIBUZIONE", 14, currentY);
+
+    const incHead = ['ANNO', '% VOCI VARIABILI', '% VOCI FISSE', 'BASE FISSA (€)', 'TOT. VARIABILI (€)'];
+    const incBody = yearResults
+      .filter(r => r.hasIncidence && r.sumQuadroFisse > 0) // solo anni con base fissa reale: i non-backfillati non mostrano 100%/0% fuorviante
+      .map(r => [
+        r.isReferenceYear ? `${r.year} (Rif.)` : String(r.year),
+        fmtPct(r.pctVariabileMediaAnnua),
+        fmtPct(r.pctFissaMediaAnnua),
+        fmt(r.sumQuadroFisse),
+        fmt(r.sumIndennitaTotali),
+      ]);
+
+    // Media di periodo sui soli anni a credito (esclusi i "Rif.") CON base fissa reale,
+    // come "22,94%" dell'avvocato. Senza il filtro sumQuadroFisse, gli anni non backfillati
+    // (base 0 → 100% variabili) gonfierebbero la media.
+    const period = computePeriodIncidence(yearResults.filter(r => !r.isReferenceYear && r.sumQuadroFisse > 0));
+    if (period.anni > 0) {
+      incBody.push([
+        'MEDIA PERIODO',
+        fmtPct(period.pctVariabile),
+        fmtPct(period.pctFissa),
+        '-',
+        '-',
+      ]);
+    }
+
+    autoTable(doc, {
+      startY: currentY + 5,
+      head: [incHead],
+      body: incBody,
+      theme: 'grid',
+      styles: { fontSize: 9, cellPadding: 3, textColor: 50, lineColor: [200, 200, 200], lineWidth: 0.1 },
+      headStyles: { fillColor: [241, 245, 249], textColor: [23, 37, 84], fontStyle: 'bold', halign: 'center' },
+      bodyStyles: { halign: 'right' },
+      columnStyles: {
+        0: { fontStyle: 'bold', halign: 'center', fillColor: [248, 250, 252] },
+        1: { fontStyle: 'bold', textColor: [180, 83, 9] },
+      },
+      didParseCell: function (data) {
+        if (data.section === 'body' && data.row.index === incBody.length - 1 && period.anni > 0) {
+          data.cell.styles.fontStyle = 'bold';
+          data.cell.styles.fillColor = [254, 243, 199];
+          data.cell.styles.textColor = [146, 64, 14];
+        }
+      },
+      didDrawPage: drawHeaderFooter,
+      margin: { top: 25, bottom: 15, left: 14, right: 14 },
+    });
+
+    currentY = (doc as any).lastAutoTable.finalY + 6;
+    doc.setFontSize(8); doc.setTextColor(100); doc.setFont('helvetica', 'italic');
+    const notaInc = doc.splitTextToSize(
+      "Metodo di calcolo dell'incidenza: per ogni mese si rapportano le voci VARIABILI (percepite solo in giornate di lavoro) " +
+      "al totale delle voci continuative della retribuzione (Voci Fisse + Voci Variabili). La percentuale annua è la media " +
+      "delle dodici incidenze mensili (÷12). La media di periodo è la media delle percentuali annue degli anni oggetto di domanda. " +
+      "Tale incidenza quantifica la quota di retribuzione che il lavoratore NON percepisce durante le ferie.",
+      270
+    );
+    doc.text(notaInc, 14, currentY);
+  }
+
+  // --- PAGINA 5: RIEPILOGO FINALE ---
   doc.addPage('a4', 'landscape');
   drawHeaderFooter(null);
   currentY = 40;

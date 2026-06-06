@@ -5,6 +5,7 @@ import {
   YEARS,
   AnnoDati,
   getColumnsByProfile,
+  getFixedColumnsByProfile,
   ProfiloAzienda,
   evaluateFormula
 } from '../../types';
@@ -196,6 +197,8 @@ interface MonthlyDataGridProps {
   eliorType?: 'viaggiante' | 'magazzino';
   onCellFocus?: (rowIndex: number, colId: string) => void;
   years: number[];  // Range dinamico controllato dal parent
+  // Strategia B: se true, le assenze retribuite entrano nel divisore della media.
+  includePaidLeave?: boolean;
   // Verifica AI: chiave `${year}-${monthIndex}` → storage_path
   archiveEntries?: Record<string, string>;
   verifyStates?: Record<string, VerifyState>;
@@ -223,6 +226,7 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
   eliorType,
   onCellFocus,
   years,
+  includePaidLeave = false,
   archiveEntries = {},
   verifyStates = {},
   onVerifyRequest,
@@ -233,6 +237,8 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
 }) => {
   const isReadOnly = useIsReadOnly();
   const [selectedYear, setSelectedYear] = useState<number>(initialYear);
+  // Vista colonne: 'variabili' (indennità del credito) ⇄ 'fisse' (Quadro B, base % incidenza).
+  const [gridMode, setGridMode] = useState<'variabili' | 'fisse'>('variabili');
 
   // Stati Modali
   const [noteModal, setNoteModal] = useState<{ isOpen: boolean; monthIndex: number; text: string }>({ isOpen: false, monthIndex: -1, text: '' });
@@ -446,11 +452,28 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
     };
   }, [profilo]); // Si riaggiorna solo se cambia il profilo/colonne (isScrolling gestito via ref per evitare loop)
   // --- 1. CONFIGURAZIONE COLONNE ---
-  const currentColumns = useMemo(() => {
+  // Set VARIABILI (indennità del credito): sempre disponibile, base delle KPI header.
+  const variableColumns = useMemo(() => {
     const cols = getColumnsByProfile(profilo, eliorType);
     // ESCLUSIONE DEFINITIVA: Rimuoviamo Ticket e i codici di Produttività
     return cols.filter(c => !['ticket', '3B70', '3B71'].includes(c.id));
   }, [profilo, eliorType]);
+
+  // Voci FISSE (Quadro B) del profilo; il toggle compare solo se ne esistono (RFI/Trenitalia).
+  const fixedColumns = useMemo(() => getFixedColumnsByProfile(profilo), [profilo]);
+  const hasFixedCols = fixedColumns.length > 0;
+
+  // Colonne effettivamente mostrate nella griglia secondo la vista selezionata.
+  const currentColumns = useMemo(() => {
+    if (gridMode === 'fisse' && hasFixedCols) {
+      return [
+        { id: 'month', label: 'MESE', width: 'min-w-[120px]', sticky: true },
+        ...fixedColumns,
+        { id: 'total', label: 'TOTALE', subLabel: 'Fisse', width: 'min-w-[100px]', isTotal: true, isCalculated: true },
+      ];
+    }
+    return variableColumns;
+  }, [gridMode, hasFixedCols, fixedColumns, variableColumns]);
 
   const editableColumns = useMemo(() => {
     return currentColumns.filter(col =>
@@ -490,29 +513,33 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
         const row = currentYearData.find(d => d.monthIndex === i) || {};
         let val: number = 0;
         if (col.id === 'total') val = calculateRowTotal(row);
+        // Strategia B: il totale GG Lav include le assenze retribuite; la loro colonna va a 0.
+        else if (includePaidLeave && col.id === 'daysWorked') val = parseLocalFloat((row as any).daysWorked) + parseLocalFloat((row as any).daysPaidLeave);
+        else if (includePaidLeave && col.id === 'daysPaidLeave') val = 0;
         else val = parseLocalFloat((row as any)[col.id]);
         if (val && !isNaN(val)) colSum += val;
       }
       totals[col.id] = colSum;
     });
     return totals;
-  }, [currentYearData, calculateRowTotal, currentColumns]);
+  }, [currentYearData, calculateRowTotal, currentColumns, includePaidLeave]);
 
   // --- 2. STATISTICHE HEADER ---
   const annualStats = useMemo(() => {
-    // MODIFICA: Aggiunto 'arretrati' alla lista delle esclusioni
-    const indennitaCols = currentColumns.filter(col =>
+    // KPI header sempre sulle VOCI VARIABILI (il credito), a prescindere dalla vista attiva.
+    const indennitaCols = variableColumns.filter(col =>
       !['month', 'total', 'daysWorked', 'daysVacation', 'daysPaidLeave', 'ticket', 'note', 'arretrati'].includes(col.id)
     );
     let totIndennita = 0;
     let totGiorniLav = 0;
     currentYearData.forEach(row => {
       indennitaCols.forEach(col => { totIndennita += parseLocalFloat((row as any)[col.id]); });
-      totGiorniLav += parseLocalFloat(row.daysWorked);
+      // Strategia B: assenze retribuite nel divisore (distacchi/permessi sindacali).
+      totGiorniLav += parseLocalFloat(row.daysWorked) + (includePaidLeave ? parseLocalFloat(row.daysPaidLeave) : 0);
     });
     const mediaAnnuale = totGiorniLav > 0 ? totIndennita / totGiorniLav : 0;
     return { totIndennita, totGiorniLav, mediaAnnuale };
-  }, [currentYearData, currentColumns]);
+  }, [currentYearData, variableColumns, includePaidLeave]);
 
   const currentRows = useMemo(() => {
     return MONTH_NAMES.map((monthName, index) => {
@@ -971,6 +998,25 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
 
             {/* --- GRUPPO TASTI DESTRA (UNDO + MANUALE LEGALE) --- */}
             <div className="ml-auto flex items-center gap-2">
+              {/* TOGGLE VISTA: Variabili (credito) ⇄ Fisse (Quadro B, % incidenza) */}
+              {hasFixedCols && (
+                <div className="flex items-center rounded-full bg-slate-900/60 border border-slate-600 p-0.5 shadow-inner">
+                  <button
+                    onClick={() => setGridMode('variabili')}
+                    title="Voci variabili (indennità del credito)"
+                    className={`px-3 py-1 rounded-full text-xs font-bold transition-all duration-200 ${gridMode === 'variabili' ? 'bg-blue-500 text-white shadow' : 'text-slate-300 hover:text-white'}`}
+                  >
+                    Variabili
+                  </button>
+                  <button
+                    onClick={() => setGridMode('fisse')}
+                    title="Voci fisse continuative (Quadro B) — base per le % di incidenza"
+                    className={`px-3 py-1 rounded-full text-xs font-bold transition-all duration-200 ${gridMode === 'fisse' ? 'bg-amber-500 text-white shadow' : 'text-slate-300 hover:text-white'}`}
+                  >
+                    Fisse
+                  </button>
+                </div>
+              )}
               {/* TASTO UNDO (FRECCIA INDIETRO) - VERSIONE DEFINITIVA */}
               <button
                 onClick={handleUndo}
@@ -1193,7 +1239,9 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
                   // È un errore reale SOLO se ci sono indennità con 0 giorni lavorati E nessuna
                   // copertura del mese (né ferie né assenze retribuite). Un mese a 0 presenze
                   // giustificato da ferie / permessi sindacali è normale (sfasamento ferroviario).
-                  const isDivisorError = hasIndennita && workedDays === 0 && vacDays === 0 && paidLeaveDays === 0;
+                  // Le voci fisse esistono ogni mese a prescindere dai giorni: nella vista "Fisse"
+                  // l'alert divisore (indennità variabile senza giorni) non si applica.
+                  const isDivisorError = gridMode === 'variabili' && hasIndennita && workedDays === 0 && vacDays === 0 && paidLeaveDays === 0;
 
                   // Colore Riga Validazione: Premium UX Puntamento
                   let rowClass = isActiveRow
@@ -1217,6 +1265,18 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
                     >
                       {currentColumns.map((col, colIndex) => {
                         const cellValue = (row as any)[col.id];
+                        // Strategia B (display-only): con il toggle attivo le assenze retribuite
+                        // vengono mostrate DENTRO i "GG Lav" (somma) e azzerate nella loro colonna,
+                        // perché le trattiamo come giorni lavorati. I dati sotto restano separati;
+                        // le due celle si bloccano per non corrompere la somma con un edit manuale.
+                        const paidLeaveMerged = includePaidLeave && (col.id === 'daysWorked' || col.id === 'daysPaidLeave');
+                        let displayValue: any = cellValue;
+                        if (includePaidLeave && col.id === 'daysWorked') {
+                          const merged = parseLocalFloat(row.daysWorked) + parseLocalFloat(row.daysPaidLeave);
+                          displayValue = merged !== 0 ? merged : '';
+                        } else if (includePaidLeave && col.id === 'daysPaidLeave') {
+                          displayValue = '';
+                        }
                         const isTotal = col.id === 'total';
                         const isMonth = col.id === 'month';
                         const isVacation = col.id === 'daysVacation';
@@ -1428,7 +1488,10 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
                                   type="text"
                                   inputMode="decimal"
                                   autoComplete="off"
-                                  disabled={col.type === 'formula' || isReadOnly}
+                                  disabled={col.type === 'formula' || isReadOnly || paidLeaveMerged}
+                                  title={paidLeaveMerged ? (col.id === 'daysWorked'
+                                    ? 'Strategia B attiva: include le assenze retribuite. Disattiva "Permessi" per modificare i giorni.'
+                                    : 'Assenze retribuite conteggiate nei Giorni Lavorati (Strategia B attiva).') : undefined}
                                   className={`
                                         w-full h-full bg-transparent px-2 text-right outline-none transition-colors duration-75 tabular-nums text-xs placeholder:text-transparent
                                         ${col.type === 'formula'
@@ -1441,7 +1504,7 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
                                         ${dragSelection.isDragging || cellSelection.isSelecting ? 'pointer-events-none' : ''}
                                       `}
                                   placeholder="0"
-                                  value={col.type === 'formula' && cellValue !== 0 ? formatCurrency(cellValue) : (cellValue ?? '')}
+                                  value={col.type === 'formula' && cellValue !== 0 ? formatCurrency(cellValue) : (displayValue ?? '')}
                                   onChange={(e) => handleCellChange(rowIndex, col.id, e.target.value)}
                                   onFocus={(e) => handleInputFocus(e, rowIndex, col.id)}
                                   onMouseDown={handleInputMouseDown}

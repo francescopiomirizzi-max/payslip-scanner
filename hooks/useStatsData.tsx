@@ -14,6 +14,7 @@ interface UseStatsDataOptions {
   startClaimYear: number;
   includeExFest: boolean;
   includeTickets: boolean;
+  includePaidLeave?: boolean;
 }
 
 export function useStatsData({
@@ -22,6 +23,7 @@ export function useStatsData({
   startClaimYear,
   includeExFest,
   includeTickets,
+  includePaidLeave = false,
 }: UseStatsDataOptions) {
   const statsData = useMemo(() => {
     if (!monthlyInputs || !Array.isArray(monthlyInputs)) return { cards: [], rawTotal: 0 };
@@ -35,6 +37,7 @@ export function useStatsData({
       includeExFest,
       includeTickets,
       startClaimYear,
+      includePaidLeave,
       years: allYears,
     });
 
@@ -184,7 +187,7 @@ export function useStatsData({
     }
 
     return { cards, rawTotal: nettoRecuperabile };
-  }, [monthlyInputs, worker.profilo, worker.eliorType, worker.tfr_pregresso, worker.tfr_pregresso_anno, includeExFest, includeTickets, startClaimYear]);
+  }, [monthlyInputs, worker.profilo, worker.eliorType, worker.tfr_pregresso, worker.tfr_pregresso_anno, includeExFest, includeTickets, includePaidLeave, startClaimYear]);
 
   const tickerItems = [...statsData.cards, ...statsData.cards, ...statsData.cards];
 

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   computeYearlyAverages,
   computeHolidayIndemnity,
+  computePeriodIncidence,
   EXCLUDED_INDEMNITY_COLS,
 } from '../utils/calculationEngine';
 import { getColumnsByProfile } from '../types';
@@ -496,5 +497,128 @@ describe('computeHolidayIndemnity — netto', () => {
         expect(isNaN(d.netto)).toBe(false);
       });
     });
+  });
+});
+
+// ─── Percentuali di incidenza (metodo "Quadro A/B/C" dell'avvocato) ──────────
+// Validazione contro i numeri REALI dell'Excel dell'avvocato
+// (CONTEGGI - PALLADINO CIRO SALVATORE.xlsx, anno 2008):
+//   - % MEDIA annua voci VARIABILI (cella R57) = 23,9085…
+//   - % MEDIA annua voci FISSE   (cella R28) = 76,0914…
+//   - per costruzione le due percentuali sommano a 100.
+describe('percentuali di incidenza (Quadro A/B/C)', () => {
+  // [B (fisse, R24), C (variabili, R52)] mese per mese del 2008.
+  const MESI_2008: Array<[number, number]> = [
+    [2173.71, 808.18], [2231.57, 730.44], [2231.57, 613.41], [2229.67, 657.74],
+    [2233.47, 650.37], [2227.77, 515.96], [2229.67, 694.05], [2231.57, 737.79],
+    [2233.47, 733.49], [2229.67, 693.35], [2231.57, 731.62], [2239.17, 858.89],
+  ];
+
+  // Inietta B nel codice fisso 3B01 e C nel codice variabile 0152.
+  const data2008: AnnoDati[] = MESI_2008.map(([b, c], i) => ({
+    year: 2008, monthIndex: i, daysWorked: 20, daysVacation: 0, ticket: 0,
+    '3B01': b, '0152': c,
+  }));
+
+  const [year] = computeHolidayIndemnity(
+    { data: data2008, profilo: 'RFI', includeExFest: false, includeTickets: false, startClaimYear: 2024, years: [2008] }
+  );
+
+  it('riproduce la % media annua delle voci variabili dell\'avvocato (≈ 23,91%)', () => {
+    expect(year.hasIncidence).toBe(true);
+    expect(year.pctVariabileMediaAnnua).toBeCloseTo(23.91, 1);
+  });
+
+  it('riproduce la % media annua delle voci fisse dell\'avvocato (≈ 76,09%)', () => {
+    expect(year.pctFissaMediaAnnua).toBeCloseTo(76.09, 1);
+  });
+
+  it('le due percentuali medie annue sommano a 100', () => {
+    expect(year.pctVariabileMediaAnnua + year.pctFissaMediaAnnua).toBeCloseTo(100, 5);
+  });
+
+  it('espone la base fissa annua (Σ Quadro B)', () => {
+    const sumB = MESI_2008.reduce((a, [b]) => a + b, 0);
+    expect(year.sumQuadroFisse).toBeCloseTo(sumB, 2);
+  });
+
+  it('la media di periodo media le medie annue dei soli anni con incidenza', () => {
+    const period = computePeriodIncidence([year]);
+    expect(period.anni).toBe(1);
+    expect(period.pctVariabile).toBeCloseTo(23.91, 1);
+  });
+
+  it('profilo senza voci fisse (ELIOR): nessuna incidenza, percentuali a 0', () => {
+    const elior: AnnoDati[] = [
+      { year: 2008, monthIndex: 0, daysWorked: 20, daysVacation: 0, ticket: 0, '1130': 100 },
+    ];
+    const [y] = computeHolidayIndemnity(
+      { data: elior, profilo: 'ELIOR', includeExFest: false, includeTickets: false, startClaimYear: 2024, years: [2008] }
+    );
+    expect(y.hasIncidence).toBe(false);
+    expect(y.pctVariabileMediaAnnua).toBe(0);
+    expect(y.pctFissaMediaAnnua).toBe(0);
+  });
+
+  it('le percentuali NON alterano il credito (netto invariato)', () => {
+    // Stesso input senza voci fisse vs con voci fisse: il netto deve coincidere.
+    const senzaFisse: AnnoDati[] = [
+      { year: 2008, monthIndex: 0, daysWorked: 20, daysVacation: 5, ticket: 0, '0152': 800 },
+      { year: 2009, monthIndex: 0, daysWorked: 20, daysVacation: 5, ticket: 0, '0152': 800 },
+    ];
+    const conFisse: AnnoDati[] = senzaFisse.map(r => ({ ...r, '3B01': 2000 }));
+    const p = { profilo: 'RFI' as const, includeExFest: false, includeTickets: false, startClaimYear: 2024, years: [2008, 2009] };
+    const a = computeHolidayIndemnity({ data: senzaFisse, ...p });
+    const b = computeHolidayIndemnity({ data: conFisse, ...p });
+    expect(b.map(y => y.sumNetto)).toEqual(a.map(y => y.sumNetto));
+  });
+});
+
+// ─── Strategia B: assenze retribuite nel divisore (distacchi/permessi sindacali) ──
+describe('includePaidLeave (Strategia B sindacale)', () => {
+  // Anno di sindacalista: ogni mese 0 presenze, 20 gg assenza retribuita, 100€ indennità.
+  const annoSindacale: AnnoDati[] = Array.from({ length: 12 }, (_, i) => ({
+    year: 2023, monthIndex: i, daysWorked: 0, daysVacation: 0, ticket: 0,
+    daysPaidLeave: 20, '0152': 100,
+  }));
+
+  it('OFF (default): mesi a 0 presenze → divisore 0 → media annua = 0 (penalizzazione)', () => {
+    const avg = computeYearlyAverages(annoSindacale, 'RFI');
+    expect(avg[2023]).toBe(0);
+  });
+
+  it('ON: assenze retribuite nel divisore → media = ΣindennitÃ / Σpermessi (non più 0)', () => {
+    const avg = computeYearlyAverages(annoSindacale, 'RFI', undefined, true);
+    // totVar = 12*100 = 1200 ; ggLav = 12*20 = 240 ; 1200/240 = 5
+    expect(avg[2023]).toBeCloseTo(5);
+  });
+
+  it('end-to-end: con OFF il credito dell\'anno dopo è 0, con ON diventa positivo', () => {
+    const data: AnnoDati[] = [
+      ...annoSindacale,
+      // 2024: claim year, anch'esso da sindacalista (0 presenze) con 5 gg ferie →
+      // niente fallback all'anno corrente che mascheri l'effetto del toggle.
+      { year: 2024, monthIndex: 0, daysWorked: 0, daysVacation: 5, ticket: 0,
+        daysPaidLeave: 18, '0152': 90, coeffPercepito: '0', coeffTicket: '0' },
+    ];
+    const base = { data, profilo: 'RFI' as const, includeExFest: false, includeTickets: false, startClaimYear: 2024, years: [2023, 2024] };
+
+    const off = computeHolidayIndemnity(base).find(r => r.year === 2024)!;
+    expect(off.avgApplied).toBe(0);           // media 2023 = 0 e fallback 2024 = 0
+    expect(off.sumIndennitaSpettante).toBe(0);
+
+    const on = computeHolidayIndemnity({ ...base, includePaidLeave: true }).find(r => r.year === 2024)!;
+    expect(on.avgApplied).toBeCloseTo(5);     // media 2023 = 5
+    expect(on.sumIndennitaSpettante).toBeCloseTo(25); // 5 gg ferie * 5€
+  });
+
+  it('non cambia i casi normali: con presenze > 0 il toggle è ininfluente sulla media', () => {
+    const normale: AnnoDati[] = [
+      { year: 2023, monthIndex: 0, daysWorked: 20, daysVacation: 0, ticket: 0, daysPaidLeave: 0, '0152': 200 },
+    ];
+    const off = computeYearlyAverages(normale, 'RFI')[2023];
+    const on = computeYearlyAverages(normale, 'RFI', undefined, true)[2023];
+    expect(on).toBeCloseTo(off); // 200/20 = 10 in entrambi
+    expect(off).toBeCloseTo(10);
   });
 });

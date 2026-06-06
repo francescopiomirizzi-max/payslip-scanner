@@ -1,4 +1,4 @@
-import { AnnoDati, MONTH_NAMES, ProfiloAzienda, getColumnsByProfile } from '../types';
+import { AnnoDati, MONTH_NAMES, ProfiloAzienda, getColumnsByProfile, getFixedColumnsByProfile } from '../types';
 import { parseLocalFloat } from './formatters';
 
 export const EXCLUDED_INDEMNITY_COLS = [
@@ -19,6 +19,12 @@ export interface MonthDetail {
   netto: number;
   rawPercepito: string;
   rawTicket: string;
+  // ── Percentuali di incidenza ("Quadro A/B/C" del conteggio dell'avvocato) ──
+  // Additive: non influenzano il credito. quadroVariabili === indennitaMensile.
+  quadroFisse: number;       // B = somma voci fisse continuative del mese
+  quadroVariabili: number;   // C = somma voci variabili del mese (= indennitaMensile)
+  pctVariabile: number;      // C*100 / (B+C); 0 se base assente o profilo senza voci fisse
+  pctFissa: number;          // B*100 / (B+C)
 }
 
 export interface YearResult {
@@ -34,6 +40,11 @@ export interface YearResult {
   sumIndennitaPercepita: number;
   sumBuoniPasto: number;
   sumNetto: number;
+  // ── Percentuali di incidenza dell'anno ──
+  hasIncidence: boolean;          // true solo se il profilo ha voci fisse definite
+  sumQuadroFisse: number;         // B annuo
+  pctVariabileMediaAnnua: number; // Σ(% variabile mensile) / 12  (come l'Excel dell'avvocato)
+  pctFissaMediaAnnua: number;     // Σ(% fissa mensile) / 12
   monthlyDetails: MonthDetail[];
 }
 
@@ -45,6 +56,12 @@ export interface CalculationParams {
   includeTickets: boolean;
   startClaimYear: number;
   years: number[];
+  /**
+   * Strategia B sindacale: se true, le assenze retribuite (distacchi/permessi)
+   * vengono sommate ai giorni lavorati nel DIVISORE della media. Default false
+   * (Strategia A: solo i giorni di effettiva presenza, comportamento storico).
+   */
+  includePaidLeave?: boolean;
 }
 
 // ─── Internal helpers ───────────────────────────────────────────────────────
@@ -100,13 +117,17 @@ function safeMonthIndex(index: unknown): number {
 
 /**
  * Computes the daily variable indemnity average per year.
- * Only months with daysWorked > 0 contribute to the denominator.
+ * Only months with a positive divisor contribute to the denominator.
+ * Con `includePaidLeave` (Strategia B sindacale): il divisore di ogni mese diventa
+ * `giorni lavorati + assenze retribuite`, così i distacchi/permessi sindacali
+ * (mesi a 0 presenze) entrano nella media invece di azzerarla.
  * Returns an empty object for invalid inputs.
  */
 export function computeYearlyAverages(
   data: AnnoDati[],
   profilo: ProfiloAzienda,
-  eliorType?: 'viaggiante' | 'magazzino'
+  eliorType?: 'viaggiante' | 'magazzino',
+  includePaidLeave: boolean = false
 ): Record<number, number> {
   if (!Array.isArray(data) || data.length === 0) return {};
 
@@ -122,7 +143,7 @@ export function computeYearlyAverages(
     const y = Number(row.year);
     if (!isFinite(y) || isNaN(y)) return;
     if (!raw[y]) raw[y] = { totVar: 0, ggLav: 0 };
-    const gg = parseDays(row.daysWorked);
+    const gg = parseDays(row.daysWorked) + (includePaidLeave ? parseDays(row.daysPaidLeave) : 0);
     let sum = 0;
     cols.forEach(c => { sum += parseAmount(row[c.id]); });
     raw[y].totVar += fin(sum);
@@ -158,6 +179,7 @@ export function computeHolidayIndemnity(params: CalculationParams): YearResult[]
     includeTickets,
     startClaimYear,
     years,
+    includePaidLeave = false,
   } = params;
 
   // ── Input guards ──────────────────────────────────────────────────────────
@@ -175,6 +197,12 @@ export function computeHolidayIndemnity(params: CalculationParams): YearResult[]
     c => c?.id && !EXCLUDED_INDEMNITY_COLS.includes(c.id)
   );
 
+  // Voci FISSE continuative ("Quadro B"): solo denominatore delle percentuali di
+  // incidenza, NON entrano nel credito. NON filtrate da EXCLUDED_INDEMNITY_COLS,
+  // così 3B70/3B71 (esclusi dal credito) contano comunque nella base fissa.
+  const fixedCols = (getFixedColumnsByProfile(safeProfile) || []).filter(c => c?.id);
+  const hasIncidence = fixedCols.length > 0;
+
   // ── Step 1: yearly averages + raw totals ──────────────────────────────────
   const yearlyRaw: Record<number, { totVar: number; ggLav: number }> = {};
 
@@ -183,7 +211,8 @@ export function computeHolidayIndemnity(params: CalculationParams): YearResult[]
     const y = Number(row.year);
     if (!isFinite(y) || isNaN(y)) return;
     if (!yearlyRaw[y]) yearlyRaw[y] = { totVar: 0, ggLav: 0 };
-    const gg = parseDays(row.daysWorked);
+    // Strategia B: assenze retribuite (distacchi/permessi sindacali) nel divisore.
+    const gg = parseDays(row.daysWorked) + (includePaidLeave ? parseDays(row.daysPaidLeave) : 0);
     let sum = 0;
     cols.forEach(c => { sum += parseAmount(row[c.id]); });
     yearlyRaw[y].totVar += fin(sum);
@@ -225,6 +254,9 @@ export function computeHolidayIndemnity(params: CalculationParams): YearResult[]
     let sumIndennitaPercepita = 0;
     let sumBuoniPasto = 0;
     let sumNetto = 0;
+    let sumQuadroFisse = 0;
+    let sumPctVariabile = 0;
+    let sumPctFissa = 0;
 
     const months = data
       .filter(d => d && Number(d.year) === year)
@@ -237,7 +269,18 @@ export function computeHolidayIndemnity(params: CalculationParams): YearResult[]
       cols.forEach(c => { indennitaMensile += parseAmount(row[c.id]); });
       indennitaMensile = fin(indennitaMensile);
 
-      const giorniLav = parseDays(row.daysWorked);
+      // Base fissa del mese (Quadro B) e percentuali di incidenza (additive).
+      let quadroFisse = 0;
+      fixedCols.forEach(c => { quadroFisse += parseAmount(row[c.id]); });
+      quadroFisse = fin(quadroFisse);
+      const quadroVariabili = indennitaMensile; // C
+      const baseAB = quadroFisse + quadroVariabili; // A = B + C
+      const pctVariabile = hasIncidence && baseAB > 0 ? fin(quadroVariabili * 100 / baseAB) : 0;
+      const pctFissa = hasIncidence && baseAB > 0 ? fin(quadroFisse * 100 / baseAB) : 0;
+
+      // Divisore del mese: include le assenze retribuite se Strategia B attiva
+      // (coerente col denominatore della media e con il "GG Lav." mostrato).
+      const giorniLav = parseDays(row.daysWorked) + (includePaidLeave ? parseDays(row.daysPaidLeave) : 0);
       const giorniFerieReali = parseDays(row.daysVacation); // clamped ≥ 0
 
       const prevTotal = ferieCumulate;
@@ -260,6 +303,9 @@ export function computeHolidayIndemnity(params: CalculationParams): YearResult[]
       sumIndennitaPercepita += indennitaPercepita;
       sumBuoniPasto += buoniPasto;
       sumNetto += netto;
+      sumQuadroFisse += quadroFisse;
+      sumPctVariabile += pctVariabile;
+      sumPctFissa += pctFissa;
 
       return {
         index: idx,
@@ -274,6 +320,10 @@ export function computeHolidayIndemnity(params: CalculationParams): YearResult[]
         netto,
         rawPercepito,
         rawTicket,
+        quadroFisse,
+        quadroVariabili,
+        pctVariabile,
+        pctFissa,
       };
     });
 
@@ -290,7 +340,31 @@ export function computeHolidayIndemnity(params: CalculationParams): YearResult[]
       sumIndennitaPercepita: fin(sumIndennitaPercepita),
       sumBuoniPasto: fin(sumBuoniPasto),
       sumNetto: fin(sumNetto),
+      // Media annua = Σ(% mensili) / 12 (divisione fissa per 12 come nell'Excel
+      // dell'avvocato: i mesi assenti contano come 0 e abbassano la media).
+      hasIncidence,
+      sumQuadroFisse: fin(sumQuadroFisse),
+      pctVariabileMediaAnnua: hasIncidence ? fin(sumPctVariabile / 12) : 0,
+      pctFissaMediaAnnua: hasIncidence ? fin(sumPctFissa / 12) : 0,
       monthlyDetails,
     };
   });
+}
+
+/**
+ * % media di incidenza delle voci variabili sull'intero periodo richiesto:
+ * media delle medie annue dei soli anni con incidenza (== "22,94%" dell'Excel).
+ * Restituisce 0 se nessun anno ha voci fisse.
+ */
+export function computePeriodIncidence(results: YearResult[]): {
+  pctVariabile: number;
+  pctFissa: number;
+  anni: number;
+} {
+  const withIncidence = (results || []).filter(r => r?.hasIncidence);
+  const n = withIncidence.length;
+  if (n === 0) return { pctVariabile: 0, pctFissa: 0, anni: 0 };
+  const sumVar = withIncidence.reduce((a, r) => a + fin(r.pctVariabileMediaAnnua), 0);
+  const sumFis = withIncidence.reduce((a, r) => a + fin(r.pctFissaMediaAnnua), 0);
+  return { pctVariabile: fin(sumVar / n), pctFissa: fin(sumFis / n), anni: n };
 }

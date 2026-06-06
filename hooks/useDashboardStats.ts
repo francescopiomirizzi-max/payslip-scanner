@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { Wallet, Ticket } from 'lucide-react';
-import { Worker } from '../types';
+import { Worker, resolveIncludePaidLeave } from '../types';
 import { parseLocalFloat } from '../utils/formatters';
 import { computeHolidayIndemnity } from '../utils/calculationEngine';
 
@@ -61,6 +61,7 @@ export const useDashboardStats = (
                 includeExFest,
                 includeTickets,
                 startClaimYear,
+                includePaidLeave: resolveIncludePaidLeave(worker),
                 years: allYears,
             });
 
@@ -99,6 +100,7 @@ export const useDashboardStats = (
                 includeExFest,
                 includeTickets: true,
                 startClaimYear,
+                includePaidLeave: resolveIncludePaidLeave(worker),
                 years: allYears,
             });
 
@@ -169,6 +171,7 @@ export const useDashboardStats = (
                     includeExFest: worker.includeExFest ?? false,
                     includeTickets: worker.includeTickets ?? true,
                     startClaimYear: worker.startClaimYear ?? 2008,
+                    includePaidLeave: resolveIncludePaidLeave(worker),
                     years: allYears,
                 });
                 const net = results

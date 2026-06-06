@@ -2,7 +2,7 @@ import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Calculator, Ticket, CalendarPlus, Send, Gavel,
-  Handshake, CheckCircle2, Search, ChevronDown,
+  Handshake, CheckCircle2, Search, ChevronDown, CalendarClock,
 } from 'lucide-react';
 import { useIsReadOnly } from '../../lib/readonly';
 import { useWorkerDetail } from './WorkerDetailContext';
@@ -13,6 +13,7 @@ const VertenzaTimeline: React.FC = () => {
   const {
     isTimelineOpen, onToggleTimeline, tickerItems, onSetActiveTickerModal,
     includeExFest, onToggleExFest, includeTickets, onToggleTickets,
+    includePaidLeave, onTogglePaidLeave,
     legalStatus, onLegalStatusChange, onUpdateStatus,
   } = useWorkerDetail();
   const isReadOnly = useIsReadOnly();
@@ -115,6 +116,17 @@ const VertenzaTimeline: React.FC = () => {
               >
                 <Ticket size={14} className={`transition-transform duration-300 ${includeTickets ? 'rotate-0' : 'group-hover:-rotate-12'}`} strokeWidth={2.5} />
                 Ticket
+              </button>
+              <button
+                onClick={onTogglePaidLeave}
+                className={`group flex items-center gap-1.5 px-3 py-1.5 rounded-full font-bold text-xs transition-all duration-300 border ml-1 ${includePaidLeave
+                  ? 'bg-gradient-to-r from-emerald-100 to-teal-100 dark:from-emerald-900/60 dark:to-teal-900/60 text-emerald-800 dark:text-emerald-300 border-emerald-300/50 dark:border-emerald-500/50 shadow-[0_1px_6px_rgba(16,185,129,0.2)] dark:shadow-[0_0_10px_rgba(16,185,129,0.3)]'
+                  : 'bg-transparent text-slate-500 dark:text-slate-400 dark:text-slate-200 border-transparent hover:bg-white dark:hover:bg-slate-800 hover:border-emerald-200/60 dark:hover:border-emerald-700/50 hover:text-emerald-600 dark:hover:text-emerald-400'
+                  }`}
+                title="Strategia B: conta le assenze retribuite (distacchi/permessi sindacali) come giorni lavorati nel divisore"
+              >
+                <CalendarClock size={14} className={`transition-transform duration-300 ${includePaidLeave ? 'rotate-0' : 'group-hover:rotate-12'}`} strokeWidth={2.5} />
+                <span>Permessi</span>
               </button>
             </div>
           </div>

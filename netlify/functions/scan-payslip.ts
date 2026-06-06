@@ -360,6 +360,20 @@ const PROMPT_RFI = `
   - 0995 (Str. Diurno Disp.)
   - 0996 (Str. Fest/Not Disp.)
   - 0376 (Indennità varie)
+
+  #### VOCI FISSE CONTINUATIVE (base retributiva mensile — "Quadro B")
+  [SCOPO]: servono SOLO al calcolo delle percentuali di incidenza, NON al credito ferie.
+  Estrai SEMPRE dalla colonna "Competenze" (importi positivi). IGNORA TASSATIVAMENTE gli "Assorbimenti"/Trattenute (es. 2B30, 2B35) che hanno descrizione simile ma sono trattenute.
+  - 3B01 (Minimo Contrattuale)
+  - 3B03 (Superminimo Individuale)
+  - 3B05 (ERI - Elemento Retributivo Individuale)
+  - 3B10 (Salario Professionale)
+  - 3B15 (Indennità di Funzione - solo Quadri/dirigenti)
+  - 3B20 (APA - Aumenti Periodici Anzianità)
+  - 3B30 (EDR 8.11.95)
+  - 3B35 (EDR acc. 11.9.98)
+  - 3B70 (Salario Produttività)
+  - 3B71 (Produttività Incrementale)
  
   ### 5. ARRETRATI E NOTE
   - "arretrati": Somma SOLO gli importi POSITIVI (situati nella colonna Competenze) delle seguenti voci: 3E10, 3E16, Indennità INPS, codici che iniziano per 0K.., 74.., 6INT, 3105. IGNORA categoricamente la colonna Trattenute.
@@ -393,7 +407,8 @@ const PROMPT_RFI = `
     "fondo_pregresso_31_12": 2938.55, "imponibile_tfr_mensile": 2107.91,
     "attendance": { "presenze": 18.0, "riposi": 9.0, "ferie": 1.0, "ptv26": 0.0, "malattie": null, "infortuni": null, "assenzeRetribuite": null, "assenzeNonRetribuite": null, "ferieAnnoPrec": 12.0, "ferieAnnoCorrente": 20.0 },
     "codes": {
-      "0152": 576.06, "0421": 0.0, "0423": 0.0, "0457": 140.00, "0470": 0.0, "0482": 0.0, "0496": 0.0, "0687": 0.0, "0686": 0.0, "0AA1": 0.0, "0576": 0.0, "0584": 64.00, "0919": 0.0, "0920": 0.0, "0932": 0.0, "0933": 0.0, "0995": 0.0, "0996": 0.0, "0376": 0.0
+      "0152": 576.06, "0421": 0.0, "0423": 0.0, "0457": 140.00, "0470": 0.0, "0482": 0.0, "0496": 0.0, "0687": 0.0, "0686": 0.0, "0AA1": 0.0, "0576": 0.0, "0584": 64.00, "0919": 0.0, "0920": 0.0, "0932": 0.0, "0933": 0.0, "0995": 0.0, "0996": 0.0, "0376": 0.0,
+      "3B01": 1609.30, "3B03": 1.61, "3B05": 40.38, "3B10": 89.25, "3B15": 0.0, "3B20": 179.46, "3B30": 63.01, "3B35": 57.17, "3B70": 69.49, "3B71": 52.46
     }
   }
 `;
@@ -483,6 +498,20 @@ const PROMPT_TRENITALIA = `
   - 0996 (Str. Fest/Not Disp.)
   - 0376 (Indennità varie)
 
+  #### VOCI FISSE CONTINUATIVE (base retributiva mensile — "Quadro B")
+  [SCOPO]: servono SOLO al calcolo delle percentuali di incidenza, NON al credito ferie.
+  Estrai SEMPRE dalla colonna "Competenze" (importi positivi). IGNORA TASSATIVAMENTE gli "Assorbimenti"/Trattenute (es. 2B30, 2B35) che hanno descrizione simile ma sono trattenute.
+  - 3B01 (Minimo Contrattuale)
+  - 3B03 (Superminimo Individuale)
+  - 3B05 (ERI - Elemento Retributivo Individuale)
+  - 3B10 (Salario Professionale)
+  - 3B15 (Indennità di Funzione - solo Quadri/dirigenti)
+  - 3B20 (APA - Aumenti Periodici Anzianità)
+  - 3B30 (EDR 8.11.95)
+  - 3B35 (EDR acc. 11.9.98)
+  - 3B70 (Salario Produttività)
+  - 3B71 (Produttività Incrementale)
+
   ### 5. ARRETRATI E NOTE
   - "arretrati": Somma SOLO gli importi POSITIVI (situati nella colonna Competenze) delle seguenti voci: 3E10, 3E16, Indennità INPS, codici che iniziano per 0K.., 74.., 6INT, 3105. IGNORA categoricamente la colonna Trattenute.
   - "eventNote": Se rilevi codici di malattia (es. 3E.., Indennità INPS) o giorni segnati sotto la colonna "Malattie", scrivi la stringa "[Malattia/Carenza]". Altrimenti lascia una stringa vuota "".
@@ -515,7 +544,8 @@ const PROMPT_TRENITALIA = `
     "fondo_pregresso_31_12": 2938.55, "imponibile_tfr_mensile": 2107.91,
     "attendance": { "presenze": 18.0, "riposi": 9.0, "ferie": 1.0, "ptv26": 0.0, "malattie": null, "infortuni": null, "assenzeRetribuite": null, "assenzeNonRetribuite": null, "ferieAnnoPrec": 12.0, "ferieAnnoCorrente": 20.0 },
     "codes": {
-      "0152": 576.06, "0421": 0.0, "0423": 0.0, "0457": 140.00, "0470": 0.0, "0482": 0.0, "0496": 0.0, "0687": 0.0, "0686": 0.0, "0AA1": 0.0, "0576": 0.0, "0584": 64.00, "0919": 0.0, "0920": 0.0, "0932": 0.0, "0933": 0.0, "0995": 0.0, "0996": 0.0, "0376": 0.0
+      "0152": 576.06, "0421": 0.0, "0423": 0.0, "0457": 140.00, "0470": 0.0, "0482": 0.0, "0496": 0.0, "0687": 0.0, "0686": 0.0, "0AA1": 0.0, "0576": 0.0, "0584": 64.00, "0919": 0.0, "0920": 0.0, "0932": 0.0, "0933": 0.0, "0995": 0.0, "0996": 0.0, "0376": 0.0,
+      "3B01": 1609.30, "3B03": 1.61, "3B05": 40.38, "3B10": 89.25, "3B15": 0.0, "3B20": 179.46, "3B30": 63.01, "3B35": 57.17, "3B70": 69.49, "3B71": 52.46
     }
   }
 `;
@@ -1013,6 +1043,58 @@ REGOLE ASSOLUTE:
         headers,
         body: JSON.stringify({ value: result.response.text().trim() })
       };
+    }
+
+    // =========================================================================
+    // 🧱 MODALITÀ VOCI FISSE (Quadro B): backfill leggero delle sole voci fisse
+    // continuative su buste RFI/Trenitalia già in archivio. Estrae SOLO i codici 3B..
+    // (no giorni, no variabili) → veloce/economica. Il client scrive in merge-safe.
+    // =========================================================================
+    if (action === 'fixed-voci') {
+      const fixedPrompt = `Sei un estrattore dati preciso per buste paga ferroviarie RFI/Trenitalia.
+Estrai ESCLUSIVAMENTE le seguenti VOCI FISSE CONTINUATIVE dalla colonna "Competenze" (importi positivi, in euro).
+⚠️ IGNORA TASSATIVAMENTE la colonna "Trattenute"/"Assorbimenti": i codici 2B30 e 2B35 hanno descrizione simile (EDR) ma sono TRATTENUTE → NON usarli.
+Cerca questi codici in TUTTE le pagine:
+- 3B01 (Minimo Contrattuale)
+- 3B03 (Superminimo Individuale)
+- 3B05 (ERI)
+- 3B10 (Salario Professionale)
+- 3B15 (Indennità di Funzione - solo Quadri/dirigenti)
+- 3B20 (APA - Aumenti Periodici Anzianità)
+- 3B30 (EDR 8.11.95)
+- 3B35 (EDR acc. 11.9.98)
+- 3B70 (Salario Produttività)
+- 3B71 (Produttività Incrementale)
+Restituisci ESCLUSIVAMENTE un oggetto JSON crudo (NIENTE markdown, niente \`\`\`), con TUTTE le chiavi elencate. Se un codice è assente nella busta, il suo valore DEVE essere 0.0.
+Aggiungi inoltre "retribuzioneMensile": il valore del riquadro "RETRIBUZIONE MENSILE" in alto (numero di controllo; 0.0 se assente).
+Aggiungi infine "month" (numero 1-12) e "year" (4 cifre): identificali dalla testata del cedolino (mese/anno di competenza). Se non identificabili, scrivi 0.
+Esempio di output perfetto:
+{"codes":{"3B01":1609.30,"3B03":1.61,"3B05":40.38,"3B10":89.25,"3B15":0.0,"3B20":179.46,"3B30":63.01,"3B35":57.17,"3B70":69.49,"3B71":52.46},"retribuzioneMensile":1920.00,"month":3,"year":2019}`;
+
+      const result = await generateContentWithRetry(
+        SCAN_API_KEYS,
+        (g) => g.getGenerativeModel({
+          model: GEMINI_MODEL,
+          generationConfig: { responseMimeType: "application/json", temperature: 0.0, thinkingConfig: { thinkingBudget: THINKING_BUDGET } } as any,
+        }),
+        [fixedPrompt, { inlineData: { data: cleanData, mimeType: mimeType || "application/pdf" } }]
+      );
+
+      let parsed: any = {};
+      try { parsed = JSON.parse(result.response.text().trim()); } catch { parsed = {}; }
+      const FIXED_IDS = ['3B01','3B03','3B05','3B10','3B15','3B20','3B30','3B35','3B70','3B71'];
+      const codes: Record<string, number> = {};
+      for (const id of FIXED_IDS) {
+        const v = Number(parsed?.codes?.[id]);
+        codes[id] = isFinite(v) ? v : 0;
+      }
+      const retribuzioneMensile = isFinite(Number(parsed?.retribuzioneMensile)) ? Number(parsed.retribuzioneMensile) : 0;
+      // Periodo dalla testata (serve al caricamento da file, dove non c'è metadato d'archivio).
+      const mRaw = Number(parsed?.month);
+      const yRaw = Number(parsed?.year);
+      const month = Number.isInteger(mRaw) && mRaw >= 1 && mRaw <= 12 ? mRaw : 0;
+      const year = Number.isInteger(yRaw) && yRaw >= 2000 && yRaw <= 2100 ? yRaw : 0;
+      return { statusCode: 200, headers, body: JSON.stringify({ codes, retribuzioneMensile, month, year }) };
     }
 
     // =========================================================================
