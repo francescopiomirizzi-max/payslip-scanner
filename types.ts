@@ -32,7 +32,9 @@ export interface AnnoDati {
   ticket: string | number;       // Buono pasto
 
   // Assenze retribuite (es. permessi / distacco sindacale).
-  // Colonna puramente INFORMATIVA: NON entra nel divisore né in alcuna formula.
+  // Default (Strategia A): colonna puramente INFORMATIVA, NON entra in alcuna formula.
+  // Con Strategia B (CalculationParams.includePaidLeave / Worker.includePaidLeave) viene
+  // sommata ai giorni lavorati nel DIVISORE della media (vedi calculationEngine.ts).
   daysPaidLeave?: string | number;
 
   // Note per eventi (es. Malattia, Infortunio)
