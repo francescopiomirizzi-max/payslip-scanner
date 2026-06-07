@@ -60,12 +60,35 @@
 - [x] **DB**: migration `supabase/migrations/013_pratiche_riposi.sql` — tabella `pratiche_riposi` (id, owner_id, nome, cognome, azienda, mansione, periodo_start/end, tariffa_oraria, fonte_tariffa, giornate jsonb, created_at, updated_at). **RLS owner-scoped su SELECT/INSERT/UPDATE/DELETE** (mirror 008). ⚠️ **da applicare** su Supabase (non ancora eseguita).
 - [x] `npm test` 142/142 verde · `tsc --noEmit` pulito · `vite build` ok.
 
+### Dati vivi dall'Excel (seed locale, NON serve il PDF) ✅ FATTO (2026-06-07)
+
+> Prima lettura reale del motore sui dati grezzi dell'Excel di Viterbo:
+> **275 violazioni** (35 giornaliere + 240 settimanali), **1.890h** mancanti,
+> **€18.958** (tariffa placeholder 10,03), **504 ridotti leciti** non flaggati,
+> 16 righe da verificare. Conferma che l'Excel sovrastimava (970 "potenziali").
+
+- [x] `public/viterbo-seed.json` — giornate grezze dall'Excel (4937 righe). **Gitignored** (dati personali).
+- [x] **Hook** `hooks/usePraticheRiposi.ts` — per ora seed locale di Viterbo (fetch del JSON); struttura pronta per il wiring Supabase in Fase 2.
+- [x] **UI lista** pratiche nell'area `riposi`: card cliccabile di Viterbo.
+- [x] **UI dettaglio** `components/RiposiPraticaDetail.tsx` — cruscotto che gira `computeRestViolations`: stat cards, tabella per anno, elenco violazioni con gravità. Banner onestà dati ("ordine di grandezza, non definitivo").
+- [x] **UI rifinita** (2026-06-07): stat card stile "vetro" + `AnimatedCounter`; grafico a barre per anno (stacked); 2 tab **Violazioni** / **Prospetto turni**; il Prospetto è un **calendario annuale** (12 mesi, giorni colorati turno/riposo + ring rosso violazione) e il **click sul mese** apre `MeseFocus` (tabella incolonnata + legenda verticale: riepilogo mese, colori, servizi). `AreaSwitch` ricolorato per sezione (Incidenza=smeraldo, Riposi=indaco). Card pratica con chip calcolati.
+- [x] `tsc` pulito · 142/142 test · `vite build` ok · seed valido in `dist/`.
+
 ### Resto della Fase 2 (serve il PDF)
 
-- [ ] **Hook** `hooks/usePraticheRiposi.ts` (mirror `useWorkers`): CRUD + mapper `dbToPratica`/`praticaToDb`.
 - [ ] **Estrazione** `netlify/functions/scan-turni.ts` (mirror `scan-payslip.ts`): prompt Gemini per righe giornaliere `data·gset·tipo·servizio·inizio·termine` + **confidence per cella**; coda capata + thinking budget 1024 + retry (i 3 layer esistenti). Policy: cella dubbia → **flag, non indovinare**.
-- [ ] **UI lista** pratiche riposi nell'area `riposi` (sostituisce l'empty state).
-- [ ] **UI dettaglio pratica**: review giornate in `SplitViewViewer` (PDF a sx, righe a dx, dubbie evidenziate) + cruscotto violazioni (aggancia `computeRestViolations`).
+- [ ] **Persistenza Supabase**: applicare migration `013`; wiring CRUD reale nel hook (mapper `dbToPratica`/`praticaToDb`), il seed sparisce.
+- [ ] **Review giornate** in `SplitViewViewer` (PDF a sx, righe a dx, dubbie evidenziate) — la correzione umana prima del calcolo.
+
+## 🟢 PRONTI PER IL PDF — dove si aggancia (leggere quando arriva il PDF di Vincenzo)
+
+Tutto l'impianto è in piedi e testato sui dati grezzi dell'Excel. Quando arriva il PDF, i punti di innesto sono:
+
+1. **Estrazione** → scrivere `scan-turni.ts` e far produrre l'array `GiornataInput[]` (`data·servizio·inizio·termine`, formato h.mm). Il motore (`computeRestViolations`) e tutta la UI **non cambiano**: lavorano già su quel tipo.
+2. **Persistenza** → `apply_migration 013_pratiche_riposi`, poi in `usePraticheRiposi` sostituire il fetch del seed con la CRUD Supabase (`giornate` jsonb). Tolto il seed, sparisce `public/viterbo-seed.json`.
+3. **Review** → `SplitViewViewer` con PDF a sinistra e le `GiornataInput` a destra; le righe `warning` del motore sono già quelle da evidenziare.
+4. **Tariffa** → appena l'avvocato conferma €/h + fonte, aggiornare `tariffaOraria`/`fonteTariffa` della pratica: indennità e gravità si ricalcolano da sole.
+5. **Codici turno** → la `Legenda servizi` mostra già i codici; con la legenda aziendale si possono etichettare (mappa `SERV_LABEL` o tabella di lookup).
 
 ## FASE 3 — Export (contestazione + Excel pulito)
 
@@ -78,16 +101,22 @@
 
 - [ ] **PDF sorgente** "Mancati riposi di Viterbo (1).pdf" — da Vincenzo (blocca la Fase 2).
 - [ ] **Tariffa €/ora** con **fonte legale/CCNL** — parametro, non hardcoded (domanda per l'avvocato; l'Excel usava €10,03 ricavato a ritroso).
+- [ ] **Legenda codici turno** dall'azienda — i codici numerici di "Servizio" (linea/turno) non sono decodificabili senza la chiave aziendale; serve per la contestazione.
+
+### 📋 Da chiedere a Vincenzo (riassunto)
+1. Il **PDF** "Mancati riposi di Viterbo".
+2. La **tariffa €/h** dell'indennità con la sua **fonte** (CCNL/legale).
+3. La **legenda dei codici turno** (cosa significano i numeri di servizio).
 - [x] **Vademecum**: 3 ritocchi fatti (2026-06-07) → salvato `Vademecum_Turni_Riposi_FAST_REV1.docx` (originale intatto). (a) sez. 2.1: aggiunti "Principio applicativo" (>10% = gravità ex Reg. UE 2016/403, non il trigger dell'illecito) e "Nota metodologica" (esempi illustrativi); (b) tabella sez. 5: riposo giornaliero ridotto "max 3× tra due settimanali" + settimanale "entro 6 periodi di 24h, ≥45h/≥24h con compensazione". Copiato in `public/vademecum-turni-riposi.docx` (~9MB, immagini FAST) e linkato dal bottone "Apri il vademecum" nella landing.
 - [ ] Nota deploy: l'asset vademecum pesa ~9MB → valutare se committarlo o servirlo altrove prima del push (repo bloat / Netlify).
 - [ ] Nota brand: "RailFlow" è ferroviario, qui siamo su gomma (TPL) — irrilevante per ora.
 
 ## Verifica prima di "done" (CLAUDE.md)
 
-- [ ] `npm test` verde + nuovo `restEngine.test.ts` che passa contro gli esempi del vademecum.
-- [ ] `npm run type-check` pulito.
+- [x] `npm test` verde (142/142) + `restEngine.test.ts` passa contro gli esempi del vademecum.
+- [x] `tsc --noEmit` pulito · `vite build` ok · nessun import/helper inutile.
 - [ ] Motore validato a mano su almeno un periodo reale (quando arriva il PDF) confrontando col conteggio atteso.
-- [ ] Tutto **locale, non deployato** finché l'utente non dà l'ok (batching deploy Netlify).
+- [x] Tutto **locale, non deployato** (commit sì, push no — da indicazione utente).
 
 ## Review (da compilare a fine lavoro)
 

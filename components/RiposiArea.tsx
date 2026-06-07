@@ -1,6 +1,9 @@
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { Clock, FileUp, ListChecks, FileText, ShieldCheck, Moon, CalendarClock, Coffee, CheckCircle2, BookOpen } from 'lucide-react';
+import { Clock, FileUp, ListChecks, FileText, ShieldCheck, Moon, CalendarClock, Coffee, CheckCircle2, BookOpen, ChevronRight, AlertTriangle, Euro } from 'lucide-react';
+import { usePraticheRiposi, type PraticaRiposi } from '../hooks/usePraticheRiposi';
+import { computeRestViolations } from '../utils/restEngine';
+import RiposiPraticaDetail from './RiposiPraticaDetail';
 
 // ─── Workflow (cosa farà la pratica, in 3 passi) ──────────────────────────────
 const STEPS: { icon: React.ComponentType<{ className?: string }>; title: string; desc: string }[] = [
@@ -30,6 +33,12 @@ const VIOLAZIONI: { n: string; titolo: string; rif: string; attiva: boolean; not
  * persistenza (pratiche_riposi) e UI di review arrivano in Fase 2.
  */
 const RiposiArea: React.FC = () => {
+    const { pratiche, isLoading } = usePraticheRiposi();
+    const [selectedId, setSelectedId] = useState<string | null>(null);
+    const selected = pratiche.find((p) => p.id === selectedId) ?? null;
+
+    if (selected) return <RiposiPraticaDetail pratica={selected} onBack={() => setSelectedId(null)} />;
+
     return (
         <div className="min-h-screen px-6 py-12">
             <div className="max-w-5xl mx-auto space-y-8">
@@ -43,6 +52,22 @@ const RiposiArea: React.FC = () => {
                         <p className="text-slate-500 dark:text-slate-400">Mancati riposi · Reg. (CE) n. 561/2006 — area separata dalle buste paga</p>
                     </div>
                 </header>
+
+                {/* Pratiche */}
+                <section>
+                    <h2 className="text-lg font-bold text-slate-700 dark:text-slate-200 mb-3">Pratiche</h2>
+                    {isLoading ? (
+                        <div className="h-20 rounded-2xl bg-slate-100 dark:bg-slate-800/60 animate-pulse" />
+                    ) : pratiche.length === 0 ? (
+                        <p className="text-sm text-slate-500 dark:text-slate-400">Nessuna pratica. Carica un prospetto turni per iniziare.</p>
+                    ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            {pratiche.map((p) => (
+                                <PraticaCard key={p.id} pratica={p} onOpen={() => setSelectedId(p.id)} />
+                            ))}
+                        </div>
+                    )}
+                </section>
 
                 {/* Cosa fa quest'area */}
                 <motion.div
@@ -153,6 +178,34 @@ const RiposiArea: React.FC = () => {
                 </div>
             </div>
         </div>
+    );
+};
+
+const PraticaCard: React.FC<{ pratica: PraticaRiposi; onOpen: () => void }> = ({ pratica, onOpen }) => {
+    // Stima rapida per la card (1 pratica → costo trascurabile; in Fase 2 si precalcola).
+    const { tot, indennita } = useMemo(() => {
+        const r = computeRestViolations(pratica.giornate, { tariffaOraria: pratica.tariffaOraria });
+        return { tot: r.nViolazioniGiornaliere + r.nViolazioniSettimanali, indennita: r.totIndennita };
+    }, [pratica]);
+    return (
+        <button
+            onClick={onOpen}
+            className="group relative overflow-hidden flex items-center gap-4 text-left rounded-[1.6rem] bg-white/60 dark:bg-slate-800/60 backdrop-blur-2xl border border-white/60 dark:border-slate-700/60 p-4 transition-all duration-300 hover:-translate-y-1 hover:border-indigo-300 dark:hover:border-indigo-500/50 hover:shadow-[0_20px_50px_-22px_rgba(99,102,241,0.55)]"
+        >
+            <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/[0.06] to-transparent pointer-events-none" />
+            <div className="relative w-12 h-12 rounded-2xl bg-indigo-600 flex items-center justify-center text-white font-black shrink-0 shadow-lg shadow-indigo-500/30 transition-transform duration-300 group-hover:scale-110 group-hover:rotate-6">
+                {pratica.cognome.charAt(0)}{pratica.nome.charAt(0)}
+            </div>
+            <div className="relative min-w-0 flex-1">
+                <p className="font-bold text-slate-800 dark:text-slate-100 truncate">{pratica.cognome} {pratica.nome}</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{pratica.mansione} · {pratica.periodoStart}–{pratica.periodoEnd}</p>
+                <div className="flex items-center gap-2 mt-1.5">
+                    <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-rose-100 dark:bg-rose-500/15 text-rose-600 dark:text-rose-400"><AlertTriangle className="w-3 h-3" />{tot} violazioni</span>
+                    <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-500/15 text-indigo-600 dark:text-indigo-400"><Euro className="w-3 h-3" />{indennita.toLocaleString('it-IT', { maximumFractionDigits: 0 })}</span>
+                </div>
+            </div>
+            <ChevronRight className="relative w-5 h-5 text-slate-300 group-hover:text-indigo-500 group-hover:translate-x-0.5 transition-all shrink-0" />
+        </button>
     );
 };
 

@@ -31,3 +31,7 @@ deno.lock
 # Knowledge base: fonti grezze (possono contenere dati personali) — solo il README è versionato
 knowledge/fonti/*
 !knowledge/fonti/README.md
+
+# Area "Turni & Riposi": seed locale di demo (dati personali del lavoratore).
+# La persistenza vera è su Supabase (pratiche_riposi), non nel repo.
+public/viterbo-seed.json
