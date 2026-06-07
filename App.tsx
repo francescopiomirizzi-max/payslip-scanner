@@ -9,6 +9,8 @@ import LoginPage from './pages/LoginPage';
 import CompanyBuilder from './components/CompanyBuilder';
 import Background from './components/Background';
 import AppRouter from './components/AppRouter';
+import AreaSwitch, { type AppArea } from './components/AreaSwitch';
+import RiposiArea from './components/RiposiArea';
 import HiddenClasses from './HiddenClasses';
 
 // UI Utils
@@ -71,6 +73,9 @@ const App: React.FC = () => {
     const [activeStatsModal, setActiveStatsModal] = useState<'net' | 'ticket' | null>(null);
 
     const [showScrollTop, setShowScrollTop] = useState(false);
+
+    // --- AREA GLOBALE: 'incidenza' (buste/RFI) vs 'riposi' (mancati riposi TPL) ---
+    const [area, setArea] = useState<AppArea>('incidenza');
 
     // --- SCROLL TO TOP ---
     useEffect(() => {
@@ -216,7 +221,7 @@ const App: React.FC = () => {
             <KeyboardShortcutsHint />
             <Background />
 
-            <AppRouter
+            {area === 'incidenza' && <AppRouter
                 viewMode={viewMode}
                 workers={workers}
                 filteredWorkers={filteredWorkers}
@@ -256,7 +261,11 @@ const App: React.FC = () => {
                 handleBack={handleBack}
                 archiveWorkerId={archiveWorkerId}
                 handleOpenArchive={handleOpenArchive}
-            />
+            />}
+
+            {area === 'riposi' && <RiposiArea />}
+
+            <AreaSwitch area={area} onChange={setArea} />
 
             {/* MODALS AND TOASTS */}
             <div className="fixed bottom-4 right-4 z-[110] flex flex-col items-end pointer-events-none">
