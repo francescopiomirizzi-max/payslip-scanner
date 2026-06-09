@@ -619,3 +619,19 @@ in `knowledge/fonti/checklist_pratiche_rfi.html` (durevole, gitignorata per i no
 generale: **un artefatto che va aggiornato ricorrentemente non può avere la sua sorgente in /tmp**;
 metterla in un percorso stabile e documentare il comando di rigenerazione.
 Cfr. memoria `feedback-aggiorna-checklist-desktop`, `knowledge/verifica-pratica.md`.
+
+## 2026-06-09 — Quando tocchi il layout, verifica gli elementi FIXED che ci galleggiano sopra
+
+**Contesto:** ho compattato l'header della dashboard (logo 128→56px) per guadagnare spazio
+verticale. Risultato: i bottoni azione sono saliti nella fascia della Dynamic Island (fixed
+top-center) e "Archivio" ci finiva sotto. In più 56px/3xl era troppo piccolo per il gusto
+dell'utente: ho ottimizzato una metrica (px verticali) sacrificando l'identità del brand.
+
+**Lezione (doppia):**
+1. Prima di spostare/ridurre elementi di layout, inventariare gli elementi `fixed`/overlay
+   che condividono la stessa fascia (isola top-center, toast top-right, AreaSwitch bottom-left,
+   bottoni bottom-right) e verificare le collisioni alle varie larghezze. La soluzione robusta
+   non è "spostare di qualche px" ma riservare le corsie a livello di layout (header a 3 colonne
+   con corsia centrale vuota per l'isola).
+2. "Compatto" per l'utente non significa "minimo": il brand può perdere spazio ma non presenza.
+   Quando riduco qualcosa di identitario, proporre il punto di mezzo (80px/4xl), non l'estremo.

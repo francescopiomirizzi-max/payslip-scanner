@@ -108,6 +108,19 @@ const App: React.FC = () => {
         return () => window.removeEventListener('scroll', handleScroll);
     }, []);
 
+    // --- TITOLO TAB DINAMICO ---
+    // Con più tab aperte su pratiche diverse ci si orienta dalla barra del browser.
+    useEffect(() => {
+        const base = 'RailFlow';
+        let title = `${base} — Gestionale Ferrovieri`;
+        if (area === 'riposi') title = `Turni & Riposi · ${base}`;
+        else if (viewMode === 'stats') title = `Statistiche · ${base}`;
+        else if (viewMode === 'archive') title = `Archivio · ${base}`;
+        else if ((viewMode === 'complex' || viewMode === 'simple') && selectedWorker)
+            title = `${selectedWorker.cognome} ${selectedWorker.nome} · ${base}`;
+        document.title = title;
+    }, [area, viewMode, selectedWorker]);
+
     const scrollToTop = () => window.scrollTo({ top: 0, behavior: 'smooth' });
 
     // --- DYNAMIC ISLAND SYNC ---
@@ -184,16 +197,16 @@ const App: React.FC = () => {
         <div className="min-h-screen bg-white dark:bg-slate-900 font-sans px-6 py-10">
             <div className="max-w-7xl mx-auto space-y-12">
                 <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-6">
-                        <div className="w-32 h-32 rounded-full bg-slate-200 dark:bg-slate-800 animate-pulse" />
-                        <div className="space-y-3">
-                            <div className="h-12 w-44 bg-slate-200 dark:bg-slate-800 rounded-2xl animate-pulse" />
-                            <div className="h-4 w-32 bg-slate-200 dark:bg-slate-700 rounded-xl animate-pulse" />
+                    <div className="flex items-center gap-5">
+                        <div className="w-20 h-20 rounded-full bg-slate-200 dark:bg-slate-800 animate-pulse" />
+                        <div className="space-y-2">
+                            <div className="h-9 w-40 bg-slate-200 dark:bg-slate-800 rounded-2xl animate-pulse" />
+                            <div className="h-3 w-36 bg-slate-200 dark:bg-slate-700 rounded-xl animate-pulse" />
                         </div>
                     </div>
                     <div className="flex gap-3">
-                        {[140, 120, 160].map((w, i) => (
-                            <div key={i} className="h-12 bg-slate-200 dark:bg-slate-800 rounded-xl animate-pulse" style={{ width: w }} />
+                        {[120, 110, 150].map((w, i) => (
+                            <div key={i} className="h-11 bg-slate-200 dark:bg-slate-800 rounded-xl animate-pulse" style={{ width: w }} />
                         ))}
                     </div>
                 </div>

@@ -179,6 +179,16 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
   const [activeTickerModal, setActiveTickerModal] = useState<{ title: string, content: React.ReactNode } | null>(null);
 
   const [currentYear, setCurrentYear] = useState<number>(() => {
+    // Hint one-shot dalla YearTimeline della WorkerCard: il click su una tacca
+    // anno deve far atterrare direttamente su quell'anno.
+    try {
+      const hint = sessionStorage.getItem(`openYear_${worker.id}`);
+      if (hint) {
+        sessionStorage.removeItem(`openYear_${worker.id}`);
+        const y = parseInt(hint);
+        if (!isNaN(y)) return y;
+      }
+    } catch {}
     if (worker?.anni && worker.anni.length > 0) {
       const activeInputs = worker.anni.filter((d: AnnoDati) =>
         (d.imponibile_tfr_mensile && d.imponibile_tfr_mensile > 0) ||

@@ -4,6 +4,7 @@ import { Worker, getColumnsByProfile, resolveIncludePaidLeave } from '../types';
 import { SYSTEM_PROFILES, getCustomColorIndex } from '../config/profiles';
 import { parseLocalFloat, getProfiloBadgeLabel } from '../utils/formatters';
 import { computeHolidayIndemnity } from '../utils/calculationEngine';
+import { getYearCoverage } from '../utils/workerStatus';
 import { useIsReadOnly } from '../lib/readonly';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -28,7 +29,7 @@ const scrollbarStyles = `
 // Mostra il trend economico degli ultimi 12 mesi. Se non ci sono almeno 2 mesi
 // con valori reali > 0, non si inventano dati: si mostra un piccolo segnale
 // "in attesa" — tre puntini pulsanti nel colore accent della card.
-const Sparkline = ({ worker }: { worker: Worker }) => {
+const Sparkline = ({ worker, color }: { worker: Worker; color: string }) => {
   const dataPoints = useMemo(() => {
     if (!worker.anni || !Array.isArray(worker.anni) || worker.anni.length === 0) return null;
     const cols = getColumnsByProfile(worker.profilo, worker.eliorType);
@@ -47,9 +48,7 @@ const Sparkline = ({ worker }: { worker: Worker }) => {
     return values.length >= 2 && values.some(v => v > 0) ? values : null;
   }, [worker]);
 
-  const accent = worker.accentColor || 'indigo';
-  const colorMap: any = { indigo: '#6366f1', emerald: '#10b981', orange: '#f97316', blue: '#3b82f6', rose: '#f43f5e', violet: '#8b5cf6', teal: '#14b8a6' };
-  const hexColor = colorMap[accent] || '#3b82f6';
+  const hexColor = color || '#3b82f6';
 
   if (!dataPoints) {
     return (
@@ -169,6 +168,89 @@ const BackChart = ({ worker, theme, startYear }: { worker: Worker, theme: any, s
   );
 };
 
+// --- TIMELINE ANNI (FRONTE) ---
+// Una tacca per ogni anno del range atteso: verde = 12/12 mesi, ambra = parziale,
+// grigio = nessuna busta. Stessa logica del Report Buste Mancanti (workerStatus).
+// Cliccare una tacca apre la Gestione Buste Paga direttamente su quell'anno
+// (hint via sessionStorage letto da WorkerDetailPage).
+const YearTimeline = ({ worker, startClaimYear, onOpenYear }: {
+  worker: Worker;
+  startClaimYear: number;
+  onOpenYear: (year: number) => void;
+}) => {
+  const coverage = useMemo(
+    () => getYearCoverage({ anni: worker.anni, startClaimYear }),
+    [worker.anni, startClaimYear]
+  );
+
+  if (coverage.length === 0) {
+    return (
+      <div className="space-y-1.5 mt-2">
+        <div className="flex justify-between items-end px-1">
+          <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">Copertura buste</span>
+          <span className="text-xs font-black text-slate-300 dark:text-slate-600">—</span>
+        </div>
+        <div className="h-4 w-full rounded-lg border border-dashed border-slate-200 dark:border-slate-700" />
+      </div>
+    );
+  }
+
+  const filled = coverage.reduce((s, y) => s + y.filledMonths, 0);
+  const percent = Math.round((filled / (coverage.length * 12)) * 100);
+  const fullYears = coverage.filter(y => y.filledMonths === 12).length;
+
+  const segColor = (m: number) =>
+    m === 12 ? 'bg-emerald-500 hover:bg-emerald-400'
+    : m > 0  ? 'bg-amber-400 hover:bg-amber-300'
+    :          'bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600';
+
+  const segTitle = (y: { year: number; filledMonths: number }) =>
+    y.filledMonths === 12 ? `${y.year} · completo (12/12)`
+    : y.filledMonths > 0  ? `${y.year} · ${y.filledMonths}/12 mesi — apri per completare`
+    :                       `${y.year} · nessuna busta — apri per iniziare`;
+
+  return (
+    <div className="space-y-1.5 mt-2">
+      <div className="flex justify-between items-end px-1">
+        <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">
+          Copertura buste · {fullYears}/{coverage.length} anni
+        </span>
+        <span className={`text-xs font-black tabular-nums ${percent === 100 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500 dark:text-slate-400'}`}>
+          {percent}%
+        </span>
+      </div>
+      <div className="flex gap-[3px] items-end px-0.5">
+        {coverage.map(y => (
+          <button
+            key={y.year}
+            onClick={(e) => { e.stopPropagation(); onOpenYear(y.year); }}
+            title={segTitle(y)}
+            aria-label={segTitle(y)}
+            className={`flex-1 min-w-0 h-4 rounded-[3px] transition-all duration-150 hover:scale-y-125 hover:shadow-sm cursor-pointer ${segColor(y.filledMonths)}`}
+          />
+        ))}
+      </div>
+      <div className="flex justify-between px-0.5">
+        <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 tabular-nums">{coverage[0].year}</span>
+        <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 tabular-nums">{coverage[coverage.length - 1].year}</span>
+      </div>
+    </div>
+  );
+};
+
+// --- COLORE CARD = AZIENDA ---
+// La card è colorata per azienda (come filtri e badge dashboard): si capisce dove
+// lavora la persona senza leggere. Lo STATO della pratica vive nella tacca laterale.
+// Custom → famiglia deterministica condivisa con badgeStyles/getCustomColorIndex.
+const COMPANY_COLOR_KEY: Record<string, string> = {
+  RFI: 'blue',
+  TRENITALIA: 'red',
+  ELIOR: 'orange',
+  CLEAN_SERVICE: 'emerald',
+  MERCITALIA: 'amber',
+};
+const CUSTOM_COLOR_KEYS = ['fuchsia', 'violet', 'cyan', 'rose', 'indigo', 'teal'];
+
 const STATUS_PICKER_OPTIONS = [
   { value: '', label: 'Da Analizzare', dot: '#94a3b8' },
   { value: 'pronta', label: 'Conteggi', dot: '#f59e0b' },
@@ -266,47 +348,31 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
     return UserCircle;
   }, [worker.ruolo]);
 
+  // NB: varianti dark esplicite — i vecchi `dark:bg-opacity-*` ai call site erano
+  // utility rimosse in Tailwind v4 e in dark mode il chip restava chiaro.
   const getStatusConfig = (status?: string) => {
     switch (status) {
-      case 'chiusa': return { color: 'bg-emerald-100/80 text-emerald-700 border-emerald-200', dot: '#10b981', label: 'Pagata', icon: CheckCircle2 };
-      case 'inviata': return { color: 'bg-red-100/80 text-red-700 border-red-200', dot: '#ef4444', label: 'Buste Paga Mancanti', icon: AlertCircle };
-      case 'pronta': return { color: 'bg-amber-100/80 text-amber-700 border-amber-200', dot: '#f59e0b', label: 'Conteggi', icon: FileBarChart };
-      case 'trattativa': return { color: 'bg-teal-100/80 text-teal-700 border-teal-200', dot: '#14b8a6', label: 'Conclusa', icon: Handshake };
-      default: return { color: 'bg-slate-100/80 text-slate-500 border-slate-200', dot: '#94a3b8', label: 'Da Analizzare', icon: Clock };
+      case 'chiusa': return { color: 'bg-emerald-100/80 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-700/50', dot: '#10b981', label: 'Pagata', icon: CheckCircle2 };
+      case 'inviata': return { color: 'bg-red-100/80 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-700/50', dot: '#ef4444', label: 'Buste Paga Mancanti', icon: AlertCircle };
+      case 'pronta': return { color: 'bg-amber-100/80 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-700/50', dot: '#f59e0b', label: 'Conteggi', icon: FileBarChart };
+      case 'trattativa': return { color: 'bg-teal-100/80 text-teal-700 border-teal-200 dark:bg-teal-900/30 dark:text-teal-300 dark:border-teal-700/50', dot: '#14b8a6', label: 'Conclusa', icon: Handshake };
+      default: return { color: 'bg-slate-100/80 text-slate-500 border-slate-200 dark:bg-slate-800/60 dark:text-slate-400 dark:border-slate-600/50', dot: '#94a3b8', label: 'Da Analizzare', icon: Clock };
     }
   };
 
   const statusConfig = getStatusConfig(worker.status);
   const StatusIcon = statusConfig.icon;
 
-  // --- STATS PROGRESSO DATI ---
-  const stats = useMemo(() => {
-    if (!worker.anni || worker.anni.length === 0) {
-      return { percent: 0, label: 'Nuova', range: 'N.D.', preview: [] };
-    }
-    const validRows = worker.anni.filter(row => parseLocalFloat(row.daysWorked) > 0);
-    const yearsWithData = validRows.map(m => m.year);
+  // --- RANGE ANNI (chip accanto al ruolo) ---
+  // La copertura mese-per-mese è mostrata dalla YearTimeline; qui serve solo il range.
+  const yearsRange = useMemo(() => {
+    if (!worker.anni || worker.anni.length === 0) return 'N.D.';
+    const yearsWithData = worker.anni
+      .filter(row => parseLocalFloat(row.daysWorked) > 0)
+      .map(m => m.year);
     const maxYear = yearsWithData.length > 0 ? Math.max(...yearsWithData) : new Date().getFullYear();
-
-    if (maxYear < startClaimYear) {
-      return { percent: 0, label: 'Da Iniziare', range: `${startClaimYear}-...`, preview: [] };
-    }
-
-    const totalYearsSpan = maxYear - startClaimYear + 1;
-    const totalMonthsPossible = totalYearsSpan * 12;
-    const validMonthsCount = validRows.filter(row => row.year >= startClaimYear && row.year <= maxYear).length;
-
-    let percentage = 0;
-    if (totalMonthsPossible > 0) percentage = Math.round((validMonthsCount / totalMonthsPossible) * 100);
-
-    const preview = [...validRows].sort((a, b) => b.year - a.year || b.monthIndex - a.monthIndex).slice(0, 3);
-
-    return {
-      percent: Math.min(percentage, 100),
-      label: percentage >= 100 ? 'Completa' : percentage === 0 ? 'In Attesa' : 'In Corso',
-      range: `${startClaimYear}-${maxYear}`,
-      preview
-    };
+    if (maxYear < startClaimYear) return `${startClaimYear}-...`;
+    return `${startClaimYear}-${maxYear}`;
   }, [worker.anni, startClaimYear]);
 
   // --- CALCOLO FINANZIARIO — MOTORE UNIFICATO ---
@@ -348,14 +414,19 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
     };
   }, [worker, includeTickets, startClaimYear, includeExFest]);
 
-  // --- TEMA E STILI ---
+  // --- TEMA E STILI (colore = azienda, non più accentColor casuale) ---
   const theme = useMemo(() => {
-    const color = worker.accentColor || 'indigo';
+    const color = COMPANY_COLOR_KEY[worker.profilo]
+      ?? CUSTOM_COLOR_KEYS[getCustomColorIndex(worker.profilo ?? '')];
     const hexMap: any = {
       indigo:  { start: '#6366f1', end: '#8b5cf6', text: '#4f46e5', bg: '#eef2ff', border: '#c7d2fe', glow: 'rgba(99, 102, 241, 0.5)',  classes: 'bg-indigo-50 dark:bg-indigo-900/30 border-indigo-200 dark:border-indigo-700/50 text-indigo-600 dark:text-indigo-400' },
       emerald: { start: '#10b981', end: '#14b8a6', text: '#059669', bg: '#ecfdf5', border: '#a7f3d0', glow: 'rgba(16, 185, 129, 0.5)',  classes: 'bg-emerald-50 dark:bg-emerald-900/30 border-emerald-200 dark:border-emerald-700/50 text-emerald-600 dark:text-emerald-400' },
       orange:  { start: '#f97316', end: '#ef4444', text: '#ea580c', bg: '#fff7ed', border: '#fed7aa', glow: 'rgba(249, 115, 22, 0.5)',  classes: 'bg-orange-50 dark:bg-orange-900/30 border-orange-200 dark:border-orange-700/50 text-orange-600 dark:text-orange-400' },
       blue:    { start: '#3b82f6', end: '#06b6d4', text: '#2563eb', bg: '#eff6ff', border: '#bfdbfe', glow: 'rgba(59, 130, 246, 0.5)',  classes: 'bg-blue-50 dark:bg-blue-900/30 border-blue-200 dark:border-blue-700/50 text-blue-600 dark:text-cyan-400' },
+      red:     { start: '#dc2626', end: '#f43f5e', text: '#b91c1c', bg: '#fef2f2', border: '#fecaca', glow: 'rgba(220, 38, 38, 0.5)',   classes: 'bg-red-50 dark:bg-red-900/30 border-red-200 dark:border-red-700/50 text-red-600 dark:text-red-400' },
+      amber:   { start: '#d97706', end: '#f59e0b', text: '#b45309', bg: '#fffbeb', border: '#fde68a', glow: 'rgba(217, 119, 6, 0.5)',   classes: 'bg-amber-50 dark:bg-amber-900/30 border-amber-200 dark:border-amber-700/50 text-amber-600 dark:text-amber-400' },
+      cyan:    { start: '#06b6d4', end: '#3b82f6', text: '#0891b2', bg: '#ecfeff', border: '#a5f3fc', glow: 'rgba(6, 182, 212, 0.5)',   classes: 'bg-cyan-50 dark:bg-cyan-900/30 border-cyan-200 dark:border-cyan-700/50 text-cyan-600 dark:text-cyan-400' },
+      fuchsia: { start: '#d946ef', end: '#a855f7', text: '#c026d3', bg: '#fdf4ff', border: '#f5d0fe', glow: 'rgba(217, 70, 239, 0.5)',  classes: 'bg-fuchsia-50 dark:bg-fuchsia-900/30 border-fuchsia-200 dark:border-fuchsia-700/50 text-fuchsia-600 dark:text-fuchsia-400' },
       rose:    { start: '#f43f5e', end: '#fb923c', text: '#e11d48', bg: '#fff1f2', border: '#fecdd3', glow: 'rgba(244, 63, 94, 0.5)',   classes: 'bg-rose-50 dark:bg-rose-900/30 border-rose-200 dark:border-rose-700/50 text-rose-600 dark:text-rose-400' },
       violet:  { start: '#8b5cf6', end: '#d946ef', text: '#7c3aed', bg: '#f5f3ff', border: '#ddd6fe', glow: 'rgba(139, 92, 246, 0.5)', classes: 'bg-violet-50 dark:bg-violet-900/30 border-violet-200 dark:border-violet-700/50 text-violet-600 dark:text-violet-400' },
       teal:    { start: '#14b8a6', end: '#06b6d4', text: '#0d9488', bg: '#f0fdfa', border: '#99f6e4', glow: 'rgba(20, 184, 166, 0.5)',  classes: 'bg-teal-50 dark:bg-teal-900/30 border-teal-200 dark:border-teal-700/50 text-teal-600 dark:text-teal-400' }
@@ -374,7 +445,7 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
       textGradientStyle: { background: `linear-gradient(90deg, ${c.start} 0%, ${c.end} 100%)`, WebkitBackgroundClip: 'text', color: 'transparent' },
       shadowStyle: { '--shadow-color': c.glow } as React.CSSProperties
     };
-  }, [worker.accentColor]);
+  }, [worker.profilo]);
 
   const badgeStyles = useMemo(() => {
     if (!worker.profilo) return 'bg-slate-200/50 dark:bg-slate-700/50 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-600';
@@ -418,7 +489,16 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
                 <div className="absolute inset-0 pointer-events-none z-0" style={{ backgroundImage: noiseBg, opacity: 0.4 }}></div>
                 <div className="pointer-events-none absolute -inset-px opacity-0 transition duration-300 z-10" style={{ opacity, background: `radial-gradient(600px circle at ${position.x}px ${position.y}px, ${theme.spotlight}, transparent 40%)` }} />
 
-                <div className="absolute left-0 top-10 bottom-10 w-[3px] rounded-full z-30 transition-colors duration-500" style={{ backgroundColor: statusConfig.dot, boxShadow: `0 0 10px 2px ${statusConfig.dot}50` }} />
+                {/* TACCA STATO — il colore della card dice l'azienda, questa dice
+                    lo stato pratica. Sfuma alle estremità e si allarga in hover. */}
+                <div
+                  className="absolute left-0 top-9 bottom-9 w-[5px] rounded-r-full z-30 transition-all duration-500 group-hover:w-[7px]"
+                  title={statusConfig.label}
+                  style={{
+                    background: `linear-gradient(180deg, ${statusConfig.dot}00 0%, ${statusConfig.dot} 14%, ${statusConfig.dot} 86%, ${statusConfig.dot}00 100%)`,
+                    boxShadow: `0 0 14px 2px ${statusConfig.dot}55`,
+                  }}
+                />
 
                 <div className="relative p-7 flex flex-col h-full z-20 pl-8">
                   <div className="flex items-start gap-3 mb-4">
@@ -532,7 +612,7 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
                       {isReadOnly ? (
                         /* Sola lettura: badge stato statico, non cliccabile (le RLS bloccano comunque la scrittura) */
                         <div
-                          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border shadow-sm w-fit backdrop-blur-md ${statusConfig.color} dark:bg-opacity-20 dark:border-opacity-30`}
+                          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border shadow-sm w-fit backdrop-blur-md ${statusConfig.color}`}
                         >
                           <span className="w-2 h-2 rounded-full shadow-[0_0_8px_currentColor]" style={{ backgroundColor: statusConfig.dot }} />
                           <StatusIcon className="w-3.5 h-3.5" />
@@ -549,7 +629,7 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
                           }
                           setIsStatusOpen(prev => !prev);
                         }}
-                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border shadow-sm w-fit backdrop-blur-md transition-all hover:opacity-80 ${statusConfig.color} dark:bg-opacity-20 dark:border-opacity-30`}
+                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border shadow-sm w-fit backdrop-blur-md transition-all hover:opacity-80 ${statusConfig.color}`}
                       >
                         <span className="w-2 h-2 rounded-full shadow-[0_0_8px_currentColor]" style={{ backgroundColor: statusConfig.dot }} />
                         <StatusIcon className="w-3.5 h-3.5" />
@@ -586,20 +666,17 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
                       <span className="flex-1 min-w-0 truncate px-3 py-1.5 rounded-xl bg-white/50 dark:bg-slate-900/60 border border-slate-200/60 dark:border-slate-700/50 text-[10px] font-bold text-slate-500 dark:text-slate-400 capitalize shadow-sm backdrop-blur-sm transition-colors">{worker.ruolo || 'N.D.'}</span>
                       <div className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/50 dark:bg-slate-900/60 border border-slate-200/60 dark:border-slate-700/50 shadow-sm backdrop-blur-sm transition-colors">
                         <CalendarRange className="w-3.5 h-3.5" style={theme.iconStyle} />
-                        <span className="text-[10px] font-black text-slate-700 dark:text-slate-300 tracking-tight transition-colors">{stats.range}</span>
+                        <span className="text-[10px] font-black text-slate-700 dark:text-slate-300 tracking-tight transition-colors">{yearsRange}</span>
                       </div>
                     </div>
-                    <div className="space-y-2 mt-2">
-                      <div className="flex justify-between items-end px-1">
-                        <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500 transition-colors">{stats.label}</span>
-                        <span className="text-xs font-black" style={theme.iconStyle}>{stats.percent}%</span>
-                      </div>
-                      <div className="h-3 w-full bg-slate-200/50 dark:bg-slate-900/80 rounded-full overflow-hidden border border-slate-100/50 dark:border-slate-800/80 p-[2px] shadow-inner backdrop-blur-sm transition-colors">
-                        <div className="h-full rounded-full shadow-[0_0_10px_currentColor] transition-all duration-1000 ease-out relative" style={{ ...theme.gradientStyle, width: `${stats.percent}%` }}>
-                          <div className="absolute inset-0 bg-white/40 dark:bg-white/20 w-full animate-[shimmer_2s_infinite] skew-x-12"></div>
-                        </div>
-                      </div>
-                    </div>
+                    <YearTimeline
+                      worker={worker}
+                      startClaimYear={startClaimYear}
+                      onOpenYear={(year) => {
+                        try { sessionStorage.setItem(`openYear_${worker.id}`, String(year)); } catch {}
+                        onOpenComplex(worker.id);
+                      }}
+                    />
 
                     {worker.notes && worker.notes.trim() && (
                       <p className="text-[10px] text-slate-400 dark:text-slate-500 italic leading-snug line-clamp-2 px-1 pt-1">
@@ -666,7 +743,7 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
                     </motion.button>
                   </div>
                 </div>
-                <Sparkline worker={worker} />
+                <Sparkline worker={worker} color={theme.rawColor.start} />
               </div>
           </div>
 
@@ -698,7 +775,7 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
                       <p className="text-[9px] uppercase tracking-widest text-slate-400 font-black">RECUPERO TOTALE</p>
                       <Wallet className="w-4 h-4 opacity-60" style={theme.iconStyle} />
                     </div>
-                    <p className="text-3xl font-black tracking-tight bg-clip-text text-transparent" style={theme.textGradientStyle}>
+                    <p className="text-3xl font-black tracking-tight tabular-nums bg-clip-text text-transparent" style={theme.textGradientStyle}>
                       {financialStats.netto.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })}
                     </p>
                   </div>
@@ -706,7 +783,7 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
                   {/* GRAFICO TREND */}
                   <div className="mb-4">
                     <div className="flex justify-between items-center mb-1 px-1">
-                      <p className="text-[8px] font-bold uppercase text-slate-400">Trend Storico</p>
+                      <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400">Trend Storico</p>
                       <TrendingUp className="w-3 h-3 text-slate-300 dark:text-slate-600" />
                     </div>
                     <BackChart worker={worker} theme={theme} startYear={startClaimYear} />
@@ -725,8 +802,8 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
                     </div>
 
                     {includeTickets ? (
-                      <p className="text-lg font-black text-slate-600 dark:text-slate-200 transition-colors">
-                        {financialStats.ticket.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' }).replace(',00', '')}
+                      <p className="text-lg font-black tabular-nums text-slate-600 dark:text-slate-200 transition-colors">
+                        {financialStats.ticket.toLocaleString('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })}
                       </p>
                     ) : (
                       <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-100/80 dark:bg-rose-900/30 border border-rose-200 dark:border-rose-800/50 shadow-sm transition-colors">
@@ -740,16 +817,16 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
                   <div className="grid grid-cols-2 gap-3 mb-2">
                     <div className="p-3 rounded-[1.5rem] bg-white/40 dark:bg-slate-900/40 border border-white/50 dark:border-slate-700/50 shadow-sm backdrop-blur-sm flex flex-col items-center justify-center text-center hover:bg-white/60 dark:hover:bg-slate-800/60 transition-colors">
                       <Layers className="w-3.5 h-3.5 text-blue-400 dark:text-cyan-400 mb-1" />
-                      <p className="text-[7px] uppercase tracking-widest text-slate-400 font-bold mb-0.5">Lordo</p>
-                      <p className="text-sm font-black text-slate-600 dark:text-slate-200 transition-colors">
-                        {financialStats.lordo.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' }).replace(',00', '')}
+                      <p className="text-[9px] uppercase tracking-wide text-slate-400 font-bold mb-0.5">Lordo</p>
+                      <p className="text-sm font-black tabular-nums text-slate-600 dark:text-slate-200 transition-colors">
+                        {financialStats.lordo.toLocaleString('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })}
                       </p>
                     </div>
 
                     <div className="p-3 rounded-[1.5rem] bg-white/40 dark:bg-slate-900/40 border border-white/50 dark:border-slate-700/50 shadow-sm backdrop-blur-sm flex flex-col items-center justify-center text-center hover:bg-white/60 dark:hover:bg-slate-800/60 transition-colors">
                       <CalendarClock className="w-3.5 h-3.5 mb-1" style={theme.iconStyle} />
-                      <p className="text-[7px] uppercase tracking-widest text-slate-400 font-bold mb-0.5">G. Utili</p>
-                      <p className="text-sm font-black" style={theme.iconStyle}>
+                      <p className="text-[9px] uppercase tracking-wide text-slate-400 font-bold mb-0.5">G. Utili</p>
+                      <p className="text-sm font-black tabular-nums" style={theme.iconStyle}>
                         {financialStats.ferie.toLocaleString('it-IT', { maximumFractionDigits: 1 })}
                       </p>
                     </div>

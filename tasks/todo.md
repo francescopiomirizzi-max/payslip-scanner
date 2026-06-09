@@ -47,6 +47,60 @@ Pacchetto concordato dopo review UX: feedback/conferme coerenti + URL sync.
       scroll-top + scorciatoie; aggiornato il testo della modale bulk delete.
 - [~] 9. Accessibilità/animazioni — ESCLUSO su richiesta dell'utente.
 
+## Quarto giro — proposte visive 1 e 2 (timeline anni + header compatto)
+
+- [x] V1. Timeline anni sulla WorkerCard (sostituisce la barra % generica):
+      - `utils/workerStatus.ts`: nuovo `getYearCoverage` — stesso range/definizione di
+        "mese compilato" di formatMissingMonths, così card e Report Word coincidono;
+      - `WorkerCard`: componente `YearTimeline` — una tacca per anno (verde 12/12,
+        ambra parziale, grigio vuoto), tooltip "anno · N/12 mesi", label
+        "Copertura buste · X/Y anni · %"; click su tacca → Gestione Buste su
+        quell'anno (hint one-shot `sessionStorage openYear_<id>` letto
+        dall'inizializzatore di `currentYear` in WorkerDetailPage);
+      - rimosso il memo stats ormai morto (restava solo `range` → `yearsRange`).
+- [x] V2. Header dashboard compatto: logo 128→56px, titolo 5xl→3xl, bottoni
+      py-3→py-2.5 con icone w-4, gap/margini ridotti (≈90px verticali recuperati);
+      skeleton di caricamento in App.tsx allineato.
+- [x] Verifica: tsc pulito · build ok · **167 test verdi** (+4 workerStatus.test.ts).
+
+## Quinto giro — proposte visive 3 e 4 (variante utente)
+
+- [x] V4 (idea utente, migliore dell'originale): card colorata per AZIENDA + tacca
+      laterale colorata per STATO:
+      - `WorkerCard`: tema derivato da `worker.profilo` (RFI blu, Trenitalia rosso,
+        Elior arancio, Clean Service smeraldo, Mercitalia ambra — hex canonici di
+        SYSTEM_PROFILES; custom → famiglia deterministica via getCustomColorIndex,
+        stessa palette dei badge); `accentColor` casuale non guida più la card
+        (resta usato da header dettaglio/modale stats — fuori scope);
+      - hexMap esteso con red/amber/cyan/fuchsia; Sparkline riceve il colore dal tema;
+      - tacca stato potenziata: 5px (7px in hover), gradiente sfumato alle estremità,
+        glow, tooltip con label stato.
+- [x] V3. Tipografia/numeri: `tabular-nums` su tutti gli importi (3 hero dashboard,
+      modale stats importi+totale, retro card: recupero/ticket/lordo/g.utili);
+      formato € unificato sul retro card (maximumFractionDigits:0, via il
+      .replace(',00','') che teneva i decimali solo a volte); label retro card
+      7-8px→9px tracking-wide.
+- [x] Verifica: tsc pulito · build ok · 167 test verdi.
+
+## Sesto giro — header definitivo + V5 dark mode + V6 titolo tab
+
+- [x] Header a TRE CORSIE (fix sovrapposizione segnalata dall'utente): grid
+      `auto | minmax(260px,1fr) | auto` — brand a sinistra, corsia centrale VUOTA
+      riservata alla Dynamic Island (fissa top-center, 140px idle), azioni a destra.
+      La collisione bottoni/isola sparisce per costruzione.
+- [x] Brand ricalibrato (era troppo piccolo a 56px/3xl): logo 80px con ring sottile +
+      alone gradiente in hover, titolo 4xl, sottotitolo 11px; bottoni uniformati h-11
+      con whitespace-nowrap; skeleton App.tsx allineato.
+- [x] V5 dark mode: Toast con varianti dark (success/error/info + bottoni azione);
+      badge profilo modale stats da hardcoded ELIOR/blu → registro SYSTEM_PROFILES
+      (con dark, fallback neutro custom); ranking # con dark:text-slate-600;
+      chip stato WorkerCard: rimossi `dark:bg-opacity-*` (utility INESISTENTI in
+      Tailwind v4 → in dark il chip restava chiaro), aggiunte varianti dark vere
+      per i 5 stati.
+- [x] V6 titolo tab dinamico: "Cognome Nome · RailFlow", "Archivio · RailFlow",
+      "Statistiche · RailFlow", "Turni & Riposi · RailFlow" (effect in App.tsx).
+- [x] Verifica: tsc pulito · build ok · 167 test verdi.
+
 ## Review
 
 - Verifica finale: `npx tsc --noEmit` pulito · `vite build` ok · **163 test verdi**.

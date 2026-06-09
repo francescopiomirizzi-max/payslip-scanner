@@ -23,15 +23,15 @@ export const Toast = ({ message, type, onClose, action }: { message: string; typ
     };
 
     const colors = {
-        success: 'border-emerald-500/50 bg-emerald-50/90 text-emerald-900',
-        error: 'border-red-500/50 bg-red-50/90 text-red-900',
-        info: 'border-blue-500/50 bg-blue-50/90 text-blue-900'
+        success: 'border-emerald-500/50 bg-emerald-50/90 text-emerald-900 dark:bg-emerald-950/90 dark:text-emerald-100 dark:border-emerald-500/40',
+        error: 'border-red-500/50 bg-red-50/90 text-red-900 dark:bg-red-950/90 dark:text-red-100 dark:border-red-500/40',
+        info: 'border-blue-500/50 bg-blue-50/90 text-blue-900 dark:bg-blue-950/90 dark:text-blue-100 dark:border-blue-500/40'
     };
 
     const actionStyles = {
-        success: 'text-emerald-700 hover:bg-emerald-100/80 border-emerald-300',
-        error: 'text-red-700 hover:bg-red-100/80 border-red-300',
-        info: 'text-blue-700 hover:bg-blue-100/80 border-blue-300'
+        success: 'text-emerald-700 hover:bg-emerald-100/80 border-emerald-300 dark:text-emerald-300 dark:hover:bg-emerald-900/60 dark:border-emerald-700',
+        error: 'text-red-700 hover:bg-red-100/80 border-red-300 dark:text-red-300 dark:hover:bg-red-900/60 dark:border-red-700',
+        info: 'text-blue-700 hover:bg-blue-100/80 border-blue-300 dark:text-blue-300 dark:hover:bg-blue-900/60 dark:border-blue-700'
     };
 
     return (

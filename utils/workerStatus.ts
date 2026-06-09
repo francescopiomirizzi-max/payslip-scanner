@@ -131,6 +131,31 @@ export const formatMissingMonths = (worker: Pick<Worker, 'anni' | 'startClaimYea
   return parts.join('; ');
 };
 
+// --- Copertura per anno (timeline WorkerCard) ---
+
+export interface YearCoverage {
+  year: number;
+  /** Mesi compilati su 12, stessa definizione di "compilato" del Report Buste Mancanti. */
+  filledMonths: number;
+}
+
+/**
+ * Copertura buste per ogni anno del range atteso [startClaimYear-1, anno scorso]
+ * (stesso range e stessa logica di formatMissingMonths, così la timeline in card
+ * e il Report Word non possono raccontare storie diverse).
+ */
+export const getYearCoverage = (worker: Pick<Worker, 'anni' | 'startClaimYear'>): YearCoverage[] => {
+  const byYear = monthsByYearFromAnni(worker);
+  const range = computeExpectedRange(worker);
+  if (!range) return [];
+  const [startY, endY] = range;
+  const out: YearCoverage[] = [];
+  for (let year = startY; year <= endY; year++) {
+    out.push({ year, filledMonths: (byYear.get(year) ?? new Set<number>()).size });
+  }
+  return out;
+};
+
 /** True se ci sono mesi mancanti nel range atteso [startClaimYear, anno_scorso]. */
 export const hasMissingMonths = (worker: Pick<Worker, 'anni' | 'startClaimYear'>): boolean => {
   const byYear = monthsByYearFromAnni(worker);
