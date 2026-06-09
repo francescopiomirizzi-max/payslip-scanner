@@ -37,13 +37,14 @@ interface TableComponentProps {
   onEdit: () => void;
   startClaimYear: number;
   onUpdateWorkerFields?: (fields: Partial<Worker>) => void;
+  addToast?: (message: string, type?: 'success' | 'error' | 'info') => void;
 }
 
 // --- FUNZIONI UTILITY RIMOSSE ---
 
 
 // --- COMPONENTE PRINCIPALE ---
-const TableComponent: React.FC<TableComponentProps> = ({ worker, monthlyInputs, onBack, onEdit, startClaimYear, onUpdateWorkerFields }) => {
+const TableComponent: React.FC<TableComponentProps> = ({ worker, monthlyInputs, onBack, onEdit, startClaimYear, onUpdateWorkerFields, addToast }) => {
   const isReadOnly = useIsReadOnly();
 
   // ✨ BISTURI 1: QUICK ACTIONS CONTESTUALI (Radar Intelligente)
@@ -254,7 +255,8 @@ Distinti saluti.
       await exportSingleWorkerZip(worker, riepilogoOverride);
     } catch (err: any) {
       console.error('Export documenti fallito:', err);
-      alert(`Generazione documenti non riuscita: ${err?.message || err}`);
+      const msg = `Generazione documenti non riuscita: ${err?.message || err}`;
+      if (addToast) addToast(msg, 'error'); else alert(msg);
     } finally {
       setIsExporting(false);
     }

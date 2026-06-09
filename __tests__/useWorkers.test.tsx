@@ -23,6 +23,7 @@ const { mockSelect, mockDelete, mockFrom } = vi.hoisted(() => {
         })),
         delete: vi.fn(() => ({
             eq: vi.fn(() => mockDelete()),
+            in: vi.fn(() => mockDelete()),
         })),
         upsert: vi.fn(() => Promise.resolve({ error: null })),
         insert: vi.fn(() => Promise.resolve({ error: null })),
@@ -302,5 +303,111 @@ describe('delete (optimistic + undo)', () => {
         } finally {
             vi.useRealTimers();
         }
+    });
+});
+
+// ─── Bulk delete (optimistic + undo unico) ───────────────────────────────────
+
+describe('handleDeleteWorkersBulk', () => {
+    const twoWorkers = [
+        makeDbWorker(),
+        makeDbWorker({ id: 'worker-uuid-2', nome: 'Luca', cognome: 'Bianchi' }),
+    ];
+
+    it('removes all workers at once with a single undo toast', async () => {
+        mockSelect.mockResolvedValueOnce({ data: twoWorkers, error: null });
+
+        const { result } = renderHook(() => useWorkers(mockToast));
+        await waitFor(() => expect(result.current.isWorkersLoading).toBe(false));
+
+        act(() => { result.current.handleDeleteWorkersBulk(['worker-uuid-1', 'worker-uuid-2']); });
+
+        expect(result.current.workers).toHaveLength(0);
+        const undoToasts = mockToast.mock.calls.filter(c => c[2]?.action?.label === 'Annulla');
+        expect(undoToasts).toHaveLength(1);
+        expect(undoToasts[0][0]).toContain('2 pratiche');
+    });
+
+    it('undo restores every worker and skips the DB delete', async () => {
+        vi.useFakeTimers();
+        try {
+            mockSelect.mockResolvedValueOnce({ data: twoWorkers, error: null });
+
+            const { result } = renderHook(() => useWorkers(mockToast));
+            await vi.waitFor(() => expect(result.current.isWorkersLoading).toBe(false));
+
+            act(() => { result.current.handleDeleteWorkersBulk(['worker-uuid-1', 'worker-uuid-2']); });
+            expect(result.current.workers).toHaveLength(0);
+
+            const undoCall = mockToast.mock.calls.find(c => c[2]?.action);
+            const undo = (undoCall![2] as any).action.onClick as () => void;
+            act(() => { undo(); });
+
+            expect(result.current.workers).toHaveLength(2);
+            await act(async () => { await vi.advanceTimersByTimeAsync(6000); });
+            expect(mockDelete).not.toHaveBeenCalled();
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('after the undo window expires it issues ONE batch DB delete', async () => {
+        vi.useFakeTimers();
+        try {
+            mockSelect.mockResolvedValueOnce({ data: twoWorkers, error: null });
+
+            const { result } = renderHook(() => useWorkers(mockToast));
+            await vi.waitFor(() => expect(result.current.isWorkersLoading).toBe(false));
+
+            act(() => { result.current.handleDeleteWorkersBulk(['worker-uuid-1', 'worker-uuid-2']); });
+            await act(async () => { await vi.advanceTimersByTimeAsync(5100); });
+
+            expect(mockDelete).toHaveBeenCalledTimes(1);
+            expect(result.current.workers).toHaveLength(0);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+});
+
+// ─── Ricerca estesa (nome, azienda, ruolo) ───────────────────────────────────
+
+describe('filteredWorkers — ricerca estesa', () => {
+    const seed = [
+        makeDbWorker(), // Mario Rossi · RFI · Tecnico
+        makeDbWorker({ id: 'worker-uuid-2', nome: 'Luca', cognome: 'Bianchi', profilo: 'CLEAN_SERVICE', ruolo: 'Operaio' }),
+    ];
+
+    it('matcha per azienda come la mostra la UI (underscore → spazio)', async () => {
+        mockSelect.mockResolvedValueOnce({ data: seed, error: null });
+
+        const { result } = renderHook(() => useWorkers(mockToast));
+        await waitFor(() => expect(result.current.isWorkersLoading).toBe(false));
+
+        act(() => { result.current.setSearchQuery('clean service'); });
+        expect(result.current.filteredWorkers).toHaveLength(1);
+        expect(result.current.filteredWorkers[0].cognome).toBe('Bianchi');
+    });
+
+    it('matcha per ruolo', async () => {
+        mockSelect.mockResolvedValueOnce({ data: seed, error: null });
+
+        const { result } = renderHook(() => useWorkers(mockToast));
+        await waitFor(() => expect(result.current.isWorkersLoading).toBe(false));
+
+        act(() => { result.current.setSearchQuery('tecnico'); });
+        expect(result.current.filteredWorkers).toHaveLength(1);
+        expect(result.current.filteredWorkers[0].cognome).toBe('Rossi');
+    });
+
+    it('continua a matchare per cognome', async () => {
+        mockSelect.mockResolvedValueOnce({ data: seed, error: null });
+
+        const { result } = renderHook(() => useWorkers(mockToast));
+        await waitFor(() => expect(result.current.isWorkersLoading).toBe(false));
+
+        act(() => { result.current.setSearchQuery('bianchi'); });
+        expect(result.current.filteredWorkers).toHaveLength(1);
+        expect(result.current.filteredWorkers[0].nome).toBe('Luca');
     });
 });

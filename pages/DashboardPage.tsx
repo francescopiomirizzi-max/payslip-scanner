@@ -32,9 +32,11 @@ import {
     FileBarChart,
     AlertCircle,
     Handshake,
+    Loader2,
 } from 'lucide-react';
 import WorkerCard from '../components/WorkerCard';
 import { AnimatedCounter } from '../components/ui/AnimatedCounter';
+import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { useIsReadOnly } from '../lib/readonly';
 import { Worker } from '../types';
 import { SYSTEM_PROFILES, SYSTEM_PROFILE_KEYS } from '../config/profiles';
@@ -223,6 +225,7 @@ interface DashboardPageProps {
     handleOpenComplex: (id: string) => void;
     openEditModal: (e: React.MouseEvent, id: string) => void;
     handleDeleteWorker: (id: string) => void;
+    handleDeleteWorkersBulk: (ids: string[]) => void;
     recentlyCreatedId: string | null;
     handleOpenModal: (mode: 'create' | 'edit') => void;
     updateWorkerById: (id: string, fields: any) => void;
@@ -231,6 +234,11 @@ interface DashboardPageProps {
     handleImportData: (e: React.ChangeEvent<HTMLInputElement>) => void;
     setViewMode: (mode: 'home' | 'simple' | 'complex' | 'stats' | 'archive') => void;
     onOpenArchive: (id: string) => void;
+    addToast: (
+        message: string,
+        type?: 'success' | 'error' | 'info',
+        options?: { action?: { label: string; onClick: () => void }; duration?: number }
+    ) => void;
 }
 
 const DashboardPage: React.FC<DashboardPageProps> = ({
@@ -259,6 +267,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
     handleOpenComplex,
     openEditModal,
     handleDeleteWorker,
+    handleDeleteWorkersBulk,
     recentlyCreatedId,
     handleOpenModal,
     updateWorkerById,
@@ -267,6 +276,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
     handleImportData,
     setViewMode,
     onOpenArchive,
+    addToast,
 }) => {
     const isReadOnly = useIsReadOnly();
     type SortKey = 'cognome' | 'credito' | 'status' | 'data';
@@ -367,7 +377,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
         setIsDataMenuOpen(false);
         const conclusi = workersByCassetto.get('trattativa') ?? [];
         if (conclusi.length === 0) {
-            alert('Nessuna pratica nel cassetto "Concluse" da esportare.');
+            addToast('Nessuna pratica nel cassetto "Concluse" da esportare.', 'info');
             return;
         }
         setConcluseStatus(`0 / ${conclusi.length}`);
@@ -376,13 +386,17 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
             const res = await exportConcluseZip(conclusi, (done, total) => {
                 setConcluseStatus(`${done} / ${total}`);
             });
-            let msg = `Esportate ${res.exported} pratiche su ${res.total}.`;
             if (res.failed.length > 0) {
-                msg += `\n\nNon riuscite:\n` + res.failed.map(f => `• ${f.worker}: ${f.error}`).join('\n');
+                addToast(
+                    `Esportate ${res.exported} pratiche su ${res.total}. Non riuscite: ${res.failed.map(f => f.worker).join(', ')}.`,
+                    'error'
+                );
+                console.error('[Export Concluse] Pratiche non riuscite:', res.failed);
+            } else {
+                addToast(`Esportate ${res.exported} pratiche su ${res.total}.`, 'success');
             }
-            alert(msg);
         } catch (err: any) {
-            alert(`Errore durante l'export: ${err?.message || err}`);
+            addToast(`Errore durante l'export: ${err?.message || err}`, 'error');
         } finally {
             setConcluseStatus(null);
         }
@@ -464,8 +478,18 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
     // --- HANDLER TICKET RAPIDO ---
     const allTicketsOn = sortedWorkers.length > 0 && sortedWorkers.every(w => w.includeTickets !== false);
 
-    const toggleGlobalTickets = () => {
-        sortedWorkers.forEach(w => updateWorkerById(w.id, { includeTickets: !allTicketsOn }));
+    // Il toggle riscrive l'impostazione su TUTTE le pratiche mostrate: troppo
+    // pesante per un click secco accanto ai controlli di ordinamento → conferma.
+    const [isTicketConfirmOpen, setIsTicketConfirmOpen] = useState(false);
+
+    const confirmGlobalTickets = () => {
+        const value = !allTicketsOn;
+        sortedWorkers.forEach(w => updateWorkerById(w.id, { includeTickets: value }));
+        setIsTicketConfirmOpen(false);
+        addToast(
+            `Ticket ${value ? 'attivati' : 'disattivati'} su ${sortedWorkers.length} ${sortedWorkers.length === 1 ? 'pratica' : 'pratiche'}.`,
+            'success'
+        );
     };
 
     const toggleSelectWorker = (id: string) => {
@@ -482,9 +506,13 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
         setIsSelectionMode(false);
     };
 
-    const deleteSelectedWorkers = () => {
-        if (!confirm(`Eliminare ${selectedIds.size} ${selectedIds.size === 1 ? 'pratica' : 'pratiche'} selezionate? L'operazione è irreversibile.`)) return;
-        selectedIds.forEach(id => handleDeleteWorker(id));
+    // Conferma via ConfirmModal (coerente col resto dell'app, niente confirm()
+    // nativo); l'eliminazione vera passa dalla bulk delete con singolo undo.
+    const [isBulkDeleteOpen, setIsBulkDeleteOpen] = useState(false);
+
+    const confirmBulkDelete = () => {
+        setIsBulkDeleteOpen(false);
+        handleDeleteWorkersBulk([...selectedIds]);
         setSelectedIds(new Set());
         setIsSelectionMode(false);
     };
@@ -730,16 +758,20 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                             <div className="p-3.5 rounded-2xl bg-slate-100 dark:bg-slate-700/50 text-slate-400 border border-slate-200 dark:border-slate-600 transition-all duration-500 group-hover:bg-emerald-600 group-hover:text-white group-hover:border-emerald-500 group-hover:rotate-12 group-hover:scale-110 group-hover:shadow-lg group-hover:shadow-emerald-500/40">
                                 <Wallet className="w-7 h-7" strokeWidth={2} />
                             </div>
-                            <div className="px-3 py-1 bg-emerald-100 text-emerald-700 text-[10px] font-black uppercase tracking-wider rounded-full border border-emerald-200 opacity-0 group-hover:opacity-100 transition-all transform -translate-y-2 group-hover:translate-y-0 shadow-lg">CLICCA PER DETTAGLI</div>
+                            {/* Sempre visibile: l'affordance "qui si clicca" deve esistere anche su touch/tastiera */}
+                            <div className="flex items-center gap-1 px-3 py-1 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 text-[10px] font-black uppercase tracking-wider rounded-full border border-emerald-200 dark:border-emerald-800 shadow-sm group-hover:shadow-lg transition-shadow">
+                                Dettagli <ChevronRight className="w-3 h-3" strokeWidth={3} />
+                            </div>
                         </div>
                         <div>
                             <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2 group-hover:text-emerald-600 transition-colors duration-300">Credito Stimato Totale</p>
                             <p className="text-5xl font-black tracking-tighter transition-all duration-500 bg-clip-text text-slate-700 dark:text-slate-300 group-hover:text-transparent transform group-hover:scale-105 origin-left overflow-hidden" style={{ backgroundImage: 'linear-gradient(135deg, #059669 0%, #34d399 100%)', WebkitBackgroundClip: 'text' }}>
                                 {dashboardStats.totalNet > 0 ? <AnimatedCounter value={dashboardStats.totalNet} isCurrency /> : '-'}
                             </p>
-                            <div className="flex items-center gap-2 mt-3 opacity-60 group-hover:opacity-100 transition-opacity">
-                                <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 shadow-[0_0_10px_currentColor]"></div>
-                                <p className="text-[10px] font-bold text-slate-400 group-hover:text-emerald-700">Differenza retributive calcolate applicando il principio di onnicomprensività (Cass. 20216/2022) sulle voci variabili ricorrenti, parametrata al tetto di 28 giorni annui.</p>
+                            {/* Nota di metodo: è contenuto sostanziale, non decorazione → leggibile a riposo */}
+                            <div className="flex items-start gap-2 mt-3">
+                                <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 mt-1.5 shrink-0"></div>
+                                <p className="text-xs font-medium leading-snug text-slate-500 dark:text-slate-400">Differenza retributive calcolate applicando il principio di onnicomprensività (Cass. 20216/2022) sulle voci variabili ricorrenti, parametrata al tetto di 28 giorni annui.</p>
                             </div>
                         </div>
                     </div>
@@ -762,16 +794,20 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                             <div className="p-3.5 rounded-2xl bg-slate-100 dark:bg-slate-700/50 text-slate-400 border border-slate-200 dark:border-slate-600 transition-all duration-500 group-hover:bg-amber-500 group-hover:text-white group-hover:border-amber-400 group-hover:-rotate-12 group-hover:scale-110 group-hover:shadow-lg group-hover:shadow-amber-500/40">
                                 <Ticket className="w-7 h-7" strokeWidth={2} />
                             </div>
-                            <div className="px-3 py-1 bg-amber-100 text-amber-700 text-[10px] font-black uppercase tracking-wider rounded-full border border-amber-200 opacity-0 group-hover:opacity-100 transition-all transform translate-x-4 group-hover:translate-x-0 shadow-lg">CLICCA PER DETTAGLI</div>
+                            {/* Sempre visibile: l'affordance "qui si clicca" deve esistere anche su touch/tastiera */}
+                            <div className="flex items-center gap-1 px-3 py-1 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 text-[10px] font-black uppercase tracking-wider rounded-full border border-amber-200 dark:border-amber-800 shadow-sm group-hover:shadow-lg transition-shadow">
+                                Dettagli <ChevronRight className="w-3 h-3" strokeWidth={3} />
+                            </div>
                         </div>
                         <div>
                             <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2 group-hover:text-amber-600 transition-colors duration-300">Valore Ticket</p>
                             <p className="text-5xl font-black tracking-tighter transition-all duration-500 bg-clip-text text-slate-700 dark:text-slate-300 group-hover:text-transparent transform group-hover:scale-105 origin-left overflow-hidden" style={{ backgroundImage: 'linear-gradient(135deg, #d97706 0%, #fbbf24 100%)', WebkitBackgroundClip: 'text' }}>
                                 {dashboardStats.totalTicket > 0 ? <AnimatedCounter value={dashboardStats.totalTicket} isCurrency /> : '-'}
                             </p>
-                            <div className="flex items-center gap-2 mt-3 opacity-60 group-hover:opacity-100 transition-opacity">
-                                <div className="h-1.5 w-1.5 rounded-full bg-amber-500 shadow-[0_0_10px_currentColor]"></div>
-                                <p className="text-[10px] font-bold text-slate-400 group-hover:text-amber-700">Controvalore monetario dei buoni pasto maturati durante le ferie godute e non erogati.</p>
+                            {/* Nota di metodo: è contenuto sostanziale, non decorazione → leggibile a riposo */}
+                            <div className="flex items-start gap-2 mt-3">
+                                <div className="h-1.5 w-1.5 rounded-full bg-amber-500 mt-1.5 shrink-0"></div>
+                                <p className="text-xs font-medium leading-snug text-slate-500 dark:text-slate-400">Controvalore monetario dei buoni pasto maturati durante le ferie godute e non erogati.</p>
                             </div>
                         </div>
                     </div>
@@ -803,7 +839,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                         {/* Input Campo */}
                         <input
                             type="text"
-                            placeholder="Cerca dipendente per nome e/o cognome.."
+                            placeholder="Cerca per nome, cognome, azienda o ruolo.."
                             value={searchQuery}
                             onChange={e => setSearchQuery(e.target.value)}
                             className="w-full bg-transparent border-none px-6 py-6 text-xl font-bold text-slate-700 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 placeholder:font-medium focus:ring-0 focus:outline-none"
@@ -918,7 +954,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                     {/* Gruppo: Ticket */}
                     <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mr-0.5 shrink-0">Ticket</span>
                     <button
-                        onClick={toggleGlobalTickets}
+                        onClick={() => setIsTicketConfirmOpen(true)}
                         className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all duration-200 border ${
                             allTicketsOn
                                 ? 'bg-amber-500 text-white border-amber-400 shadow-md shadow-amber-500/30'
@@ -1066,7 +1102,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                         </button>
                         <div className="w-px h-4 bg-slate-200 dark:bg-slate-700" />
                         <button
-                            onClick={deleteSelectedWorkers}
+                            onClick={() => setIsBulkDeleteOpen(true)}
                             disabled={selectedIds.size === 0}
                             className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-700 dark:bg-slate-800 text-white text-[10px] font-black uppercase tracking-wide shadow-md disabled:opacity-40 disabled:cursor-not-allowed hover:bg-red-600 transition-colors"
                         >
@@ -1081,6 +1117,53 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                             <X className="w-4 h-4" />
                         </button>
                     </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* PILL PROGRESSO EXPORT CONCLUSE — visibile anche a menu Dati chiuso */}
+            <AnimatePresence>
+                {concluseStatus && (
+                    <motion.div
+                        initial={{ y: 60, opacity: 0 }}
+                        animate={{ y: 0, opacity: 1 }}
+                        exit={{ y: 60, opacity: 0 }}
+                        transition={{ type: 'spring', stiffness: 300, damping: 28 }}
+                        className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[70] flex items-center gap-3 px-5 py-3 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-teal-200/60 dark:border-teal-800/60"
+                    >
+                        <Loader2 className="w-4 h-4 text-teal-600 dark:text-teal-400 animate-spin" />
+                        <span className="text-[12px] font-bold text-slate-700 dark:text-slate-200">
+                            Esporto pratiche concluse… <span className="font-mono tabular-nums">{concluseStatus}</span>
+                        </span>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* CONFERMA TOGGLE TICKET GLOBALE */}
+            <AnimatePresence>
+                {isTicketConfirmOpen && (
+                    <ConfirmModal
+                        isOpen={true}
+                        onClose={() => setIsTicketConfirmOpen(false)}
+                        onConfirm={confirmGlobalTickets}
+                        color="orange"
+                        title={`${allTicketsOn ? 'Disattivare' : 'Attivare'} i ticket su ${sortedWorkers.length} ${sortedWorkers.length === 1 ? 'pratica' : 'pratiche'}?`}
+                        message="L'impostazione viene riscritta su tutte le pratiche mostrate e i conteggi vengono ricalcolati di conseguenza."
+                        confirmLabel={allTicketsOn ? 'Disattiva Ticket' : 'Attiva Ticket'}
+                    />
+                )}
+            </AnimatePresence>
+
+            {/* CONFERMA ELIMINAZIONE MULTIPLA */}
+            <AnimatePresence>
+                {isBulkDeleteOpen && (
+                    <ConfirmModal
+                        isOpen={true}
+                        onClose={() => setIsBulkDeleteOpen(false)}
+                        onConfirm={confirmBulkDelete}
+                        title={selectedIds.size === 1 ? 'Eliminare la pratica selezionata?' : `Eliminare ${selectedIds.size} pratiche selezionate?`}
+                        message="Dopo la conferma avrai 5 secondi per annullare dal messaggio in alto a destra; poi l'eliminazione diventa definitiva."
+                        confirmLabel="Elimina"
+                    />
                 )}
             </AnimatePresence>
 
@@ -1154,7 +1237,8 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                                                         </>
                                                     )}
 
-                                                    <button onClick={() => { setActiveStatsModal(null); handleOpenSimple(item.id); }} className={`text-[10px] font-bold ${theme.textLight} hover:underline flex items-center justify-end gap-1 mt-1 opacity-0 group-hover:opacity-100 transition-opacity`}>
+                                                    {/* Sempre visibile: su touch il group-hover non scatta mai */}
+                                                    <button onClick={() => { setActiveStatsModal(null); handleOpenSimple(item.id); }} className={`text-[11px] font-bold ${theme.textLight} hover:underline flex items-center justify-end gap-1 mt-1`}>
                                                         Vedi Report <ChevronRight className="w-3 h-3" />
                                                     </button>
                                                 </div>

@@ -37,7 +37,7 @@ export const Toast = ({ message, type, onClose, action }: { message: string; typ
     return (
         <motion.div
             layout
-            initial={{ opacity: 0, y: 50, scale: 0.3 }}
+            initial={{ opacity: 0, y: -40, scale: 0.3 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, scale: 0.5, transition: { duration: 0.2 } }}
             className={`flex items-center gap-3 px-4 py-3 rounded-xl border shadow-xl backdrop-blur-md mb-3 ${colors[type]}`}

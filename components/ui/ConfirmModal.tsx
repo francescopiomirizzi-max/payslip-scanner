@@ -3,7 +3,23 @@ import { motion } from 'framer-motion';
 import { Delete } from 'lucide-react';
 
 // --- COMPONENTE MODALE DI CONFERMA (DINAMICO) ---
-export const ConfirmModal = ({ isOpen, onClose, onConfirm, color = 'red' }: { isOpen: boolean; onClose: () => void; onConfirm: () => void; color?: string }) => {
+export const ConfirmModal = ({
+    isOpen,
+    onClose,
+    onConfirm,
+    color = 'red',
+    title = 'Eliminare Lavoratore?',
+    message = "L'operazione è definitiva. Tutti i dati associati verranno rimossi dal sistema.",
+    confirmLabel = 'Conferma Eliminazione',
+}: {
+    isOpen: boolean;
+    onClose: () => void;
+    onConfirm: () => void;
+    color?: string;
+    title?: string;
+    message?: string;
+    confirmLabel?: string;
+}) => {
     if (!isOpen) return null;
 
     const styles: any = {
@@ -26,16 +42,16 @@ export const ConfirmModal = ({ isOpen, onClose, onConfirm, color = 'red' }: { is
                     <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 ${currentStyle.bgIcon}`}>
                         <Delete className={`w-8 h-8 ${currentStyle.icon}`} />
                     </div>
-                    <h3 className="text-xl font-black text-slate-800 dark:text-white mb-2">Eliminare Lavoratore?</h3>
+                    <h3 className="text-xl font-black text-slate-800 dark:text-white mb-2">{title}</h3>
                     <p className="text-slate-500 dark:text-slate-400 text-sm mb-6">
-                        L'operazione è definitiva. Tutti i dati associati verranno rimossi dal sistema.
+                        {message}
                     </p>
                     <div className="flex gap-3 justify-center">
                         <button onClick={onClose} className="px-5 py-2.5 rounded-xl font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 hover:text-slate-800 dark:hover:text-white transition-colors">
                             Annulla
                         </button>
                         <button onClick={onConfirm} className={`px-5 py-2.5 rounded-xl font-bold text-white bg-gradient-to-r hover:scale-105 transition-all shadow-lg dark:shadow-[0_0_15px_rgba(239,68,68,0.4)] ${currentStyle.btn}`}>
-                            Conferma Eliminazione
+                            {confirmLabel}
                         </button>
                     </div>
                 </div>

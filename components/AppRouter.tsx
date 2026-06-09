@@ -36,6 +36,7 @@ interface AppRouterProps {
     handleOpenComplex: (id: string) => void;
     openEditModal: (e: React.MouseEvent, id: string) => void;
     handleDeleteWorker: (id: string) => void;
+    handleDeleteWorkersBulk: (ids: string[]) => void;
     recentlyCreatedId: string | null;
     handleOpenModal: (mode: 'create' | 'edit') => void;
     updateWorkerById: (id: string, fields: any) => void;
@@ -50,6 +51,11 @@ interface AppRouterProps {
     handleBack: () => void;
     archiveWorkerId?: string | null;
     handleOpenArchive: (id: string) => void;
+    addToast: (
+        message: string,
+        type?: 'success' | 'error' | 'info',
+        options?: { action?: { label: string; onClick: () => void }; duration?: number }
+    ) => void;
 }
 
 const AppRouter: React.FC<AppRouterProps> = ({
@@ -78,6 +84,7 @@ const AppRouter: React.FC<AppRouterProps> = ({
     handleOpenComplex,
     openEditModal,
     handleDeleteWorker,
+    handleDeleteWorkersBulk,
     recentlyCreatedId,
     handleOpenModal,
     updateWorkerById,
@@ -92,6 +99,7 @@ const AppRouter: React.FC<AppRouterProps> = ({
     handleBack,
     archiveWorkerId,
     handleOpenArchive,
+    addToast,
 }) => {
     const pageAnim: Pick<HTMLMotionProps<'div'>, 'initial' | 'animate' | 'exit'> = {
         initial: { opacity: 0, y: 18 },
@@ -137,6 +145,7 @@ const AppRouter: React.FC<AppRouterProps> = ({
                             onEdit={() => setViewMode('complex')}
                             startClaimYear={selectedWorker.startClaimYear ?? 2008}
                             onUpdateWorkerFields={handleUpdateWorkerFields}
+                            addToast={addToast}
                         />
                     </motion.div>
                 )}
@@ -168,6 +177,7 @@ const AppRouter: React.FC<AppRouterProps> = ({
                 handleOpenComplex={handleOpenComplex}
                 openEditModal={openEditModal}
                 handleDeleteWorker={handleDeleteWorker}
+                handleDeleteWorkersBulk={handleDeleteWorkersBulk}
                 recentlyCreatedId={recentlyCreatedId}
                 handleOpenModal={handleOpenModal}
                 updateWorkerById={updateWorkerById}
@@ -176,6 +186,7 @@ const AppRouter: React.FC<AppRouterProps> = ({
                 handleImportData={handleImportData}
                 setViewMode={setViewMode}
                 onOpenArchive={handleOpenArchive}
+                addToast={addToast}
             />
         </>
     );

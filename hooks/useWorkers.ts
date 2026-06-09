@@ -214,7 +214,14 @@ export const useWorkers = (addToast: AddToast) => {
         const query = searchQuery.toLowerCase().trim();
         const fullName = `${w.nome} ${w.cognome}`.toLowerCase();
         const reverseName = `${w.cognome} ${w.nome}`.toLowerCase();
-        const matchesSearch = !searchQuery || fullName.includes(query) || reverseName.includes(query);
+        // L'azienda si cerca come la mostra la UI ("clean service", non "clean_service")
+        const azienda = (w.profilo ?? '').replace(/_/g, ' ').toLowerCase();
+        const ruolo = (w.ruolo ?? '').toLowerCase();
+        const matchesSearch = !searchQuery
+            || fullName.includes(query)
+            || reverseName.includes(query)
+            || azienda.includes(query)
+            || ruolo.includes(query);
         const matchesFilter = activeFilter === 'ALL' || w.profilo === activeFilter;
         const matchesStatus = matchesStatusFilter(w.status, activeStatusFilter);
         return matchesSearch && matchesFilter && matchesStatus;
@@ -233,6 +240,7 @@ export const useWorkers = (addToast: AddToast) => {
 
     const handleBack = () => {
         setSelectedWorker(null);
+        setArchiveWorkerId(null);
         setViewMode('home');
         setRefreshStats(prev => prev + 1);
     };
@@ -359,6 +367,75 @@ export const useWorkers = (addToast: AddToast) => {
                         if (pendingTimer) clearTimeout(pendingTimer);
                         pendingDeleteTimersRef.current.delete(id);
                         restoreWorker();
+                        addToast('Eliminazione annullata.', 'success');
+                    },
+                },
+            }
+        );
+    };
+
+    // Variante bulk dell'optimistic delete: stessa finestra di undo di 5s ma con
+    // UN solo toast e UNA sola chiamata DB batch, così eliminare N pratiche non
+    // produce N toast impilati né N round-trip.
+    const handleDeleteWorkersBulk = (ids: string[]) => {
+        if (!authUser || ids.length === 0) return;
+        const idSet = new Set(ids);
+        const removed = workers.filter(w => idSet.has(w.id));
+        if (removed.length === 0) return;
+
+        const restoreWorkers = () => {
+            setWorkers(prev => {
+                const missing = removed.filter(r => !prev.find(w => w.id === r.id));
+                if (missing.length === 0) return prev;
+                const next = [...prev, ...missing].sort((a, b) => {
+                    const aT = a.created_at ? new Date(a.created_at).getTime() : 0;
+                    const bT = b.created_at ? new Date(b.created_at).getTime() : 0;
+                    return aT - bT;
+                });
+                prevWorkersRef.current = next;
+                return next;
+            });
+        };
+
+        // 1. Rimozione ottimistica dalla UI
+        setWorkers(prev => {
+            const next = prev.filter(w => !idSet.has(w.id));
+            prevWorkersRef.current = next;
+            return next;
+        });
+
+        // 2. Cancellazione DB batch schedulata dopo la finestra di undo.
+        // Il timer è registrato su ogni id così un eventuale undo singolo
+        // concorrente non può lasciare timer orfani.
+        const removedIds = removed.map(w => w.id);
+        const timer = setTimeout(async () => {
+            removedIds.forEach(id => pendingDeleteTimersRef.current.delete(id));
+            const { error } = await supabase
+                .from('worker_profiles')
+                .delete()
+                .in('id', removedIds);
+            if (error) {
+                console.error('[Workers] Bulk delete error:', error);
+                addToast("Errore durante l'eliminazione dal database. Pratiche ripristinate.", 'error');
+                restoreWorkers();
+            }
+        }, 5000);
+        removedIds.forEach(id => pendingDeleteTimersRef.current.set(id, timer));
+
+        // 3. Un solo toast con annullamento per l'intero gruppo
+        addToast(
+            removed.length === 1
+                ? `Pratica di ${removed[0].nome} ${removed[0].cognome} eliminata`
+                : `${removed.length} pratiche eliminate`,
+            'info',
+            {
+                duration: 5000,
+                action: {
+                    label: 'Annulla',
+                    onClick: () => {
+                        clearTimeout(timer);
+                        removedIds.forEach(id => pendingDeleteTimersRef.current.delete(id));
+                        restoreWorkers();
                         addToast('Eliminazione annullata.', 'success');
                     },
                 },
@@ -518,6 +595,7 @@ export const useWorkers = (addToast: AddToast) => {
 
         // Delete
         handleDeleteWorker,
+        handleDeleteWorkersBulk,
 
         // Recently created (Dashboard reagisce per aprire il cassetto e portare in vista)
         recentlyCreatedId,

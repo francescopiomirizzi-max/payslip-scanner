@@ -29,6 +29,7 @@ import { useTheme } from './hooks/useTheme';
 import { useWorkers } from './hooks/useWorkers';
 import { useAuth } from './hooks/useAuth';
 import { useDashboardStats } from './hooks/useDashboardStats';
+import { useHashRoute } from './hooks/useHashRoute';
 
 const App: React.FC = () => {
     const { isDarkMode, toggleTheme } = useTheme();
@@ -45,7 +46,12 @@ const App: React.FC = () => {
     ): number => {
         const id = Date.now() + Math.random();
         setToasts(prev => [...prev, { id, message, type, action: options.action }]);
-        setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), options.duration ?? 3000);
+        // Gli errori senza duration esplicita restano finché l'utente non li chiude:
+        // 3 secondi non bastano per leggere (e reagire a) un messaggio di errore.
+        const duration = options.duration ?? (type === 'error' ? null : 3000);
+        if (duration !== null) {
+            setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), duration);
+        }
         return id;
     };
 
@@ -56,7 +62,7 @@ const App: React.FC = () => {
         searchQuery, setSearchQuery, activeFilter, setActiveFilter, activeStatusFilter, setActiveStatusFilter, customFilters,
         isModalOpen, setIsModalOpen, modalMode, currentWorker,
         handleOpenModal, openEditModal, handleSaveWorker,
-        handleDeleteWorker, recentlyCreatedId,
+        handleDeleteWorker, handleDeleteWorkersBulk, recentlyCreatedId,
         handleUpdateWorkerData, handleUpdateStatus, handleUpdateWorkerFields, updateWorkerById,
         handleOpenSimple, handleOpenComplex, handleBack, archiveWorkerId, handleOpenArchive,
         fileInputRef, isImportModalOpen, setIsImportModalOpen, importPendingData, setImportPendingData,
@@ -76,6 +82,24 @@ const App: React.FC = () => {
 
     // --- AREA GLOBALE: 'incidenza' (buste/RFI) vs 'riposi' (mancati riposi TPL) ---
     const [area, setArea] = useState<AppArea>('incidenza');
+
+    // --- URL SYNC (hash routing) ---
+    // Back/Forward del browser, F5 e deep link (#/worker/:id, #/archive, ...)
+    // riportano alla vista giusta invece di buttare fuori dall'app.
+    useHashRoute({
+        isReady: isAuthenticated && !isWorkersLoading,
+        area,
+        viewMode,
+        selectedWorkerId: selectedWorker?.id ?? null,
+        archiveWorkerId: archiveWorkerId ?? null,
+        workerExists: (id) => workers.some(w => w.id === id),
+        setArea,
+        setViewMode,
+        openComplex: handleOpenComplex,
+        openSimple: handleOpenSimple,
+        openArchive: handleOpenArchive,
+        goHome: handleBack,
+    });
 
     // --- SCROLL TO TOP ---
     useEffect(() => {
@@ -247,6 +271,7 @@ const App: React.FC = () => {
                 handleOpenComplex={handleOpenComplex}
                 openEditModal={openEditModal}
                 handleDeleteWorker={handleDeleteWorker}
+                handleDeleteWorkersBulk={handleDeleteWorkersBulk}
                 recentlyCreatedId={recentlyCreatedId}
                 handleOpenModal={handleOpenModal}
                 updateWorkerById={updateWorkerById}
@@ -261,6 +286,7 @@ const App: React.FC = () => {
                 handleBack={handleBack}
                 archiveWorkerId={archiveWorkerId}
                 handleOpenArchive={handleOpenArchive}
+                addToast={addToast}
             />}
 
             {area === 'riposi' && <RiposiArea />}
@@ -268,7 +294,10 @@ const App: React.FC = () => {
             <AreaSwitch area={area} onChange={setArea} />
 
             {/* MODALS AND TOASTS */}
-            <div className="fixed bottom-4 right-4 z-[110] flex flex-col items-end pointer-events-none">
+            {/* Toast in alto a destra: il basso-destra è dei bottoni fissi (scroll-top,
+                scorciatoie) e i toast — ora anche persistenti per gli errori — non
+                devono coprirli. In alto al centro c'è l'isola (z-9999, sta sopra). */}
+            <div className="fixed top-6 right-4 z-[110] flex flex-col items-end pointer-events-none">
                 <AnimatePresence>
                     {toasts.map(toast => (
                         <div key={toast.id} className="pointer-events-auto">
