@@ -38,7 +38,7 @@ function resolveOptions(worker: Worker): ResolvedOptions {
   const includeExFest = worker.includeExFest ?? readBool(`report_exfest_${worker.id}`, false);
   const includeTickets = worker.includeTickets ?? readBool(`report_tickets_${worker.id}`, false);
   const showPercepito = (worker as any).reportShowPercepito ?? readBool(`report_percepito_${worker.id}`, false);
-  const includePaidLeave = worker.includePaidLeave ?? readBool(`paidLeave_${worker.id}`, resolveIncludePaidLeave(worker));
+  const includePaidLeave = resolveIncludePaidLeave(worker);
 
   let startClaimYear = worker.startClaimYear ?? DEFAULT_START_CLAIM_YEAR;
   if (worker.startClaimYear === undefined) {
@@ -58,6 +58,85 @@ function companyFolder(worker: Worker): string {
 
 function workerFolder(worker: Worker): string {
   return `${worker.cognome || ''} ${worker.nome || ''}`.trim().toUpperCase() || 'SENZA_NOME';
+}
+
+interface WorkerDocs {
+  conteggi: Blob;   // Conteggi PDF
+  riepilogo: Blob;  // Riepilogo somme PDF (il "report")
+  relazione: Blob;  // Relazione tecnica .docx
+}
+
+/**
+ * Genera i 3 documenti (Conteggi + Riepilogo + Relazione) di UN lavoratore come blob,
+ * usando ESATTAMENTE le opzioni risolte (campo → localStorage → default) che produrrebbe
+ * la sua pagina. Unica fonte: la usano sia l'export ZIP di tutti i conclusi sia il tasto
+ * "scarica i 3 documenti" del singolo report.
+ */
+async function buildWorkerDocs(w: Worker, riepilogoOverride?: Blob): Promise<WorkerDocs> {
+  const opts = resolveOptions(w);
+  const monthly = Array.isArray(w.anni) ? w.anni : [];
+
+  // 1. Conteggi PDF
+  const conteggi = printPayslipTables({
+    worker: w,
+    monthlyInputs: monthly,
+    includeExFest: opts.includeExFest,
+    includeTickets: opts.includeTickets,
+    startClaimYear: opts.startClaimYear,
+    includePaidLeave: opts.includePaidLeave,
+    output: 'blob',
+  }) as Blob;
+
+  // computeRiepilogoData serve comunque per i totali della Relazione.
+  const { tableData, totals, startYear, endYear } = computeRiepilogoData(
+    w, monthly, opts.startClaimYear, opts.includeExFest, opts.includeTickets,
+  );
+
+  // 2. Riepilogo PDF — se il chiamante passa lo "screenshot" del prospetto a schermo
+  //    (tasto Documenti nel report) si usa quello; altrimenti, in mancanza del DOM
+  //    (export Concluse in blocco), si genera la tabella con jsPDF.
+  let riepilogo: Blob;
+  if (riepilogoOverride) {
+    riepilogo = riepilogoOverride;
+  } else {
+    const riepilogoDoc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    renderRiepilogoPdf(riepilogoDoc, w, startYear, endYear, tableData, totals, opts.includeTickets, opts.showPercepito);
+    riepilogo = riepilogoDoc.output('blob');
+  }
+
+  // 3. Relazione .docx — riusa il generatore della modale
+  const relazione = await buildRelazioneDocxBlob({
+    worker: w,
+    totals,
+    includeExFest: opts.includeExFest,
+    includeTickets: opts.includeTickets,
+    showPercepito: opts.showPercepito,
+    startClaimYear: opts.startClaimYear,
+  });
+
+  return { conteggi, riepilogo, relazione };
+}
+
+/** Aggiunge i 3 documenti allo zip dentro la cartella `base` indicata. */
+function addWorkerDocsToZip(zip: JSZip, w: Worker, docs: WorkerDocs, base: string): void {
+  zip.file(`${base}/Conteggi_${w.cognome}_${w.nome}.pdf`, docs.conteggi);
+  zip.file(`${base}/Riepilogo_somme_richieste_${w.cognome}_${w.nome}.pdf`, docs.riepilogo);
+  zip.file(`${base}/Relazione_Tecnica_${w.cognome}.docx`, docs.relazione);
+}
+
+/**
+ * Scarica i 3 documenti di UN lavoratore in un unico zip. Aprendolo si trova UNA sola
+ * cartella "Conteggi {Cognome} {Nome}" con dentro i 3 file (niente struttura aziendale
+ * annidata: quella resta solo per l'export Concluse in blocco). Usato dal tasto nel
+ * report (`TableComponent`).
+ */
+export async function exportSingleWorkerZip(worker: Worker, riepilogoOverride?: Blob): Promise<void> {
+  const docs = await buildWorkerDocs(worker, riepilogoOverride);
+  const zip = new JSZip();
+  const folder = `Conteggi ${worker.cognome || ''} ${worker.nome || ''}`.trim();
+  addWorkerDocsToZip(zip, worker, docs, folder);
+  const out = await zip.generateAsync({ type: 'blob' });
+  saveAs(out, `${folder}.zip`);
 }
 
 export interface ConcluseExportResult {
@@ -83,43 +162,8 @@ export async function exportConcluseZip(
     onProgress?.(i, workers.length, nominativo);
 
     try {
-      const opts = resolveOptions(w);
-      const monthly = Array.isArray(w.anni) ? w.anni : [];
-
-      // 1. Conteggi PDF (blob)
-      const conteggiBlob = printPayslipTables({
-        worker: w,
-        monthlyInputs: monthly,
-        includeExFest: opts.includeExFest,
-        includeTickets: opts.includeTickets,
-        startClaimYear: opts.startClaimYear,
-        includePaidLeave: opts.includePaidLeave,
-        output: 'blob',
-      }) as Blob;
-
-      // 2. Riepilogo PDF (blob)
-      const { tableData, totals, startYear, endYear } = computeRiepilogoData(
-        w, monthly, opts.startClaimYear, opts.includeExFest, opts.includeTickets,
-      );
-      const riepilogoDoc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-      renderRiepilogoPdf(riepilogoDoc, w, startYear, endYear, tableData, totals, opts.includeTickets, opts.showPercepito);
-      const riepilogoBlob = riepilogoDoc.output('blob');
-
-      // 3. Relazione .docx (blob) — riusa il generatore della modale
-      const relazioneBlob = await buildRelazioneDocxBlob({
-        worker: w,
-        totals,
-        includeExFest: opts.includeExFest,
-        includeTickets: opts.includeTickets,
-        showPercepito: opts.showPercepito,
-        startClaimYear: opts.startClaimYear,
-      });
-
-      const base = `${companyFolder(w)}/${workerFolder(w)}/conteggi`;
-      zip.file(`${base}/Conteggi_${w.cognome}_${w.nome}.pdf`, conteggiBlob);
-      zip.file(`${base}/Riepilogo_somme_richieste_${w.cognome}_${w.nome}.pdf`, riepilogoBlob);
-      zip.file(`${base}/Relazione_Tecnica_${w.cognome}.docx`, relazioneBlob);
-
+      const docs = await buildWorkerDocs(w);
+      addWorkerDocsToZip(zip, w, docs, `${companyFolder(w)}/${workerFolder(w)}/conteggi`);
       result.exported++;
     } catch (err: any) {
       result.failed.push({ worker: nominativo, error: err?.message || String(err) });

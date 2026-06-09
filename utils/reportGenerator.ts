@@ -150,8 +150,7 @@ const computeWorkerCredit = (w: Worker): number => {
   const includeTickets = storedTicketPref !== null ? JSON.parse(storedTicketPref) : true;
   const storedExFestPref = localStorage.getItem(`exFest_${w.id}`);
   const includeExFest = storedExFestPref !== null ? JSON.parse(storedExFestPref) : false;
-  const storedPaidLeavePref = localStorage.getItem(`paidLeave_${w.id}`);
-  const includePaidLeave = storedPaidLeavePref !== null ? JSON.parse(storedPaidLeavePref) : resolveIncludePaidLeave(w);
+  const includePaidLeave = resolveIncludePaidLeave(w);
   const storedStartYear = localStorage.getItem(`startYear_${w.id}`);
   const startClaimYear = storedStartYear ? parseInt(storedStartYear) : 2008;
 

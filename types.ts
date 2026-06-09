@@ -328,15 +328,27 @@ export const getColumnsByProfile = (profilo: ProfiloAzienda, eliorType?: 'viaggi
 export const PROFILES_DEFAULT_PAID_LEAVE: string[] = [];
 
 /**
- * Valore effettivo di includePaidLeave (Strategia B): preferenza esplicita del lavoratore
- * se impostata, altrimenti il default per profilo. Default = OFF / Strategia A per tutti
- * (coerente col ricorso "effettive giornate lavorative"); B è opt-in per-lavoratore.
+ * Valore effettivo di includePaidLeave (Strategia B). UNICA fonte di verità, in ordine:
+ *  1. campo esplicito `worker.includePaidLeave` (stato live impostato dal toggle "Permessi");
+ *  2. preferenza persistita su `localStorage paidLeave_<id>` (l'unica che sopravvive tra le
+ *     sessioni, dato che NON esiste una colonna DB: finché non si apre il dettaglio il campo
+ *     resta undefined). Senza questo passo le viste aggregate (card "Credito Stimato Totale",
+ *     ordinamento, WorkerCard, relazione) userebbero il default profilo e mostrerebbero numeri
+ *     sballati sui distaccati (Cataneo) calcolati in Strategia A;
+ *  3. default per profilo (oggi vuoto → Strategia A per tutti, coerente col ricorso
+ *     "effettive giornate lavorative"); B è opt-in per-lavoratore.
  */
 export function resolveIncludePaidLeave(
-  worker?: { profilo?: ProfiloAzienda; includePaidLeave?: boolean } | null
+  worker?: { id?: string; profilo?: ProfiloAzienda; includePaidLeave?: boolean } | null
 ): boolean {
   if (!worker) return false;
   if (typeof worker.includePaidLeave === 'boolean') return worker.includePaidLeave;
+  if (worker.id && typeof localStorage !== 'undefined') {
+    try {
+      const saved = localStorage.getItem(`paidLeave_${worker.id}`);
+      if (saved !== null) return JSON.parse(saved) === true;
+    } catch { /* localStorage non disponibile o valore corrotto → default profilo */ }
+  }
   return PROFILES_DEFAULT_PAID_LEAVE.includes(worker.profilo as string);
 }
 

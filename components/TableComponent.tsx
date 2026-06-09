@@ -3,12 +3,15 @@ import { useIsland } from '../IslandContext'; // 👈 ECCOLA QUI!
 import { Worker, AnnoDati, getColumnsByProfile } from '../types';
 import { parseLocalFloat, formatCurrency, formatNumber, formatLongDate } from '../utils/formatters';
 import { EXCLUDED_INDEMNITY_COLS } from '../utils/calculationEngine';
-import { computeRiepilogoData, renderRiepilogoPdf } from '../utils/riepilogoReport';
+import { computeRiepilogoData } from '../utils/riepilogoReport';
+// exportSingleWorkerZip / captureReportPdfBlob sono import DINAMICI (vedi handleDownloadAll):
+// così zip, docx e html-to-image restano fuori dal bundle principale e si caricano solo al click.
 import { useIsReadOnly } from '../lib/readonly';
 import {
   Printer,
   ArrowLeft,
-  FileDown,
+  Package,
+  Loader2,
   FileSpreadsheet,
   LayoutGrid,
   FileText,
@@ -94,6 +97,7 @@ const TableComponent: React.FC<TableComponentProps> = ({ worker, monthlyInputs, 
 
   const [isRelazioneOpen, setIsRelazioneOpen] = useState(false);
   const [showInfoTetto, setShowInfoTetto] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   // --- STATI CON MEMORIA ---
   const [includeExFest, setIncludeExFest] = useState(() => {
     if (worker.includeExFest !== undefined) return worker.includeExFest;
@@ -228,10 +232,32 @@ Distinti saluti.
     doc.save(`Diffida_${worker.cognome}_${worker.nome}.pdf`);
   };
 
-  const handleDownloadPDFLocal = () => {
-    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-    renderRiepilogoPdf(doc, worker, startYear, endYear, tableData, totals, includeTickets, showPercepito);
-    doc.save(`Riepilogo_somme_richieste_${worker.cognome}_${worker.nome}.pdf`);
+  // Scarica in UN unico zip i 3 documenti del lavoratore (Conteggi + Riepilogo + Relazione),
+  // generati con le stesse opzioni della sua pagina. Il "Riepilogo somme richieste" è lo
+  // screenshot del prospetto a schermo (come il tasto Stampa), non la tabella ricostruita.
+  const handleDownloadAll = async () => {
+    if (isExporting) return;
+    setIsExporting(true);
+    try {
+      let riepilogoOverride: Blob | undefined;
+      const card = document.getElementById('riepilogo-card');
+      if (card) {
+        try {
+          const { captureReportPdfBlob } = await import('../utils/reportScreenshotPdf');
+          riepilogoOverride = await captureReportPdfBlob(card);
+        } catch (e) {
+          // Se lo screenshot fallisce, lo zip esce comunque con il riepilogo standard.
+          console.warn('Screenshot del prospetto non riuscito, uso il riepilogo standard:', e);
+        }
+      }
+      const { exportSingleWorkerZip } = await import('../utils/concluseExport');
+      await exportSingleWorkerZip(worker, riepilogoOverride);
+    } catch (err: any) {
+      console.error('Export documenti fallito:', err);
+      alert(`Generazione documenti non riuscita: ${err?.message || err}`);
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   return (
@@ -454,15 +480,20 @@ Distinti saluti.
             <span>Gestione Dati</span>
           </button>
 
-          {/* PDF Riepilogo somme — visibile anche in sola lettura (scarica, non scrive) */}
+          {/* Scarica i 3 documenti (Conteggi + Riepilogo + Relazione) in un unico ZIP —
+              visibile anche in sola lettura (scarica, non scrive) */}
           <button
-            onClick={handleDownloadPDFLocal}
-            className="group relative px-6 py-3 rounded-xl font-bold text-lg text-white shadow-lg hover:-translate-y-0.5 active:scale-95 transition-all duration-300 border border-white/10 overflow-hidden flex items-center gap-3"
+            onClick={handleDownloadAll}
+            disabled={isExporting}
+            title="Scarica Conteggi + Riepilogo + Relazione in un unico file ZIP"
+            className="group relative px-6 py-3 rounded-xl font-bold text-lg text-white shadow-lg hover:-translate-y-0.5 active:scale-95 transition-all duration-300 border border-white/10 overflow-hidden flex items-center gap-3 disabled:opacity-60 disabled:cursor-wait disabled:hover:translate-y-0"
             style={{ background: 'linear-gradient(90deg, #dc2626 0%, #e11d48 100%)' }}
           >
             <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500 rotate-12"></div>
-            <FileDown className="w-5 h-5 transition-transform duration-500 group-hover:bounce" strokeWidth={2.5} />
-            <span>PDF</span>
+            {isExporting
+              ? <Loader2 className="w-5 h-5 animate-spin" strokeWidth={2.5} />
+              : <Package className="w-5 h-5 transition-transform duration-500 group-hover:rotate-12" strokeWidth={2.5} />}
+            <span>{isExporting ? 'Genero…' : 'Documenti'}</span>
           </button>
 
           {/* Stampa — visibile anche in sola lettura */}
@@ -496,7 +527,7 @@ Distinti saluti.
               </button>
             </div>
           ) : (
-            <div className="bg-white text-black dark:text-black border-2 border-black dark:border-slate-800 rounded-2xl overflow-hidden shadow-2xl">
+            <div id="riepilogo-card" className="bg-white text-black dark:text-black border-2 border-black dark:border-slate-800 rounded-2xl overflow-hidden shadow-2xl">
 
               <div className="bg-gray-200 border-b border-black text-center py-6">
                 <div className="font-black text-2xl uppercase mb-2">

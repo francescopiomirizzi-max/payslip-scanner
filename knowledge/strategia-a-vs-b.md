@@ -54,8 +54,20 @@ solo il ~2-7% della media con A. Es. su D'Errico (presenze normali) B gli **togl
   in `VertenzaTimeline`).
 - Motore: `CalculationParams.includePaidLeave` → divisore = `daysWorked + (includePaidLeave ?
   daysPaidLeave : 0)`. Additivo, con OFF il comportamento è quello storico.
-- Persistenza: `localStorage` `paidLeave_<id>` + helper `resolveIncludePaidLeave(worker)` usato
-  in **tutti** i call site. Nel DB **non** esiste colonna `include_paid_leave`.
+- Persistenza: `localStorage` `paidLeave_<id>` (nel DB **non** esiste colonna `include_paid_leave`).
+- **Fonte di verità unica = `resolveIncludePaidLeave(worker)`** (in `types.ts`), consultata da
+  **tutti** i call site. Precedenza: **1)** campo esplicito `worker.includePaidLeave` (stato live
+  del toggle); **2)** `localStorage paidLeave_<id>`; **3)** default profilo. ⚠️ **Non** rimettere
+  letture `localStorage.getItem('paidLeave_…')` inline nei call site: la centralizzazione (fix
+  2026-06-09) serve proprio a evitare che alcune viste leggano la preferenza e altre no.
+- 🐞 **Bug risolto 2026-06-09:** la card "Credito Stimato Totale" (`pages/DashboardPage.tsx` →
+  `useDashboardStats`) mostrava crediti **gonfiati** sui Cataneo. Causa: `useDashboardStats`
+  (e `WorkerCard`, `riepilogoReport`, `RelazioneModal`) leggevano solo il campo
+  `worker.includePaidLeave`, idratato **solo** aprendo il dettaglio → su un load fresco i
+  distaccati venivano calcolati in **Strategia A** (divisore = poche presenze → tariffa
+  giornaliera esplosa). Fix: `resolveIncludePaidLeave` ora legge anche `localStorage`, quindi la
+  card è corretta dall'avvio e si aggiorna live al toggle (il toggle aggiorna `worker.includePaidLeave`
+  via `onUpdateWorkerFields` → `setWorkers` → memo ricalcola). Test: `__tests__/resolveIncludePaidLeave.test.ts`.
 - ⚠️ **Trappola localStorage:** il mount-effect di `WorkerDetailPage` aveva scritto
   `paidLeave_<id>=true` sulle pratiche aperte a inizio giugno (quando il default era ON). Invertire
   il default **non** le corregge da solo → su quelle pratiche va **spento il toggle a mano**.

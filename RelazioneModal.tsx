@@ -4,7 +4,7 @@ import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, HeadingLevel, AlignmentType, WidthType, BorderStyle, ShadingType } from 'docx';
 import { motion } from 'framer-motion';
-import { YEARS, AnnoDati, getColumnsByProfile, getFixedColumnsByProfile, resolveIncludePaidLeave } from './types';
+import { YEARS, MONTH_NAMES, AnnoDati, getColumnsByProfile, getFixedColumnsByProfile, resolveIncludePaidLeave } from './types';
 import { parseLocalFloat, getProfiloBadgeLabel, formatDay } from './utils/formatters';
 import { EXCLUDED_INDEMNITY_COLS, computeHolidayIndemnity, computePeriodIncidence } from './utils/calculationEngine';
 import { useIsReadOnly } from './lib/readonly';
@@ -387,9 +387,33 @@ export async function buildRelazioneDocxBlob({
                 .forEach((l: string) => children.push(bullet(l.replace(/^-\s*/, ''))));
         }
         if (esempioAnno) {
-            children.push(para(`A titolo esemplificativo, nell'anno ${esempioAnno.year} le voci variabili percepite ammontano a complessivi € ${fmt(esempioAnno.sumIndennitaTotali)}, a fronte di una retribuzione fissa continuativa di € ${fmt(esempioAnno.sumQuadroFisse)}: ne deriva un'incidenza media delle voci variabili pari al ${pct(esempioAnno.pctVariabileMediaAnnua)}% della retribuzione.`));
+            const mesiEs: any[] = Array.isArray(esempioAnno.monthlyDetails) ? esempioAnno.monthlyDetails : [];
+            // Mese rappresentativo: quello con più voci variabili tra i mesi con incidenza > 0.
+            const meseEs = mesiEs
+                .filter((m: any) => m.pctVariabile > 0 && (m.quadroFisse + m.quadroVariabili) > 0)
+                .sort((a: any, b: any) => b.quadroVariabili - a.quadroVariabili)[0];
+
+            children.push(para(`Il calcolo si articola in due passaggi. In primo luogo, per ciascun mese si determina l'incidenza come rapporto percentuale tra le voci variabili e il totale delle voci continuative, secondo la formula: incidenza mensile = (Voci Variabili × 100) ÷ (Voci Fisse + Voci Variabili). In secondo luogo, l'incidenza dell'anno è data dalla media aritmetica delle dodici incidenze mensili così ottenute.`));
+
+            if (meseEs) {
+                const nomeMese = meseEs.name.charAt(0) + meseEs.name.slice(1).toLowerCase();
+                children.push(para(`A titolo esemplificativo, nel mese di ${nomeMese} ${esempioAnno.year} il lavoratore ha percepito voci variabili per € ${fmt(meseEs.quadroVariabili)} a fronte di voci fisse continuative per € ${fmt(meseEs.quadroFisse)}; l'incidenza di quel mese è dunque pari a (€ ${fmt(meseEs.quadroVariabili)} × 100) ÷ (€ ${fmt(meseEs.quadroFisse)} + € ${fmt(meseEs.quadroVariabili)}) = ${pct(meseEs.pctVariabile)}%.`));
+            }
+
+            // Stessa operazione, mostrata anche per la media ANNUA: elenco delle incidenze
+            // mensili + somma ÷ 12 (il metodo divide sempre per 12, anche negli anni parziali).
+            const mesiOrdinati = [...mesiEs].sort((a: any, b: any) =>
+                MONTH_NAMES.indexOf(String(a.name).toUpperCase()) - MONTH_NAMES.indexOf(String(b.name).toUpperCase()));
+            const sommaMensili = mesiOrdinati.reduce((s: number, m: any) => s + (m.pctVariabile || 0), 0);
+            const elencoMesi = mesiOrdinati
+                .map((m: any) => `${m.name.charAt(0)}${m.name.slice(1).toLowerCase()} ${pct(m.pctVariabile)}%`)
+                .join('; ');
+            children.push(para(`Ripetendo l'operazione per ogni mese del ${esempioAnno.year} si ottengono le incidenze mensili (${elencoMesi}). La loro somma è pari a ${pct(sommaMensili)} e, divisa per dodici (i mesi dell'anno), restituisce l'incidenza media annua: ${pct(sommaMensili)} ÷ 12 = ${pct(esempioAnno.pctVariabileMediaAnnua)}% (nell'anno: voci variabili complessive € ${fmt(esempioAnno.sumIndennitaTotali)}, retribuzione fissa continuativa € ${fmt(esempioAnno.sumQuadroFisse)}).`));
         }
-        children.push(para(`Estendendo l'analisi all'intero periodo oggetto di domanda (${anniAttivi[0]} - ${finePeriodo}), l'incidenza media delle voci variabili risulta pari al ${pct(periodInc.pctVariabile)}%: tale quota della retribuzione, di natura ricorrente e continuativa, non è stata corrisposta al lavoratore durante i giorni di ferie, in violazione dei principi richiamati in premessa.`));
+        // Stessa operazione anche a livello di PERIODO: somma delle incidenze annue ÷ n. anni.
+        const anniInc = yearResultsRel.filter((r: any) => !r.isReferenceYear && r.sumQuadroFisse > 0 && r.hasIncidence);
+        const sommaAnnue = anniInc.reduce((s: number, r: any) => s + (r.pctVariabileMediaAnnua || 0), 0);
+        children.push(para(`Estendendo l'analisi all'intero periodo oggetto di domanda (${anniAttivi[0]} - ${finePeriodo}), l'incidenza media è la media delle incidenze annue, riportate anno per anno nella "Tabella 5 - Incidenza %". Per i ${periodInc.anni} anni a credito la loro somma è pari a ${pct(sommaAnnue)}, che divisa per ${periodInc.anni} restituisce ${pct(sommaAnnue)} ÷ ${periodInc.anni} = ${pct(periodInc.pctVariabile)}%: tale quota della retribuzione, di natura ricorrente e continuativa, non è stata corrisposta al lavoratore durante i giorni di ferie, in violazione dei principi richiamati in premessa.`));
 
         children.push(sezTitle(`6. CONCLUSIONI (Rif. Allegato "Prospetto Ufficiale di Ricalcolo")`));
     } else {

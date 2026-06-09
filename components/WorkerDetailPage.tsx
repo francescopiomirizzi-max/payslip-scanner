@@ -432,11 +432,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
   // Strategia B sindacale: assenze retribuite nel divisore. Default OFF / Strategia A per tutti
   // (il ricorso usa le "effettive giornate lavorative"); ON come opt-in per-lavoratore via
   // toggle "Permessi" — riservato ai distaccati sindacali a ~0 presenze (es. i 2 Cataneo).
-  const [includePaidLeave, setIncludePaidLeave] = useState(() => {
-    if (worker.includePaidLeave !== undefined) return worker.includePaidLeave;
-    const saved = localStorage.getItem(`paidLeave_${worker.id}`);
-    return saved !== null ? JSON.parse(saved) : resolveIncludePaidLeave(worker);
-  });
+  const [includePaidLeave, setIncludePaidLeave] = useState(() => resolveIncludePaidLeave(worker));
 
   React.useEffect(() => {
     localStorage.setItem(`exFest_${worker.id}`, JSON.stringify(includeExFest));

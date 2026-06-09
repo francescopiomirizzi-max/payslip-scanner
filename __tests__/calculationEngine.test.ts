@@ -574,6 +574,37 @@ describe('percentuali di incidenza (Quadro A/B/C)', () => {
   });
 });
 
+// ─── Lato CREDITO: tariffa giornaliera variabile vs Excel Palladino 2008 ─────
+// Excel CONTEGGI - PALLADINO, foglio "anno 2008", Quadro E:
+//   K72 = S54/S63  →  totale variabili annuo ÷ giorni di presenza (riga R62, somma 239)
+//   risultato nell'Excel = 35,25 €/gg (la "differenza giornaliera" utile per le ferie).
+// Il motore calcola la stessa cosa: computeYearlyAverages[anno] = Σ variabili ÷ Σ daysWorked.
+describe('tariffa giornaliera variabile (Quadro E) vs Excel Palladino 2008', () => {
+  const VAR_2008 = [808.18, 730.44, 613.41, 657.74, 650.37, 515.96, 694.05, 737.79, 733.49, 693.35, 731.62, 858.89];
+  const PRES_2008 = [23, 19, 20, 19, 19, 18, 20, 18, 19, 21, 18, 25]; // R62, somma 239
+  const data2008: AnnoDati[] = VAR_2008.map((c, i) => ({
+    year: 2008, monthIndex: i, daysWorked: PRES_2008[i], daysVacation: 0, ticket: 0, '0152': c,
+  }));
+
+  it('riproduce la tariffa giornaliera dell\'avvocato (≈ 35,25 €/gg = variabili ÷ 239 gg di presenza)', () => {
+    const avgs = computeYearlyAverages(data2008, 'RFI');
+    expect(PRES_2008.reduce((a, b) => a + b, 0)).toBe(239);
+    expect(avgs[2008]).toBeCloseTo(35.25, 1);
+  });
+
+  it('il credito = gg ferie × tariffa dell\'anno PRECEDENTE (chaining come l\'Excel, K83 = K81×K82)', () => {
+    // 2007 (riferimento) con la stessa tariffa, 2008 a credito con 17 gg di ferie:
+    // credito atteso ≈ 17 × 35,25 = 599,25 (lordo, senza la detrazione 0792 specifica PDM).
+    const data: AnnoDati[] = [
+      ...VAR_2008.map((c, i) => ({ year: 2007, monthIndex: i, daysWorked: PRES_2008[i], daysVacation: 0, ticket: 0, '0152': c } as AnnoDati)),
+      ...VAR_2008.map((c, i) => ({ year: 2008, monthIndex: i, daysWorked: PRES_2008[i], daysVacation: i === 0 ? 17 : 0, ticket: 0, '0152': c } as AnnoDati)),
+    ];
+    const [, y2008] = computeHolidayIndemnity({ data, profilo: 'RFI', includeExFest: false, includeTickets: false, startClaimYear: 2008, years: [2007, 2008] });
+    expect(y2008.avgApplied).toBeCloseTo(35.25, 1);           // tariffa dell'anno precedente
+    expect(y2008.sumIndennitaSpettante).toBeCloseTo(17 * 35.25, 0); // ferie × tariffa precedente
+  });
+});
+
 // ─── Strategia B: assenze retribuite nel divisore (distacchi/permessi sindacali) ──
 describe('includePaidLeave (Strategia B sindacale)', () => {
   // Anno di sindacalista: ogni mese 0 presenze, 20 gg assenza retribuita, 100€ indennità.

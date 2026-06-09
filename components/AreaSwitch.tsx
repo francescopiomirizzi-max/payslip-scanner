@@ -34,7 +34,7 @@ const ORDER: AppArea[] = ['incidenza', 'riposi'];
  */
 const AreaSwitch: React.FC<AreaSwitchProps> = ({ area, onChange }) => {
     return (
-        <div className="fixed bottom-4 left-4 z-[60]">
+        <div className="fixed bottom-4 left-4 z-[60] print:hidden">
             <div className="flex items-center gap-1 p-1.5 rounded-full bg-white/75 dark:bg-slate-800/75 backdrop-blur-2xl border border-white/60 dark:border-slate-700/60 shadow-xl shadow-slate-900/10">
                 {ORDER.map((id) => {
                     const { label, icon: Icon, activeBg, hoverText } = META[id];

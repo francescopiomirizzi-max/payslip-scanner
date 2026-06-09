@@ -1,3 +1,78 @@
+# Sessione 2026-06-09 — Fix card "Credito Stimato Totale" (Strategia B / assenze retribuite)
+
+> **Bug:** nella dashboard principale (`pages/DashboardPage.tsx`) la card "Credito Stimato
+> Totale" mostra numeri sballati sui distaccati (Cataneo Vincenzo/Pasquale) perché non tiene
+> conto della scelta Strategia A/B (assenze retribuite nel divisore).
+>
+> **Causa (root):** la preferenza Strategia B vive su `localStorage paidLeave_<id>` (non c'è
+> colonna DB). Il fallback su localStorage è duplicato a mano in ALCUNI call site e MANCA in
+> altri. La card principale usa `useDashboardStats` → `resolveIncludePaidLeave(worker)`, che
+> guarda solo il campo `worker.includePaidLeave` (idratato SOLO se apri il dettaglio) + default
+> profilo (oggi vuoto → Strategia A). Quindi su un load fresco i Cataneo vengono calcolati in A
+> → con pochissime presenze (distacco) la tariffa giornaliera "esplode" → credito gonfiato.
+> Diventa "giusto" solo dopo aver aperto il loro dettaglio (che idrata il campo via
+> `onUpdateWorkerFields`). Da qui il "a volte sballato".
+>
+> **Fix (single source of truth):** centralizzare il fallback localStorage DENTRO
+> `resolveIncludePaidLeave` (campo esplicito → localStorage `paidLeave_<id>` → default profilo).
+> Così TUTTI i call site (card dashboard, ordinamento, WorkerCard, riepilogo, relazione)
+> diventano coerenti senza dover aprire il dettaglio, e i 3 punti che leggevano localStorage a
+> mano si semplificano.
+
+- [x] `types.ts` — `resolveIncludePaidLeave`: aggiunto `id?` al tipo param; dopo il check del
+      campo boolean legge `localStorage paidLeave_<id>` (guard `typeof localStorage` + try/catch),
+      poi default profilo.
+- [x] Semplificati i call site ridondanti → `resolveIncludePaidLeave(...)`:
+      `StatsDashboard.tsx`, `utils/reportGenerator.ts`, `utils/concluseExport.ts`,
+      `components/WorkerDetailPage.tsx` (init useState).
+- [x] Verifica: `npx tsc --noEmit` pulito + **148 test verdi** (142 + 6 nuovi).
+- [x] Aggiunto `__tests__/resolveIncludePaidLeave.test.ts` (precedenza campo→localStorage→default).
+
+## Review
+- **Root cause:** preferenza Strategia B con DUE fonti (campo `worker.includePaidLeave` + localStorage
+  `paidLeave_<id>`), riconciliate solo dentro `WorkerDetailPage`. Il fallback localStorage era
+  duplicato a mano in 3 call site e MANCAVA negli altri 4 (tra cui `useDashboardStats` = la card).
+- **Fix:** una sola modifica sostanziale (`resolveIncludePaidLeave` legge localStorage) sistema card
+  dashboard + ordinamento + WorkerCard + riepilogo + relazione; i 3 call site con la lettura inline
+  sono stati semplificati (rimossa la duplicazione che aveva generato l'incoerenza).
+- **Comportamento:** card corretta già al load (legge la preferenza salvata) e live al toggle
+  (toggle → `onUpdateWorkerFields` → `setWorkers` → memo `[workers]` ricalcola). Nessun deploy fatto
+  (regola batch crediti Netlify): testare in locale `npm start` :8888.
+- **File toccati:** `types.ts`, `components/StatsDashboard.tsx`, `components/WorkerDetailPage.tsx`,
+  `utils/reportGenerator.ts`, `utils/concluseExport.ts`, `__tests__/resolveIncludePaidLeave.test.ts`,
+  `knowledge/strategia-a-vs-b.md`.
+
+---
+
+# Sessione 2026-06-09 (b) — Pagina report finale (`TableComponent`)
+
+## Part 1 — Stampa non deve mostrare i widget flottanti
+- [x] Causa: `window.print()` cattura l'intera pagina → comparivano i widget GLOBALI di `App.tsx`
+      (`AreaSwitch` Incidenza/Turni&Riposi in basso a sx, `KeyboardShortcutsHint` scorciatoie in basso a dx),
+      fuori dal `@media print` locale di TableComponent.
+- [x] Fix: regola globale in `index.css` (`@media print { .print\:hidden { display:none !important } }`)
+      + classe `print:hidden` su `AreaSwitch` e `KeyboardShortcutsHint`. Vale ovunque, non solo nel report.
+- [ ] **Da confermare dall'utente** (anteprima stampa in locale): i toggle in basso non compaiono più.
+
+## Part 2 — Tasto "PDF" → tasto "Documenti" (ZIP dei 3)
+- [x] Rimosso il tasto "PDF" (`handleDownloadPDFLocal`, Riepilogo singolo = doppione della Stampa).
+- [x] `concluseExport.ts`: estratti `buildWorkerDocs(w)` + `addWorkerDocsToZip()` (DRY) e aggiunto
+      `exportSingleWorkerZip(worker)` → zip con Conteggi + Riepilogo + Relazione (stessa struttura cartelle).
+- [x] `TableComponent.tsx`: nuovo tasto "Documenti" (icona Package, spinner durante la generazione async
+      della Relazione .docx) che chiama `exportSingleWorkerZip(worker)`; opzioni risolte = quelle a schermo.
+- [x] Verifica: `npx tsc --noEmit` pulito + **148 test verdi**, nessun import orfano/ciclo.
+- Scelta utente: **ZIP unico** (non 3 file separati).
+- [x] Struttura ZIP singolo: UNA cartella `Conteggi {Cognome} {Nome}` con i 3 file (no albero aziendale).
+- [x] **Riepilogo nel ZIP = screenshot del prospetto** (come tasto Stampa), non la tabella jsPDF:
+      nuova dip `html-to-image` (foreignObject → gestisce oklch Tailwind v4) + `utils/reportScreenshotPdf.ts`
+      (`captureReportPdfBlob`); cattura `#riepilogo-card` → jsPDF A4 landscape → blob; override passato a
+      `exportSingleWorkerZip(worker, riepilogoOverride)`. Fallback al riepilogo jsPDF se la cattura fallisce.
+      Export Concluse in blocco invariato (nessun DOM → usa la tabella jsPDF).
+- [x] Import `concluseExport`/`reportScreenshotPdf` resi **dinamici** in TableComponent → chunk lazy,
+      fuori dal bundle principale (risolve il warning rollup). `tsc` pulito + **build OK**.
+
+---
+
 # Sessione 2026-06-02 — Uniformare RFI al metodo "ricco" dell'avvocato (% di incidenza)
 
 > **Origine:** l'avvocato ha fornito un Excel di conteggio (CONTEGGI - PALLADINO CIRO

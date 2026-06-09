@@ -138,4 +138,8 @@
 @media print {
   @page { margin: 0; }
   body { margin: 1.6cm; }
+  /* Widget flottanti globali (AreaSwitch incidenza/riposi, KeyboardShortcutsHint, toast):
+     la stampa cattura l'intera pagina, quindi vanno nascosti. Regola globale con !important
+     così vale ovunque, non solo quando è montato lo <style> print di TableComponent. */
+  .print\:hidden { display: none !important; }
 }
