@@ -121,6 +121,23 @@ Pacchetto concordato dopo review UX: feedback/conferme coerenti + URL sync.
       incoerente con card/dashboard che preferiscono i campi; non toccato perché
       cambierebbe i numeri, non l'estetica.
 
+## Ottavo giro — Archivio ridisegnato (4 interventi, ok utente)
+
+- [x] A1. Mesi a GRIGLIA-CALENDARIO (4×3) al posto della lista: cella piena nel
+      gradiente azienda = PDF (clic per aprire, ring se selezionata), bordo
+      colorato = solo dati, tratteggiata = mancante; `yearTree` ora genera sempre
+      12 mesi; header anno con micro-barra a 12 punti + "N/12" tabular-nums.
+- [x] A2. Navigazione sequenziale buste: frecce ‹ › nel visore + tasti ←/→
+      (ignorati su input/select e con modale aperta), contatore "5/38",
+      `orderedPayslips` cronologico, anno auto-espanso al salto.
+- [x] A3. Colonna lavoratori nel linguaggio azienda: avatar con gradiente
+      aziendale, selezione con tacca+velo nel colore azienda (via indigo fisso),
+      etichetta azienda del worker header col2 nel suo colore.
+- [x] A4. Polish: header visore con gerarchia giusta (Mese Anno titolo, filename
+      secondario), Download nel gradiente azienda, empty states con alone
+      gradiente e hint d'uso, icona drag&drop con rimbalzo, tabular-nums sui conteggi.
+- [x] Verifica: tsc pulito · build ok · 167 test verdi.
+
 ## Review
 
 - Verifica finale: `npx tsc --noEmit` pulito · `vite build` ok · **163 test verdi**.

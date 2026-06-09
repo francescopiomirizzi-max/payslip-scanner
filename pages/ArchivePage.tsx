@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  ArrowLeft, Search, FileText, Database, ChevronDown, ChevronRight,
+  ArrowLeft, Search, ChevronDown, ChevronRight, ChevronLeft,
   Download, Archive, Loader2, X, FolderOpen, File, Calendar, UploadCloud, Check,
 } from 'lucide-react';
 import { Worker, MONTH_NAMES } from '../types';
-import { SYSTEM_PROFILES } from '../config/profiles';
+import { SYSTEM_PROFILES, getCompanyGradient, getCompanyHex } from '../config/profiles';
 import { usePayslipArchive, PayslipRecord } from '../hooks/usePayslipArchive';
 import { getProfiloBadgeLabel } from '../utils/formatters';
 
@@ -86,6 +86,8 @@ interface YearEntry {
 
 const CURRENT_YEAR = new Date().getFullYear();
 const YEAR_OPTIONS = Array.from({ length: CURRENT_YEAR - 1999 }, (_, i) => CURRENT_YEAR - i);
+
+const MONTH_ABBR = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC'];
 
 const ArchivePage: React.FC<ArchivePageProps> = ({ workers, onBack, initialWorkerId }) => {
   const { getPayslipsByWorker, getSignedUrl, addPayslip } = usePayslipArchive();
@@ -178,6 +180,46 @@ const ArchivePage: React.FC<ArchivePageProps> = ({ workers, onBack, initialWorke
       return next;
     });
   }, []);
+
+  // Colori dell'azienda del lavoratore selezionato (stesso linguaggio di card/dettaglio)
+  const companyHex = selectedWorker ? getCompanyHex(selectedWorker.profilo) : '#6366f1';
+  const [gradStart, gradEnd] = selectedWorker ? getCompanyGradient(selectedWorker.profilo) : ['#6366f1', '#8b5cf6'];
+
+  // --- NAVIGAZIONE SEQUENZIALE TRA LE BUSTE (‹ › e frecce tastiera) ---
+  // Le buste del lavoratore in ordine cronologico: la verifica mese-per-mese
+  // scorre senza tornare all'albero a ogni cambio.
+  const orderedPayslips = useMemo(() => {
+    if (!selectedWorker) return [] as PayslipRecord[];
+    return [...(payslipCache[selectedWorker.id] ?? [])].sort(
+      (a, b) => Number(a.year) - Number(b.year) || MONTH_NAMES.indexOf(a.month) - MONTH_NAMES.indexOf(b.month)
+    );
+  }, [selectedWorker, payslipCache]);
+
+  const currentPayslipIdx = useMemo(
+    () => (selectedPayslip ? orderedPayslips.findIndex(p => p.id === selectedPayslip.id) : -1),
+    [orderedPayslips, selectedPayslip]
+  );
+
+  const goToPayslip = useCallback((dir: 1 | -1) => {
+    if (currentPayslipIdx < 0) return;
+    const next = orderedPayslips[currentPayslipIdx + dir];
+    if (!next) return;
+    handleSelectPayslip(next);
+    // Tiene l'albero in sync: l'anno della busta raggiunta resta visibile
+    setExpandedYears(prev => new Set([...prev, Number(next.year)]));
+  }, [currentPayslipIdx, orderedPayslips, handleSelectPayslip]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (showUploadModal || !selectedPayslip) return;
+      const t = e.target as HTMLElement | null;
+      if (t && ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName)) return;
+      if (e.key === 'ArrowLeft') { e.preventDefault(); goToPayslip(-1); }
+      if (e.key === 'ArrowRight') { e.preventDefault(); goToPayslip(1); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [goToPayslip, selectedPayslip, showUploadModal]);
 
   // --- DRAG & DROP HANDLERS ---
   const handleDragEnter = useCallback((e: React.DragEvent) => {
@@ -284,21 +326,14 @@ const ArchivePage: React.FC<ArchivePageProps> = ({ workers, onBack, initialWorke
         .filter(p => Number(p.year) === year)
         .forEach(p => { payslipByMonth[p.month] = p; });
 
-      // Build month entries: union of all months present in either source
-      const monthIndexSet = new Set<number>([...dataMonths]);
-      payslips.filter(p => Number(p.year) === year).forEach(p => {
-        const idx = MONTH_NAMES.findIndex(m => m === p.month);
-        if (idx >= 0) monthIndexSet.add(idx);
-      });
-
-      const months: MonthEntry[] = Array.from(monthIndexSet)
-        .sort((a, b) => a - b)
-        .map(monthIndex => ({
-          monthIndex,
-          monthName: MONTH_NAMES[monthIndex],
-          hasData: dataMonths.has(monthIndex),
-          payslip: payslipByMonth[MONTH_NAMES[monthIndex]],
-        }));
+      // Tutti i 12 mesi, sempre: la griglia-calendario mostra anche i mancanti
+      // (cella tratteggiata), così la copertura si legge a colpo d'occhio.
+      const months: MonthEntry[] = Array.from({ length: 12 }, (_, monthIndex) => ({
+        monthIndex,
+        monthName: MONTH_NAMES[monthIndex],
+        hasData: dataMonths.has(monthIndex),
+        payslip: payslipByMonth[MONTH_NAMES[monthIndex]],
+      }));
 
       return {
         year,
@@ -394,21 +429,25 @@ const ArchivePage: React.FC<ArchivePageProps> = ({ workers, onBack, initialWorke
                 const isLoading = loadingWorker === worker.id;
                 const count = payslipCountMap[worker.id];
                 const dataMonths = (worker.anni ?? []).length;
+                const wHex = getCompanyHex(worker.profilo);
+                const [wGradS, wGradE] = getCompanyGradient(worker.profilo);
 
                 return (
                   <button
                     key={worker.id}
                     onClick={() => handleSelectWorker(worker)}
-                    className={`w-full flex items-center gap-3 px-4 py-3.5 text-left transition-all border-b border-slate-100/60 dark:border-slate-800/60 ${
-                      isSelected
-                        ? 'bg-indigo-50 dark:bg-indigo-900/20 border-l-2 border-l-indigo-500'
-                        : 'hover:bg-slate-50 dark:hover:bg-slate-800/40 border-l-2 border-l-transparent'
+                    className={`w-full flex items-center gap-3 px-4 py-3.5 text-left transition-all border-b border-slate-100/60 dark:border-slate-800/60 border-l-2 ${
+                      isSelected ? '' : 'hover:bg-slate-50 dark:hover:bg-slate-800/40'
                     }`}
+                    style={isSelected
+                      ? { borderLeftColor: wHex, backgroundColor: `${wHex}14` }
+                      : { borderLeftColor: 'transparent' }}
                   >
-                    {/* Avatar */}
-                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-sm font-black shrink-0 ${
-                      isSelected ? 'bg-indigo-600 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
-                    }`}>
+                    {/* Avatar nel gradiente dell'azienda (come l'header del dettaglio) */}
+                    <div
+                      className={`w-9 h-9 rounded-xl flex items-center justify-center text-sm font-black text-white shrink-0 shadow-sm transition-transform ${isSelected ? 'scale-105' : ''}`}
+                      style={{ background: `linear-gradient(135deg, ${wGradS}, ${wGradE})` }}
+                    >
                       {worker.cognome.charAt(0).toUpperCase()}
                     </div>
 
@@ -424,9 +463,9 @@ const ArchivePage: React.FC<ArchivePageProps> = ({ workers, onBack, initialWorke
                         {isLoading ? (
                           <Loader2 className="w-3 h-3 text-slate-400 animate-spin" />
                         ) : count !== undefined ? (
-                          <span className="text-[9px] font-bold text-slate-400">{count} PDF</span>
+                          <span className="text-[9px] font-bold tabular-nums text-slate-400">{count} PDF</span>
                         ) : (
-                          <span className="text-[9px] text-slate-400">{dataMonths} mesi</span>
+                          <span className="text-[9px] tabular-nums text-slate-400">{dataMonths} mesi</span>
                         )}
                       </div>
                     </div>
@@ -440,21 +479,29 @@ const ArchivePage: React.FC<ArchivePageProps> = ({ workers, onBack, initialWorke
         {/* ── COL 2: YEAR/MONTH TREE ── */}
         <div className="w-80 flex-none flex flex-col border-r border-slate-200/60 dark:border-slate-700/60 bg-white/40 dark:bg-slate-900/40">
           {!selectedWorker ? (
-            <div className="flex flex-col items-center justify-center h-full text-slate-400 gap-3">
-              <Calendar className="w-10 h-10 opacity-30" />
-              <p className="text-sm font-medium">Seleziona un lavoratore</p>
+            <div className="flex flex-col items-center justify-center h-full text-slate-400 gap-4">
+              <div className="relative">
+                <div className="absolute -inset-3 rounded-full bg-gradient-to-tr from-indigo-500/10 via-purple-500/10 to-cyan-500/10 blur-xl pointer-events-none" />
+                <div className="relative w-16 h-16 rounded-2xl bg-white/70 dark:bg-slate-800/70 border border-slate-200/60 dark:border-slate-700/60 shadow-sm flex items-center justify-center">
+                  <Calendar className="w-7 h-7 text-slate-300 dark:text-slate-600" />
+                </div>
+              </div>
+              <div className="text-center">
+                <p className="text-sm font-bold text-slate-500 dark:text-slate-400">Seleziona un lavoratore</p>
+                <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Gli anni si aprono in una griglia mese per mese</p>
+              </div>
             </div>
           ) : (
             <>
-              {/* Worker header */}
+              {/* Worker header — etichetta azienda nel suo colore */}
               <div className="flex-none px-5 py-4 border-b border-slate-100 dark:border-slate-800">
-                <p className="text-xs font-black uppercase tracking-widest text-indigo-600 dark:text-indigo-400 mb-0.5">
+                <p className="text-xs font-black uppercase tracking-widest mb-0.5" style={{ color: companyHex }}>
                   {getProfiloBadgeLabel(selectedWorker.profilo, selectedWorker.eliorType, true)}
                 </p>
                 <p className="text-base font-black text-slate-800 dark:text-white truncate">
                   {selectedWorker.cognome} {selectedWorker.nome}
                 </p>
-                <p className="text-[10px] text-slate-400 mt-0.5">
+                <p className="text-[10px] tabular-nums text-slate-400 mt-0.5">
                   {yearTree.length} {yearTree.length === 1 ? 'anno' : 'anni'} · {' '}
                   {yearTree.reduce((s, y) => s + y.payslipCount, 0)} PDF caricati
                 </p>
@@ -475,7 +522,7 @@ const ArchivePage: React.FC<ArchivePageProps> = ({ workers, onBack, initialWorke
                 ) : (
                   yearTree.map(({ year, months, payslipCount }) => (
                     <div key={year} className="mb-1">
-                      {/* Year header */}
+                      {/* Year header — micro-barra di copertura: 12 punti, pieno = PDF */}
                       <button
                         onClick={() => toggleYear(year)}
                         className="w-full flex items-center gap-2 px-5 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors group"
@@ -484,18 +531,23 @@ const ArchivePage: React.FC<ArchivePageProps> = ({ workers, onBack, initialWorke
                           ? <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
                           : <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
                         }
-                        <span className="text-sm font-black text-slate-700 dark:text-slate-200">{year}</span>
-                        <div className="ml-auto flex items-center gap-2">
-                          {payslipCount > 0 && (
-                            <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-400">
-                              {payslipCount} PDF
-                            </span>
-                          )}
-                          <span className="text-[9px] text-slate-400">{months.length} mesi</span>
+                        <span className="text-sm font-black tabular-nums text-slate-700 dark:text-slate-200">{year}</span>
+                        <div className="ml-auto flex items-center gap-2.5">
+                          <div className="flex items-center gap-[3px]">
+                            {months.map(m => (
+                              <span
+                                key={m.monthIndex}
+                                className="w-1.5 h-1.5 rounded-full bg-slate-200 dark:bg-slate-700"
+                                style={m.payslip ? { backgroundColor: companyHex } : undefined}
+                              />
+                            ))}
+                          </div>
+                          <span className="text-[10px] font-bold tabular-nums text-slate-400">{payslipCount}/12</span>
                         </div>
                       </button>
 
-                      {/* Months */}
+                      {/* Griglia-calendario: 12 celle, si legge come la timeline della card.
+                          Piena = PDF (clic per aprire) · bordo = solo dati · tratteggiata = mancante */}
                       <AnimatePresence>
                         {expandedYears.has(year) && (
                           <motion.div
@@ -505,53 +557,51 @@ const ArchivePage: React.FC<ArchivePageProps> = ({ workers, onBack, initialWorke
                             transition={{ duration: 0.2 }}
                             className="overflow-hidden"
                           >
-                            {months.map(({ monthIndex, monthName, hasData, payslip }) => {
-                              const isSelectedPayslip = selectedPayslip?.id === payslip?.id;
-                              return (
-                                <button
-                                  key={monthIndex}
-                                  onClick={() => payslip ? handleSelectPayslip(payslip) : undefined}
-                                  disabled={!payslip}
-                                  className={`w-full flex items-center gap-3 pl-10 pr-5 py-2 transition-all ${
-                                    isSelectedPayslip
-                                      ? 'bg-indigo-50 dark:bg-indigo-900/20'
-                                      : payslip
-                                        ? 'hover:bg-slate-50 dark:hover:bg-slate-800/40 cursor-pointer'
-                                        : 'cursor-default opacity-60'
-                                  }`}
-                                >
-                                  {/* Status icon */}
-                                  {payslip ? (
-                                    <FileText className={`w-3.5 h-3.5 shrink-0 ${isSelectedPayslip ? 'text-indigo-600' : 'text-slate-500 dark:text-slate-400'}`} />
-                                  ) : hasData ? (
-                                    <Database className="w-3.5 h-3.5 shrink-0 text-slate-300 dark:text-slate-600" />
-                                  ) : (
-                                    <div className="w-3.5 h-3.5 shrink-0" />
-                                  )}
-
-                                  {/* Month name */}
-                                  <span className={`text-[11px] font-bold capitalize flex-1 text-left ${
-                                    isSelectedPayslip ? 'text-indigo-700 dark:text-indigo-300' : 'text-slate-700 dark:text-slate-300'
-                                  }`}>
-                                    {monthName.charAt(0) + monthName.slice(1).toLowerCase()}
-                                  </span>
-
-                                  {/* Right badges */}
-                                  <div className="flex items-center gap-1.5 shrink-0">
-                                    {payslip && (
-                                      <span className="text-[8px] font-black uppercase px-1.5 py-0.5 rounded bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-400">
-                                        PDF
-                                      </span>
-                                    )}
-                                    {hasData && (
-                                      <span className="text-[8px] font-black uppercase px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
-                                        dati
-                                      </span>
-                                    )}
+                            <div className="grid grid-cols-4 gap-1.5 px-5 pb-3 pt-1">
+                              {months.map(({ monthIndex, monthName, hasData, payslip }) => {
+                                const isSelectedPayslip = !!payslip && selectedPayslip?.id === payslip.id;
+                                const meseLabel = monthName.charAt(0) + monthName.slice(1).toLowerCase();
+                                if (payslip) {
+                                  return (
+                                    <button
+                                      key={monthIndex}
+                                      onClick={() => handleSelectPayslip(payslip)}
+                                      title={`${meseLabel} ${year} — apri PDF`}
+                                      className={`h-9 rounded-lg flex items-center justify-center text-[10px] font-black tracking-wide text-white shadow-sm transition-all duration-150 hover:scale-[1.06] hover:shadow-md ${
+                                        isSelectedPayslip ? 'ring-2 ring-offset-2 ring-offset-white dark:ring-offset-slate-900' : ''
+                                      }`}
+                                      style={{
+                                        background: `linear-gradient(135deg, ${gradStart}, ${gradEnd})`,
+                                        ...(isSelectedPayslip ? { ['--tw-ring-color' as any]: companyHex } : {}),
+                                      }}
+                                    >
+                                      {MONTH_ABBR[monthIndex]}
+                                    </button>
+                                  );
+                                }
+                                if (hasData) {
+                                  return (
+                                    <div
+                                      key={monthIndex}
+                                      title={`${meseLabel} ${year} — dati inseriti, PDF non caricato`}
+                                      className="h-9 rounded-lg flex items-center justify-center text-[10px] font-black tracking-wide border"
+                                      style={{ color: companyHex, borderColor: `${companyHex}55`, backgroundColor: `${companyHex}0F` }}
+                                    >
+                                      {MONTH_ABBR[monthIndex]}
+                                    </div>
+                                  );
+                                }
+                                return (
+                                  <div
+                                    key={monthIndex}
+                                    title={`${meseLabel} ${year} — mancante`}
+                                    className="h-9 rounded-lg flex items-center justify-center text-[10px] font-bold tracking-wide border border-dashed border-slate-200 dark:border-slate-700/60 text-slate-300 dark:text-slate-600"
+                                  >
+                                    {MONTH_ABBR[monthIndex]}
                                   </div>
-                                </button>
-                              );
-                            })}
+                                );
+                              })}
+                            </div>
                           </motion.div>
                         )}
                       </AnimatePresence>
@@ -567,40 +617,68 @@ const ArchivePage: React.FC<ArchivePageProps> = ({ workers, onBack, initialWorke
         <div className="flex-1 flex flex-col min-w-0 bg-slate-100/50 dark:bg-slate-950/50">
           {!selectedPayslip && !loadingPdf ? (
             <div className="flex flex-col items-center justify-center h-full gap-4 text-slate-400">
-              <div className="w-20 h-20 rounded-3xl bg-slate-200/60 dark:bg-slate-800/60 flex items-center justify-center">
-                <File className="w-10 h-10 opacity-40" />
+              <div className="relative">
+                <div className="absolute -inset-3 rounded-full bg-gradient-to-tr from-indigo-500/10 via-purple-500/10 to-cyan-500/10 blur-xl pointer-events-none" />
+                <div className="relative w-20 h-20 rounded-3xl bg-white/70 dark:bg-slate-800/70 border border-slate-200/60 dark:border-slate-700/60 shadow-sm flex items-center justify-center">
+                  <File className="w-9 h-9 text-slate-300 dark:text-slate-600" />
+                </div>
               </div>
               <div className="text-center">
                 <p className="text-sm font-bold text-slate-500 dark:text-slate-400">Nessuna busta selezionata</p>
                 <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
-                  {selectedWorker ? 'Seleziona un mese con PDF per visualizzarlo' : 'Seleziona prima un lavoratore'}
+                  {selectedWorker ? 'Clicca un mese pieno nella griglia, poi scorri con ‹ › o le frecce' : 'Seleziona prima un lavoratore'}
                 </p>
               </div>
             </div>
           ) : (
             <div className="flex flex-col h-full">
-              {/* PDF Header */}
+              {/* PDF Header — mese/anno come titolo, filename in secondo piano,
+                  frecce ‹ › per scorrere le buste in ordine cronologico (anche ←/→) */}
               <div className="flex-none flex items-center gap-3 px-5 py-3 bg-white/80 dark:bg-slate-900/80 border-b border-slate-200/60 dark:border-slate-700/60">
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    onClick={() => goToPayslip(-1)}
+                    disabled={currentPayslipIdx <= 0}
+                    title="Busta precedente (←)"
+                    className="p-2 rounded-xl text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <ChevronLeft className="w-4 h-4" strokeWidth={2.5} />
+                  </button>
+                  <button
+                    onClick={() => goToPayslip(1)}
+                    disabled={currentPayslipIdx < 0 || currentPayslipIdx >= orderedPayslips.length - 1}
+                    title="Busta successiva (→)"
+                    className="p-2 rounded-xl text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <ChevronRight className="w-4 h-4" strokeWidth={2.5} />
+                  </button>
+                </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs font-black text-slate-700 dark:text-slate-200 truncate">
-                    {selectedPayslip?.filename}
-                  </p>
-                  <p className="text-[10px] text-slate-400 mt-0.5">
-                    {selectedWorker?.cognome} {selectedWorker?.nome} · {' '}
+                  <p className="text-sm font-black text-slate-800 dark:text-white truncate">
                     {selectedPayslip && (
                       <>
-                        {selectedPayslip.month.charAt(0) + selectedPayslip.month.slice(1).toLowerCase()} {selectedPayslip.year}
+                        {selectedPayslip.month.charAt(0) + selectedPayslip.month.slice(1).toLowerCase()}{' '}
+                        <span className="tabular-nums">{selectedPayslip.year}</span>
                       </>
                     )}
                   </p>
+                  <p className="text-[10px] text-slate-400 mt-0.5 truncate">
+                    {selectedWorker?.cognome} {selectedWorker?.nome} · {selectedPayslip?.filename}
+                  </p>
                 </div>
+                {currentPayslipIdx >= 0 && (
+                  <span className="shrink-0 text-[10px] font-bold tabular-nums text-slate-400">
+                    {currentPayslipIdx + 1} / {orderedPayslips.length}
+                  </span>
+                )}
                 {pdfUrl && (
                   <a
                     href={pdfUrl}
                     download={selectedPayslip?.filename}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 text-white text-[10px] font-black uppercase tracking-wide hover:bg-indigo-700 transition-colors shadow-md shadow-indigo-500/30"
+                    className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-white text-[10px] font-black uppercase tracking-wide hover:opacity-90 transition-opacity shadow-md"
+                    style={{ background: `linear-gradient(135deg, ${gradStart}, ${gradEnd})` }}
                   >
                     <Download className="w-3 h-3" />
                     Download
@@ -648,9 +726,13 @@ const ArchivePage: React.FC<ArchivePageProps> = ({ workers, onBack, initialWorke
               animate={{ scale: 1, opacity: 1 }}
               className="flex flex-col items-center gap-3"
             >
-              <div className="w-20 h-20 rounded-3xl bg-indigo-600 flex items-center justify-center shadow-2xl shadow-indigo-500/40">
+              <motion.div
+                animate={{ y: [0, -8, 0] }}
+                transition={{ repeat: Infinity, duration: 1.6, ease: 'easeInOut' }}
+                className="w-20 h-20 rounded-3xl bg-indigo-600 flex items-center justify-center shadow-2xl shadow-indigo-500/40"
+              >
                 <UploadCloud className="w-10 h-10 text-white" />
-              </div>
+              </motion.div>
               <p className="text-xl font-black text-indigo-700 dark:text-indigo-300">Rilascia per caricare</p>
               <p className="text-sm text-indigo-500 dark:text-indigo-400">PDF busta paga · più file supportati</p>
             </motion.div>
