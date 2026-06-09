@@ -273,3 +273,45 @@ export const getSystemProfile = (key?: string | null): SystemProfile | undefined
 
 /** Icona logistica/aziendale di default per le aziende custom. */
 export const DEFAULT_PROFILE_ICON: LucideIcon = Building2;
+
+// ── Colore-azienda: linguaggio cromatico unico in tutta l'app ────────────────
+// La famiglia Tailwind di ogni azienda (card, header dettaglio, modali, stats):
+// RFI blu, Trenitalia rosso, Elior arancio, Clean Service smeraldo, Mercitalia
+// ambra; custom → famiglia deterministica (stessa palette dei badge custom).
+
+const SYSTEM_COLOR_KEY: Record<string, string> = {
+  RFI: 'blue',
+  TRENITALIA: 'red',
+  ELIOR: 'orange',
+  CLEAN_SERVICE: 'emerald',
+  MERCITALIA: 'amber',
+};
+
+const CUSTOM_COLOR_KEYS = ['fuchsia', 'violet', 'cyan', 'rose', 'indigo', 'teal'];
+
+/** Famiglia cromatica Tailwind dell'azienda (es. 'blue' per RFI). */
+export const getCompanyColorKey = (profilo?: string | null): string =>
+  (profilo && SYSTEM_COLOR_KEY[profilo]) || CUSTOM_COLOR_KEYS[getCustomColorIndex(profilo ?? '')];
+
+/** Coppie [start, end] dei gradienti per famiglia (avatar, bottoni, sparkline). */
+export const COMPANY_GRADIENTS: Record<string, [string, string]> = {
+  blue:    ['#3b82f6', '#06b6d4'],
+  red:     ['#dc2626', '#f43f5e'],
+  orange:  ['#f97316', '#ef4444'],
+  emerald: ['#10b981', '#14b8a6'],
+  amber:   ['#d97706', '#f59e0b'],
+  fuchsia: ['#d946ef', '#a855f7'],
+  violet:  ['#8b5cf6', '#d946ef'],
+  cyan:    ['#06b6d4', '#3b82f6'],
+  rose:    ['#f43f5e', '#fb923c'],
+  indigo:  ['#6366f1', '#8b5cf6'],
+  teal:    ['#14b8a6', '#06b6d4'],
+};
+
+/** Gradiente [start, end] dell'azienda. */
+export const getCompanyGradient = (profilo?: string | null): [string, string] =>
+  COMPANY_GRADIENTS[getCompanyColorKey(profilo)];
+
+/** Hex identificativo dell'azienda (sistema → hex canonico; custom → start del gradiente). */
+export const getCompanyHex = (profilo?: string | null): string =>
+  (profilo && SYSTEM_PROFILES[profilo]?.hex) || getCompanyGradient(profilo)[0];

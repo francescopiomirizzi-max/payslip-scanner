@@ -212,7 +212,7 @@ const App: React.FC = () => {
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                     {[0, 1, 2].map(i => (
-                        <div key={i} className="h-56 bg-white dark:bg-slate-800/60 border border-slate-100 dark:border-slate-700/60 rounded-[2.5rem] animate-pulse p-8 flex flex-col justify-between">
+                        <div key={i} className="h-48 bg-white dark:bg-slate-800/60 border border-slate-100 dark:border-slate-700/60 rounded-[2.5rem] animate-pulse p-6 flex flex-col justify-between">
                             <div className="w-14 h-14 rounded-2xl bg-slate-100 dark:bg-slate-700/50" />
                             <div className="space-y-3">
                                 <div className="h-3 w-28 rounded-lg bg-slate-100 dark:bg-slate-700/50" />

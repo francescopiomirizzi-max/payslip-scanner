@@ -20,7 +20,7 @@ import { motion, useSpring, useMotionValue, AnimatePresence } from 'framer-motio
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { Worker, resolveIncludePaidLeave } from '../types';
-import { SYSTEM_PROFILES, getCustomColorIndex } from '../config/profiles';
+import { SYSTEM_PROFILES, getCustomColorIndex, getCompanyHex } from '../config/profiles';
 import { computeHolidayIndemnity } from '../utils/calculationEngine';
 
 // --- COMPONENTE NUMERO ANIMATO (TICKING) ---
@@ -391,7 +391,7 @@ const StatsDashboard: React.FC<StatsDashboardProps> = ({ workers = [], onBack })
                                     </span>
                                     Analisi Trend
                                 </h2>
-                                <div className="text-6xl font-black text-white tracking-tighter flex items-baseline gap-4 drop-shadow-2xl">
+                                <div className="text-6xl font-black text-white tracking-tighter tabular-nums flex items-baseline gap-4 drop-shadow-2xl">
                                     <AnimatedCounter value={stats.totalRevenue} currency />
 
                                 </div>
@@ -420,7 +420,7 @@ const StatsDashboard: React.FC<StatsDashboardProps> = ({ workers = [], onBack })
                                     <div className="p-3 bg-blue-500/10 rounded-xl border border-blue-500/20 shadow-[0_0_10px_rgba(59,130,246,0.2)]"><Users className="w-6 h-6" /></div>
                                     <span className="text-xs font-black uppercase tracking-widest opacity-80">Pratiche Gestite</span>
                                 </div>
-                                <div className="text-5xl font-black text-white tracking-tighter drop-shadow-lg"><AnimatedCounter value={stats.totalWorkers} /></div>
+                                <div className="text-5xl font-black text-white tracking-tighter tabular-nums drop-shadow-lg"><AnimatedCounter value={stats.totalWorkers} /></div>
                             </div>
                         </motion.div>
 
@@ -432,7 +432,7 @@ const StatsDashboard: React.FC<StatsDashboardProps> = ({ workers = [], onBack })
                                     <div className="p-3 bg-amber-500/10 rounded-xl border border-amber-500/20 shadow-[0_0_10px_rgba(245,158,11,0.2)]"><Target className="w-6 h-6" /></div>
                                     <span className="text-xs font-black uppercase tracking-widest opacity-80">Media / Pratica</span>
                                 </div>
-                                <div className="text-5xl font-black text-white tracking-tighter drop-shadow-lg"><AnimatedCounter value={stats.avgRevenue} currency /></div>
+                                <div className="text-5xl font-black text-white tracking-tighter tabular-nums drop-shadow-lg"><AnimatedCounter value={stats.avgRevenue} currency /></div>
                             </div>
                         </motion.div>
 
@@ -449,33 +449,19 @@ const StatsDashboard: React.FC<StatsDashboardProps> = ({ workers = [], onBack })
                             {Object.entries(stats.byProfile).map(([profile, data]: [string, { count: number, value: number }], idx) => {
                                 const percent = (data.value / stats.totalRevenue) * 100 || 0;
 
-                                let barColor = '#3b82f6'; // Default Blue (RFI / ALTRO)
-                                let bgClass = 'bg-blue-500';
-
+                                // Colore-azienda condiviso (stesso linguaggio di card e dashboard)
+                                const barColor = profile === 'ALTRO' ? '#3b82f6' : getCompanyHex(profile);
                                 const sysProfile = SYSTEM_PROFILES[profile];
-                                if (sysProfile) {
-                                    barColor = sysProfile.hex;
-                                    bgClass = sysProfile.badge.statsBg;
-                                } else if (profile !== 'ALTRO') {
-                                    // AZIENDE CUSTOM (stesso hash deterministico condiviso)
-                                    const customColors = [
-                                        { bar: '#d946ef', bg: 'bg-fuchsia-500' },
-                                        { bar: '#8b5cf6', bg: 'bg-violet-500' },
-                                        { bar: '#06b6d4', bg: 'bg-cyan-500' },
-                                        { bar: '#f43f5e', bg: 'bg-rose-500' },
-                                        { bar: '#6366f1', bg: 'bg-indigo-500' },
-                                        { bar: '#14b8a6', bg: 'bg-teal-500' }
-                                    ];
-                                    const theme = customColors[getCustomColorIndex(profile)];
-                                    barColor = theme.bar;
-                                    bgClass = theme.bg;
-                                }
+                                const customBgClasses = ['bg-fuchsia-500', 'bg-violet-500', 'bg-cyan-500', 'bg-rose-500', 'bg-indigo-500', 'bg-teal-500'];
+                                const bgClass = sysProfile
+                                    ? sysProfile.badge.statsBg
+                                    : profile === 'ALTRO' ? 'bg-blue-500' : customBgClasses[getCustomColorIndex(profile)];
 
                                 return (
                                     <div key={profile} className="group">
                                         <div className="flex justify-between items-end mb-3">
                                             <div className="flex items-center gap-3">
-                                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-white text-sm shadow-lg ${bgClass} bg-opacity-90`}>
+                                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-white text-sm shadow-lg ${bgClass}`}>
                                                     {profile.substring(0, 1)}
                                                 </div>
                                                 <div>
@@ -484,7 +470,7 @@ const StatsDashboard: React.FC<StatsDashboardProps> = ({ workers = [], onBack })
                                                 </div>
                                             </div>
                                             <div className="text-right">
-                                                <span className="block font-black text-xl drop-shadow-md" style={{ color: barColor }}>{data.value.toLocaleString('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })}</span>
+                                                <span className="block font-black text-xl tabular-nums drop-shadow-md" style={{ color: barColor }}>{data.value.toLocaleString('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })}</span>
                                                 <span className="text-xs font-bold text-slate-600">{percent.toFixed(1)}% market share</span>
                                             </div>
                                         </div>
@@ -538,14 +524,21 @@ const StatsDashboard: React.FC<StatsDashboardProps> = ({ workers = [], onBack })
                                             </div>
                                             <div className="flex items-center gap-2 mt-1">
                                                 {/* BADGE PROFILO */}
-                                                <span className="text-[9px] font-black px-1.5 py-0.5 rounded border bg-slate-800 text-slate-300 border-slate-600 shadow-sm uppercase">
+                                                <span
+                                                    className="text-[9px] font-black px-1.5 py-0.5 rounded border shadow-sm uppercase"
+                                                    style={{
+                                                        color: getCompanyHex(w.profilo),
+                                                        borderColor: `${getCompanyHex(w.profilo)}4D`,
+                                                        backgroundColor: `${getCompanyHex(w.profilo)}1A`,
+                                                    }}
+                                                >
                                                     {w.profilo}
                                                 </span>
                                             </div>
                                         </div>
                                     </div>
                                     <div className="text-right">
-                                        <p className={`font-black text-sm tracking-tight drop-shadow-md ${w.computedTotal === 0 ? 'text-slate-500' : 'text-emerald-400'}`}>
+                                        <p className={`font-black text-sm tracking-tight tabular-nums drop-shadow-md ${w.computedTotal === 0 ? 'text-slate-500' : 'text-emerald-400'}`}>
                                             {w.computedTotal.toLocaleString('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })}
                                         </p>
                                         <ArrowUpRight className="w-3 h-3 text-slate-500 ml-auto mt-1 opacity-0 group-hover:opacity-100 transition-all -translate-x-2 group-hover:translate-x-0" />
@@ -585,7 +578,7 @@ const StatsDashboard: React.FC<StatsDashboardProps> = ({ workers = [], onBack })
 
                             <div className="mt-8 relative z-10 pt-6 border-t border-white/10">
                                 <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Valore Stimato</p>
-                                <p className="text-4xl font-black text-transparent bg-clip-text drop-shadow-sm bg-gradient-to-r from-yellow-200 to-yellow-500">
+                                <p className="text-4xl font-black tabular-nums text-transparent bg-clip-text drop-shadow-sm bg-gradient-to-r from-yellow-200 to-yellow-500">
                                     {stats.topPerformer.computedTotal.toLocaleString('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })}
                                 </p>
                             </div>

@@ -3,6 +3,7 @@ import { Wallet, Ticket } from 'lucide-react';
 import { Worker, resolveIncludePaidLeave } from '../types';
 import { parseLocalFloat } from '../utils/formatters';
 import { computeHolidayIndemnity } from '../utils/calculationEngine';
+import { getCompanyColorKey } from '../config/profiles';
 
 type StatsModalType = 'net' | 'ticket' | null;
 
@@ -126,7 +127,8 @@ export const useDashboardStats = (
                 profilo: worker.profilo,
                 amount,
                 potential,
-                color: worker.accentColor || 'blue',
+                // Colore-azienda (stesso linguaggio della WorkerCard), non più accentColor casuale
+                color: getCompanyColorKey(worker.profilo),
                 isTicketExcluded: !includeTickets
             };
         })

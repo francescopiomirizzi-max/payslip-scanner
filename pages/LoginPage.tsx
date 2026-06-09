@@ -44,9 +44,13 @@ const LoginPage: React.FC<LoginPageProps> = ({ loginEmail, setLoginEmail, loginP
                 transition={{ duration: 0.5 }}
                 className="bg-slate-900/40 backdrop-blur-2xl border border-white/[0.08] ring-1 ring-white/[0.05] p-10 rounded-[2.5rem] shadow-[0_8px_64px_rgba(0,0,0,0.5)] w-full max-w-md relative z-10 mx-4"
             >
+                {/* Logo vero al posto del lucchetto generico: stessa identità della dashboard */}
                 <div className="flex justify-center mb-8">
-                    <div className="w-24 h-24 bg-linear-to-tr from-cyan-500 to-blue-600 rounded-3xl flex items-center justify-center shadow-lg shadow-cyan-500/30 border border-white/10">
-                        <Lock className="w-10 h-10 text-white" strokeWidth={2.5} />
+                    <div className="relative w-24 h-24">
+                        <div className="absolute -inset-2 rounded-full bg-gradient-to-tr from-cyan-500/30 via-blue-500/20 to-indigo-500/30 blur-xl pointer-events-none" />
+                        <div className="relative w-full h-full rounded-full overflow-hidden ring-1 ring-white/20 shadow-lg shadow-cyan-500/30">
+                            <img src="/logo.png" alt="Logo RailFlow" className="w-full h-full object-cover" />
+                        </div>
                     </div>
                 </div>
 

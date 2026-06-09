@@ -8,6 +8,7 @@ import {
   QrCode, Download, Bot, Cpu, FileText, Save, CheckCircle, AlertTriangle, Archive, Zap, LineChart,
 } from 'lucide-react';
 import { YEARS } from '../../types';
+import { getCompanyGradient } from '../../config/profiles';
 import { getProfiloBadgeLabel } from '../../utils/formatters';
 import { useIsReadOnly } from '../../lib/readonly';
 import { FRAMER_PHYSICS } from '../../framerConfig';
@@ -103,18 +104,10 @@ const WorkerDetailHeader: React.FC = () => {
 
             {/* USER INFO */}
             <div className="flex items-center gap-5 border-l-2 border-slate-200/60 dark:border-slate-700/50 pl-8 h-20 transition-colors">
+              {/* Avatar nel colore-azienda (stesso linguaggio della card in dashboard) */}
               <div className="w-14 h-14 rounded-2xl flex items-center justify-center shadow-xl text-white shadow-indigo-200 dark:shadow-indigo-900/40 ring-4 ring-white dark:ring-slate-800 shrink-0 transition-all"
                 style={{ background: (() => {
-                  const g: Record<string, [string, string]> = {
-                    indigo:  ['#6366f1', '#8b5cf6'],
-                    emerald: ['#10b981', '#14b8a6'],
-                    orange:  ['#f97316', '#ef4444'],
-                    blue:    ['#3b82f6', '#06b6d4'],
-                    rose:    ['#f43f5e', '#fb923c'],
-                    violet:  ['#8b5cf6', '#d946ef'],
-                    teal:    ['#14b8a6', '#06b6d4'],
-                  };
-                  const [s, e] = g[worker.accentColor ?? 'blue'] ?? g.blue;
+                  const [s, e] = getCompanyGradient(worker.profilo);
                   return `linear-gradient(135deg, ${s}, ${e})`;
                 })() }}>
                 <User className="w-7 h-7" strokeWidth={2} />

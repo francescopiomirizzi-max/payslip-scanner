@@ -101,6 +101,26 @@ Pacchetto concordato dopo review UX: feedback/conferme coerenti + URL sync.
       "Statistiche · RailFlow", "Turni & Riposi · RailFlow" (effect in App.tsx).
 - [x] Verifica: tsc pulito · build ok · 167 test verdi.
 
+## Settimo giro (chiusura) — colore-azienda ovunque + hero compatte + stats/login
+
+- [x] Colore-azienda come linguaggio unico: helper centrali in `config/profiles.ts`
+      (`getCompanyColorKey` / `getCompanyGradient` / `getCompanyHex`); WorkerCard
+      usa l'helper condiviso (via mappa locale); avatar header dettaglio
+      (`WorkerDetailHeader`) e colori modale stats (`useDashboardStats`) ora
+      azienda-based — l'`accentColor` casuale NON guida più nessuna UI (resta solo
+      campo DB legacy); `COLOR_VARIANTS` esteso con red/fuchsia/rose/teal.
+- [x] Hero cards dashboard compattate: min-h 220→180px, p-8→p-6, mb-6→mb-4,
+      gap-8 mb-10→gap-6 mb-8; skeleton allineato (h-56→h-48).
+- [x] StatsDashboard: tabular-nums sui 6 numeri grandi; badge profilo nel ranking
+      dal grigio neutro al colore-azienda (inline hex); barColor custom via
+      getCompanyHex (via array duplicato); rimosso `bg-opacity-90` (no-op Tailwind v4).
+- [x] LoginPage: logo vero con alone gradiente al posto del lucchetto generico.
+- [x] Verifica: tsc pulito · build ok · 167 test verdi.
+- NOTA (fuori scope, da valutare): StatsDashboard legge le preferenze SOLO da
+      localStorage (tickets_/exFest_/startYear_) ignorando i campi worker.* cloud —
+      incoerente con card/dashboard che preferiscono i campi; non toccato perché
+      cambierebbe i numeri, non l'estetica.
+
 ## Review
 
 - Verifica finale: `npx tsc --noEmit` pulito · `vite build` ok · **163 test verdi**.

@@ -42,6 +42,30 @@ export const COLOR_VARIANTS: any = {
         border: 'border-cyan-200', borderDark: 'dark:border-cyan-700',
         borderHover: 'hover:border-cyan-300', borderDarkHover: 'dark:hover:border-cyan-600'
     },
+    red: {
+        bgLight: 'bg-red-100', bgDark: 'dark:bg-red-900/30', bgSoft: 'bg-red-50', bgSoftDark: 'dark:bg-red-900/10',
+        text: 'text-red-600', textDark: 'dark:text-red-400', textLight: 'text-red-500',
+        border: 'border-red-200', borderDark: 'dark:border-red-700',
+        borderHover: 'hover:border-red-300', borderDarkHover: 'dark:hover:border-red-600'
+    },
+    fuchsia: {
+        bgLight: 'bg-fuchsia-100', bgDark: 'dark:bg-fuchsia-900/30', bgSoft: 'bg-fuchsia-50', bgSoftDark: 'dark:bg-fuchsia-900/10',
+        text: 'text-fuchsia-600', textDark: 'dark:text-fuchsia-400', textLight: 'text-fuchsia-500',
+        border: 'border-fuchsia-200', borderDark: 'dark:border-fuchsia-700',
+        borderHover: 'hover:border-fuchsia-300', borderDarkHover: 'dark:hover:border-fuchsia-600'
+    },
+    rose: {
+        bgLight: 'bg-rose-100', bgDark: 'dark:bg-rose-900/30', bgSoft: 'bg-rose-50', bgSoftDark: 'dark:bg-rose-900/10',
+        text: 'text-rose-600', textDark: 'dark:text-rose-400', textLight: 'text-rose-500',
+        border: 'border-rose-200', borderDark: 'dark:border-rose-700',
+        borderHover: 'hover:border-rose-300', borderDarkHover: 'dark:hover:border-rose-600'
+    },
+    teal: {
+        bgLight: 'bg-teal-100', bgDark: 'dark:bg-teal-900/30', bgSoft: 'bg-teal-50', bgSoftDark: 'dark:bg-teal-900/10',
+        text: 'text-teal-600', textDark: 'dark:text-teal-400', textLight: 'text-teal-500',
+        border: 'border-teal-200', borderDark: 'dark:border-teal-700',
+        borderHover: 'hover:border-teal-300', borderDarkHover: 'dark:hover:border-teal-600'
+    },
     slate: {
         bgLight: 'bg-slate-100', bgDark: 'dark:bg-slate-800', bgSoft: 'bg-slate-50', bgSoftDark: 'dark:bg-slate-900',
         text: 'text-slate-600', textDark: 'dark:text-slate-300', textLight: 'text-slate-500',

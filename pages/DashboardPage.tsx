@@ -702,10 +702,10 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
             </div>
 
             {/* STATISTICHE HOME (GOD TIER FX RESTORED) */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-10 relative z-10">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8 relative z-10">
 
                 {/* 1. CARD PRATICHE (NEON BLU - CON SFONDO E PING) */}
-                <div className="isolate group relative h-full min-h-[220px] bg-white/60 dark:bg-slate-800/60 backdrop-blur-2xl border border-white/60 dark:border-slate-700/60 rounded-[2.5rem] overflow-hidden [clip-path:inset(0_round_2.5rem)] transition-[transform,box-shadow,border-color] duration-500 hover:scale-[1.03] hover:-translate-y-1 hover:border-blue-400/50 hover:shadow-[0_20px_60px_-15px_rgba(59,130,246,0.5)] flex flex-col justify-between cursor-default">
+                <div className="isolate group relative h-full min-h-[180px] bg-white/60 dark:bg-slate-800/60 backdrop-blur-2xl border border-white/60 dark:border-slate-700/60 rounded-[2.5rem] overflow-hidden [clip-path:inset(0_round_2.5rem)] transition-[transform,box-shadow,border-color] duration-500 hover:scale-[1.03] hover:-translate-y-1 hover:border-blue-400/50 hover:shadow-[0_20px_60px_-15px_rgba(59,130,246,0.5)] flex flex-col justify-between cursor-default">
 
                     {/* Sfondo Decorativo Animato — wrappato in inner clipper per containere il blur out-of-bounds */}
                     <div className="absolute inset-0 overflow-hidden rounded-[2.5rem] pointer-events-none">
@@ -713,8 +713,8 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                         <div className="absolute bottom-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-blue-500 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
                     </div>
 
-                    <div className="p-8 relative z-10">
-                        <div className="flex justify-between items-start mb-6">
+                    <div className="p-6 relative z-10">
+                        <div className="flex justify-between items-start mb-4">
                             {/* Icona con Ping */}
                             <div className="p-3.5 rounded-2xl bg-slate-100 dark:bg-slate-700/50 text-slate-400 border border-slate-200 dark:border-slate-600 transition-all duration-500 group-hover:bg-blue-600 group-hover:text-white group-hover:border-blue-500 group-hover:rotate-12 group-hover:scale-110 group-hover:shadow-lg group-hover:shadow-blue-500/40">
                                 <User className="w-7 h-7" strokeWidth={2} />
@@ -733,7 +733,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                     </div>
 
                     {/* Footer Badge Stats */}
-                    <div className="px-8 pb-8 relative z-10">
+                    <div className="px-6 pb-6 relative z-10">
                         <div className="flex flex-wrap gap-3 opacity-90 group-hover:opacity-100 transition-opacity duration-500 translate-y-2 group-hover:translate-y-0">
                             {SYSTEM_PROFILE_KEYS.map((key) => {
                                 const p = SYSTEM_PROFILES[key];
@@ -750,7 +750,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                 </div>
 
                 {/* 2. CARD NETTO (EMERALD - CON GRAFICO SVG) */}
-                <div onClick={() => setActiveStatsModal('net')} className="isolate group relative h-full min-h-[220px] bg-white/70 dark:bg-slate-800/70 backdrop-blur-2xl border border-white/60 dark:border-slate-700/60 rounded-[2.5rem] overflow-hidden [clip-path:inset(0_round_2.5rem)] transition-[transform,box-shadow,border-color] duration-500 hover:scale-[1.04] hover:-translate-y-1 hover:border-emerald-400/50 hover:shadow-[0_20px_60px_-15px_rgba(16,185,129,0.5)] cursor-pointer flex flex-col justify-between">
+                <div onClick={() => setActiveStatsModal('net')} className="isolate group relative h-full min-h-[180px] bg-white/70 dark:bg-slate-800/70 backdrop-blur-2xl border border-white/60 dark:border-slate-700/60 rounded-[2.5rem] overflow-hidden [clip-path:inset(0_round_2.5rem)] transition-[transform,box-shadow,border-color] duration-500 hover:scale-[1.04] hover:-translate-y-1 hover:border-emerald-400/50 hover:shadow-[0_20px_60px_-15px_rgba(16,185,129,0.5)] cursor-pointer flex flex-col justify-between">
 
                     {/* Decorazioni — wrappate in inner clipper */}
                     <div className="absolute inset-0 overflow-hidden rounded-[2.5rem] pointer-events-none">
@@ -761,8 +761,8 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                         </svg>
                     </div>
 
-                    <div className="p-8 relative z-10">
-                        <div className="flex justify-between items-start mb-6">
+                    <div className="p-6 relative z-10">
+                        <div className="flex justify-between items-start mb-4">
                             <div className="p-3.5 rounded-2xl bg-slate-100 dark:bg-slate-700/50 text-slate-400 border border-slate-200 dark:border-slate-600 transition-all duration-500 group-hover:bg-emerald-600 group-hover:text-white group-hover:border-emerald-500 group-hover:rotate-12 group-hover:scale-110 group-hover:shadow-lg group-hover:shadow-emerald-500/40">
                                 <Wallet className="w-7 h-7" strokeWidth={2} />
                             </div>
@@ -786,7 +786,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                 </div>
 
                 {/* 3. CARD TICKET (AMBER - CON ICONA GIGANTE) */}
-                <div onClick={() => setActiveStatsModal('ticket')} className="isolate group relative h-full min-h-[220px] bg-white/60 dark:bg-slate-800/60 backdrop-blur-2xl border border-white/60 dark:border-slate-700/60 rounded-[2.5rem] overflow-hidden [clip-path:inset(0_round_2.5rem)] transition-[transform,box-shadow,border-color] duration-500 hover:scale-[1.02] hover:-translate-y-1 hover:border-amber-400/50 hover:shadow-[0_20px_60px_-15px_rgba(245,158,11,0.5)] cursor-pointer flex flex-col justify-between">
+                <div onClick={() => setActiveStatsModal('ticket')} className="isolate group relative h-full min-h-[180px] bg-white/60 dark:bg-slate-800/60 backdrop-blur-2xl border border-white/60 dark:border-slate-700/60 rounded-[2.5rem] overflow-hidden [clip-path:inset(0_round_2.5rem)] transition-[transform,box-shadow,border-color] duration-500 hover:scale-[1.02] hover:-translate-y-1 hover:border-amber-400/50 hover:shadow-[0_20px_60px_-15px_rgba(245,158,11,0.5)] cursor-pointer flex flex-col justify-between">
 
                     {/* Decorazioni — wrappate in inner clipper */}
                     <div className="absolute inset-0 overflow-hidden rounded-[2.5rem] pointer-events-none">
@@ -797,8 +797,8 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                         </div>
                     </div>
 
-                    <div className="p-8 relative z-10">
-                        <div className="flex justify-between items-start mb-6">
+                    <div className="p-6 relative z-10">
+                        <div className="flex justify-between items-start mb-4">
                             <div className="p-3.5 rounded-2xl bg-slate-100 dark:bg-slate-700/50 text-slate-400 border border-slate-200 dark:border-slate-600 transition-all duration-500 group-hover:bg-amber-500 group-hover:text-white group-hover:border-amber-400 group-hover:-rotate-12 group-hover:scale-110 group-hover:shadow-lg group-hover:shadow-amber-500/40">
                                 <Ticket className="w-7 h-7" strokeWidth={2} />
                             </div>

@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useRef, useEffect } from 'react';
 import ReactDOM from 'react-dom';
 import { Worker, getColumnsByProfile, resolveIncludePaidLeave } from '../types';
-import { SYSTEM_PROFILES, getCustomColorIndex } from '../config/profiles';
+import { SYSTEM_PROFILES, getCustomColorIndex, getCompanyColorKey } from '../config/profiles';
 import { parseLocalFloat, getProfiloBadgeLabel } from '../utils/formatters';
 import { computeHolidayIndemnity } from '../utils/calculationEngine';
 import { getYearCoverage } from '../utils/workerStatus';
@@ -238,19 +238,6 @@ const YearTimeline = ({ worker, startClaimYear, onOpenYear }: {
   );
 };
 
-// --- COLORE CARD = AZIENDA ---
-// La card è colorata per azienda (come filtri e badge dashboard): si capisce dove
-// lavora la persona senza leggere. Lo STATO della pratica vive nella tacca laterale.
-// Custom → famiglia deterministica condivisa con badgeStyles/getCustomColorIndex.
-const COMPANY_COLOR_KEY: Record<string, string> = {
-  RFI: 'blue',
-  TRENITALIA: 'red',
-  ELIOR: 'orange',
-  CLEAN_SERVICE: 'emerald',
-  MERCITALIA: 'amber',
-};
-const CUSTOM_COLOR_KEYS = ['fuchsia', 'violet', 'cyan', 'rose', 'indigo', 'teal'];
-
 const STATUS_PICKER_OPTIONS = [
   { value: '', label: 'Da Analizzare', dot: '#94a3b8' },
   { value: 'pronta', label: 'Conteggi', dot: '#f59e0b' },
@@ -416,8 +403,7 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
 
   // --- TEMA E STILI (colore = azienda, non più accentColor casuale) ---
   const theme = useMemo(() => {
-    const color = COMPANY_COLOR_KEY[worker.profilo]
-      ?? CUSTOM_COLOR_KEYS[getCustomColorIndex(worker.profilo ?? '')];
+    const color = getCompanyColorKey(worker.profilo);
     const hexMap: any = {
       indigo:  { start: '#6366f1', end: '#8b5cf6', text: '#4f46e5', bg: '#eef2ff', border: '#c7d2fe', glow: 'rgba(99, 102, 241, 0.5)',  classes: 'bg-indigo-50 dark:bg-indigo-900/30 border-indigo-200 dark:border-indigo-700/50 text-indigo-600 dark:text-indigo-400' },
       emerald: { start: '#10b981', end: '#14b8a6', text: '#059669', bg: '#ecfdf5', border: '#a7f3d0', glow: 'rgba(16, 185, 129, 0.5)',  classes: 'bg-emerald-50 dark:bg-emerald-900/30 border-emerald-200 dark:border-emerald-700/50 text-emerald-600 dark:text-emerald-400' },
