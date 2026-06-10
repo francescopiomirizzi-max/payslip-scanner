@@ -104,15 +104,20 @@ def main():
     if grand_total is not None and abs(tot - grand_total) > 0.011:
         sys.exit(f'ERRORE: somma mesi {tot} != Totale complessivo stampato {grand_total}')
 
-    # seed GiornataInput[]: solo i campi del tipo, omessi se vuoti
+    # seed GiornataInput[]: campi del tipo + serie della fonte (mancati riposi
+    # h.mm e indennità € come calcolati nel PDF), omessi se vuoti
     seed = []
     for iso in isos:
         d = byday[iso]
         g = {'data': d['data']}
         for key, src in (('gset', 'gset'), ('tipo', 'tipo'), ('servizio', 'serv'),
-                         ('inizio', 'ini'), ('termine', 'ter')):
+                         ('inizio', 'ini'), ('termine', 'ter'),
+                         ('mancatoRipGiorn', 'mrg'), ('mancatoRipSett', 'mrs')):
             if d[src]:
                 g[key] = d[src]
+        ind = num(d['ind'])
+        if ind is not None:
+            g['indennitaFonte'] = ind
         seed.append(g)
 
     with open(out_path, 'w') as f:

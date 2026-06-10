@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowLeft, AlertTriangle, Moon, CalendarClock, Euro, CheckCircle2, Search, CalendarDays, ListChecks } from 'lucide-react';
-import { computeRestViolations, formatHm, type Violazione, type GiornataInput } from '../utils/restEngine';
+import { ArrowLeft, AlertTriangle, Moon, CalendarClock, Euro, CheckCircle2, Search, CalendarDays, ListChecks, FileText, Scale } from 'lucide-react';
+import { computeRestViolations, formatHm, parseHmm, type Violazione, type GiornataInput } from '../utils/restEngine';
 import { AnimatedCounter } from './ui/AnimatedCounter';
 import type { PraticaRiposi } from '../hooks/usePraticheRiposi';
 
@@ -49,6 +49,30 @@ const RiposiPraticaDetail: React.FC<Props> = ({ pratica, onBack }) => {
         return Object.entries(m).sort(([a], [b]) => a.localeCompare(b)).map(([y, v]) => ({ y, ...v, tot: v.g + v.s }));
     }, [result]);
 
+    /** Serie della FONTE: indennità/ore come calcolate nel PDF sorgente (criteri di
+     *  chi l'ha prodotto), da affiancare — non sommare — alla serie del motore. */
+    const fonte = useMemo(() => {
+        let gg = 0, minuti = 0, ind = 0;
+        const perAnnoF: Record<string, number> = {};
+        for (const g of pratica.giornate) {
+            if (g.indennitaFonte == null) continue;
+            gg++; ind += g.indennitaFonte;
+            for (const v of [g.mancatoRipGiorn, g.mancatoRipSett]) {
+                const m = parseHmm(v);
+                if (!Number.isNaN(m)) minuti += m;
+            }
+            const y = yearOf(g.data);
+            perAnnoF[y] = (perAnnoF[y] ?? 0) + g.indennitaFonte;
+        }
+        return { gg, ore: minuti / 60, ind, perAnno: perAnnoF };
+    }, [pratica]);
+
+    const perAnnoRows = useMemo(() => {
+        const m = new Map(perAnno.map((a) => [a.y, a]));
+        const ys = Array.from(new Set([...perAnno.map((a) => a.y), ...Object.keys(fonte.perAnno)])).sort();
+        return ys.map((y) => ({ y, g: m.get(y)?.g ?? 0, s: m.get(y)?.s ?? 0, ind: m.get(y)?.ind ?? 0, indFonte: fonte.perAnno[y] ?? 0 }));
+    }, [perAnno, fonte]);
+
     const maxAnno = useMemo(() => Math.max(1, ...perAnno.map((a) => a.tot)), [perAnno]);
     const violazioniOrdinate = useMemo(() => [...result.violazioni].sort((a, b) => a.inizio.localeCompare(b.inizio)), [result]);
 
@@ -94,7 +118,7 @@ const RiposiPraticaDetail: React.FC<Props> = ({ pratica, onBack }) => {
                 {/* Banner onestà dati */}
                 <div className="flex items-start gap-2 rounded-2xl bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 px-4 py-3 text-sm text-amber-800 dark:text-amber-200">
                     <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
-                    <span>Lettura su <strong>dati grezzi dell'Excel</strong> (con i suoi errori OCR): ordine di grandezza affidabile, non definitivo. Il PDF pulito consoliderà i numeri. La tariffa è un <strong>placeholder</strong> da confermare con l'avvocato.</span>
+                    <span>Giornate dal <strong>PDF sorgente</strong> («Mancati riposi»), parsato in modo deterministico e quadrato al centesimo coi totali del documento. La tariffa del motore è un <strong>placeholder</strong> da confermare con l'avvocato.</span>
                 </div>
 
                 {/* Tabs */}
@@ -109,6 +133,32 @@ const RiposiPraticaDetail: React.FC<Props> = ({ pratica, onBack }) => {
 
                 {tab === 'violazioni' ? (
                     <>
+                        {/* Le due serie a confronto: fonte (PDF) vs motore 561/2006 */}
+                        {fonte.gg > 0 && (
+                            <section className="rounded-[2rem] bg-white/60 dark:bg-slate-800/60 backdrop-blur-2xl border border-white/60 dark:border-slate-700/60 p-6">
+                                <h3 className="font-bold text-slate-700 dark:text-slate-200 mb-4">Le due serie a confronto</h3>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    <div className="rounded-2xl border border-sky-200 dark:border-sky-500/30 bg-sky-50/60 dark:bg-sky-500/10 p-4">
+                                        <div className="flex items-center gap-2 mb-2 text-sky-700 dark:text-sky-300">
+                                            <FileText className="w-4 h-4" />
+                                            <span className="text-[11px] font-bold uppercase tracking-wide">Indennità secondo il PDF</span>
+                                        </div>
+                                        <p className="text-2xl font-black tabular-nums text-slate-800 dark:text-slate-100"><AnimatedCounter value={fonte.ind} isCurrency /></p>
+                                        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">{fonte.gg.toLocaleString('it-IT')} giornate indennizzate · {Math.round(fonte.ore).toLocaleString('it-IT')} h mancanti · tariffe e criteri di chi ha prodotto il documento</p>
+                                    </div>
+                                    <div className="rounded-2xl border border-indigo-200 dark:border-indigo-500/30 bg-indigo-50/60 dark:bg-indigo-500/10 p-4">
+                                        <div className="flex items-center gap-2 mb-2 text-indigo-700 dark:text-indigo-300">
+                                            <Scale className="w-4 h-4" />
+                                            <span className="text-[11px] font-bold uppercase tracking-wide">Indennità secondo il motore (Reg. 561/2006)</span>
+                                        </div>
+                                        <p className="text-2xl font-black tabular-nums text-slate-800 dark:text-slate-100"><AnimatedCounter value={result.totIndennita} isCurrency /></p>
+                                        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">{totViol} violazioni · {Math.round(result.totOreMancanti).toLocaleString('it-IT')} h mancanti · tariffa placeholder {euro(pratica.tariffaOraria)}/h</p>
+                                    </div>
+                                </div>
+                                <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-3 leading-relaxed">Criteri di calcolo diversi: la fonte applica le proprie regole, il motore le soglie del Reg. (CE) 561/2006 sui soli orari di turno. Le due serie si affiancano, non si sommano — confronto neutro per l'avvocato.</p>
+                            </section>
+                        )}
+
                         {/* Stat cards */}
                         <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
                             {STAT.map(({ tone, icon: Icon, label, sub, node }) => (
@@ -153,15 +203,16 @@ const RiposiPraticaDetail: React.FC<Props> = ({ pratica, onBack }) => {
                             <section className="lg:col-span-2 rounded-[2rem] bg-white/60 dark:bg-slate-800/60 backdrop-blur-2xl border border-white/60 dark:border-slate-700/60 p-5">
                                 <h3 className="font-bold text-slate-700 dark:text-slate-200 mb-3">Dettaglio per anno</h3>
                                 <div className="space-y-1">
-                                    <div className="grid grid-cols-4 text-[11px] font-bold uppercase text-slate-400 dark:text-slate-500 px-2">
-                                        <span>Anno</span><span className="text-right">G.</span><span className="text-right">S.</span><span className="text-right">€</span>
+                                    <div className="grid grid-cols-5 text-[11px] font-bold uppercase text-slate-400 dark:text-slate-500 px-2">
+                                        <span>Anno</span><span className="text-right">G.</span><span className="text-right">S.</span><span className="text-right">€ mot.</span><span className="text-right">€ PDF</span>
                                     </div>
-                                    {perAnno.map(({ y, g, s, ind }) => (
-                                        <div key={y} className="grid grid-cols-4 text-sm px-2 py-1.5 rounded-lg odd:bg-slate-50 dark:odd:bg-slate-800/40">
+                                    {perAnnoRows.map(({ y, g, s, ind, indFonte }) => (
+                                        <div key={y} className="grid grid-cols-5 text-sm px-2 py-1.5 rounded-lg odd:bg-slate-50 dark:odd:bg-slate-800/40">
                                             <span className="font-semibold text-slate-700 dark:text-slate-200">{y}</span>
                                             <span className="text-right tabular-nums text-rose-500">{g}</span>
                                             <span className="text-right tabular-nums text-indigo-500">{s}</span>
                                             <span className="text-right tabular-nums text-slate-500 dark:text-slate-400">{Math.round(ind).toLocaleString('it-IT')}</span>
+                                            <span className="text-right tabular-nums text-sky-600 dark:text-sky-400">{indFonte ? Math.round(indFonte).toLocaleString('it-IT') : '—'}</span>
                                         </div>
                                     ))}
                                 </div>
@@ -256,15 +307,18 @@ const MeseFocus: React.FC<{ year: number; month: number; giornate: GiornataInput
     const nLav = giornate.filter((g) => !isRiposo(g)).length;
     const nRiposi = giornate.length - nLav;
     const nViol = giornate.filter((g) => violDays.has(g.data)).length;
+    const indFonteMese = giornate.reduce((a, g) => a + (g.indennitaFonte ?? 0), 0);
+    const hasFonte = giornate.some((g) => g.indennitaFonte != null);
     const counts = new Map<string, number>();
     for (const g of giornate) { const s = (g.servizio ?? '').trim(); if (s) counts.set(s, (counts.get(s) ?? 0) + 1); }
     const markers: [string, number][] = [], turni: [string, number][] = [];
     for (const [c, n] of counts) (/^\d+$/.test(c) ? turni : markers).push([c, n]);
     markers.sort((a, b) => b[1] - a[1]); turni.sort((a, b) => b[1] - a[1]);
-    const riepilogo = [
+    const riepilogo: { color: string; label: string; value: React.ReactNode }[] = [
         { color: 'bg-indigo-500', label: 'Giorni di turno', value: nLav },
         { color: 'bg-slate-400', label: 'Riposi', value: nRiposi },
         { color: 'bg-rose-500', label: 'Con violazione', value: nViol },
+        ...(hasFonte ? [{ color: 'bg-sky-500', label: 'Indennità PDF', value: euro(indFonteMese) }] : []),
     ];
     return (
         <motion.section initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }} className="rounded-[2rem] bg-white/60 dark:bg-slate-800/60 backdrop-blur-2xl border border-white/60 dark:border-slate-700/60 p-6">
@@ -285,7 +339,8 @@ const MeseFocus: React.FC<{ year: number; month: number; giornate: GiornataInput
                                 <th className="text-left font-bold px-3 py-2.5">Giorno</th>
                                 <th className="text-left font-bold px-3 py-2.5">Servizio</th>
                                 <th className="text-right font-bold px-3 py-2.5">Inizio</th>
-                                <th className="text-right font-bold px-4 py-2.5">Termine</th>
+                                <th className={`text-right font-bold ${hasFonte ? 'px-3' : 'px-4'} py-2.5`}>Termine</th>
+                                {hasFonte && <th className="text-right font-bold px-4 py-2.5">€ PDF</th>}
                             </tr>
                         </thead>
                         <tbody>
@@ -300,7 +355,8 @@ const MeseFocus: React.FC<{ year: number; month: number; giornate: GiornataInput
                                         <td className="px-3 py-2 text-slate-500 dark:text-slate-400">{weekday(g.data)}</td>
                                         <td className="px-3 py-2">{riposo ? <span className="text-slate-400 dark:text-slate-500">{g.servizio ?? '—'}</span> : <span className="font-semibold text-indigo-600 dark:text-indigo-400">{g.servizio ?? '—'}</span>}</td>
                                         <td className="px-3 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">{g.inizio ?? '—'}</td>
-                                        <td className="px-4 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">{g.termine ?? '—'}</td>
+                                        <td className={`${hasFonte ? 'px-3' : 'px-4'} py-2 text-right tabular-nums text-slate-600 dark:text-slate-300`}>{g.termine ?? '—'}</td>
+                                        {hasFonte && <td className="px-4 py-2 text-right tabular-nums font-semibold text-sky-600 dark:text-sky-400">{g.indennitaFonte != null ? g.indennitaFonte.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : <span className="font-normal text-slate-300 dark:text-slate-600">—</span>}</td>}
                                     </tr>
                                 );
                             })}

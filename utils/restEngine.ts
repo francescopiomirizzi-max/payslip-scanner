@@ -24,6 +24,11 @@ export interface GiornataInput {
   servizio?: string;   // 'R' | 'D' | 'Festivo' | codice linea/turno
   inizio?: string;     // 'H.mm' inizio turno (vuoto nei giorni di riposo)
   termine?: string;    // 'H.mm' fine turno (vuoto nei giorni di riposo)
+  /** Serie della FONTE (colonne "Mancati Riposi"/"Indennità" del PDF, criteri di
+   *  chi l'ha prodotto). Solo informativi: il motore NON li usa nel calcolo. */
+  mancatoRipGiorn?: string;  // 'H.mm' mancato riposo giornaliero secondo la fonte
+  mancatoRipSett?: string;   // 'H.mm' mancato riposo settimanale secondo la fonte
+  indennitaFonte?: number;   // € indennità del giorno come calcolata nella fonte
 }
 
 export interface RestParams {

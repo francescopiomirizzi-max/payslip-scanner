@@ -18,12 +18,13 @@ export interface PraticaRiposi {
 /**
  * Carica le pratiche dell'area Turni & Riposi.
  *
- * FASE ATTUALE (scaffold): seed locale di Viterbo dai dati grezzi dell'Excel,
- * servito da `public/viterbo-seed.json` (gitignored, dati personali). Serve a
- * mostrare il cruscotto con dati VERI senza dipendere dalla migration.
+ * FASE ATTUALE (scaffold): seed locale di Viterbo generato dal PDF sorgente con
+ * `scripts/parse-mancati-riposi-pdf.py` (parser deterministico, quadrato coi
+ * totali del documento), servito da `public/viterbo-seed.json` (gitignored,
+ * dati personali). Include la serie della fonte (indennitaFonte/mancatoRip*).
  *
- * FASE 2 (col PDF): qui andrà il fetch da Supabase `pratiche_riposi` (mirror di
- * useWorkers), con l'estrazione Gemini a popolare le giornate. Il seed sparisce.
+ * FASE 2: qui andrà il fetch da Supabase `pratiche_riposi` (mirror di
+ * useWorkers). Il seed sparisce.
  */
 export function usePraticheRiposi() {
     const [pratiche, setPratiche] = useState<PraticaRiposi[]>([]);
