@@ -29,17 +29,10 @@ Il bundle "Polish Dynamic Island" (G + H + J + F) ha completato il lavoro sull'i
 
 ---
 
-### N — Glass shimmer on hover sulle card
-**Scope:** stesso 3 card del Dashboard. Al hover, una **linea diagonale di luce** attraversa la card (sweep 1.2s usando l'utility `@keyframes shimmer` già definita in `index.css:60`).
-
-**Tecnica:**
-- Sub-div absolute `inset-0 pointer-events-none` con `bg-gradient-to-r from-transparent via-white/30 to-transparent skew-x-12`
-- `opacity-0 group-hover:opacity-100` + `animate-shimmer` su hover
-- Wrappato nello stesso inner clipper già esistente nelle card (no overflow del blur out-of-bounds)
-
-**Costo:** ~15 LOC per card × 3 = ~45 LOC totali.
-
-**Dipendenze:** nessuna. Quick win.
+### ~~N — Glass shimmer on hover sulle card~~ ✅ FATTO 2026-06-10
+Implementato con keyframe dedicato `card-sweep` in `index.css` (il nome `shimmer` era
+già preso dallo skeleton, con doppia definizione in conflitto tra config e css);
+animazione attiva solo in `:hover` (zero GPU a riposo), variante dark più tenue.
 
 ---
 
@@ -57,27 +50,17 @@ Il bundle "Polish Dynamic Island" (G + H + J + F) ha completato il lavoro sull'i
 
 ---
 
-### S — Smart cursor highlight (hero area)
-**Scope:** sulla DashboardPage, nella zona hero (sopra le 3 card stat), un **radial gradient soft** segue il cursore. Effetto Apple Vision Pro / Linear app.
-
-**Tecnica:**
-- Listener globale `mousemove` su una zona definita (hero container)
-- CSS custom property `--mouse-x` / `--mouse-y` aggiornata
-- Layer absolute con `background: radial-gradient(circle at var(--mouse-x) var(--mouse-y), rgba(99,102,241,0.08), transparent 200px)`
-- Throttling 16ms (60fps)
-
-**Costo:** ~30 LOC (custom hook `useMouseTracking` + sub-div in DashboardPage).
-
-**Dipendenze:** nessuna backend. Può partire subito.
-
-**Motivazione rinvio:** è il più "estetico puro" del bundle, OK ultimo.
+### ~~S — Smart cursor highlight (hero area)~~ ✅ FATTO 2026-06-10
+Implementato su tutta l'area home (non solo hero): `hooks/useMouseGlow.ts` aggiorna
+`--mx/--my/--glow-o` via rAF senza re-render; layer radial-gradient indigo 240px
+con fade-out al mouse leave.
 
 ---
 
 ## Ordine di implementazione consigliato (post-backend)
 
-1. **N + S** (quick wins, ~75 LOC totali, zero dipendenze backend)
-2. **E** (tilt 3D, ~60 LOC, sostanzioso ma additivo)
+1. ~~**N + S**~~ ✅ fatti 2026-06-10
+2. **E** (tilt 3D, ~60 LOC, sostanzioso ma additivo) — prossimo
 3. **O** (skeleton, ~50 LOC, va calibrato sui tempi reali del backend Supabase)
 
 ---
