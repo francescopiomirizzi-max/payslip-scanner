@@ -14,7 +14,8 @@ const isRiposo = (g: GiornataInput) => !g.inizio || !g.termine;
 const isoToKey = (iso: string) => { const d = new Date(iso); return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`; };
 const WEEK = ['L', 'M', 'M', 'G', 'V', 'S', 'D'];
 const MESI = ['Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno', 'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'];
-const SERV_LABEL: Record<string, string> = { R: 'Riposo', Festivo: 'Festività' };
+const SERV_LABEL: Record<string, string> = { R: 'Riposo', Festivo: 'Festività', Ferie: 'Ferie' };
+const servLabel = (code: string) => SERV_LABEL[code] ?? 'sigla da decodificare';
 
 interface Props {
     pratica: PraticaRiposi;
@@ -311,8 +312,10 @@ const MeseFocus: React.FC<{ year: number; month: number; giornate: GiornataInput
     const hasFonte = giornate.some((g) => g.indennitaFonte != null);
     const counts = new Map<string, number>();
     for (const g of giornate) { const s = (g.servizio ?? '').trim(); if (s) counts.set(s, (counts.get(s) ?? 0) + 1); }
+    // Turno = codice che contiene cifre (63, 1063, 0020BR…); le sigle di sole
+    // lettere (R, D, VM, Ferie, Festivo) sono marcatori di non-guida.
     const markers: [string, number][] = [], turni: [string, number][] = [];
-    for (const [c, n] of counts) (/^\d+$/.test(c) ? turni : markers).push([c, n]);
+    for (const [c, n] of counts) (/\d/.test(c) ? turni : markers).push([c, n]);
     markers.sort((a, b) => b[1] - a[1]); turni.sort((a, b) => b[1] - a[1]);
     const riepilogo: { color: string; label: string; value: React.ReactNode }[] = [
         { color: 'bg-indigo-500', label: 'Giorni di turno', value: nLav },
@@ -392,7 +395,7 @@ const MeseFocus: React.FC<{ year: number; month: number; giornate: GiornataInput
                         <div className="space-y-2 text-sm">
                             {markers.map(([code, n]) => (
                                 <div key={code} className="flex items-center justify-between text-slate-600 dark:text-slate-300">
-                                    <span><span className="font-bold">{code}</span> · {SERV_LABEL[code] ?? 'non lavoro'}</span>
+                                    <span><span className="font-bold">{code}</span>{servLabel(code) !== code && <span className={SERV_LABEL[code] ? '' : 'italic text-slate-400 dark:text-slate-500'}> · {servLabel(code)}</span>}</span>
                                     <span className="text-slate-400 tabular-nums">×{n}</span>
                                 </div>
                             ))}
@@ -403,7 +406,7 @@ const MeseFocus: React.FC<{ year: number; month: number; giornate: GiornataInput
                             )}
                         </div>
                         {turni.length > 0 && (
-                            <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-3 leading-relaxed">I codici numerici sono i turni/linee aziendali: la legenda dei singoli codici va richiesta all'azienda (o a Vincenzo).</p>
+                            <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-3 leading-relaxed">I codici turno (numerici o alfanumerici) sono i turni/linee aziendali: la legenda dei singoli codici va richiesta all'azienda (o a Vincenzo).</p>
                         )}
                     </div>
                 </aside>
