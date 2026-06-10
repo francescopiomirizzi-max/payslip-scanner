@@ -497,7 +497,7 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
                       <h3 className="text-base font-bold text-slate-500 dark:text-slate-400 leading-snug capitalize truncate">{worker.nome}</h3>
                       {getCompanyLogo(worker.profilo) ? (
                         <span className="mt-1.5 inline-flex items-center gap-1.5">
-                          <CompanyLogo profilo={worker.profilo} imgClass="h-3.5" title={getProfiloBadgeLabel(worker.profilo, worker.eliorType)} />
+                          <CompanyLogo profilo={worker.profilo} imgClass="h-5" padClass="px-2 py-1" title={getProfiloBadgeLabel(worker.profilo, worker.eliorType)} />
                           {worker.profilo === 'ELIOR' && worker.eliorType && (
                             <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wide border shadow-sm backdrop-blur-md ${badgeStyles}`}>{worker.eliorType === 'viaggiante' ? 'Viag.' : 'Mag.'}</span>
                           )}
