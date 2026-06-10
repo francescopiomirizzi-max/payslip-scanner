@@ -119,11 +119,6 @@ const SplitViewViewer: React.FC<SplitViewViewerProps> = ({
   // Selezione multipla del picker archivio (visore): permette di aprire alcune buste
   // specifiche, oltre al caricamento di un anno intero col bottone dedicato.
   const [selectedPickIds, setSelectedPickIds] = React.useState<Set<string>>(new Set());
-  const togglePick = (id: string) => setSelectedPickIds(prev => {
-    const next = new Set(prev);
-    next.has(id) ? next.delete(id) : next.add(id);
-    return next;
-  });
   const pickYears = archivedPicks
     ? Array.from(new Set(archivedPicks.map(p => p.year))).sort((a, b) => b - a)
     : [];
@@ -343,10 +338,21 @@ const SplitViewViewer: React.FC<SplitViewViewerProps> = ({
               const yearPicks = archivedPicks
                 .filter(p => p.year === year)
                 .sort((a, b) => a.monthIdx - b.monthIdx);
+              // Griglia-calendario a 12 posizioni fisse (stesso linguaggio dell'Archivio):
+              // GEN è sempre nella stessa colonna, i mesi senza busta restano come
+              // tratteggi — i buchi si vedono a colpo d'occhio invece di sparire.
+              // Un mese può avere più buste (duplicati): la cella le rappresenta tutte.
+              const byMonth = new Map<number, ArchivedPick[]>();
+              yearPicks.forEach(p => {
+                const arr = byMonth.get(p.monthIdx) ?? [];
+                arr.push(p);
+                byMonth.set(p.monthIdx, arr);
+              });
               return (
                 <div key={year} className="mb-4">
                   <div className="flex items-center gap-2 mb-2">
                     <span className="text-sm font-bold text-cyan-400">{year}</span>
+                    <span className="text-[10px] font-bold text-slate-500 tabular-nums">{byMonth.size}/12</span>
                     <span className="flex-1 h-px bg-slate-700/60" />
                     <button
                       onClick={() => onOpenArchivedPicks?.(yearPicks.map(p => p.id))}
@@ -356,21 +362,37 @@ const SplitViewViewer: React.FC<SplitViewViewerProps> = ({
                       Tutto l'anno
                     </button>
                   </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {yearPicks.map(p => {
-                      const selected = selectedPickIds.has(p.id);
+                  <div className="grid grid-cols-6 xl:grid-cols-12 gap-1.5">
+                    {MONTH_SHORT.map((label, m) => {
+                      const picks = byMonth.get(m);
+                      if (!picks) {
+                        return (
+                          <div
+                            key={m}
+                            title={`${label} ${year} — busta non in archivio`}
+                            className="h-8 rounded-lg flex items-center justify-center text-[10px] font-bold tracking-wide border border-dashed border-slate-700/70 text-slate-600 select-none"
+                          >
+                            {label}
+                          </div>
+                        );
+                      }
+                      const selected = picks.some(p => selectedPickIds.has(p.id));
                       return (
                         <button
-                          key={p.id}
-                          onClick={() => togglePick(p.id)}
-                          className={`px-2.5 py-1.5 rounded-lg text-[11px] font-black border transition-colors ${
+                          key={m}
+                          onClick={() => setSelectedPickIds(prev => {
+                            const next = new Set(prev);
+                            picks.forEach(p => selected ? next.delete(p.id) : next.add(p.id));
+                            return next;
+                          })}
+                          className={`h-8 rounded-lg flex items-center justify-center gap-0.5 text-[10px] font-black tracking-wide border transition-all duration-150 hover:scale-[1.05] ${
                             selected
                               ? 'bg-cyan-500 text-white border-cyan-400 shadow-[0_0_12px_rgba(6,182,212,0.5)]'
-                              : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700 hover:border-cyan-500'
+                              : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-600 hover:border-cyan-500'
                           }`}
-                          title={`${p.month} ${p.year} — ${p.filename}`}
+                          title={picks.map(p => `${p.month} ${p.year} — ${p.filename}`).join('\n')}
                         >
-                          {MONTH_SHORT[p.monthIdx] ?? p.month.slice(0, 3)}
+                          {label}{picks.length > 1 ? <span className="text-[8px] font-bold opacity-80">×{picks.length}</span> : null}
                         </button>
                       );
                     })}
