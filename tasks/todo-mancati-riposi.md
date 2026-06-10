@@ -76,7 +76,7 @@
 
 ### Resto della Fase 2 (serve il PDF)
 
-- [ ] **Estrazione** `netlify/functions/scan-turni.ts` (mirror `scan-payslip.ts`): prompt Gemini per righe giornaliere `data·gset·tipo·servizio·inizio·termine` + **confidence per cella**; coda capata + thinking budget 1024 + retry (i 3 layer esistenti). Policy: cella dubbia → **flag, non indovinare**.
+- [x] **Estrazione** (2026-06-10) — `scan-turni.ts` NON serve: il PDF di Vincenzo ("Mancati riposi di Viterbo (2).pdf", Desktop) è **testo nativo** → parser deterministico `scripts/parse-mancati-riposi-pdf.py` (regex, zero AI/OCR, verifiche di quadratura incorporate). Seed rigenerato: **5.022 giornate** (gen 2011–set 2024, zero buchi) vs 4.936 dell'Excel; quadra al centesimo col "Totale complessivo" stampato nel PDF (€98.732,03). L'opzione Gemini resta solo per eventuali PDF futuri scansionati.
 - [ ] **Persistenza Supabase**: applicare migration `013`; wiring CRUD reale nel hook (mapper `dbToPratica`/`praticaToDb`), il seed sparisce.
 - [ ] **Review giornate** in `SplitViewViewer` (PDF a sx, righe a dx, dubbie evidenziate) — la correzione umana prima del calcolo.
 
@@ -99,8 +99,9 @@ Tutto l'impianto è in piedi e testato sui dati grezzi dell'Excel. Quando arriva
 
 ## Aperti / dipendenze esterne
 
-- [ ] **PDF sorgente** "Mancati riposi di Viterbo (1).pdf" — da Vincenzo (blocca la Fase 2).
-- [ ] **Tariffa €/ora** con **fonte legale/CCNL** — parametro, non hardcoded (domanda per l'avvocato; l'Excel usava €10,03 ricavato a ritroso).
+- [x] **PDF sorgente** ricevuto 2026-06-10 ("Mancati riposi di Viterbo (2).pdf", Desktop). Parsato e quadrato; CSV derivati (giornaliero/mensile/annuale) accanto all'Excel in `mancati riposi/`.
+- [ ] **Tariffa €/ora** con **fonte legale/CCNL** — parametro, non hardcoded (domanda per l'avvocato). Dal PDF la tariffa implicita è coerente e cresce per anno: €10,03 (2011) → €13,13 (2024) — resta da chiedere la fonte CCNL.
+- [ ] **Due serie da presentare nel cruscotto** (decisione design): indennità del PDF (1.081 gg, €98.732,03, criteri di chi l'ha prodotto) vs motore nostro 561/2006 (prima lettura sul seed PDF: 278 violazioni = 35 giorn. + 243 sett., 1.912h, ~€19.178 a tariffa placeholder €10,03, 16 warnings turni >16h da verificare a mano). Finding neutro per l'avvocato.
 - [ ] **Legenda codici turno** dall'azienda — i codici numerici di "Servizio" (linea/turno) non sono decodificabili senza la chiave aziendale; serve per la contestazione.
 
 ### 📋 Da chiedere a Vincenzo (riassunto)
