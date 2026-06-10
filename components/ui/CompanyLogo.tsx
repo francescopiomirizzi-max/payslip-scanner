@@ -12,8 +12,10 @@ interface CompanyLogoProps {
 }
 
 /**
- * Pastiglia bianca col logo aziendale ufficiale (public/logos/). La base bianca
- * serve in dark mode e sugli sfondi colorati: i loghi hanno testo scuro.
+ * Logo aziendale ufficiale (public/logos/), in due vesti per tema:
+ * - light: pastiglia bianca (i loghi hanno testo scuro, serve la base chiara);
+ * - dark: niente pastiglia, logo monocromo bianco via filtro CSS — le pastiglie
+ *   bianche su fondo scuro erano rettangoli fastidiosi (feedback 2026-06-10).
  * Se il profilo non ha logo (Clean Service, custom) renderizza null:
  * il chiamante mantiene il suo fallback colorato esistente.
  */
@@ -22,10 +24,10 @@ export const CompanyLogo: React.FC<CompanyLogoProps> = ({ profilo, imgClass = 'h
     if (!src) return null;
     return (
         <span
-            className={`inline-flex items-center bg-white rounded-md ring-1 ring-slate-900/10 dark:ring-white/15 shadow-sm ${padClass} ${className}`}
+            className={`inline-flex items-center rounded-md bg-white ring-1 ring-slate-900/10 shadow-sm dark:bg-transparent dark:ring-0 dark:shadow-none ${padClass} ${className}`}
             title={title}
         >
-            <img src={src} alt={profilo ?? ''} className={`${imgClass} w-auto select-none`} loading="lazy" draggable={false} />
+            <img src={src} alt={profilo ?? ''} className={`${imgClass} w-auto select-none dark:brightness-0 dark:invert`} loading="lazy" draggable={false} />
         </span>
     );
 };
