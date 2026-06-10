@@ -429,7 +429,8 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
     const renderWorkerCard = (w: Worker) => {
         const isJustCreated = w.id === recentlyCreatedId;
         return (
-            <motion.div key={w.id} variants={itemVariants} layout initial="hidden" animate="show" exit="exit" className="relative h-[420px]">
+            // 440px: il badge-logo aziendale è più alto del vecchio badge testuale
+            <motion.div key={w.id} variants={itemVariants} layout initial="hidden" animate="show" exit="exit" className="relative h-[440px]">
                 {isJustCreated && (
                     <motion.div
                         initial={{ opacity: 0 }}
@@ -1097,7 +1098,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                                                     variants={itemVariants}
                                                     layout
                                                     onClick={() => handleOpenModal('create')}
-                                                    className="group relative w-full h-[420px] bg-white/40 dark:bg-slate-800/40 backdrop-blur-xl border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-[2.5rem] flex flex-col items-center justify-center cursor-pointer transition-all duration-500 hover:border-emerald-400 hover:bg-emerald-50/10 hover:shadow-[0_0_40px_-10px_rgba(16,185,129,0.3)] hover:-translate-y-2"
+                                                    className="group relative w-full h-[440px] bg-white/40 dark:bg-slate-800/40 backdrop-blur-xl border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-[2.5rem] flex flex-col items-center justify-center cursor-pointer transition-all duration-500 hover:border-emerald-400 hover:bg-emerald-50/10 hover:shadow-[0_0_40px_-10px_rgba(16,185,129,0.3)] hover:-translate-y-2"
                                                 >
                                                     <div className="relative">
                                                         <div className="absolute inset-0 bg-emerald-400/20 rounded-full blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 animate-pulse"></div>
