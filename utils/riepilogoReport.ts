@@ -1,6 +1,6 @@
 import autoTable from 'jspdf-autotable';
 import { Worker, AnnoDati, resolveIncludePaidLeave } from '../types';
-import { computeHolidayIndemnity } from './calculationEngine';
+import { computeHolidayIndemnity, computePeriodIncidence } from './calculationEngine';
 
 // Dati del "Riepilogo / Prospetto Ufficiale di Ricalcolo" estratti dal motore
 // unico, condivisi tra la pagina report (TableComponent) e l'export batch dei
@@ -24,11 +24,20 @@ export interface RiepilogoTotals {
   indennitaPasto: number;
 }
 
+// % di incidenza voci variabili/fisse (Quadro A/B/C dell'avvocato). null per i
+// profili senza voci fisse definite (Elior/Clean Service/Mercitalia): la sezione
+// nel report non viene mostrata.
+export interface RiepilogoIncidenza {
+  rows: { anno: number; pctVariabile: number; pctFissa: number; isReferenceYear: boolean }[];
+  period: { pctVariabile: number; pctFissa: number };
+}
+
 export interface RiepilogoData {
   tableData: RiepilogoRow[];
   totals: RiepilogoTotals;
   startYear: number;
   endYear: number;
+  incidenza: RiepilogoIncidenza | null;
 }
 
 export function computeRiepilogoData(
@@ -45,7 +54,7 @@ export function computeRiepilogoData(
     .filter(y => !isNaN(y))
     .sort((a, b) => a - b);
 
-  const tableData: RiepilogoRow[] = computeHolidayIndemnity({
+  const results = computeHolidayIndemnity({
     data: safeRows,
     profilo: worker.profilo,
     eliorType: worker.eliorType,
@@ -54,7 +63,9 @@ export function computeRiepilogoData(
     startClaimYear,
     includePaidLeave: resolveIncludePaidLeave(worker),
     years: allYears,
-  })
+  });
+
+  const tableData: RiepilogoRow[] = results
     .filter(r => !r.isReferenceYear)
     .map(r => ({
       anno: r.year,
@@ -81,7 +92,23 @@ export function computeRiepilogoData(
   const startYear = tableData.length > 0 ? tableData[0].anno : startClaimYear;
   const endYear = tableData.length > 0 ? tableData[tableData.length - 1].anno : 2025;
 
-  return { tableData, totals, startYear, endYear };
+  // Stessa selezione del tab "Calcolo Annuale" (AnnualCalculationTable): anni con
+  // Quadro B compilato; la media di periodo è sui soli anni non di riferimento.
+  const incidenzaRows = results.filter(r => r.hasIncidence && r.sumQuadroFisse > 0);
+  const incidenza: RiepilogoIncidenza | null = incidenzaRows.length === 0 ? null : {
+    rows: incidenzaRows.map(r => ({
+      anno: r.year,
+      pctVariabile: r.pctVariabileMediaAnnua,
+      pctFissa: r.pctFissaMediaAnnua,
+      isReferenceYear: r.isReferenceYear,
+    })),
+    period: (() => {
+      const p = computePeriodIncidence(results.filter(r => !r.isReferenceYear));
+      return { pctVariabile: p.pctVariabile, pctFissa: p.pctFissa };
+    })(),
+  };
+
+  return { tableData, totals, startYear, endYear, incidenza };
 }
 
 // Disegna il PDF "Prospetto Ufficiale di Ricalcolo" su un doc jsPDF (landscape).

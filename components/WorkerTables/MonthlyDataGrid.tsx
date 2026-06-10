@@ -10,6 +10,7 @@ import {
   evaluateFormula
 } from '../../types';
 import { parseLocalFloat, formatCurrency, formatDay } from '../../utils/formatters';
+import { monthsByYearFromAnni } from '../../utils/workerStatus';
 import { PortalTooltip } from '../ui/PortalTooltip';
 import {
   MessageSquareText,
@@ -363,6 +364,15 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
     setSelectedYear(year);
     onYearChange(year);
   };
+
+  // Copertura per anno (stessa definizione "mese compilato" della YearTimeline in
+  // card e del Report Buste Mancanti): guida lo stile delle pillole-anno, così gli
+  // anni vuoti diventano ghost e quelli con dati si trovano a colpo d'occhio.
+  const filledByYear = useMemo(() => monthsByYearFromAnni({ anni: data }), [data]);
+
+  const selectedYearIdx = years.indexOf(selectedYear);
+  const goPrevYear = () => { if (selectedYearIdx > 0) handleYearChange(years[selectedYearIdx - 1]); };
+  const goNextYear = () => { if (selectedYearIdx >= 0 && selectedYearIdx < years.length - 1) handleYearChange(years[selectedYearIdx + 1]); };
 
   // Sincronizzazione visore → tabella: quando nel visore cambia il PDF mostrato,
   // porta la tabella sull'anno di quel cedolino. Dipende solo dal file mostrato,
@@ -986,15 +996,42 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
               <Calendar className="w-4 h-4 mr-2" />
               <span className="text-xs font-bold uppercase tracking-widest select-none">Periodo</span>
             </div>
-            {years.map(year => (
-              <button
-                key={year}
-                onClick={() => handleYearChange(year)}
-                className={`px-3 py-1 rounded-full text-sm font-medium transition-all duration-200 border border-transparent ${selectedYear === year ? 'bg-blue-500 text-white shadow-md border-blue-400' : 'text-slate-300 hover:bg-slate-700 hover:text-white hover:border-slate-600'}`}
-              >
-                {year}
-              </button>
-            ))}
+            <button
+              onClick={goPrevYear}
+              disabled={selectedYearIdx <= 0}
+              title="Anno precedente"
+              className="p-1 rounded-full text-slate-400 hover:text-white hover:bg-slate-700 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-slate-400 transition-colors"
+            >
+              <ChevronLeft className="w-4 h-4" strokeWidth={2.5} />
+            </button>
+            {years.map(year => {
+              const filled = filledByYear.get(year)?.size ?? 0;
+              const isSel = selectedYear === year;
+              return (
+                <button
+                  key={year}
+                  onClick={() => handleYearChange(year)}
+                  title={filled === 12 ? `${year} · completo (12/12)` : filled > 0 ? `${year} · ${filled}/12 mesi` : `${year} · nessun dato`}
+                  className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium transition-all duration-200 border ${
+                    isSel ? 'bg-blue-500 text-white shadow-md border-blue-400'
+                    : filled > 0 ? 'text-slate-200 bg-slate-700/60 border-slate-600/60 hover:bg-slate-600 hover:text-white'
+                    : 'text-slate-500 border-transparent hover:bg-slate-700 hover:text-slate-200'
+                  }`}
+                >
+                  {/* Dot copertura: stesso linguaggio della YearTimeline (verde=pieno, ambra=parziale) */}
+                  {filled > 0 && <span className={`w-1.5 h-1.5 rounded-full ${filled === 12 ? 'bg-emerald-400' : 'bg-amber-400'}`} />}
+                  {year}
+                </button>
+              );
+            })}
+            <button
+              onClick={goNextYear}
+              disabled={selectedYearIdx === -1 || selectedYearIdx >= years.length - 1}
+              title="Anno successivo"
+              className="p-1 rounded-full text-slate-400 hover:text-white hover:bg-slate-700 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-slate-400 transition-colors"
+            >
+              <ChevronRight className="w-4 h-4" strokeWidth={2.5} />
+            </button>
 
             {/* --- GRUPPO TASTI DESTRA (UNDO + MANUALE LEGALE) --- */}
             <div className="ml-auto flex items-center gap-2">

@@ -20,7 +20,7 @@ const isMonthFilled = (a: Record<string, any>): boolean => {
   return false;
 };
 
-const monthsByYearFromAnni = (worker: Pick<Worker, 'anni'>): Map<number, Set<number>> => {
+export const monthsByYearFromAnni = (worker: Pick<Worker, 'anni'>): Map<number, Set<number>> => {
   const map = new Map<number, Set<number>>();
   for (const a of worker.anni ?? []) {
     if (a.year == null || a.monthIndex == null) continue;

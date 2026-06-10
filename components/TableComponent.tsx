@@ -126,10 +126,15 @@ const TableComponent: React.FC<TableComponentProps> = ({ worker, monthlyInputs, 
   }, [includeExFest, includeTickets, showPercepito]);
 
   // --- 1. LOGICA DATI — MOTORE UNIFICATO (estratto in utils/riepilogoReport) ---
-  const { tableData, totals, startYear, endYear } = useMemo(
+  const { tableData, totals, startYear, endYear, incidenza } = useMemo(
     () => computeRiepilogoData(worker, monthlyInputs, startClaimYear, includeExFest, includeTickets),
     [worker, monthlyInputs, includeExFest, includeTickets, startClaimYear],
   );
+
+  // Soglia di riferimento per la % voci variabili (fissa: questo è il prospetto
+  // ufficiale, lo strumento con soglia editabile resta nel tab Calcolo Annuale).
+  const SOGLIA_VARIABILI = 20;
+  const fmtPct = (n: number) => n.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' %';
 
   const handlePrint = () => {
     // 1. Salviamo il titolo originale della scheda del browser
@@ -329,6 +334,15 @@ Distinti saluti.
           td.bg-green-total { background-color: #92D050 !important; }
           td.bg-red-total { background-color: #FF5050 !important; color: white !important; }
           td.bg-yellow-cell { background-color: #fef08a !important; }
+
+          /* % di incidenza su pagina 2: il prospetto di pagina 1 resta intoccato */
+          #incidenza-content {
+            page-break-before: always;
+            display: flex !important;
+            justify-content: center !important;
+            width: 100% !important;
+            page-break-inside: avoid;
+          }
         }
       `}</style>
 
@@ -609,6 +623,62 @@ Distinti saluti.
           )}
         </div>
       </div>
+
+      {/* % DI INCIDENZA (Quadro A/B/C) — stessa fonte dati del tab Calcolo Annuale.
+          A schermo: sotto il prospetto. In stampa: pagina 2 (il prospetto resta intatto). */}
+      {incidenza && tableData.length > 0 && (
+        <div id="incidenza-content" className="w-full flex justify-center print:block">
+          <div className="print-container mt-10 print:mt-0 w-full max-w-[900px]">
+            <div className="bg-white text-black dark:text-black border-2 border-black dark:border-slate-800 rounded-2xl overflow-hidden shadow-2xl">
+              <div className="bg-gray-200 border-b border-black text-center py-4">
+                <div className="font-black text-xl uppercase mb-1">
+                  Incidenza % delle voci variabili sulla retribuzione
+                </div>
+                <div className="text-base font-normal normal-case">
+                  <span className="font-bold mr-2">{worker.cognome} {worker.nome}</span>
+                  — Periodo: {startYear}–{endYear}
+                </div>
+              </div>
+
+              <table className="w-full border-collapse text-center">
+                <thead>
+                  <tr className="bg-[#7EB6D3] bg-blue-header text-black h-10" style={{ backgroundColor: '#7EB6D3' }}>
+                    <th className="border border-black p-2 font-bold text-base align-middle">Anno</th>
+                    <th className="border border-black p-2 font-bold text-base align-middle">% Voci Variabili</th>
+                    <th className="border border-black p-2 font-bold text-base align-middle">% Voci Fisse</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {incidenza.rows.map((r) => (
+                    <tr key={r.anno} className="h-9 text-base">
+                      <td className="border border-black px-2 py-1 text-center bg-gray-100 font-bold">{r.anno}{r.isReferenceYear ? ' (Rif.)' : ''}</td>
+                      <td className={`border border-black px-2 py-1 text-right font-bold tabular-nums ${r.pctVariabile >= SOGLIA_VARIABILI ? 'text-green-700' : 'text-red-600'}`}>{fmtPct(r.pctVariabile)}</td>
+                      <td className="border border-black px-2 py-1 text-right tabular-nums text-gray-600">{fmtPct(r.pctFissa)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="h-12 font-black text-lg">
+                    <td className="border border-black bg-[#92D050] bg-green-total text-left px-6 align-middle uppercase" style={{ backgroundColor: '#92D050' }}>Media periodo</td>
+                    <td
+                      className={`border border-black text-right px-2 align-middle ${incidenza.period.pctVariabile >= SOGLIA_VARIABILI ? 'bg-[#92D050] bg-green-total' : 'bg-[#FF5050] bg-red-total text-white'}`}
+                      style={incidenza.period.pctVariabile >= SOGLIA_VARIABILI ? { backgroundColor: '#92D050' } : { backgroundColor: '#FF5050', color: 'white' }}
+                    >
+                      {fmtPct(incidenza.period.pctVariabile)}
+                    </td>
+                    <td className="border border-black bg-[#92D050] bg-green-total text-right px-2 align-middle" style={{ backgroundColor: '#92D050' }}>{fmtPct(incidenza.period.pctFissa)}</td>
+                  </tr>
+                </tfoot>
+              </table>
+
+              <p className="px-4 py-2.5 text-xs text-gray-600 border-t border-black bg-gray-50">
+                % variabili = voci variabili ÷ (voci fisse + variabili), media dei 12 mesi di ciascun anno.
+                Soglia di riferimento: {SOGLIA_VARIABILI}% — la media di periodo è il valore rilevante ai fini del ricorso.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {isRelazioneOpen && (
         <RelazioneModal

@@ -33,6 +33,7 @@ import {
     AlertCircle,
     Handshake,
     Loader2,
+    Eye,
 } from 'lucide-react';
 import WorkerCard from '../components/WorkerCard';
 import { AnimatedCounter } from '../components/ui/AnimatedCounter';
@@ -86,6 +87,8 @@ const Cassetto: React.FC<{
 }> = ({ config, workers, isOpen, onToggle, onOpenWorker, children }) => {
     const Icon = config.icon;
     const count = workers.length;
+    // Il tooltip del badge deve dire dove si atterra davvero (report per il viewer).
+    const isReadOnly = useIsReadOnly();
 
     // Overflow visible solo dopo apertura completa (anti-clip card in hover).
     const [overflowVisible, setOverflowVisible] = useState(false);
@@ -147,7 +150,7 @@ const Cassetto: React.FC<{
                                             <button
                                                 key={w.id}
                                                 onClick={(e) => { e.stopPropagation(); onOpenWorker(w.id); }}
-                                                title={`Apri scheda ${w.nome} ${w.cognome}`}
+                                                title={isReadOnly ? `Apri report ${w.nome} ${w.cognome}` : `Apri scheda ${w.nome} ${w.cognome}`}
                                                 className={`shrink-0 flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-bold border transition-all duration-150 hover:scale-[1.06] hover:shadow-sm ${wrapCls}`}
                                             >
                                                 <span className={`w-1.5 h-1.5 rounded-full ${dotCls}`} />
@@ -686,7 +689,17 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                         <input type="file" accept=".json" ref={fileInputRef} onChange={handleImportData} className="hidden" />
                     </div>
 
-                    {/* GRUPPO AZIONE PRINCIPALE — nascosto in modalita' sola lettura */}
+                    {/* GRUPPO AZIONE PRINCIPALE — per il viewer al suo posto c'è il chip
+                        "Sola consultazione": senza, l'assenza dei bottoni sembra un bug */}
+                    {isReadOnly && (
+                        <div
+                            className="h-11 px-4 rounded-xl flex items-center gap-2 text-sm font-bold text-slate-500 dark:text-slate-300 bg-white/65 dark:bg-slate-800/65 border border-white/60 dark:border-slate-700/60 backdrop-blur-xl shadow-sm whitespace-nowrap cursor-default select-none"
+                            title="Accesso in sola consultazione: puoi vedere pratiche, report e archivio ma non modificarli"
+                        >
+                            <Eye className="w-4 h-4" strokeWidth={2.5} />
+                            <span>Sola consultazione</span>
+                        </div>
+                    )}
                     {!isReadOnly && (
                     <button
                         onClick={() => handleOpenModal('create')}
@@ -1026,7 +1039,9 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                                     workers={workersInCassetto}
                                     isOpen={isOpen}
                                     onToggle={() => toggleCassetto(config.id)}
-                                    onOpenWorker={handleOpenComplex}
+                                    // Per il viewer readonly il nome porta al Report (la sua
+                                    // destinazione di consultazione), non alla griglia di gestione.
+                                    onOpenWorker={isReadOnly ? handleOpenSimple : handleOpenComplex}
                                 >
                                     <motion.div
                                         className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8"

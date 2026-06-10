@@ -178,6 +178,14 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
 
   const [activeTickerModal, setActiveTickerModal] = useState<{ title: string, content: React.ReactNode } | null>(null);
 
+  // True se siamo atterrati da un click sulla YearTimeline della card: in quel caso
+  // l'utente vuole proprio la griglia mensile di quell'anno, anche se è il viewer
+  // readonly (che altrimenti atterra sul tab Calcolo Annuale). Va letto PRIMA
+  // dell'inizializzazione di currentYear, che consuma l'hint.
+  const hadOpenYearHint = useRef<boolean>(
+    typeof sessionStorage !== 'undefined' && !!sessionStorage.getItem(`openYear_${worker.id}`)
+  );
+
   const [currentYear, setCurrentYear] = useState<number>(() => {
     // Hint one-shot dalla YearTimeline della WorkerCard: il click su una tacca
     // anno deve far atterrare direttamente su quell'anno.
@@ -213,6 +221,18 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
   const [archivedPicks, setArchivedPicks] = useState<ArchivedPick[]>([]);
   const isReadOnly = useIsReadOnly();
   const [verifyStates, setVerifyStates] = useState<Record<string, VerifyState>>({});
+
+  // Il viewer readonly atterra sul tab "Calcolo Annuale" (totali per anno + % di
+  // incidenza): è la vista da consultazione, la griglia di input resta nel tab.
+  // useIsReadOnly risolve la sessione in async, quindi si corregge qui e non nella
+  // useState; solo se l'utente non ha già cambiato tab e non c'è l'hint anno.
+  useEffect(() => {
+    if (isReadOnly && activeTab === 'input' && !hadOpenYearHint.current) {
+      setActiveTab('calc');
+    }
+    // attivo solo al flip di isReadOnly: un ritorno manuale su 'input' deve restare
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isReadOnly]);
 
   // --- BACKFILL VOCI FISSE (Quadro B) dalle buste già in archivio ---
   // Solo profili con voci fisse definite (RFI/Trenitalia). Merge-safe: scrive SOLO i 3B...
