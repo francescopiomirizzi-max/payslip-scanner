@@ -202,19 +202,20 @@ const StatsDashboard: React.FC<StatsDashboardProps> = ({ workers = [], onBack })
     // Questa versione usa la logica "Anno per Anno" con reset del tetto ferie
     const stats = useMemo(() => {
 
-        // Per ogni lavoratore, calcoliamo il "Netto Recuperabile" esatto
+        // Per ogni lavoratore, calcoliamo il "Netto Recuperabile" esatto.
+        // Preferenze dai campi del worker (DB) con fallback localStorage: il solo
+        // localStorage qui mostrava al viewer readonly totali coi default sbagliati.
         const computedWorkers = workers.map(w => {
-            // 1. LEGGIAMO LE PREFERENZE DAL LOCALSTORAGE
             const storedTicketPref = localStorage.getItem(`tickets_${w.id}`);
-            const includeTickets = storedTicketPref !== null ? JSON.parse(storedTicketPref) : true;
+            const includeTickets = w.includeTickets ?? (storedTicketPref !== null ? JSON.parse(storedTicketPref) : true);
 
             const storedExFestPref = localStorage.getItem(`exFest_${w.id}`);
-            const includeExFest = storedExFestPref !== null ? JSON.parse(storedExFestPref) : false;
+            const includeExFest = w.includeExFest ?? (storedExFestPref !== null ? JSON.parse(storedExFestPref) : false);
 
             const includePaidLeave = resolveIncludePaidLeave(w);
 
             const storedStartYear = localStorage.getItem(`startYear_${w.id}`);
-            const startClaimYear = storedStartYear ? parseInt(storedStartYear) : 2008;
+            const startClaimYear = w.startClaimYear ?? (storedStartYear ? parseInt(storedStartYear) : 2008);
 
             const safeAnni = (Array.isArray(w.anni) ? w.anni : []) as any[];
             const allYears = Array.from(new Set(safeAnni.map((r: any) => Number(r.year))))

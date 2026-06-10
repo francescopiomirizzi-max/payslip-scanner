@@ -26,6 +26,7 @@ function dbToWorker(row: any): Worker {
         startClaimYear: row.start_claim_year ?? undefined,
         includeExFest: row.include_ex_fest ?? undefined,
         includeTickets: row.include_tickets ?? undefined,
+        includePaidLeave: row.include_paid_leave ?? undefined,
         reportShowPercepito: row.report_show_percepito ?? undefined,
         anni: row.anni ?? [],
         created_at: row.created_at ?? undefined,
@@ -51,6 +52,7 @@ function workerToDb(worker: Worker, ownerId: string): object {
         start_claim_year: worker.startClaimYear ?? null,
         include_ex_fest: worker.includeExFest ?? null,
         include_tickets: worker.includeTickets ?? null,
+        include_paid_leave: worker.includePaidLeave ?? null,
         report_show_percepito: worker.reportShowPercepito ?? null,
         anni: worker.anni,
     };
