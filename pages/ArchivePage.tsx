@@ -5,7 +5,8 @@ import {
   Download, Archive, Loader2, X, FolderOpen, File, Calendar, UploadCloud, Check,
 } from 'lucide-react';
 import { Worker, MONTH_NAMES } from '../types';
-import { SYSTEM_PROFILES, getCompanyGradient, getCompanyHex } from '../config/profiles';
+import { SYSTEM_PROFILES, getCompanyGradient, getCompanyHex, getCompanyLogo } from '../config/profiles';
+import { CompanyLogo } from '../components/ui/CompanyLogo';
 import { usePayslipArchive, PayslipRecord } from '../hooks/usePayslipArchive';
 import { getProfiloBadgeLabel } from '../utils/formatters';
 
@@ -457,9 +458,13 @@ const ArchivePage: React.FC<ArchivePageProps> = ({ workers, onBack, initialWorke
                         {worker.cognome} {worker.nome}
                       </p>
                       <div className="flex items-center gap-1.5 mt-0.5">
-                        <span className={`text-[8px] font-bold uppercase px-1.5 py-0.5 rounded border ${badgeStyle(worker.profilo)}`}>
-                          {getProfiloBadgeLabel(worker.profilo, worker.eliorType, true)}
-                        </span>
+                        {getCompanyLogo(worker.profilo) ? (
+                          <CompanyLogo profilo={worker.profilo} imgClass="h-3" padClass="px-1 py-0.5" title={getProfiloBadgeLabel(worker.profilo, worker.eliorType)} />
+                        ) : (
+                          <span className={`text-[8px] font-bold uppercase px-1.5 py-0.5 rounded border ${badgeStyle(worker.profilo)}`}>
+                            {getProfiloBadgeLabel(worker.profilo, worker.eliorType, true)}
+                          </span>
+                        )}
                         {isLoading ? (
                           <Loader2 className="w-3 h-3 text-slate-400 animate-spin" />
                         ) : count !== undefined ? (

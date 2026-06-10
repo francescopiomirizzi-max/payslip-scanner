@@ -1,7 +1,8 @@
 import React, { useMemo, useState, useRef, useEffect } from 'react';
 import ReactDOM from 'react-dom';
 import { Worker, getColumnsByProfile, resolveIncludePaidLeave } from '../types';
-import { SYSTEM_PROFILES, getCustomColorIndex, getCompanyColorKey } from '../config/profiles';
+import { SYSTEM_PROFILES, getCustomColorIndex, getCompanyColorKey, getCompanyLogo } from '../config/profiles';
+import { CompanyLogo } from './ui/CompanyLogo';
 import { parseLocalFloat, getProfiloBadgeLabel } from '../utils/formatters';
 import { computeHolidayIndemnity } from '../utils/calculationEngine';
 import { getYearCoverage } from '../utils/workerStatus';
@@ -494,7 +495,16 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
                     <div className="flex-1 min-w-0">
                       <h3 className="text-xl font-black text-slate-800 dark:text-white leading-tight tracking-tight uppercase truncate">{worker.cognome}</h3>
                       <h3 className="text-base font-bold text-slate-500 dark:text-slate-400 leading-snug capitalize truncate">{worker.nome}</h3>
-                      <span className={`mt-1.5 inline-block px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wide border shadow-sm backdrop-blur-md ${badgeStyles}`}>{getProfiloBadgeLabel(worker.profilo, worker.eliorType, true)}</span>
+                      {getCompanyLogo(worker.profilo) ? (
+                        <span className="mt-1.5 inline-flex items-center gap-1.5">
+                          <CompanyLogo profilo={worker.profilo} imgClass="h-3.5" title={getProfiloBadgeLabel(worker.profilo, worker.eliorType)} />
+                          {worker.profilo === 'ELIOR' && worker.eliorType && (
+                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wide border shadow-sm backdrop-blur-md ${badgeStyles}`}>{worker.eliorType === 'viaggiante' ? 'Viag.' : 'Mag.'}</span>
+                          )}
+                        </span>
+                      ) : (
+                        <span className={`mt-1.5 inline-block px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wide border shadow-sm backdrop-blur-md ${badgeStyles}`}>{getProfiloBadgeLabel(worker.profilo, worker.eliorType, true)}</span>
+                      )}
                     </div>
 
                     {/* Tasto ruota + Menu ••• */}

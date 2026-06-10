@@ -8,7 +8,8 @@ import {
   QrCode, Download, Bot, Cpu, FileText, Save, CheckCircle, AlertTriangle, Archive, Zap, LineChart,
 } from 'lucide-react';
 import { YEARS } from '../../types';
-import { getCompanyGradient } from '../../config/profiles';
+import { getCompanyGradient, getCompanyLogo } from '../../config/profiles';
+import { CompanyLogo } from '../ui/CompanyLogo';
 import { getProfiloBadgeLabel } from '../../utils/formatters';
 import { useIsReadOnly } from '../../lib/readonly';
 import { FRAMER_PHYSICS } from '../../framerConfig';
@@ -118,9 +119,18 @@ const WorkerDetailHeader: React.FC = () => {
                     {worker.cognome} {worker.nome}
                   </h1>
                   <BadgeCheck className="w-6 h-6 text-blue-500 dark:text-cyan-400 transition-colors" />
-                  <div className={`ml-2 px-2.5 py-1 rounded-md text-[11px] font-black uppercase tracking-tighter border transition-colors ${badgeStyles}`}>
-                    {getProfiloBadgeLabel(worker.profilo, worker.eliorType)}
-                  </div>
+                  {getCompanyLogo(worker.profilo) ? (
+                    <span className="ml-2 inline-flex items-center gap-1.5">
+                      <CompanyLogo profilo={worker.profilo} imgClass="h-4" padClass="px-2 py-1" title={getProfiloBadgeLabel(worker.profilo, worker.eliorType)} />
+                      {worker.profilo === 'ELIOR' && worker.eliorType && (
+                        <span className={`px-2 py-1 rounded-md text-[11px] font-black uppercase tracking-tighter border transition-colors ${badgeStyles}`}>{worker.eliorType === 'viaggiante' ? 'Viag.' : 'Mag.'}</span>
+                      )}
+                    </span>
+                  ) : (
+                    <div className={`ml-2 px-2.5 py-1 rounded-md text-[11px] font-black uppercase tracking-tighter border transition-colors ${badgeStyles}`}>
+                      {getProfiloBadgeLabel(worker.profilo, worker.eliorType)}
+                    </div>
+                  )}
                 </div>
                 <div className="flex items-center gap-3 text-sm font-bold text-slate-400 dark:text-slate-500 dark:text-slate-300 uppercase tracking-wider mt-1.5 transition-colors">
                   <Briefcase className="w-4 h-4" />

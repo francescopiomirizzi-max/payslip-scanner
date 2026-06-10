@@ -41,7 +41,8 @@ import { AnimatedCounter } from '../components/ui/AnimatedCounter';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { useIsReadOnly } from '../lib/readonly';
 import { Worker } from '../types';
-import { SYSTEM_PROFILES, SYSTEM_PROFILE_KEYS } from '../config/profiles';
+import { SYSTEM_PROFILES, SYSTEM_PROFILE_KEYS, getCompanyLogo } from '../config/profiles';
+import { CompanyLogo } from '../components/ui/CompanyLogo';
 import { DashboardStats, WorkerStatItem, ModalConfig } from '../hooks/useDashboardStats';
 import { generateReport, generateRegistroPagate } from '../utils/reportGenerator';
 import { COLOR_VARIANTS } from '../utils/colorVariants';
@@ -773,8 +774,14 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                                 const p = SYSTEM_PROFILES[key];
                                 return (
                                     <div key={key} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border backdrop-blur-md transition-colors ${p.footer.wrap}`}>
-                                        <div className={`w-2 h-2 rounded-full ${p.footer.dot}`}></div>
-                                        <span className={`text-[11px] font-black transition-colors ${p.footer.name}`}>{p.label}</span>
+                                        {getCompanyLogo(key) ? (
+                                            <CompanyLogo profilo={key} imgClass="h-3" title={p.label} />
+                                        ) : (
+                                            <>
+                                                <div className={`w-2 h-2 rounded-full ${p.footer.dot}`}></div>
+                                                <span className={`text-[11px] font-black transition-colors ${p.footer.name}`}>{p.label}</span>
+                                            </>
+                                        )}
                                         <span className={`text-[11px] font-bold transition-colors ${p.footer.count}`}>{workers.filter(w => w.profilo === key).length}</span>
                                     </div>
                                 );
@@ -923,7 +930,11 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                                 onClick={() => setActiveFilter(filterId)}
                                 className={`px-6 py-2 rounded-2xl font-black text-xs uppercase tracking-widest transition-all duration-300 backdrop-blur-md flex items-center gap-2 ${getFilterStyle(filterId, isActive)}`}
                             >
-                                {filterId === 'ALL' ? 'Tutti' : filterId.replace(/_/g, ' ')}
+                                {filterId === 'ALL'
+                                    ? 'Tutti'
+                                    : getCompanyLogo(filterId)
+                                        ? <CompanyLogo profilo={filterId} imgClass="h-3.5" className="-my-0.5" title={filterId.replace(/_/g, ' ')} />
+                                        : filterId.replace(/_/g, ' ')}
                                 {filterId !== 'ALL' && (
                                     <span className="opacity-70 font-mono text-[10px]">
                                         ({workers.filter(w => w.profilo === filterId).length})

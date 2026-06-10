@@ -20,6 +20,21 @@ Piano approvato in conversazione: cross-link funzionali sul dettaglio Riposi + b
       updateWorkerById → auto-sync debounced + mirror localStorage startYear_<id>);
       toast con promemoria anno precedente completo
 
+## Terzo giro — loghi aziendali (solo UI, mai nei documenti)
+
+- [x] 9. Asset: SVG ufficiali da Wikimedia Commons in public/logos/ — RFI,
+      Trenitalia (viewBox aggiunto a mano, il file ne era privo), Mercitalia Rail,
+      Elior. Clean Service NON ha logo pubblico affidabile → fallback.
+- [x] 10. Infrastruttura: getCompanyLogo() in config/profiles.ts (mappa estendibile,
+      null per Clean Service/custom) + componente ui/CompanyLogo (pastiglia bianca,
+      necessaria in dark e su sfondi colorati; null se senza logo → il chiamante
+      tiene il fallback colorato esistente).
+- [x] 11. Superfici (scelte dall'utente, tutte e 4): WorkerCard (badge → logo,
+      suffisso Viag./Mag. conservato per Elior), filtri azienda + chips footer
+      card Pratiche (dot+nome → logo), header dettaglio, colonna lavoratori Archivio.
+- [x] 12. Verifica visiva: preview Chrome headless dei loghi a 12/14/16px su
+      pastiglia, light+dark — leggibili. tsc pulito · build ok · 171 test verdi.
+
 ## Review
 
 - Verifica: `npx tsc --noEmit` pulito · `vite build` ok · **171 test verdi**.
