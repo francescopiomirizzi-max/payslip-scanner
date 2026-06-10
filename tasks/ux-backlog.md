@@ -50,16 +50,16 @@ animazione attiva solo in `:hover` (zero GPU a riposo), variante dark più tenue
 
 ---
 
-### ~~S — Smart cursor highlight (hero area)~~ ✅ FATTO 2026-06-10
-Implementato su tutta l'area home (non solo hero): `hooks/useMouseGlow.ts` aggiorna
-`--mx/--my/--glow-o` via rAF senza re-render; layer radial-gradient indigo 240px
-con fade-out al mouse leave.
+### ~~S — Smart cursor highlight (hero area)~~ ❌ BOCCIATO 2026-06-10
+Implementato e RIMOSSO nella stessa sera su feedback utente: il glow che segue il
+cursore non gli piace. **Non riproporre** effetti cursor-following; stessa famiglia
+di K (magnetic cursor) → considerare anche K a rischio bocciatura.
 
 ---
 
 ## Ordine di implementazione consigliato (post-backend)
 
-1. ~~**N + S**~~ ✅ fatti 2026-06-10
+1. ~~**N**~~ ✅ fatto 2026-06-10 · ~~**S**~~ ❌ bocciato 2026-06-10
 2. **E** (tilt 3D, ~60 LOC, sostanzioso ma additivo) — prossimo
 3. **O** (skeleton, ~50 LOC, va calibrato sui tempi reali del backend Supabase)
 

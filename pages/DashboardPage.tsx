@@ -34,6 +34,7 @@ import {
     Handshake,
     Loader2,
     Eye,
+    CalendarDays,
 } from 'lucide-react';
 import WorkerCard from '../components/WorkerCard';
 import { AnimatedCounter } from '../components/ui/AnimatedCounter';
@@ -42,7 +43,6 @@ import { useIsReadOnly } from '../lib/readonly';
 import { Worker } from '../types';
 import { SYSTEM_PROFILES, SYSTEM_PROFILE_KEYS } from '../config/profiles';
 import { DashboardStats, WorkerStatItem, ModalConfig } from '../hooks/useDashboardStats';
-import { useMouseGlow } from '../hooks/useMouseGlow';
 import { generateReport, generateRegistroPagate } from '../utils/reportGenerator';
 import { COLOR_VARIANTS } from '../utils/colorVariants';
 
@@ -510,6 +510,23 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
         setIsSelectionMode(false);
     };
 
+    // Inizio calcoli in blocco: stesso range (2008-2025) e stessa doppia scrittura
+    // del dettaglio (campo cloud + mirror localStorage startYear_<id>).
+    const [bulkStartYear, setBulkStartYear] = useState('');
+    const applyStartYearToSelection = () => {
+        const y = Number(bulkStartYear);
+        if (!y || selectedIds.size === 0) return;
+        selectedIds.forEach(id => {
+            updateWorkerById(id, { startClaimYear: y });
+            localStorage.setItem(`startYear_${id}`, String(y));
+        });
+        const n = selectedIds.size;
+        addToast(`Inizio calcoli ${y} applicato a ${n} ${n === 1 ? 'pratica' : 'pratiche'}. Per la media serve il ${y - 1} completo di buste.`, 'success');
+        setBulkStartYear('');
+        setSelectedIds(new Set());
+        setIsSelectionMode(false);
+    };
+
     // Conferma via ConfirmModal (coerente col resto dell'app, niente confirm()
     // nativo); l'eliminazione vera passa dalla bulk delete con singolo undo.
     const [isBulkDeleteOpen, setIsBulkDeleteOpen] = useState(false);
@@ -526,26 +543,8 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
         setIsSelectionMode(false);
     };
 
-    // Glow soft che segue il cursore sull'area home (S del backlog UX).
-    const glow = useMouseGlow<HTMLDivElement>();
-
     return (
-        <div
-            ref={glow.ref}
-            onMouseMove={glow.onMouseMove}
-            onMouseLeave={glow.onMouseLeave}
-            className="relative max-w-7xl mx-auto px-6 py-10"
-            style={{ display: viewMode === 'home' ? 'block' : 'none' }}
-        >
-            {/* Layer cursor-glow: legge --mx/--my/--glow-o impostate dall'hook */}
-            <div
-                aria-hidden
-                className="absolute inset-0 pointer-events-none transition-opacity duration-500"
-                style={{
-                    opacity: 'var(--glow-o, 0)',
-                    background: 'radial-gradient(circle at var(--mx, 50%) var(--my, 50%), rgba(99,102,241,0.09), transparent 240px)',
-                }}
-            ></div>
+        <div className="relative max-w-7xl mx-auto px-6 py-10" style={{ display: viewMode === 'home' ? 'block' : 'none' }}>
             {/* HEADER — barra a tre corsie: brand a sinistra, corsia centrale
                 RISERVATA alla Dynamic Island (fissa al centro-alto), azioni a destra.
                 Così l'isola non può mai coprire i bottoni, e il brand resta presente
@@ -1151,6 +1150,28 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                             <Ban className="w-3 h-3" />
                             Tickets OFF
                         </button>
+                        <div className="w-px h-4 bg-slate-200 dark:bg-slate-700" />
+                        {/* Inizio calcoli in blocco: select anno + Applica */}
+                        <div className="flex items-center gap-1.5">
+                            <CalendarDays className="w-3.5 h-3.5 text-slate-400" />
+                            <select
+                                value={bulkStartYear}
+                                onChange={(e) => setBulkStartYear(e.target.value)}
+                                className="px-2 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[10px] font-black uppercase tracking-wide text-slate-600 dark:text-slate-300 cursor-pointer focus:outline-none focus:border-indigo-400"
+                            >
+                                <option value="">Inizio calcoli…</option>
+                                {Array.from({ length: 2025 - 2008 + 1 }, (_, i) => 2008 + i).map((y) => (
+                                    <option key={y} value={y}>{y}</option>
+                                ))}
+                            </select>
+                            <button
+                                onClick={applyStartYearToSelection}
+                                disabled={selectedIds.size === 0 || !bulkStartYear}
+                                className="px-3.5 py-2 rounded-xl bg-indigo-600 text-white text-[10px] font-black uppercase tracking-wide shadow-md shadow-indigo-500/30 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-indigo-700 transition-colors"
+                            >
+                                Applica
+                            </button>
+                        </div>
                         <div className="w-px h-4 bg-slate-200 dark:bg-slate-700" />
                         <button
                             onClick={() => setIsBulkDeleteOpen(true)}

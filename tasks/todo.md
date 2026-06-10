@@ -11,6 +11,15 @@ Piano approvato in conversazione: cross-link funzionali sul dettaglio Riposi + b
 - [x] 5. S — cursor highlight (radial gradient) nella hero/home della DashboardPage → a3077b5
 - [x] 6. Test verdi + tsc + build, poi commit per blocchi logici
 
+## Secondo giro (feedback utente)
+
+- [x] 7. S RIMOSSO — il glow cursor-following non piace all'utente (hook eliminato,
+      backlog aggiornato: non riproporre la famiglia cursor-following, K incluso)
+- [x] 8. Inizio calcoli in BLOCCO dalla barra di selezione: select 2008-2025 +
+      Applica, stessa doppia scrittura del dettaglio (startClaimYear via
+      updateWorkerById → auto-sync debounced + mirror localStorage startYear_<id>);
+      toast con promemoria anno precedente completo
+
 ## Review
 
 - Verifica: `npx tsc --noEmit` pulito · `vite build` ok · **171 test verdi**.
