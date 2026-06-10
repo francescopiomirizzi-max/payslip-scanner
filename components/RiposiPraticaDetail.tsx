@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowLeft, AlertTriangle, Moon, CalendarClock, Euro, CheckCircle2, Search, CalendarDays, ListChecks, FileText, Scale } from 'lucide-react';
+import { ArrowLeft, AlertTriangle, Moon, CalendarClock, Euro, CheckCircle2, Search, CalendarDays, ListChecks, FileText, Scale, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { computeRestViolations, formatHm, parseHmm, type Violazione, type GiornataInput } from '../utils/restEngine';
 import { AnimatedCounter } from './ui/AnimatedCounter';
 import type { PraticaRiposi } from '../hooks/usePraticheRiposi';
@@ -83,6 +83,32 @@ const RiposiPraticaDetail: React.FC<Props> = ({ pratica, onBack }) => {
     const byDataAnno = useMemo(() => { const m = new Map<string, GiornataInput>(); for (const g of giornateAnno) m.set(g.data, g); return m; }, [giornateAnno]);
     const violDaysAnno = useMemo(() => { const s = new Set<string>(); for (const v of result.violazioni) { const k = isoToKey(v.inizio); if (k.endsWith('/' + year)) s.add(k); } return s; }, [result, year]);
     const [meseAperto, setMeseAperto] = useState<number | null>(null);
+
+    // Cross-link: dall'elenco violazioni al mese nel Prospetto (v.inizio è ISO).
+    const openMeseProspetto = (iso: string) => {
+        setYear(iso.slice(0, 4));
+        setMeseAperto(Number(iso.slice(5, 7)) - 1);
+        setTab('prospetto');
+    };
+
+    // Frecce ‹ › in MeseFocus: scavalcano l'anno se nel dataset esiste quello adiacente.
+    const yearIdx = years.indexOf(year);
+    const canPrevMese = meseAperto !== null && (meseAperto > 0 || yearIdx > 0);
+    const canNextMese = meseAperto !== null && (meseAperto < 11 || yearIdx < years.length - 1);
+    const navigateMese = (delta: 1 | -1) => {
+        if (meseAperto === null) return;
+        const m = meseAperto + delta;
+        if (m < 0) { setYear(years[yearIdx - 1]); setMeseAperto(11); }
+        else if (m > 11) { setYear(years[yearIdx + 1]); setMeseAperto(0); }
+        else setMeseAperto(m);
+    };
+
+    // Filtro anno dell'elenco violazioni, pilotato dal grafico (toggle).
+    const [annoFiltro, setAnnoFiltro] = useState<string | null>(null);
+    const violazioniVisibili = useMemo(
+        () => (annoFiltro ? violazioniOrdinate.filter((v) => v.inizio.slice(0, 4) === annoFiltro) : violazioniOrdinate),
+        [violazioniOrdinate, annoFiltro]
+    );
 
     const totViol = result.nViolazioniGiornaliere + result.nViolazioniSettimanali;
 
@@ -188,17 +214,28 @@ const RiposiPraticaDetail: React.FC<Props> = ({ pratica, onBack }) => {
                                     </div>
                                 </div>
                                 <div className="flex items-end gap-2 flex-1 min-h-[10rem]">
-                                    {perAnno.map(({ y, g, s, tot }) => (
-                                        <div key={y} className="group/bar flex-1 flex flex-col items-center justify-end h-full gap-1.5">
-                                            <span className="text-[11px] font-bold tabular-nums text-slate-600 dark:text-slate-300 opacity-0 group-hover/bar:opacity-100 transition-opacity">{tot}</span>
-                                            <div className="w-full flex flex-col justify-end h-full">
-                                                <div className="w-full rounded-t-md bg-rose-400 transition-all duration-300 group-hover/bar:bg-rose-500" style={{ height: `${(g / maxAnno) * 100}%` }} title={`${g} giornaliere`} />
-                                                <div className="w-full bg-indigo-500 transition-all duration-300 group-hover/bar:bg-indigo-600" style={{ height: `${(s / maxAnno) * 100}%` }} title={`${s} settimanali`} />
-                                            </div>
-                                            <span className="text-[10px] text-slate-400 dark:text-slate-500 tabular-nums">'{y.slice(2)}</span>
-                                        </div>
-                                    ))}
+                                    {perAnno.map(({ y, g, s, tot }) => {
+                                        const attivo = annoFiltro === y;
+                                        const spento = annoFiltro !== null && !attivo;
+                                        return (
+                                            <button
+                                                key={y}
+                                                type="button"
+                                                onClick={() => setAnnoFiltro(attivo ? null : y)}
+                                                title={attivo ? 'Mostra tutti gli anni' : `Filtra l'elenco violazioni sul ${y}`}
+                                                className={`group/bar flex-1 flex flex-col items-center justify-end h-full gap-1.5 transition-opacity duration-200 ${spento ? 'opacity-35 hover:opacity-70' : ''}`}
+                                            >
+                                                <span className={`text-[11px] font-bold tabular-nums text-slate-600 dark:text-slate-300 transition-opacity ${attivo ? 'opacity-100' : 'opacity-0 group-hover/bar:opacity-100'}`}>{tot}</span>
+                                                <div className={`w-full flex flex-col justify-end h-full rounded-t-md ${attivo ? 'ring-2 ring-indigo-400/70 dark:ring-indigo-500/60' : ''}`}>
+                                                    <div className="w-full rounded-t-md bg-rose-400 transition-all duration-300 group-hover/bar:bg-rose-500" style={{ height: `${(g / maxAnno) * 100}%` }} title={`${g} giornaliere`} />
+                                                    <div className="w-full bg-indigo-500 transition-all duration-300 group-hover/bar:bg-indigo-600" style={{ height: `${(s / maxAnno) * 100}%` }} title={`${s} settimanali`} />
+                                                </div>
+                                                <span className={`text-[10px] tabular-nums ${attivo ? 'font-bold text-indigo-600 dark:text-indigo-400' : 'text-slate-400 dark:text-slate-500'}`}>'{y.slice(2)}</span>
+                                            </button>
+                                        );
+                                    })}
                                 </div>
+                                <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-3">Clicca un anno per filtrare l'elenco violazioni qui sotto.</p>
                             </section>
 
                             <section className="lg:col-span-2 rounded-[2rem] bg-white/60 dark:bg-slate-800/60 backdrop-blur-2xl border border-white/60 dark:border-slate-700/60 p-5">
@@ -222,9 +259,21 @@ const RiposiPraticaDetail: React.FC<Props> = ({ pratica, onBack }) => {
 
                         {/* Elenco violazioni */}
                         <section className="rounded-[2rem] bg-white/60 dark:bg-slate-800/60 backdrop-blur-2xl border border-white/60 dark:border-slate-700/60 p-6">
-                            <h3 className="font-bold text-slate-700 dark:text-slate-200 mb-4">Elenco violazioni <span className="text-slate-400 font-normal">({violazioniOrdinate.length})</span></h3>
+                            <div className="flex flex-wrap items-center gap-3 mb-4">
+                                <h3 className="font-bold text-slate-700 dark:text-slate-200">Elenco violazioni <span className="text-slate-400 font-normal">({violazioniVisibili.length})</span></h3>
+                                {annoFiltro && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setAnnoFiltro(null)}
+                                        title="Rimuovi il filtro anno"
+                                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-indigo-100 dark:bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 text-xs font-bold hover:bg-indigo-200 dark:hover:bg-indigo-500/25 transition-colors"
+                                    >
+                                        solo {annoFiltro} <X className="w-3 h-3" />
+                                    </button>
+                                )}
+                            </div>
                             <div className="max-h-[30rem] overflow-y-auto pr-1 space-y-1.5">
-                                {violazioniOrdinate.map((v, i) => <ViolazioneRow key={i} v={v} />)}
+                                {violazioniVisibili.map((v, i) => <ViolazioneRow key={i} v={v} onOpenMese={() => openMeseProspetto(v.inizio)} />)}
                             </div>
                         </section>
                     </>
@@ -259,6 +308,9 @@ const RiposiPraticaDetail: React.FC<Props> = ({ pratica, onBack }) => {
                         giornate={giornateAnno.filter((g) => Number(g.data.split('/')[1]) === meseAperto + 1)}
                         violDays={violDaysAnno}
                         onBack={() => setMeseAperto(null)}
+                        onNavigate={navigateMese}
+                        canPrev={canPrevMese}
+                        canNext={canNextMese}
                     />
                 )}
             </div>
@@ -304,7 +356,7 @@ const MeseCalendario: React.FC<{ year: number; month: number; byData: Map<string
     );
 };
 
-const MeseFocus: React.FC<{ year: number; month: number; giornate: GiornataInput[]; violDays: Set<string>; onBack: () => void }> = ({ year, month, giornate, violDays, onBack }) => {
+const MeseFocus: React.FC<{ year: number; month: number; giornate: GiornataInput[]; violDays: Set<string>; onBack: () => void; onNavigate: (delta: 1 | -1) => void; canPrev: boolean; canNext: boolean }> = ({ year, month, giornate, violDays, onBack, onNavigate, canPrev, canNext }) => {
     const nLav = giornate.filter((g) => !isRiposo(g)).length;
     const nRiposi = giornate.length - nLav;
     const nViol = giornate.filter((g) => violDays.has(g.data)).length;
@@ -326,10 +378,18 @@ const MeseFocus: React.FC<{ year: number; month: number; giornate: GiornataInput
     return (
         <motion.section initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }} className="rounded-[2rem] bg-white/60 dark:bg-slate-800/60 backdrop-blur-2xl border border-white/60 dark:border-slate-700/60 p-6">
             <div className="flex items-center gap-3 mb-5">
-                <button onClick={onBack} className="w-9 h-9 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-500 hover:text-indigo-600 hover:-translate-x-0.5 transition-all">
+                <button onClick={onBack} title="Torna alla griglia dei mesi" className="w-9 h-9 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-500 hover:text-indigo-600 hover:-translate-x-0.5 transition-all">
                     <ArrowLeft className="w-4 h-4" />
                 </button>
                 <h3 className="text-xl font-black text-slate-800 dark:text-slate-100">{MESI[month]} <span className="text-slate-400 font-bold">{year}</span></h3>
+                <div className="ml-auto flex items-center gap-1.5">
+                    <button onClick={() => onNavigate(-1)} disabled={!canPrev} title="Mese precedente" className="w-9 h-9 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-500 hover:text-indigo-600 transition-colors disabled:opacity-35 disabled:cursor-not-allowed disabled:hover:text-slate-500">
+                        <ChevronLeft className="w-4 h-4" />
+                    </button>
+                    <button onClick={() => onNavigate(1)} disabled={!canNext} title="Mese successivo" className="w-9 h-9 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-500 hover:text-indigo-600 transition-colors disabled:opacity-35 disabled:cursor-not-allowed disabled:hover:text-slate-500">
+                        <ChevronRight className="w-4 h-4" />
+                    </button>
+                </div>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -415,11 +475,16 @@ const MeseFocus: React.FC<{ year: number; month: number; giornate: GiornataInput
     );
 };
 
-const ViolazioneRow: React.FC<{ v: Violazione }> = ({ v }) => {
+const ViolazioneRow: React.FC<{ v: Violazione; onOpenMese: () => void }> = ({ v, onOpenMese }) => {
     const isSett = v.tipo === 'riposo_settimanale';
     const Icon = isSett ? CalendarClock : Moon;
     return (
-        <div className="flex items-center gap-3 px-3 py-2 rounded-xl bg-slate-50/80 dark:bg-slate-800/40 hover:bg-white dark:hover:bg-slate-800 border border-transparent hover:border-slate-200 dark:hover:border-slate-700 transition-colors">
+        <button
+            type="button"
+            onClick={onOpenMese}
+            title="Apri il mese nel Prospetto turni"
+            className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left bg-slate-50/80 dark:bg-slate-800/40 hover:bg-white dark:hover:bg-slate-800 border border-transparent hover:border-slate-200 dark:hover:border-slate-700 transition-colors group"
+        >
             <div className={`w-8 h-8 shrink-0 rounded-lg flex items-center justify-center ${isSett ? 'bg-indigo-100 dark:bg-indigo-500/15 text-indigo-600 dark:text-indigo-400' : 'bg-rose-100 dark:bg-rose-500/15 text-rose-500 dark:text-rose-400'}`}>
                 <Icon className="w-4 h-4" />
             </div>
@@ -434,7 +499,8 @@ const ViolazioneRow: React.FC<{ v: Violazione }> = ({ v }) => {
                 <p className="text-sm font-bold tabular-nums text-slate-700 dark:text-slate-200">{formatHm(v.ore)}</p>
                 <p className="text-[11px] tabular-nums text-slate-400 dark:text-slate-500">manc {formatHm(v.oreMancanti)}</p>
             </div>
-        </div>
+            <ChevronRight className="w-4 h-4 shrink-0 text-slate-300 dark:text-slate-600 group-hover:text-indigo-500 group-hover:translate-x-0.5 transition-all" />
+        </button>
     );
 };
 
