@@ -934,7 +934,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                                 {filterId === 'ALL'
                                     ? 'Tutti'
                                     : getCompanyLogo(filterId)
-                                        ? <CompanyLogo profilo={filterId} imgClass="h-5" className="-my-1" title={filterId.replace(/_/g, ' ')} />
+                                        ? <CompanyLogo profilo={filterId} imgClass="h-5" forceWhite={isActive} title={filterId.replace(/_/g, ' ')} />
                                         : filterId.replace(/_/g, ' ')}
                                 {filterId !== 'ALL' && (
                                     <span className="opacity-70 font-mono text-[10px]">

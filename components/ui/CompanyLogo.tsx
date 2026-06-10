@@ -3,31 +3,33 @@ import { getCompanyLogo } from '../../config/profiles';
 
 interface CompanyLogoProps {
     profilo?: string | null;
-    /** Altezza del logo come classe Tailwind (es. 'h-3.5'); la pastiglia si adatta. */
+    /** Altezza del logo come classe Tailwind (es. 'h-3.5'). */
     imgClass?: string;
-    /** Padding della pastiglia (separato da className per evitare conflitti di utility). */
-    padClass?: string;
+    /** Silhouette bianca anche in light (per sfondi colorati saturi, es. filtro attivo). */
+    forceWhite?: boolean;
     className?: string;
     title?: string;
 }
 
 /**
- * Logo aziendale ufficiale (public/logos/), in due vesti per tema:
- * - light: pastiglia bianca (i loghi hanno testo scuro, serve la base chiara);
- * - dark: niente pastiglia, logo monocromo bianco via filtro CSS — le pastiglie
- *   bianche su fondo scuro erano rettangoli fastidiosi (feedback 2026-06-10).
- * Se il profilo non ha logo (Clean Service, custom) renderizza null:
- * il chiamante mantiene il suo fallback colorato esistente.
+ * Logo aziendale ufficiale (public/logos/), nudo, senza pastiglia: in light i
+ * colori originali reggono sul fondo chiaro, in dark diventa silhouette bianca
+ * via filtro CSS (le pastiglie bianche erano rettangoli fastidiosi in entrambi
+ * i temi — feedback 2026-06-10). Se il profilo non ha logo (Clean Service,
+ * custom) renderizza null: il chiamante mantiene il suo fallback colorato.
  */
-export const CompanyLogo: React.FC<CompanyLogoProps> = ({ profilo, imgClass = 'h-3.5', padClass = 'px-1.5 py-[3px]', className = '', title }) => {
+export const CompanyLogo: React.FC<CompanyLogoProps> = ({ profilo, imgClass = 'h-3.5', forceWhite = false, className = '', title }) => {
     const src = getCompanyLogo(profilo);
     if (!src) return null;
     return (
-        <span
-            className={`inline-flex items-center rounded-md bg-white ring-1 ring-slate-900/10 shadow-sm dark:bg-transparent dark:ring-0 dark:shadow-none ${padClass} ${className}`}
-            title={title}
-        >
-            <img src={src} alt={profilo ?? ''} className={`${imgClass} w-auto select-none dark:brightness-0 dark:invert`} loading="lazy" draggable={false} />
+        <span className={`inline-flex items-center ${className}`} title={title}>
+            <img
+                src={src}
+                alt={profilo ?? ''}
+                className={`${imgClass} w-auto select-none ${forceWhite ? 'brightness-0 invert' : 'dark:brightness-0 dark:invert'}`}
+                loading="lazy"
+                draggable={false}
+            />
         </span>
     );
 };
