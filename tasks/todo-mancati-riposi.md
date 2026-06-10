@@ -90,10 +90,19 @@ Tutto l'impianto è in piedi e testato sui dati grezzi dell'Excel. Quando arriva
 4. **Tariffa** → appena l'avvocato conferma €/h + fonte, aggiornare `tariffaOraria`/`fonteTariffa` della pratica: indennità e gravità si ricalcolano da sole.
 5. **Codici turno** → la `Legenda servizi` mostra già i codici; con la legenda aziendale si possono etichettare (mappa `SERV_LABEL` o tabella di lookup).
 
-## FASE 3 — Export (contestazione + Excel pulito)
+## FASE 3 — Export e gestione pratica (roadmap 2026-06-10, richiesta utente)
 
-- [ ] `utils/contestazioneReport.ts` (mirror `reportGenerator.ts`): `.docx` contestazione popolata coi dati reali + boilerplate dal vademecum.
+- [ ] **PDF dei conteggi** — riusare il pattern del tasto **Stampa** (HTML print → PDF, come il Riepilogo buste: è quello "buono", non il tasto PDF): intestazione pratica, le **due serie affiancate** per anno, elenco violazioni del motore con riferimenti normativi, nota metodologica. Stampabile dal cruscotto.
+- [ ] **Relazione** `.docx` **vero** (libreria `docx`, mirror di `reportGenerator.ts` — mai HTML travestito): quadro normativo dal vademecum, metodo (parser deterministico quadrato col PDF sorgente), tabelle annue due serie, violazioni, riserve/limiti (tariffa da confermare, pausa art. 7 fuori scope v1).
 - [ ] Export **Excel pulito** via `exceljs`: numeri **veri** (non testo) + formule vive + foglio per anno + riepilogo.
+- [ ] **Archivio pratiche + stato** — migration `013_pratiche_riposi` da estendere con `stato` (`in_corso` | `conclusa` | `pagata`) + date utili (apertura/chiusura/pagamento) e importo riconosciuto; nella lista pratiche badge colorato di stato + filtro; il wiring Supabase del hook (già previsto in Fase 2) fa sparire il seed.
+
+### ⚖️ Domanda chiave prima degli export (per Vincenzo/avvocato)
+
+Le due serie quantificano **lo stesso pregiudizio** (gli stessi riposi saltati) con criteri diversi → **non si sommano**. Cosa si chiede dipende da chi ha prodotto il PDF e se quelle indennità risultano **già pagate in busta**:
+- mai pagate → si chiede UNA delle due quantificazioni (decide l'avvocato quale base);
+- già pagate → si può valutare l'eventuale **danno ulteriore** (es. usura psicofisica) o differenze, ma è una scelta legale, non nostra.
+Da chiedere: (a) chi ha prodotto il PDF (azienda? sindacato? consulente?); (b) riscontro nei cedolini di Viterbo di voci "indennità mancato riposo" pagate.
 
 ---
 
