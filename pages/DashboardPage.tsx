@@ -42,6 +42,7 @@ import { useIsReadOnly } from '../lib/readonly';
 import { Worker } from '../types';
 import { SYSTEM_PROFILES, SYSTEM_PROFILE_KEYS } from '../config/profiles';
 import { DashboardStats, WorkerStatItem, ModalConfig } from '../hooks/useDashboardStats';
+import { useMouseGlow } from '../hooks/useMouseGlow';
 import { generateReport, generateRegistroPagate } from '../utils/reportGenerator';
 import { COLOR_VARIANTS } from '../utils/colorVariants';
 
@@ -525,8 +526,26 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
         setIsSelectionMode(false);
     };
 
+    // Glow soft che segue il cursore sull'area home (S del backlog UX).
+    const glow = useMouseGlow<HTMLDivElement>();
+
     return (
-        <div className="relative max-w-7xl mx-auto px-6 py-10" style={{ display: viewMode === 'home' ? 'block' : 'none' }}>
+        <div
+            ref={glow.ref}
+            onMouseMove={glow.onMouseMove}
+            onMouseLeave={glow.onMouseLeave}
+            className="relative max-w-7xl mx-auto px-6 py-10"
+            style={{ display: viewMode === 'home' ? 'block' : 'none' }}
+        >
+            {/* Layer cursor-glow: legge --mx/--my/--glow-o impostate dall'hook */}
+            <div
+                aria-hidden
+                className="absolute inset-0 pointer-events-none transition-opacity duration-500"
+                style={{
+                    opacity: 'var(--glow-o, 0)',
+                    background: 'radial-gradient(circle at var(--mx, 50%) var(--my, 50%), rgba(99,102,241,0.09), transparent 240px)',
+                }}
+            ></div>
             {/* HEADER — barra a tre corsie: brand a sinistra, corsia centrale
                 RISERVATA alla Dynamic Island (fissa al centro-alto), azioni a destra.
                 Così l'isola non può mai coprire i bottoni, e il brand resta presente
@@ -724,6 +743,9 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                     <div className="absolute inset-0 overflow-hidden rounded-[2.5rem] pointer-events-none">
                         <div className="absolute top-[-50%] right-[-50%] w-96 h-96 bg-blue-500/20 rounded-full blur-[100px] transition-[opacity,transform] duration-700 opacity-50 group-hover:opacity-100 group-hover:scale-110"></div>
                         <div className="absolute bottom-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-blue-500 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+                        <div className="card-sweep absolute inset-0">
+                            <div className="absolute inset-y-0 left-0 w-1/2 -skew-x-12 bg-gradient-to-r from-transparent via-white/25 dark:via-white/10 to-transparent"></div>
+                        </div>
                     </div>
 
                     <div className="p-6 relative z-10">
@@ -772,6 +794,9 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                         <svg className="absolute bottom-0 left-0 w-full h-40 text-emerald-500/5 group-hover:text-emerald-500/20 transition-[color,transform] duration-700 ease-out translate-y-10 group-hover:translate-y-2" viewBox="0 0 100 40" preserveAspectRatio="none">
                             <path d="M0 40 L0 30 Q10 15 20 25 T40 15 T60 20 T80 5 L100 0 L100 40 Z" fill="currentColor" />
                         </svg>
+                        <div className="card-sweep absolute inset-0">
+                            <div className="absolute inset-y-0 left-0 w-1/2 -skew-x-12 bg-gradient-to-r from-transparent via-white/25 dark:via-white/10 to-transparent"></div>
+                        </div>
                     </div>
 
                     <div className="p-6 relative z-10">
@@ -807,6 +832,9 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
 
                         <div className="absolute top-4 right-4 text-amber-500/0 group-hover:text-amber-500/10 transition-[color,transform] duration-500 rotate-0 group-hover:rotate-12 scale-50 group-hover:scale-100">
                             <Ticket className="w-40 h-40" strokeWidth={1.5} />
+                        </div>
+                        <div className="card-sweep absolute inset-0">
+                            <div className="absolute inset-y-0 left-0 w-1/2 -skew-x-12 bg-gradient-to-r from-transparent via-white/25 dark:via-white/10 to-transparent"></div>
                         </div>
                     </div>
 

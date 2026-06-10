@@ -66,6 +66,22 @@
   animation: shimmer 2s linear infinite;
 }
 
+/* --- CARD SWEEP (linea di luce diagonale sulle card stat, solo in hover) ---
+   Keyframe dedicato: "shimmer" è già preso dallo skeleton (background-position).
+   L'animazione parte solo con .group:hover, così a riposo non consuma GPU. */
+@keyframes card-sweep {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+.card-sweep {
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+.group:hover .card-sweep {
+  opacity: 1;
+  animation: card-sweep 1.4s ease-in-out infinite;
+}
+
 /* --- AURORA (Gradiente animato) --- */
 @keyframes aurora {
   0%, 100% { background-position: 0% 50%; }
