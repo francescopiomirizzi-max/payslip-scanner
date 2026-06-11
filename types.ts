@@ -78,6 +78,8 @@ export interface Worker {
    * giorni lavorati nel divisore della media. Default false (Strategia A).
    */
   includePaidLeave?: boolean;
+  /** Data di assunzione (testo gg/mm/aaaa, inserita a mano dalla busta). */
+  dataAssunzione?: string | null;
 
   created_at?: string;
 }

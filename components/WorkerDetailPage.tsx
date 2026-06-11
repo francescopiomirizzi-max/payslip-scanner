@@ -53,7 +53,21 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
     return () => clearTimeout(timer);
   }, [monthlyInputs, onUpdateData]);
 
-  const [activeTab, setActiveTab] = useState<'input' | 'calc' | 'pivot' | 'tfr' | 'archive'>('input');
+  // Il tab vive nel 4° segmento dell'hash (#/worker/:id/:tab): F5 e deep link
+  // riaprono il tab giusto. Scrittura con replaceState (i tab non sporcano la
+  // history); useHashRoute tollera il segmento extra.
+  type DetailTab = 'input' | 'calc' | 'pivot' | 'tfr' | 'archive';
+  const DETAIL_TABS: readonly DetailTab[] = ['input', 'calc', 'pivot', 'tfr', 'archive'];
+  const [activeTab, setActiveTab] = useState<DetailTab>(() => {
+    const seg = window.location.hash.split('/')[3];
+    return (DETAIL_TABS as readonly string[]).includes(seg) ? (seg as DetailTab) : 'input';
+  });
+  useEffect(() => {
+    const base = `#/worker/${worker.id}`;
+    if (!window.location.hash.startsWith(base)) return; // non siamo la vista attiva
+    const route = activeTab === 'input' ? base : `${base}/${activeTab}`;
+    if (window.location.hash !== route) window.history.replaceState(null, '', route);
+  }, [activeTab, worker.id]);
   const [archiveCount, setArchiveCount] = useState(0);
 
   // Build archive entries map whenever archiveCount changes (new upload or delete)
@@ -827,6 +841,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
       onOpenIstat: () => setIsIstatModalOpen(true),
       startClaimYear,
       onStartClaimYearChange: setStartClaimYear,
+      onUpdateWorkerFields,
       isGlobalDragging,
       onSetIsGlobalDragging: setIsGlobalDragging,
       onBatchUpload: handleBatchUpload,

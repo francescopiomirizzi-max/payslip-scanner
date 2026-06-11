@@ -15,6 +15,8 @@ export interface WorkerDetailContextValue {
   onOpenIstat: () => void;
   startClaimYear: number;
   onStartClaimYearChange: (y: number) => void;
+  /** Persistenza campi worker (cloud-synced via auto-sync useWorkers). */
+  onUpdateWorkerFields: (fields: Partial<Worker>) => void;
   isGlobalDragging: boolean;
   onSetIsGlobalDragging: (v: boolean) => void;
   onBatchUpload: (e: any, isSingle?: boolean) => void;

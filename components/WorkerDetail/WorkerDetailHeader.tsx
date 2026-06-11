@@ -20,7 +20,7 @@ import { useWorkerDetail } from './WorkerDetailContext';
 const WorkerDetailHeader: React.FC = () => {
   const {
     worker, badgeStyles, onBack, onShowReport, onSendPec, onPrintTables, onOpenIstat,
-    startClaimYear, onStartClaimYearChange,
+    startClaimYear, onStartClaimYearChange, onUpdateWorkerFields,
     onSetActiveTab, activeTab, archiveCount,
   } = useWorkerDetail();
   const [isActionsOpen, setIsActionsOpen] = useState(false);
@@ -33,13 +33,22 @@ const WorkerDetailHeader: React.FC = () => {
   const [dataAssunzione, setDataAssunzione] = useState('');
   const [editingAssunzione, setEditingAssunzione] = useState(false);
   useEffect(() => {
-    try { setDataAssunzione(localStorage.getItem(`assunzione_${worker.id}`) || ''); }
-    catch { setDataAssunzione(''); }
+    // Fonte primaria: campo cloud (migration 015). localStorage resta come
+    // fallback legacy: se il cloud è vuoto e in locale c'è un valore, lo si
+    // promuove una tantum (backfill silenzioso, non in readonly).
+    let v = worker.dataAssunzione ?? '';
+    if (!v) {
+      try { v = localStorage.getItem(`assunzione_${worker.id}`) || ''; } catch { /* storage non disponibile */ }
+      if (v && !isReadOnly) onUpdateWorkerFields({ dataAssunzione: v });
+    }
+    setDataAssunzione(v);
     setEditingAssunzione(false);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [worker.id]);
   const saveAssunzione = (v: string) => {
     const val = v.trim();
     setDataAssunzione(val);
+    onUpdateWorkerFields({ dataAssunzione: val || null });
     try { localStorage.setItem(`assunzione_${worker.id}`, val); } catch { /* storage non disponibile */ }
   };
 

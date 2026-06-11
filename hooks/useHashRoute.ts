@@ -102,10 +102,14 @@ export const useHashRoute = (deps: HashRouteDeps) => {
     }, [deps.isReady]);
 
     // Stato → URL: ogni transizione di vista diventa una entry di history.
+    // Un hash che ESTENDE la rotta canonica (es. #/worker/:id/pivot, il tab del
+    // dettaglio scritto dalla pagina con replaceState) è considerato equivalente:
+    // non va riscritto, altrimenti si cancellerebbe il sotto-stato.
     useEffect(() => {
         if (!initializedRef.current) return;
         const route = routeFromState();
-        if (window.location.hash !== route) window.history.pushState(null, '', route);
+        const h = window.location.hash;
+        if (h !== route && !h.startsWith(route + '/')) window.history.pushState(null, '', route);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [deps.area, deps.viewMode, deps.selectedWorkerId, deps.archiveWorkerId]);
 
