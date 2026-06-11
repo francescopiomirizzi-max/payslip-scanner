@@ -470,15 +470,16 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
           <div className="w-full h-full" style={{ backfaceVisibility: 'hidden', willChange: 'transform' }}>
               <div ref={divRef} onMouseMove={handleMouseMove} onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave}
                 className="group relative w-full h-full bg-white/70 dark:bg-slate-800/80 backdrop-blur-2xl border border-white/60 dark:border-slate-600 rounded-[2.5rem] overflow-hidden shadow-xl transition-all duration-500 hover:shadow-2xl hover:-translate-y-2 hover:scale-[1.01]"
-                style={{ ...theme.shadowStyle, borderColor: opacity > 0 ? theme.rawColor.start : '' }}
+                style={{ ...theme.shadowStyle, borderColor: opacity > 0 ? theme.rawColor.start : `${theme.rawColor.start}59` }}
               >
                 <div className="absolute inset-0 pointer-events-none z-0" style={{ backgroundImage: noiseBg, opacity: 0.4 }}></div>
 
                 {/* TESTATA AZIENDA: gradiente del brand sulla fascia alta (avatar+nome+logo)
-                    che sfuma nel vetro — l'azienda si riconosce a colpo d'occhio. */}
+                    che si dissolve nel vetro con stop "ease-out": niente confine
+                    percepibile a metà card. */}
                 <div
-                  className="absolute inset-x-0 top-0 h-36 pointer-events-none z-0"
-                  style={{ background: `linear-gradient(160deg, ${theme.rawColor.start}38 0%, ${theme.rawColor.end}1c 55%, transparent 100%)` }}
+                  className="absolute inset-x-0 top-0 h-60 pointer-events-none z-0"
+                  style={{ background: `linear-gradient(180deg, ${theme.rawColor.start}3d 0%, ${theme.rawColor.start}30 22%, ${theme.rawColor.end}1f 45%, ${theme.rawColor.end}10 68%, ${theme.rawColor.end}06 86%, transparent 100%)` }}
                 />
                 <div className="pointer-events-none absolute -inset-px opacity-0 transition duration-300 z-10" style={{ opacity, background: `radial-gradient(600px circle at ${position.x}px ${position.y}px, ${theme.spotlight}, transparent 40%)` }} />
 
