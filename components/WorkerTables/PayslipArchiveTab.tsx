@@ -262,10 +262,43 @@ export default function PayslipArchiveTab({ workerId, workerProfilo, workerElior
     };
 
     // ── LOADING ────────────────────────────────────────────────────────────────
+    // Skeleton con la sagoma reale del tab (header+azioni, cartella aperta,
+    // cartelle chiuse): il caricamento non "salta" quando arrivano i dati.
     if (isLoading) {
         return (
-            <div className="h-full flex items-center justify-center">
-                <Loader2 className="w-8 h-8 text-cyan-500 animate-spin" />
+            <div className="h-full overflow-hidden p-4 space-y-3" aria-busy="true">
+                {/* header: identità a sinistra, azioni a destra */}
+                <div className="flex items-center justify-between px-1">
+                    <div className="flex items-center gap-3">
+                        <div className="h-6 w-16 rounded-lg bg-slate-200 dark:bg-slate-700/60 animate-pulse" />
+                        <div className="h-3 w-52 rounded-lg bg-slate-200 dark:bg-slate-700/60 animate-pulse" />
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <div className="h-8 w-28 rounded-xl bg-slate-200 dark:bg-slate-700/60 animate-pulse" />
+                        <div className="h-8 w-36 rounded-xl bg-slate-200 dark:bg-slate-700/60 animate-pulse" />
+                        <div className="h-8 w-32 rounded-xl bg-cyan-200/50 dark:bg-cyan-900/40 animate-pulse" />
+                    </div>
+                </div>
+                {/* prima cartella anno "aperta" con righe mese */}
+                <div className="rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+                    <div className="h-12 bg-slate-100 dark:bg-slate-800 animate-pulse" />
+                    <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                        {[0, 1, 2].map(i => (
+                            <div key={i} className="flex items-center gap-3 px-4 py-3">
+                                <div className="h-9 w-12 rounded-lg bg-slate-100 dark:bg-slate-700/50 animate-pulse" />
+                                <div className="flex-1 space-y-1.5">
+                                    <div className="h-3 rounded bg-slate-100 dark:bg-slate-700/50 animate-pulse" style={{ width: `${52 - i * 9}%` }} />
+                                    <div className="h-2.5 w-24 rounded bg-slate-100 dark:bg-slate-700/50 animate-pulse" />
+                                </div>
+                                <div className="h-7 w-7 rounded-lg bg-slate-100 dark:bg-slate-700/50 animate-pulse" />
+                            </div>
+                        ))}
+                    </div>
+                </div>
+                {/* cartelle anni chiuse */}
+                {[0, 1, 2, 3].map(i => (
+                    <div key={i} className="h-12 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-100/70 dark:bg-slate-800/70 animate-pulse" />
+                ))}
             </div>
         );
     }
