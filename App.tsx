@@ -167,6 +167,8 @@ const App: React.FC = () => {
         if (filterId === 'ALL') return 'bg-slate-800 text-white shadow-lg shadow-slate-500/30 ring-2 ring-slate-400 scale-105 border-transparent';
 
         // Profili di sistema → registro centralizzato
+        // (il magazzino Elior resta nella famiglia arancio dell'azienda)
+        if (filterId === 'ELIOR_MAGAZZINO') return SYSTEM_PROFILES.ELIOR.badge.filter;
         if (SYSTEM_PROFILES[filterId]) return SYSTEM_PROFILES[filterId].badge.filter;
 
         // Aziende custom → palette deterministica via hash condiviso

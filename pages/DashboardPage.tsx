@@ -44,6 +44,7 @@ import { Worker } from '../types';
 import { SYSTEM_PROFILES, SYSTEM_PROFILE_KEYS, getCompanyLogo } from '../config/profiles';
 import { CompanyLogo } from '../components/ui/CompanyLogo';
 import { DashboardStats, WorkerStatItem, ModalConfig } from '../hooks/useDashboardStats';
+import { matchesCompanyFilter } from '../hooks/useWorkers';
 import { generateReport, generateRegistroPagate } from '../utils/reportGenerator';
 import { COLOR_VARIANTS } from '../utils/colorVariants';
 
@@ -921,10 +922,14 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                     </div>
                 </div>
 
-                {/* 2. FILTRI AZIENDA — i filtri stato sono sostituiti dai cassetti sotto */}
+                {/* 2. FILTRI AZIENDA — i filtri stato sono sostituiti dai cassetti sotto.
+                    ELIOR si sdoppia: pillola viaggianti (rosa) + pillola magazzino (bisonte),
+                    stessa famiglia arancio — il colore resta linguaggio dell'azienda. */}
                 <div className="mt-6 flex justify-center gap-3 flex-wrap items-center">
-                    {['ALL', ...SYSTEM_PROFILE_KEYS, ...customFilters].map((filterId) => {
+                    {['ALL', ...SYSTEM_PROFILE_KEYS.flatMap(k => k === 'ELIOR' ? [k, 'ELIOR_MAGAZZINO'] : [k]), ...customFilters].map((filterId) => {
                         const isActive = activeFilter === filterId;
+                        const isEliorMag = filterId === 'ELIOR_MAGAZZINO';
+                        const logoProfilo = isEliorMag ? 'ELIOR' : filterId;
                         return (
                             <button
                                 key={filterId}
@@ -933,12 +938,12 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                             >
                                 {filterId === 'ALL'
                                     ? 'Tutti'
-                                    : getCompanyLogo(filterId)
-                                        ? <CompanyLogo profilo={filterId} h={20} forceWhite={isActive} title={filterId.replace(/_/g, ' ')} />
+                                    : getCompanyLogo(logoProfilo)
+                                        ? <CompanyLogo profilo={logoProfilo} eliorType={isEliorMag ? 'magazzino' : undefined} h={20} forceWhite={isActive} title={isEliorMag ? 'Elior Magazzino' : filterId.replace(/_/g, ' ')} />
                                         : filterId.replace(/_/g, ' ')}
                                 {filterId !== 'ALL' && (
                                     <span className="opacity-70 font-mono text-[10px]">
-                                        ({workers.filter(w => w.profilo === filterId).length})
+                                        ({workers.filter(w => matchesCompanyFilter(w, filterId)).length})
                                     </span>
                                 )}
                             </button>

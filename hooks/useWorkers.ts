@@ -58,6 +58,16 @@ function workerToDb(worker: Worker, ownerId: string): object {
     };
 }
 
+/** Filtro azienda dei pill dashboard. ELIOR si sdoppia per tipo: la pillola
+ *  ELIOR = viaggianti, ELIOR_MAGAZZINO (pseudo-profilo solo-filtro) = magazzinieri.
+ *  Condiviso tra filteredWorkers e i contatori dei pill. */
+export const matchesCompanyFilter = (w: Worker, filterId: string): boolean => {
+    if (filterId === 'ALL') return true;
+    if (filterId === 'ELIOR') return w.profilo === 'ELIOR' && w.eliorType !== 'magazzino';
+    if (filterId === 'ELIOR_MAGAZZINO') return w.profilo === 'ELIOR' && w.eliorType === 'magazzino';
+    return w.profilo === filterId;
+};
+
 type AddToast = (
     message: string,
     type?: 'success' | 'error' | 'info',
@@ -225,7 +235,7 @@ export const useWorkers = (addToast: AddToast) => {
             || reverseName.includes(query)
             || azienda.includes(query)
             || ruolo.includes(query);
-        const matchesFilter = activeFilter === 'ALL' || w.profilo === activeFilter;
+        const matchesFilter = matchesCompanyFilter(w, activeFilter);
         const matchesStatus = matchesStatusFilter(w.status, activeStatusFilter);
         return matchesSearch && matchesFilter && matchesStatus;
     });

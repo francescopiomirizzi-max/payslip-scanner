@@ -430,4 +430,24 @@ describe('filteredWorkers — ricerca estesa', () => {
         act(() => { result.current.setSearchQuery('elior'); });
         expect(result.current.filteredWorkers).toHaveLength(2);
     });
+
+    it('pillole ELIOR / ELIOR_MAGAZZINO sdoppiate per tipo', async () => {
+        const seedElior = [
+            ...seed,
+            makeDbWorker({ id: 'worker-uuid-3', nome: 'Anna', cognome: 'Verdi', profilo: 'ELIOR', elior_type: 'magazzino' }),
+            makeDbWorker({ id: 'worker-uuid-4', nome: 'Paolo', cognome: 'Neri', profilo: 'ELIOR', elior_type: 'viaggiante' }),
+        ];
+        mockSelect.mockResolvedValueOnce({ data: seedElior, error: null });
+
+        const { result } = renderHook(() => useWorkers(mockToast));
+        await waitFor(() => expect(result.current.isWorkersLoading).toBe(false));
+
+        act(() => { result.current.setActiveFilter('ELIOR_MAGAZZINO'); });
+        expect(result.current.filteredWorkers).toHaveLength(1);
+        expect(result.current.filteredWorkers[0].cognome).toBe('Verdi');
+
+        act(() => { result.current.setActiveFilter('ELIOR'); });
+        expect(result.current.filteredWorkers).toHaveLength(1);
+        expect(result.current.filteredWorkers[0].cognome).toBe('Neri');
+    });
 });
