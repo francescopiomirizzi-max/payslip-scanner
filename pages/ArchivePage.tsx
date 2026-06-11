@@ -5,9 +5,10 @@ import {
   Download, Archive, Loader2, X, FolderOpen, File, Calendar, UploadCloud, Check,
 } from 'lucide-react';
 import { Worker, MONTH_NAMES } from '../types';
-import { SYSTEM_PROFILES, getCompanyGradient, getCompanyHex, getCompanyLogo } from '../config/profiles';
+import { SYSTEM_PROFILES, SYSTEM_PROFILE_KEYS, getCompanyGradient, getCompanyHex, getCompanyLogo } from '../config/profiles';
 import { CompanyLogo } from '../components/ui/CompanyLogo';
 import { usePayslipArchive, PayslipRecord } from '../hooks/usePayslipArchive';
+import { matchesCompanyFilter } from '../hooks/useWorkers';
 import { getProfiloBadgeLabel } from '../utils/formatters';
 
 interface ArchivePageProps {
@@ -125,12 +126,34 @@ const ArchivePage: React.FC<ArchivePageProps> = ({ workers, onBack, initialWorke
   const filteredWorkers = useMemo(() => {
     if (!searchQuery.trim()) return sortedWorkers;
     const q = searchQuery.toLowerCase();
-    return sortedWorkers.filter(w =>
-      w.cognome.toLowerCase().includes(q) ||
-      w.nome.toLowerCase().includes(q) ||
-      (w.profilo || '').toLowerCase().includes(q)
-    );
+    return sortedWorkers.filter(w => {
+      // Allineata alla ricerca dashboard: azienda come la mostra la UI
+      // (spazi, tipo Elior incluso) + ruolo
+      const azienda = `${(w.profilo ?? '').replace(/_/g, ' ')}${w.profilo === 'ELIOR' && w.eliorType ? ' ' + w.eliorType : ''}`.toLowerCase();
+      return w.cognome.toLowerCase().includes(q)
+        || w.nome.toLowerCase().includes(q)
+        || azienda.includes(q)
+        || (w.ruolo ?? '').toLowerCase().includes(q);
+    });
   }, [sortedWorkers, searchQuery]);
+
+  // Gruppi per azienda nell'ordine del registro (Elior sdoppiata per tipo,
+  // come i pill della dashboard), custom in coda, senza-azienda per ultimo.
+  const workerGroups = useMemo(() => {
+    const customIds = Array.from(
+      new Set(filteredWorkers.map(w => w.profilo).filter((p): p is string => !!p && !SYSTEM_PROFILES[p]))
+    ).sort((a, b) => a.localeCompare(b, 'it'));
+    const ids = [
+      ...SYSTEM_PROFILE_KEYS.flatMap(k => (k === 'ELIOR' ? [k, 'ELIOR_MAGAZZINO'] : [k])),
+      ...customIds,
+    ];
+    const groups = ids
+      .map(id => ({ id, workers: filteredWorkers.filter(w => matchesCompanyFilter(w, id)) }))
+      .filter(g => g.workers.length > 0);
+    const orphans = filteredWorkers.filter(w => !w.profilo);
+    if (orphans.length > 0) groups.push({ id: 'SENZA_AZIENDA', workers: orphans });
+    return groups;
+  }, [filteredWorkers]);
 
   const selectedWorker = useMemo(
     () => workers.find(w => w.id === selectedWorkerId) ?? null,
@@ -138,21 +161,20 @@ const ArchivePage: React.FC<ArchivePageProps> = ({ workers, onBack, initialWorke
   );
 
   const loadWorkerPayslips = useCallback(async (workerId: string) => {
-    if (payslipCache[workerId] !== undefined) return;
+    if (payslipCache[workerId] !== undefined) return payslipCache[workerId];
     setLoadingWorker(workerId);
     const records = await getPayslipsByWorker(workerId);
     setPayslipCache(prev => ({ ...prev, [workerId]: records }));
     setLoadingWorker(null);
+    return records;
   }, [payslipCache, getPayslipsByWorker]);
 
   // Auto-select worker when arriving from a card's archive button
   useEffect(() => {
     if (!initialWorkerId) return;
     const worker = workers.find(w => w.id === initialWorkerId);
-    if (worker) {
-      setSelectedWorkerId(initialWorkerId);
-      loadWorkerPayslips(initialWorkerId);
-    }
+    // Stesso percorso della selezione manuale (incluso auto-expand anno recente)
+    if (worker) handleSelectWorker(worker);
   // Only run on mount
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -162,7 +184,13 @@ const ArchivePage: React.FC<ArchivePageProps> = ({ workers, onBack, initialWorke
     setSelectedPayslip(null);
     setPdfUrl(null);
     setExpandedYears(new Set());
-    await loadWorkerPayslips(worker.id);
+    const records = await loadWorkerPayslips(worker.id);
+    // Auto-apertura dell'anno più recente: con PDF se ce ne sono, altrimenti
+    // l'ultimo anno con dati — si atterra già sulla griglia utile, zero click.
+    const pdfYears = (records ?? []).map(r => Number(r.year)).filter(Number.isFinite);
+    const dataYears = (worker.anni ?? []).map(a => a.year);
+    const latest = pdfYears.length ? Math.max(...pdfYears) : dataYears.length ? Math.max(...dataYears) : null;
+    if (latest !== null) setExpandedYears(new Set([latest]));
   }, [loadWorkerPayslips]);
 
   const handleSelectPayslip = useCallback(async (payslip: PayslipRecord) => {
@@ -360,11 +388,6 @@ const ArchivePage: React.FC<ArchivePageProps> = ({ workers, onBack, initialWorke
     return map;
   }, [payslipCache]);
 
-  const badgeStyle = (profilo: string) => {
-    if (SYSTEM_PROFILES[profilo]) return SYSTEM_PROFILES[profilo].badge.archive;
-    return 'bg-violet-100 text-violet-700 border-violet-200';
-  };
-
   return (
     <div
       className="flex flex-col h-screen bg-slate-50 dark:bg-slate-950 overflow-hidden relative"
@@ -425,7 +448,22 @@ const ArchivePage: React.FC<ArchivePageProps> = ({ workers, onBack, initialWorke
                 <p className="text-xs">Nessun risultato</p>
               </div>
             ) : (
-              filteredWorkers.map(worker => {
+              workerGroups.map(group => {
+                const isEliorMag = group.id === 'ELIOR_MAGAZZINO';
+                const logoProfilo = isEliorMag ? 'ELIOR' : group.id;
+                const groupLabel = isEliorMag ? 'Elior Magazzino' : group.id.replace(/_/g, ' ');
+                return (
+                  <div key={group.id}>
+                    {/* Header di sezione sticky: il logo è la segnaletica del gruppo */}
+                    <div className="sticky top-0 z-10 flex items-center gap-2 px-4 py-2 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-100 dark:border-slate-800">
+                      {getCompanyLogo(logoProfilo) ? (
+                        <CompanyLogo profilo={logoProfilo} eliorType={isEliorMag ? 'magazzino' : undefined} h={14} title={groupLabel} />
+                      ) : (
+                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">{groupLabel}</span>
+                      )}
+                      <span className="ml-auto text-[10px] font-bold tabular-nums text-slate-400">{group.workers.length}</span>
+                    </div>
+                    {group.workers.map(worker => {
                 const isSelected = selectedWorkerId === worker.id;
                 const isLoading = loadingWorker === worker.id;
                 const count = payslipCountMap[worker.id];
@@ -458,13 +496,7 @@ const ArchivePage: React.FC<ArchivePageProps> = ({ workers, onBack, initialWorke
                         {worker.cognome} {worker.nome}
                       </p>
                       <div className="flex items-center gap-1.5 mt-0.5">
-                        {getCompanyLogo(worker.profilo) ? (
-                          <CompanyLogo profilo={worker.profilo} eliorType={worker.eliorType} h={12} title={getProfiloBadgeLabel(worker.profilo, worker.eliorType)} />
-                        ) : (
-                          <span className={`text-[8px] font-bold uppercase px-1.5 py-0.5 rounded border ${badgeStyle(worker.profilo)}`}>
-                            {getProfiloBadgeLabel(worker.profilo, worker.eliorType, true)}
-                          </span>
-                        )}
+                        {/* L'azienda la dice già l'header del gruppo: qui solo i conteggi */}
                         {isLoading ? (
                           <Loader2 className="w-3 h-3 text-slate-400 animate-spin" />
                         ) : count !== undefined ? (
@@ -475,6 +507,9 @@ const ArchivePage: React.FC<ArchivePageProps> = ({ workers, onBack, initialWorke
                       </div>
                     </div>
                   </button>
+                );
+                    })}
+                  </div>
                 );
               })
             )}
@@ -498,11 +533,15 @@ const ArchivePage: React.FC<ArchivePageProps> = ({ workers, onBack, initialWorke
             </div>
           ) : (
             <>
-              {/* Worker header — etichetta azienda nel suo colore */}
+              {/* Worker header — logo azienda (fallback testuale per le custom) */}
               <div className="flex-none px-5 py-4 border-b border-slate-100 dark:border-slate-800">
-                <p className="text-xs font-black uppercase tracking-widest mb-0.5" style={{ color: companyHex }}>
-                  {getProfiloBadgeLabel(selectedWorker.profilo, selectedWorker.eliorType, true)}
-                </p>
+                {getCompanyLogo(selectedWorker.profilo) ? (
+                  <CompanyLogo profilo={selectedWorker.profilo} eliorType={selectedWorker.eliorType} h={16} className="mb-1" title={getProfiloBadgeLabel(selectedWorker.profilo, selectedWorker.eliorType)} />
+                ) : (
+                  <p className="text-xs font-black uppercase tracking-widest mb-0.5" style={{ color: companyHex }}>
+                    {getProfiloBadgeLabel(selectedWorker.profilo, selectedWorker.eliorType, true)}
+                  </p>
+                )}
                 <p className="text-base font-black text-slate-800 dark:text-white truncate">
                   {selectedWorker.cognome} {selectedWorker.nome}
                 </p>
