@@ -40,6 +40,7 @@ import {
   Loader2,
   Archive as ArchiveIcon,
   Eye,
+  FileText,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useIsReadOnly } from '../../lib/readonly';
@@ -405,6 +406,12 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
   // card e del Report Buste Mancanti): guida lo stile delle pillole-anno, così gli
   // anni vuoti diventano ghost e quelli con dati si trovano a colpo d'occhio.
   const filledByYear = useMemo(() => monthsByYearFromAnni({ anni: data }), [data]);
+  // Copertura PDF dell'anno selezionato: quanti mesi hanno la busta in archivio.
+  // È il prerequisito di "Verifica anno" (i dot degli anni dicono i DATI, non i PDF).
+  const archivedMonthsForYear = useMemo(
+    () => Object.keys(archiveEntries).filter(k => k.startsWith(`${selectedYear}-`)).length,
+    [archiveEntries, selectedYear]
+  );
 
   const selectedYearIdx = years.indexOf(selectedYear);
   const goPrevYear = () => { if (selectedYearIdx > 0) handleYearChange(years[selectedYearIdx - 1]); };
@@ -1149,7 +1156,7 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
           {/* IDENTITÀ — logo visibile anche con l'header di pagina scrollato via */}
           <div className="flex flex-col items-start justify-center gap-1.5 px-3 border-r border-slate-600 shrink-0 self-stretch">
             {getCompanyLogo(profilo) && (
-              <CompanyLogo profilo={profilo} eliorType={eliorType} h={18} forceWhite title={getProfiloBadgeLabel(profilo, eliorType)} />
+              <CompanyLogo profilo={profilo} eliorType={eliorType} h={28} forceWhite title={getProfiloBadgeLabel(profilo, eliorType)} />
             )}
             <div className="flex items-center text-slate-400">
               <Calendar className="w-4 h-4 mr-2" />
@@ -1216,6 +1223,21 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
             )}
             <div className="flex flex-col items-stretch justify-center gap-1.5">
             <div className="flex items-center justify-end gap-2">
+              {/* COPERTURA PDF: buste in archivio per l'anno selezionato (prerequisito di Verifica anno) */}
+              {onOpenArchive && (
+                <button
+                  onClick={onOpenArchive}
+                  title={`Buste paga in archivio per il ${selectedYear}: ${archivedMonthsForYear} mesi su 12 — apri l'archivio`}
+                  className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border transition-all duration-200 active:scale-95 ${
+                    archivedMonthsForYear === 12 ? 'text-emerald-200 bg-emerald-600/20 border-emerald-500/40 hover:bg-emerald-600/40 hover:text-white'
+                    : archivedMonthsForYear > 0 ? 'text-amber-200 bg-amber-600/20 border-amber-500/40 hover:bg-amber-600/40 hover:text-white'
+                    : 'text-slate-400 bg-slate-700/40 border-slate-600/60 hover:bg-slate-700 hover:text-slate-200'
+                  }`}
+                >
+                  <FileText size={12} />
+                  PDF {archivedMonthsForYear}/12
+                </button>
+              )}
               {/* TOGGLE VISTA: Variabili (credito) ⇄ Fisse (Quadro B, % incidenza) */}
               {vistaToggle}
               {/* VERIFICA ANNO (batch AI): un click, 12 confronti busta↔griglia in sequenza */}
