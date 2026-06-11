@@ -119,7 +119,7 @@ const WorkerDetailModals: React.FC = () => {
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
               transition={FRAMER_PHYSICS.smooth}
-              className="relative w-full max-w-lg bg-slate-900 rounded-[2rem] shadow-[0_0_60px_rgba(79,70,229,0.3)] border border-slate-700 overflow-hidden"
+              className="relative w-full max-w-lg bg-slate-900 rounded-3xl shadow-[0_0_60px_rgba(79,70,229,0.3)] border border-slate-700 overflow-hidden"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500"></div>

@@ -375,7 +375,7 @@ const CompanyBuilder: React.FC<CompanyBuilderProps> = ({ isOpen, onClose }) => {
                                 <motion.button
                                     whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
                                     onClick={saveColumns}
-                                    className={`flex items-center gap-3 px-8 py-4 rounded-[1.5rem] font-black text-sm tracking-widest transition-all shadow-2xl shrink-0 ${
+                                    className={`flex items-center gap-3 px-8 py-4 rounded-3xl font-black text-sm tracking-widest transition-all shadow-2xl shrink-0 ${
                                         hasUnsavedChanges
                                             ? 'bg-indigo-600 text-white shadow-indigo-600/40 ring-4 ring-indigo-500/20'
                                             : 'bg-slate-800 text-slate-500 border border-white/5'
@@ -477,7 +477,7 @@ const CompanyBuilder: React.FC<CompanyBuilderProps> = ({ isOpen, onClose }) => {
                                     <motion.button
                                         whileHover={{ scale: 1.01, backgroundColor: 'rgba(99,102,241,0.05)' }}
                                         onClick={addColumn}
-                                        className="w-full mt-6 py-8 rounded-[2rem] border-2 border-dashed border-slate-800 hover:border-indigo-500/50 text-slate-600 hover:text-indigo-400 font-black text-xs uppercase tracking-[0.3em] transition-all flex items-center justify-center gap-3"
+                                        className="w-full mt-6 py-8 rounded-3xl border-2 border-dashed border-slate-800 hover:border-indigo-500/50 text-slate-600 hover:text-indigo-400 font-black text-xs uppercase tracking-[0.3em] transition-all flex items-center justify-center gap-3"
                                     >
                                         <Plus className="w-5 h-5" strokeWidth={3} /> AGGIUNGI PARAMETRO
                                     </motion.button>

@@ -163,7 +163,7 @@ const RiposiPraticaDetail: React.FC<Props> = ({ pratica, onBack }) => {
                     <>
                         {/* Le due serie a confronto: fonte (PDF) vs motore 561/2006 */}
                         {fonte.gg > 0 && (
-                            <section className="rounded-[2rem] bg-white/60 dark:bg-slate-800/60 backdrop-blur-2xl border border-white/60 dark:border-slate-700/60 p-6">
+                            <section className="rounded-3xl bg-white/60 dark:bg-slate-800/60 backdrop-blur-2xl border border-white/60 dark:border-slate-700/60 p-6">
                                 <h3 className="font-bold text-slate-700 dark:text-slate-200 mb-4">Le due serie a confronto</h3>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                     <div className="rounded-2xl border border-sky-200 dark:border-sky-500/30 bg-sky-50/60 dark:bg-sky-500/10 p-4">
@@ -206,7 +206,7 @@ const RiposiPraticaDetail: React.FC<Props> = ({ pratica, onBack }) => {
 
                         {/* Per anno: grafico + tabella */}
                         <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-                            <section className="lg:col-span-3 rounded-[2rem] bg-white/60 dark:bg-slate-800/60 backdrop-blur-2xl border border-white/60 dark:border-slate-700/60 p-6 flex flex-col">
+                            <section className="lg:col-span-3 rounded-3xl bg-white/60 dark:bg-slate-800/60 backdrop-blur-2xl border border-white/60 dark:border-slate-700/60 p-6 flex flex-col">
                                 <div className="flex items-center justify-between mb-5">
                                     <h3 className="font-bold text-slate-700 dark:text-slate-200">Andamento per anno</h3>
                                     <div className="flex items-center gap-4 text-[11px] font-semibold text-slate-500 dark:text-slate-400">
@@ -239,7 +239,7 @@ const RiposiPraticaDetail: React.FC<Props> = ({ pratica, onBack }) => {
                                 <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-3">Clicca un anno per filtrare l'elenco violazioni qui sotto.</p>
                             </section>
 
-                            <section className="lg:col-span-2 rounded-[2rem] bg-white/60 dark:bg-slate-800/60 backdrop-blur-2xl border border-white/60 dark:border-slate-700/60 p-5">
+                            <section className="lg:col-span-2 rounded-3xl bg-white/60 dark:bg-slate-800/60 backdrop-blur-2xl border border-white/60 dark:border-slate-700/60 p-5">
                                 <h3 className="font-bold text-slate-700 dark:text-slate-200 mb-3">Dettaglio per anno</h3>
                                 <div className="space-y-1">
                                     <div className="grid grid-cols-5 text-[11px] font-bold uppercase text-slate-400 dark:text-slate-500 px-2">
@@ -259,7 +259,7 @@ const RiposiPraticaDetail: React.FC<Props> = ({ pratica, onBack }) => {
                         </div>
 
                         {/* Elenco violazioni */}
-                        <section className="rounded-[2rem] bg-white/60 dark:bg-slate-800/60 backdrop-blur-2xl border border-white/60 dark:border-slate-700/60 p-6">
+                        <section className="rounded-3xl bg-white/60 dark:bg-slate-800/60 backdrop-blur-2xl border border-white/60 dark:border-slate-700/60 p-6">
                             <div className="flex flex-wrap items-center gap-3 mb-4">
                                 <h3 className="font-bold text-slate-700 dark:text-slate-200">Elenco violazioni <span className="text-slate-400 font-normal">({violazioniVisibili.length})</span></h3>
                                 {annoFiltro && (
@@ -280,7 +280,7 @@ const RiposiPraticaDetail: React.FC<Props> = ({ pratica, onBack }) => {
                     </>
                 ) : meseAperto === null ? (
                     /* PROSPETTO — vista anno (griglia 12 mesi) */
-                    <section className="rounded-[2rem] bg-white/60 dark:bg-slate-800/60 backdrop-blur-2xl border border-white/60 dark:border-slate-700/60 p-6">
+                    <section className="rounded-3xl bg-white/60 dark:bg-slate-800/60 backdrop-blur-2xl border border-white/60 dark:border-slate-700/60 p-6">
                         <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
                             <div className="flex flex-wrap items-center gap-4">
                                 <h3 className="font-bold text-slate-700 dark:text-slate-200">Prospetto turni <span className="text-slate-400 font-normal">{year}</span></h3>
@@ -377,7 +377,7 @@ const MeseFocus: React.FC<{ year: number; month: number; giornate: GiornataInput
         ...(hasFonte ? [{ color: 'bg-sky-500', label: 'Indennità PDF', value: euro(indFonteMese) }] : []),
     ];
     return (
-        <motion.section initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }} className="rounded-[2rem] bg-white/60 dark:bg-slate-800/60 backdrop-blur-2xl border border-white/60 dark:border-slate-700/60 p-6">
+        <motion.section initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }} className="rounded-3xl bg-white/60 dark:bg-slate-800/60 backdrop-blur-2xl border border-white/60 dark:border-slate-700/60 p-6">
             <div className="flex items-center gap-3 mb-5">
                 <button onClick={onBack} title="Torna alla griglia dei mesi" className="w-9 h-9 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-500 hover:text-indigo-600 hover:-translate-x-0.5 transition-all">
                     <ArrowLeft className="w-4 h-4" />

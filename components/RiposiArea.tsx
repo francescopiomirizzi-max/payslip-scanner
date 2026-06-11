@@ -75,7 +75,7 @@ const RiposiArea: React.FC = () => {
                     initial={{ opacity: 0, y: 14 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.3 }}
-                    className="rounded-[2rem] border border-slate-100 dark:border-slate-700/60 bg-white dark:bg-slate-800/60 p-7"
+                    className="rounded-3xl border border-slate-100 dark:border-slate-700/60 bg-white dark:bg-slate-800/60 p-7"
                 >
                     <h2 className="text-lg font-bold text-slate-700 dark:text-slate-200">Cosa fa quest'area</h2>
                     <p className="mt-2 text-slate-600 dark:text-slate-300 leading-relaxed">

@@ -775,7 +775,7 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
                 <div className="flex-1 overflow-y-auto custom-scrollbar px-7 pb-4 relative z-10">
 
                   {/* DISPLAY NETTO */}
-                  <div className="relative overflow-hidden p-5 rounded-[2rem] bg-white/50 dark:bg-slate-950/50 border border-white/60 dark:border-slate-700 shadow-lg backdrop-blur-md mb-4 group transition-all hover:scale-[1.02]">
+                  <div className="relative overflow-hidden p-5 rounded-3xl bg-white/50 dark:bg-slate-950/50 border border-white/60 dark:border-slate-700 shadow-lg backdrop-blur-md mb-4 group transition-all hover:scale-[1.02]">
                     <div className="absolute top-0 left-0 w-1 h-full" style={{ backgroundColor: theme.rawColor.start }}></div>
                     <div className="flex justify-between items-start mb-1">
                       <p className="text-[9px] uppercase tracking-widest text-slate-400 font-black">RECUPERO TOTALE</p>
@@ -796,7 +796,7 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
                   </div>
 
                   {/* BOX TICKET INTELLIGENTE */}
-                  <div className={`p-4 rounded-[1.5rem] border shadow-sm backdrop-blur-sm flex items-center justify-between mb-3 transition-colors ${includeTickets
+                  <div className={`p-4 rounded-3xl border shadow-sm backdrop-blur-sm flex items-center justify-between mb-3 transition-colors ${includeTickets
                     ? 'bg-white/40 dark:bg-slate-900/40 border-white/50 dark:border-slate-700/50 hover:bg-white/60 dark:hover:bg-slate-800/60'
                     : 'bg-slate-50/90 dark:bg-slate-950/80 border-slate-200 dark:border-slate-800'
                     }`}>
@@ -821,7 +821,7 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
 
                   {/* GRIGLIA FINALE */}
                   <div className="grid grid-cols-2 gap-3 mb-2">
-                    <div className="p-3 rounded-[1.5rem] bg-white/40 dark:bg-slate-900/40 border border-white/50 dark:border-slate-700/50 shadow-sm backdrop-blur-sm flex flex-col items-center justify-center text-center hover:bg-white/60 dark:hover:bg-slate-800/60 transition-colors">
+                    <div className="p-3 rounded-3xl bg-white/40 dark:bg-slate-900/40 border border-white/50 dark:border-slate-700/50 shadow-sm backdrop-blur-sm flex flex-col items-center justify-center text-center hover:bg-white/60 dark:hover:bg-slate-800/60 transition-colors">
                       <Layers className="w-3.5 h-3.5 text-blue-400 dark:text-cyan-400 mb-1" />
                       <p className="text-[9px] uppercase tracking-wide text-slate-400 font-bold mb-0.5">Lordo</p>
                       <p className="text-sm font-black tabular-nums text-slate-600 dark:text-slate-200 transition-colors">
@@ -829,7 +829,7 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
                       </p>
                     </div>
 
-                    <div className="p-3 rounded-[1.5rem] bg-white/40 dark:bg-slate-900/40 border border-white/50 dark:border-slate-700/50 shadow-sm backdrop-blur-sm flex flex-col items-center justify-center text-center hover:bg-white/60 dark:hover:bg-slate-800/60 transition-colors">
+                    <div className="p-3 rounded-3xl bg-white/40 dark:bg-slate-900/40 border border-white/50 dark:border-slate-700/50 shadow-sm backdrop-blur-sm flex flex-col items-center justify-center text-center hover:bg-white/60 dark:hover:bg-slate-800/60 transition-colors">
                       <CalendarClock className="w-3.5 h-3.5 mb-1" style={theme.iconStyle} />
                       <p className="text-[9px] uppercase tracking-wide text-slate-400 font-bold mb-0.5">G. Utili</p>
                       <p className="text-sm font-black tabular-nums" style={theme.iconStyle}>

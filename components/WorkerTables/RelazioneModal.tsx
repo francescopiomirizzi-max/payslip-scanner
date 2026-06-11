@@ -148,7 +148,7 @@ export const RelazioneModal = ({ isOpen, onClose, worker, totals, includeExFest 
             <motion.div
                 initial={{ scale: 0.95, opacity: 0, y: 20 }}
                 animate={{ scale: 1, opacity: 1, y: 0 }}
-                className="bg-slate-900 w-full max-w-3xl rounded-[2rem] shadow-2xl overflow-hidden flex flex-col max-h-[90vh] border border-slate-700"
+                className="bg-slate-900 w-full max-w-3xl rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] border border-slate-700"
             >
                 <div className="p-6 border-b border-slate-800 flex justify-between items-center bg-[#020617]">
                     <div className="flex items-center gap-4">

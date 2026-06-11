@@ -491,7 +491,7 @@ const QRScannerModal: React.FC<QRScannerModalProps> = ({
                                 {status === 'waiting' ? (
                                     <motion.div key="qr" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} transition={appleTransition} className="absolute inset-0 flex flex-col items-center justify-center px-5">
                                         {/* QR CODE CON BORDO DINAMICO */}
-                                        <div className={`bg-white p-4 rounded-[2rem] relative overflow-hidden shadow-2xl ring-4 transition-colors duration-500 ${localScanMode === 'ai' ? 'ring-indigo-500/20' : 'ring-cyan-500/20'}`}>
+                                        <div className={`bg-white p-4 rounded-3xl relative overflow-hidden shadow-2xl ring-4 transition-colors duration-500 ${localScanMode === 'ai' ? 'ring-indigo-500/20' : 'ring-cyan-500/20'}`}>
                                             <QRCode value={qrUrl} size={170} level="M" />
                                             <motion.div
                                                 animate={{ top: ['0%', '100%', '0%'] }}

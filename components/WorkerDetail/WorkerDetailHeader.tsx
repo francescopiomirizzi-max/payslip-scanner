@@ -68,7 +68,7 @@ const WorkerDetailHeader: React.FC = () => {
           initial={{ y: -50, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           transition={FRAMER_PHYSICS.smooth}
-          className="glass-panel max-w-[1800px] mx-auto rounded-[2rem] p-4 flex justify-between items-center gap-6"
+          className="glass-panel max-w-[1800px] mx-auto rounded-3xl p-4 flex justify-between items-center gap-6"
         >
           <div className="flex items-center gap-6 shrink-0">
             <div className="flex flex-col gap-3 w-44">
