@@ -214,6 +214,9 @@ interface MonthlyDataGridProps {
   // Sincronizzazione col visore: mese (0-11) e anno del PDF attualmente mostrato.
   activeMonthIndex?: number | null;
   activeYear?: number | null;
+  /** Visore affiancato: header a riga singola (niente griglia anni, card e ticker)
+      per lasciare l'altezza alla tabella. */
+  compact?: boolean;
 }
 
 // parseLocalFloat importato da formatters
@@ -241,6 +244,7 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
   onAcceptAllCorrections,
   activeMonthIndex = null,
   activeYear = null,
+  compact = false,
 }) => {
   const isReadOnly = useIsReadOnly();
   const [selectedYear, setSelectedYear] = useState<number>(initialYear);
@@ -964,6 +968,66 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
   const saveNote = () => { if (noteModal.monthIndex !== -1) handleCellChange(noteModal.monthIndex, 'note', noteModal.text); closeNoteModal(); };
   const clearNote = () => setNoteModal(prev => ({ ...prev, text: '' }));
 
+  // --- CONTROLLI HEADER condivisi tra barra piena e barra compatta (visore affiancato) ---
+  const vistaToggle = hasFixedCols && (
+    <div className="flex items-center rounded-full bg-slate-900/60 border border-slate-600 p-0.5 shadow-inner">
+      <button
+        onClick={() => setGridMode('variabili')}
+        title="Voci variabili (indennità del credito)"
+        className={`px-3 py-1 rounded-full text-xs font-bold transition-all duration-200 ${gridMode === 'variabili' ? 'bg-blue-500 text-white shadow' : 'text-slate-300 hover:text-white'}`}
+      >
+        Variabili
+      </button>
+      <button
+        onClick={() => setGridMode('fisse')}
+        title="Voci fisse continuative (Quadro B) — base per le % di incidenza"
+        className={`px-3 py-1 rounded-full text-xs font-bold transition-all duration-200 ${gridMode === 'fisse' ? 'bg-amber-500 text-white shadow' : 'text-slate-300 hover:text-white'}`}
+      >
+        Fisse
+      </button>
+    </div>
+  );
+
+  const verifyYearBtn = !isReadOnly && onVerifyRequest && verifiableRows.length > 0 && (
+    <button
+      onClick={runVerifyYear}
+      disabled={!!batchVerify}
+      title={`Verifica AI di tutti i mesi del ${selectedYear} con PDF in archivio (${verifiableRows.length} ${verifiableRows.length === 1 ? 'mese' : 'mesi'}, in sequenza)`}
+      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all duration-300 border ${
+        batchVerify
+          ? 'text-violet-300 bg-violet-900/40 border-violet-700/60 cursor-wait'
+          : 'text-violet-200 bg-violet-600/30 border-violet-500/50 hover:bg-violet-600/50 hover:text-white shadow-sm active:scale-95'
+      }`}
+    >
+      {batchVerify ? <Loader2 size={14} className="animate-spin" /> : <ShieldCheck size={14} />}
+      <span className="hidden sm:inline">
+        {batchVerify ? `Verifico ${batchVerify.done}/${batchVerify.total}…` : 'Verifica anno'}
+      </span>
+    </button>
+  );
+
+  const undoBtn = (
+    <button
+      onClick={handleUndo}
+      disabled={history.length === 0}
+      className={`group relative flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all duration-300 overflow-hidden border ${history.length > 0
+        ? 'text-indigo-700 bg-indigo-50 border-indigo-200 shadow-sm hover:shadow hover:bg-indigo-100 dark:bg-cyan-900/40 dark:text-cyan-300 dark:border-cyan-700/60 dark:hover:bg-cyan-800/60 active:scale-95'
+        : 'text-slate-400 bg-transparent border-transparent cursor-default opacity-50 dark:text-slate-500'
+        }`}
+      title="Annulla ultima modifica (Ctrl+Z)"
+    >
+      <Undo2 size={16} className={history.length > 0 ? 'group-active:-rotate-45 transition-transform duration-300' : ''} />
+      <span className="hidden sm:inline relative z-10">Annulla</span>
+
+      {/* Contatore Badge Incassato */}
+      {history.length > 0 && (
+        <span className="flex h-4 min-w-[16px] items-center justify-center rounded-full bg-indigo-200/70 dark:bg-cyan-950/80 text-[10px] text-indigo-800 dark:text-cyan-200 font-black ml-1 px-1.5 shadow-inner transition-all">
+          {history.length}
+        </span>
+      )}
+    </button>
+  );
+
   return (
     <>
       <div className="flex flex-col h-full bg-white dark:bg-slate-900 shadow-xl rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 select-none group/main-container transition-colors duration-300">
@@ -1018,10 +1082,54 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
         `}</style>
 
         {/* --- HEADER --- */}
-        {/* Barra a ZONE: identità in colonna (logo sopra PERIODO, riempie
+        {compact ? (
+        /* Barra COMPATTA (visore affiancato): una sola riga — logo, ‹ anno ›,
+           vista, verifica, annulla. Tutta l'altezza risparmiata va alla tabella. */
+        <div className="bg-slate-800 text-white px-2 py-1 flex flex-wrap items-center gap-x-2 gap-y-1 shrink-0 z-20 shadow-md">
+          {getCompanyLogo(profilo) && (
+            <div className="px-1.5 border-r border-slate-600 self-stretch flex items-center shrink-0">
+              <CompanyLogo profilo={profilo} eliorType={eliorType} h={14} forceWhite title={getProfiloBadgeLabel(profilo, eliorType)} />
+            </div>
+          )}
+          <div className="flex items-center gap-0.5">
+            <button
+              onClick={goPrevYear}
+              disabled={selectedYearIdx <= 0}
+              title="Anno precedente"
+              className="p-1 rounded-full text-slate-400 hover:text-white hover:bg-slate-700 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-slate-400 transition-colors shrink-0"
+            >
+              <ChevronLeft className="w-4 h-4" strokeWidth={2.5} />
+            </button>
+            <select
+              value={selectedYear}
+              onChange={e => handleYearChange(Number(e.target.value))}
+              title="Anno selezionato"
+              className="bg-slate-700 border border-slate-600 text-white text-sm font-bold rounded-lg px-2 py-0.5 outline-none cursor-pointer hover:bg-slate-600 transition-colors"
+            >
+              {years.map(y => {
+                const filled = filledByYear.get(y)?.size ?? 0;
+                return <option key={y} value={y}>{y}{filled === 12 ? ' — completo' : filled > 0 ? ` — ${filled}/12` : ''}</option>;
+              })}
+            </select>
+            <button
+              onClick={goNextYear}
+              disabled={selectedYearIdx === -1 || selectedYearIdx >= years.length - 1}
+              title="Anno successivo"
+              className="p-1 rounded-full text-slate-400 hover:text-white hover:bg-slate-700 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-slate-400 transition-colors shrink-0"
+            >
+              <ChevronRight className="w-4 h-4" strokeWidth={2.5} />
+            </button>
+          </div>
+          <div className="flex-1" />
+          {vistaToggle}
+          {verifyYearBtn}
+          {undoBtn}
+        </div>
+        ) : (
+        /* Barra a ZONE: identità in colonna (logo sopra PERIODO, riempie
             l'altezza), griglia anni a colonne uniformi con larghezza minima
             (a pagina stretta la zona va a capo INTERA, mai a 1 colonna),
-            controlli su due righe (niente angoli morti). */}
+            controlli su due righe (niente angoli morti). */
         <div className="bg-slate-800 text-white p-2 flex flex-wrap items-center justify-between gap-y-2 shrink-0 z-20 shadow-md">
           {/* IDENTITÀ — logo visibile anche con l'header di pagina scrollato via */}
           <div className="flex flex-col items-start justify-center gap-1.5 px-3 border-r border-slate-600 shrink-0 self-stretch">
@@ -1079,64 +1187,13 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
           <div className="flex flex-col items-stretch justify-center gap-1.5 shrink-0 mr-4">
             <div className="flex items-center justify-end gap-2">
               {/* TOGGLE VISTA: Variabili (credito) ⇄ Fisse (Quadro B, % incidenza) */}
-              {hasFixedCols && (
-                <div className="flex items-center rounded-full bg-slate-900/60 border border-slate-600 p-0.5 shadow-inner">
-                  <button
-                    onClick={() => setGridMode('variabili')}
-                    title="Voci variabili (indennità del credito)"
-                    className={`px-3 py-1 rounded-full text-xs font-bold transition-all duration-200 ${gridMode === 'variabili' ? 'bg-blue-500 text-white shadow' : 'text-slate-300 hover:text-white'}`}
-                  >
-                    Variabili
-                  </button>
-                  <button
-                    onClick={() => setGridMode('fisse')}
-                    title="Voci fisse continuative (Quadro B) — base per le % di incidenza"
-                    className={`px-3 py-1 rounded-full text-xs font-bold transition-all duration-200 ${gridMode === 'fisse' ? 'bg-amber-500 text-white shadow' : 'text-slate-300 hover:text-white'}`}
-                  >
-                    Fisse
-                  </button>
-                </div>
-              )}
+              {vistaToggle}
               {/* VERIFICA ANNO (batch AI): un click, 12 confronti busta↔griglia in sequenza */}
-              {!isReadOnly && onVerifyRequest && verifiableRows.length > 0 && (
-                <button
-                  onClick={runVerifyYear}
-                  disabled={!!batchVerify}
-                  title={`Verifica AI di tutti i mesi del ${selectedYear} con PDF in archivio (${verifiableRows.length} ${verifiableRows.length === 1 ? 'mese' : 'mesi'}, in sequenza)`}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all duration-300 border ${
-                    batchVerify
-                      ? 'text-violet-300 bg-violet-900/40 border-violet-700/60 cursor-wait'
-                      : 'text-violet-200 bg-violet-600/30 border-violet-500/50 hover:bg-violet-600/50 hover:text-white shadow-sm active:scale-95'
-                  }`}
-                >
-                  {batchVerify ? <Loader2 size={14} className="animate-spin" /> : <ShieldCheck size={14} />}
-                  <span className="hidden sm:inline">
-                    {batchVerify ? `Verifico ${batchVerify.done}/${batchVerify.total}…` : 'Verifica anno'}
-                  </span>
-                </button>
-              )}
+              {verifyYearBtn}
             </div>
             <div className="flex items-center justify-end gap-2">
               {/* TASTO UNDO (FRECCIA INDIETRO) - VERSIONE DEFINITIVA */}
-              <button
-                onClick={handleUndo}
-                disabled={history.length === 0}
-                className={`group relative flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all duration-300 overflow-hidden border ${history.length > 0
-                  ? 'text-indigo-700 bg-indigo-50 border-indigo-200 shadow-sm hover:shadow hover:bg-indigo-100 dark:bg-cyan-900/40 dark:text-cyan-300 dark:border-cyan-700/60 dark:hover:bg-cyan-800/60 active:scale-95'
-                  : 'text-slate-400 bg-transparent border-transparent cursor-default opacity-50 dark:text-slate-500'
-                  }`}
-                title="Annulla ultima modifica (Ctrl+Z)"
-              >
-                <Undo2 size={16} className={history.length > 0 ? 'group-active:-rotate-45 transition-transform duration-300' : ''} />
-                <span className="hidden sm:inline relative z-10">Annulla</span>
-
-                {/* Contatore Badge Incassato */}
-                {history.length > 0 && (
-                  <span className="flex h-4 min-w-[16px] items-center justify-center rounded-full bg-indigo-200/70 dark:bg-cyan-950/80 text-[10px] text-indigo-800 dark:text-cyan-200 font-black ml-1 px-1.5 shadow-inner transition-all">
-                    {history.length}
-                  </span>
-                )}
-              </button>
+              {undoBtn}
 
               {/* TASTO MANUALE LEGALE */}
               <button
@@ -1179,7 +1236,9 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
             </motion.div>
           </div>
         </div>
+        )}
         {/* --- TICKER LEGALE (CORRETTO: NESSUNA SOVRAPPOSIZIONE) --- */}
+        {!compact && (
         <div className="bg-amber-50/80 dark:bg-amber-900/20 border-b border-amber-100 dark:border-amber-900/50 py-1.5 px-4 flex items-center h-8 shrink-0 gap-4 transition-colors">
 
           {/* 1. ETICHETTA FISSA (Non si muove, ha priorità di spazio) */}
@@ -1224,6 +1283,7 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
             </motion.div>
           </div>
         </div>
+        )}
         {/* --- GHOST SCROLLBAR SUPERIORE --- */}
         <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 shrink-0 flex items-center justify-center transition-colors">
           <div
