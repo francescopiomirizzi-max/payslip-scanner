@@ -160,6 +160,19 @@ const ArchivePage: React.FC<ArchivePageProps> = ({ workers, onBack, initialWorke
     [workers, selectedWorkerId]
   );
 
+  // Gruppi-azienda chiusi all'ingresso: si apre cliccando la barra (pattern
+  // cassetti dashboard). La ricerca mostra aperti i gruppi con risultati.
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const groupIdOf = (w: Worker) =>
+    w.profilo === 'ELIOR' && w.eliorType === 'magazzino' ? 'ELIOR_MAGAZZINO' : (w.profilo ?? 'SENZA_AZIENDA');
+  const toggleGroup = useCallback((id: string) => {
+    setExpandedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }, []);
+
   const loadWorkerPayslips = useCallback(async (workerId: string) => {
     if (payslipCache[workerId] !== undefined) return payslipCache[workerId];
     setLoadingWorker(workerId);
@@ -184,6 +197,8 @@ const ArchivePage: React.FC<ArchivePageProps> = ({ workers, onBack, initialWorke
     setSelectedPayslip(null);
     setPdfUrl(null);
     setExpandedYears(new Set());
+    // Il gruppo del selezionato resta/diventa visibile (conta per il deep-link dalla card)
+    setExpandedGroups(prev => new Set([...prev, groupIdOf(worker)]));
     const records = await loadWorkerPayslips(worker.id);
     // Auto-apertura dell'anno più recente: con PDF se ce ne sono, altrimenti
     // l'ultimo anno con dati — si atterra già sulla griglia utile, zero click.
@@ -452,17 +467,36 @@ const ArchivePage: React.FC<ArchivePageProps> = ({ workers, onBack, initialWorke
                 const isEliorMag = group.id === 'ELIOR_MAGAZZINO';
                 const logoProfilo = isEliorMag ? 'ELIOR' : group.id;
                 const groupLabel = isEliorMag ? 'Elior Magazzino' : group.id.replace(/_/g, ' ');
+                // In ricerca i gruppi con risultati sono aperti, altrimenti comanda il click
+                const isGroupOpen = searchQuery.trim().length > 0 || expandedGroups.has(group.id);
                 return (
                   <div key={group.id}>
-                    {/* Header di sezione sticky: il logo è la segnaletica del gruppo */}
-                    <div className="sticky top-0 z-10 flex items-center gap-2 px-4 py-2 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-100 dark:border-slate-800">
+                    {/* Barra-azienda sticky: chiusa all'ingresso, click per aprire */}
+                    <button
+                      type="button"
+                      onClick={() => toggleGroup(group.id)}
+                      className="w-full sticky top-0 z-10 flex items-center gap-2 px-4 py-2.5 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors text-left"
+                    >
+                      {isGroupOpen
+                        ? <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                        : <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                      }
                       {getCompanyLogo(logoProfilo) ? (
                         <CompanyLogo profilo={logoProfilo} eliorType={isEliorMag ? 'magazzino' : undefined} h={14} title={groupLabel} />
                       ) : (
                         <span className="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">{groupLabel}</span>
                       )}
                       <span className="ml-auto text-[10px] font-bold tabular-nums text-slate-400">{group.workers.length}</span>
-                    </div>
+                    </button>
+                    <AnimatePresence initial={false}>
+                    {isGroupOpen && (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.18 }}
+                        className="overflow-hidden"
+                      >
                     {group.workers.map(worker => {
                 const isSelected = selectedWorkerId === worker.id;
                 const isLoading = loadingWorker === worker.id;
@@ -509,6 +543,9 @@ const ArchivePage: React.FC<ArchivePageProps> = ({ workers, onBack, initialWorke
                   </button>
                 );
                     })}
+                      </motion.div>
+                    )}
+                    </AnimatePresence>
                   </div>
                 );
               })
