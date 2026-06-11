@@ -80,3 +80,19 @@ NIENTE della logica di estrazione/applicazione dati (Titanium V3 intatto).
 - Resa attesa: anno da ~3 min → ~1 min; archivio intero 2008-2025 caricabile
   in un colpo (~15 min non presidiati) grazie al bucket IP 300/5min.
 - NON deployato (batching Netlify, deploy ufficiale 2026-06-18).
+
+## Aggiunta: tasto CARTELLA (upload multi-anno)
+
+- [x] Input nascosto `webkitdirectory` + tasto CARTELLA in command bar (icona
+      FolderUp, stile sobrio coerente): selezioni la cartella del lavoratore o
+      una cartella-anno, prende tutto ricorsivamente.
+- [x] Filtro nel hook (il picker-cartella ignora `accept`): solo PDF/immagini,
+      via .DS_Store e simili; reset input dopo lettura (ri-selezione stessa
+      cartella ri-scatta onChange).
+- [x] Anno anche dalla cartella immediata (`webkitRelativePath`): "2022/Gennaio.pdf"
+      → 2022. SOLO la cartella immediata, non il percorso intero (una madre
+      "Avella 2008-2025" regalerebbe lo stesso anno a tutti).
+- [x] Guardia anti-doppio-batch (ref + toast): due batch simultanei si
+      clobberavano lo snapshot a vicenda. NON cablato isBatchProcessing: avrebbe
+      resuscitato il vecchio HUD bloccante (sostituito dalla Dynamic Island).
+- [x] Verifica: tsc pulito · build ok · 173 test verdi.

@@ -262,13 +262,40 @@ export function usePayslipUpload({
     }
   };
 
+  // Guardia anti-doppio-batch: due batch simultanei partirebbero ciascuno dal
+  // proprio snapshot di monthlyInputs e l'ultimo setMonthlyInputs cancellerebbe
+  // i risultati dell'altro. (isBatchProcessing non è cablato di proposito:
+  // pilotava il vecchio HUD bloccante, sostituito dalla Dynamic Island.)
+  const batchRunningRef = useRef(false);
+
   // --- LOGICA UPLOAD COLLEGATA ALLA DYNAMIC ISLAND (CON PARSER TITANIUM V2) ---
   const handleBatchUpload = async (
     e: React.ChangeEvent<HTMLInputElement>,
     isSingle = false
   ) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
+    const rawFiles = e.target.files;
+    if (!rawFiles || rawFiles.length === 0) return;
+
+    // Il picker-cartella (webkitdirectory) ignora `accept` e porta dentro anche
+    // .DS_Store, Excel, ecc.: si tengono solo PDF e immagini. L'input si resetta
+    // subito, così ri-selezionare la stessa cartella fa scattare di nuovo onChange.
+    const files = Array.from(rawFiles).filter(
+      f =>
+        !f.name.startsWith('.') &&
+        (f.type === 'application/pdf' ||
+          f.type.startsWith('image/') ||
+          /\.(pdf|jpe?g|png|webp|heic)$/i.test(f.name))
+    );
+    e.target.value = '';
+    if (files.length === 0) return;
+
+    if (batchRunningRef.current) {
+      setBatchNotification({
+        type: 'warning',
+        msg: 'Un caricamento è già in corso: attendi che finisca prima di lanciarne un altro.',
+      });
+      return;
+    }
 
     startUpload(isSingle ? 'single' : 'batch', files.length);
 
@@ -302,7 +329,14 @@ export function usePayslipUpload({
       const foundMonthUiIndex = monthNames.findIndex(m =>
         file.name.toLowerCase().includes(m.toLowerCase())
       );
-      const yearMatchUI = file.name.match(/(20\d{2})/);
+      // Con l'upload-cartella i file sono spesso "Gennaio.pdf" dentro la cartella
+      // "2022": l'anno si cerca anche nel nome della cartella IMMEDIATA. Solo
+      // quella: usare l'intero percorso regalerebbe a tutti i file l'anno di una
+      // eventuale cartella madre tipo "Avella 2008-2025".
+      const relPath: string = (file as any).webkitRelativePath || '';
+      const parentDir = relPath.split('/').slice(-2, -1)[0] || '';
+      const yearMatchUI =
+        file.name.match(/(20\d{2})/) || parentDir.match(/(20\d{2})/);
 
       if (foundMonthUiIndex !== -1) {
         label = yearMatchUI
@@ -561,15 +595,19 @@ export function usePayslipUpload({
     // su currentAnni avvengono in blocchi sincroni (nessun await tra findIndex/push
     // e le scritture) → nessuna race tra file dello stesso mese.
     const SCAN_CONCURRENCY = 3;
-    const fileArray = Array.from(files);
     let nextFile = 0;
-    await Promise.all(
-      Array.from({ length: Math.min(SCAN_CONCURRENCY, fileArray.length) }, async () => {
-        while (nextFile < fileArray.length) {
-          await processFile(fileArray[nextFile++]);
-        }
-      })
-    );
+    batchRunningRef.current = true;
+    try {
+      await Promise.all(
+        Array.from({ length: Math.min(SCAN_CONCURRENCY, files.length) }, async () => {
+          while (nextFile < files.length) {
+            await processFile(files[nextFile++]);
+          }
+        })
+      );
+    } finally {
+      batchRunningRef.current = false;
+    }
 
     currentAnni.sort((a: AnnoDati, b: AnnoDati) => {
       if (a.year !== b.year) return a.year - b.year;

@@ -2,7 +2,7 @@ import React, { useRef } from 'react';
 import { motion } from 'framer-motion';
 import {
   LayoutGrid, Calculator, TrendingUp, Wallet,
-  Loader2, ScanLine, Bot, QrCode,
+  Loader2, ScanLine, Bot, QrCode, FolderUp,
 } from 'lucide-react';
 import { useIsReadOnly } from '../../lib/readonly';
 import { useWorkerDetail } from './WorkerDetailContext';
@@ -55,6 +55,19 @@ const WorkerDetailCommandBar: React.FC = () => {
               disabled={isBatchProcessing}
             />
 
+            {/* INPUT CARTELLA NASCOSTO — webkitdirectory: prende tutti i file
+                della cartella scelta, sottocartelle-anno comprese. Il picker
+                ignora `accept`: il filtro PDF/immagini sta in usePayslipUpload. */}
+            <input
+              type="file"
+              multiple
+              onChange={(e) => onBatchUpload(e, false)}
+              className="hidden"
+              id="dashboard-ai-upload-folder"
+              disabled={isBatchProcessing}
+              {...({ webkitdirectory: '' } as any)}
+            />
+
             {/* TASTO AI AGENT — nascosto in modalita' sola lettura */}
             {!isReadOnly && (
             <button
@@ -83,6 +96,32 @@ const WorkerDetailCommandBar: React.FC = () => {
                     AI AGENT
                   </span>
                 </div>
+              </div>
+            </button>
+            )}
+
+            {/* TASTO CARICA CARTELLA — batch multi-anno in un colpo solo:
+                stessa pipeline di AI AGENT, ma si seleziona una cartella intera
+                (es. la cartella del lavoratore con le sottocartelle per anno). */}
+            {!isReadOnly && (
+            <button
+              onClick={() => document.getElementById('dashboard-ai-upload-folder')?.click()}
+              disabled={isBatchProcessing}
+              title="Carica una cartella intera: prende tutte le buste paga dentro, anche nelle sottocartelle divise per anno"
+              className={`group relative px-5 py-3 rounded-xl font-bold text-sm transition-all duration-300 flex items-center gap-2.5 overflow-hidden border-2 shrink-0
+                  ${isBatchProcessing
+                  ? 'bg-slate-100 border-slate-200 opacity-50 dark:opacity-80 cursor-not-allowed'
+                  : 'bg-white/40 dark:bg-slate-800/40 text-slate-600 dark:text-slate-400 dark:text-slate-200 border-transparent hover:border-fuchsia-400/50 hover:shadow-[0_0_20px_rgba(217,70,239,0.3)]'
+                }`}
+            >
+              <FolderUp className="w-5 h-5 transition-colors duration-300 group-hover:text-fuchsia-400" />
+              <div className="flex flex-col items-start leading-none text-left">
+                <span className="text-[8.5px] uppercase tracking-[0.2em] opacity-70 group-hover:opacity-100 transition-all duration-300 mb-0.5 font-black">
+                  Multi-anno
+                </span>
+                <span className="tracking-widest font-black text-[13px] transition-all duration-300">
+                  CARTELLA
+                </span>
               </div>
             </button>
             )}
