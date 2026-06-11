@@ -1,7 +1,7 @@
 import React, { useRef } from 'react';
 import { motion } from 'framer-motion';
 import {
-  LayoutGrid, Calculator, TrendingUp, Wallet, Eye, X,
+  LayoutGrid, Calculator, TrendingUp, Wallet,
   Loader2, ScanLine, Bot, QrCode,
 } from 'lucide-react';
 import { useIsReadOnly } from '../../lib/readonly';
@@ -11,7 +11,7 @@ import { useWorkerDetail } from './WorkerDetailContext';
 // Possiede commandBarRef per l'effetto spotlight. Legge dal context.
 const WorkerDetailCommandBar: React.FC = () => {
   const {
-    isBatchProcessing, onBatchUpload, showSplit, onSetShowSplit,
+    isBatchProcessing, onBatchUpload,
     isAnalyzing, scanRef, onFileUpload, onOpenQR, activeTab, onSetActiveTab,
   } = useWorkerDetail();
   const isReadOnly = useIsReadOnly();
@@ -87,22 +87,8 @@ const WorkerDetailCommandBar: React.FC = () => {
             </button>
             )}
 
-            {/* TASTO CARICA BUSTA */}
-            <button
-              onClick={() => onSetShowSplit(!showSplit)}
-              className={`group relative px-6 py-3 rounded-xl font-bold text-sm transition-all duration-300 flex items-center gap-2 overflow-hidden border-2 shrink-0
-                  ${showSplit
-                  ? 'text-white shadow-lg shadow-pink-500/30 border-white/20'
-                  : 'bg-white/40 dark:bg-slate-800/40 text-slate-600 dark:text-slate-400 dark:text-slate-200 border-transparent hover:bg-white dark:hover:bg-slate-700 hover:text-pink-500 hover:shadow-md'
-                }`}
-              style={showSplit ? { backgroundImage: 'linear-gradient(135deg, #ec4899 0%, #f43f5e 100%)' } : {}}
-            >
-              <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500 rotate-12"></div>
-              <div className="relative z-10 flex items-center gap-2">
-                {showSplit ? <X className="w-5 h-5" /> : <Eye className="w-5 h-5 transition-transform duration-300 group-hover:scale-110" />}
-                <span className="hidden lg:inline">{showSplit ? 'Chiudi Visore' : 'Carica Busta Paga'}</span>
-              </div>
-            </button>
+            {/* Il tasto Carica Busta Paga / Chiudi Visore vive ora sulla barra
+                PERIODO della griglia (occhio "Visore" in MonthlyDataGrid). */}
 
             {/* TASTO SCAN AI — nascosto in modalita' sola lettura */}
             {!isReadOnly && (

@@ -39,6 +39,7 @@ import {
   ShieldCheck,
   Loader2,
   Archive as ArchiveIcon,
+  Eye,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useIsReadOnly } from '../../lib/readonly';
@@ -217,6 +218,8 @@ interface MonthlyDataGridProps {
   /** Visore affiancato: header a riga singola (niente griglia anni, card e ticker)
       per lasciare l'altezza alla tabella. */
   compact?: boolean;
+  /** Apre/chiude il visore buste affiancato (l'occhio sulla barra). */
+  onToggleViewer?: () => void;
 }
 
 // parseLocalFloat importato da formatters
@@ -245,6 +248,7 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
   activeMonthIndex = null,
   activeYear = null,
   compact = false,
+  onToggleViewer,
 }) => {
   const isReadOnly = useIsReadOnly();
   const [selectedYear, setSelectedYear] = useState<number>(initialYear);
@@ -1124,6 +1128,17 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
           {vistaToggle}
           {verifyYearBtn}
           {undoBtn}
+          {/* CHIUDI VISORE: gemello dell'occhio della barra piena, stato "aperto" */}
+          {onToggleViewer && (
+            <button
+              onClick={onToggleViewer}
+              title="Chiudi il visore buste paga"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border text-pink-200 bg-pink-600/30 border-pink-500/50 hover:bg-pink-600/60 hover:text-white shadow-sm transition-all duration-300 active:scale-95"
+            >
+              <X size={14} />
+              <span className="hidden sm:inline">Chiudi visore</span>
+            </button>
+          )}
         </div>
         ) : (
         /* Barra a ZONE: identità in colonna (logo sopra PERIODO, riempie
@@ -1183,8 +1198,23 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
             </button>
           </div>
 
-          {/* --- GRUPPO TASTI su DUE RIGHE (riempie l'altezza della barra) --- */}
-          <div className="flex flex-col items-stretch justify-center gap-1.5 shrink-0 mr-4">
+          {/* --- OCCHIO VISORE + GRUPPO TASTI su DUE RIGHE (niente angoli morti) --- */}
+          <div className="flex items-stretch gap-2 shrink-0 mr-4">
+            {/* OCCHIO VISORE: carica/affianca la busta paga alla griglia (era nella toolbar di pagina) */}
+            {onToggleViewer && (
+              <button
+                onClick={onToggleViewer}
+                title="Carica busta paga — apri il visore affiancato alla griglia"
+                className="group/eye relative w-[64px] self-stretch rounded-xl border border-slate-600 bg-slate-700/60 text-slate-300 overflow-hidden flex items-center justify-center transition-all duration-300 hover:border-pink-400/70 hover:text-white hover:shadow-[0_0_22px_rgba(236,72,153,0.4)] active:scale-95"
+              >
+                <div className="absolute inset-0 opacity-0 group-hover/eye:opacity-100 transition-opacity duration-300 bg-gradient-to-br from-pink-500 to-rose-500" />
+                <div className="relative z-10 flex flex-col items-center gap-0.5">
+                  <Eye className="w-6 h-6 transition-transform duration-300 group-hover/eye:scale-110" strokeWidth={2.2} />
+                  <span className="text-[8px] font-black uppercase tracking-widest">Visore</span>
+                </div>
+              </button>
+            )}
+            <div className="flex flex-col items-stretch justify-center gap-1.5">
             <div className="flex items-center justify-end gap-2">
               {/* TOGGLE VISTA: Variabili (credito) ⇄ Fisse (Quadro B, % incidenza) */}
               {vistaToggle}
@@ -1215,6 +1245,7 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
                   <span>Archivio</span>
                 </button>
               )}
+            </div>
             </div>
           </div>
 

@@ -948,6 +948,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
             onAcceptAllCorrections={handleAcceptAllCorrections}
             onOpenArchive={() => setActiveTab('archive')}
             compact={showSplit}
+            onToggleViewer={() => setShowSplit(!showSplit)}
           />
         </div>
       )}
