@@ -469,8 +469,8 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
           {/* LATO FRONTALE */}
           <div className="w-full h-full" style={{ backfaceVisibility: 'hidden', willChange: 'transform' }}>
               <div ref={divRef} onMouseMove={handleMouseMove} onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave}
-                className="group relative w-full h-full bg-white/70 dark:bg-slate-800/80 backdrop-blur-2xl border border-white/60 dark:border-slate-600 rounded-[2.5rem] overflow-hidden shadow-xl transition-all duration-500 hover:shadow-2xl hover:-translate-y-2 hover:scale-[1.01]"
-                style={{ ...theme.shadowStyle, borderColor: opacity > 0 ? theme.rawColor.start : `${theme.rawColor.start}59` }}
+                className="group relative w-full h-full bg-white/70 dark:bg-slate-800/80 backdrop-blur-2xl border-2 rounded-[2.5rem] overflow-hidden shadow-xl transition-all duration-500 hover:shadow-2xl hover:-translate-y-2 hover:scale-[1.01]"
+                style={{ ...theme.shadowStyle, borderColor: opacity > 0 ? theme.rawColor.start : `${theme.rawColor.start}a6` }}
               >
                 <div className="absolute inset-0 pointer-events-none z-0" style={{ backgroundImage: noiseBg, opacity: 0.4 }}></div>
 
