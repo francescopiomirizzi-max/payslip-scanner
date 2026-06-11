@@ -40,7 +40,7 @@ import WorkerCard from '../components/WorkerCard';
 import { groupThousandsIT } from '../utils/formatters';
 import { AnimatedCounter } from '../components/ui/AnimatedCounter';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
-import { useIsReadOnly } from '../lib/readonly';
+import { useIsReadOnly, useReadOnlyViewerName } from '../lib/readonly';
 import { Worker } from '../types';
 import { SYSTEM_PROFILES, SYSTEM_PROFILE_KEYS, getCompanyLogo } from '../config/profiles';
 import { CompanyLogo } from '../components/ui/CompanyLogo';
@@ -286,6 +286,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
     addToast,
 }) => {
     const isReadOnly = useIsReadOnly();
+    const viewerName = useReadOnlyViewerName();
     type SortKey = 'cognome' | 'credito' | 'status' | 'data';
     const [sortBy, setSortBy] = useState<SortKey>('cognome');
     const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
@@ -715,11 +716,22 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                         "Sola consultazione": senza, l'assenza dei bottoni sembra un bug */}
                     {isReadOnly && (
                         <div
-                            className="h-11 px-4 rounded-xl flex items-center gap-2 text-sm font-bold text-slate-500 dark:text-slate-300 bg-white/65 dark:bg-slate-800/65 border border-white/60 dark:border-slate-700/60 backdrop-blur-xl shadow-sm whitespace-nowrap cursor-default select-none"
+                            className="h-11 px-4 rounded-xl flex items-center gap-3 text-sm font-bold text-slate-500 dark:text-slate-300 bg-white/65 dark:bg-slate-800/65 border border-white/60 dark:border-slate-700/60 backdrop-blur-xl shadow-sm whitespace-nowrap cursor-default select-none"
                             title="Accesso in sola consultazione: puoi vedere pratiche, report e archivio ma non modificarli"
                         >
-                            <Eye className="w-4 h-4" strokeWidth={2.5} />
-                            <span>Sola consultazione</span>
+                            {viewerName && (
+                                <>
+                                    <div className="flex flex-col items-start leading-tight">
+                                        <span className="text-[8px] font-black uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">Account</span>
+                                        <span className="text-xs font-bold text-slate-700 dark:text-slate-200">{viewerName}</span>
+                                    </div>
+                                    <div className="w-px h-6 bg-slate-200/90 dark:bg-slate-600/80" />
+                                </>
+                            )}
+                            <div className="flex items-center gap-2">
+                                <Eye className="w-4 h-4" strokeWidth={2.5} />
+                                <span>Sola consultazione</span>
+                            </div>
                         </div>
                     )}
                     {!isReadOnly && (

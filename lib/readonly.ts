@@ -13,6 +13,30 @@ export const READONLY_VIEWER_UIDS = new Set<string>([
   '34967593-6447-45fd-a303-13ec842c7b9e', // vincenzocataneofg@gmail.com
 ]);
 
+// Nome da mostrare accanto al chip "Sola consultazione" della dashboard:
+// chi è collegato deve vedere a colpo d'occhio CON QUALE account sta guardando.
+export const READONLY_VIEWER_NAMES: Record<string, string> = {
+  '34967593-6447-45fd-a303-13ec842c7b9e': 'Vincenzo Cataneo',
+};
+
+/** Nome del viewer readonly collegato, o null se l'utente non è un viewer. */
+export function useReadOnlyViewerName(): string | null {
+  const [name, setName] = useState<string | null>(null);
+
+  useEffect(() => {
+    const update = (uid: string | undefined) =>
+      setName(uid ? READONLY_VIEWER_NAMES[uid] ?? null : null);
+
+    supabase.auth.getSession().then(({ data }) => update(data.session?.user.id));
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (_, session) => update(session?.user.id),
+    );
+    return () => subscription.unsubscribe();
+  }, []);
+
+  return name;
+}
+
 export function useIsReadOnly(): boolean {
   const [isReadOnly, setIsReadOnly] = useState(false);
 
