@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom'; // <--- AGGIUNGI QUESTA RIGA
 import { AnnoDati, Worker } from '../../types';
 import { formatCurrency } from '../../utils/formatters';
-import { Wallet, Printer, Edit3, Save, X, Info, Calculator, BookOpen, Calendar, FileSearch } from 'lucide-react';
+import { Wallet, Printer, Edit3, Save, X, Info, Calculator, BookOpen, Calendar, FileSearch, LayoutGrid } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { calculateTFR } from '../../utils/tfrCalculator';
@@ -15,6 +15,8 @@ interface TfrCalculationTableProps {
     startClaimYear: number;
     onDataChange: (newData: AnnoDati[]) => void;
     onUpdateWorkerFields?: (fields: Partial<Worker>) => void;
+    /** Porta al tab Inserimento Mensile (azione dell'empty state). */
+    onGoToInput?: () => void;
 }
 
 const TfrCalculationTable: React.FC<TfrCalculationTableProps> = ({
@@ -23,6 +25,7 @@ const TfrCalculationTable: React.FC<TfrCalculationTableProps> = ({
     startClaimYear,
     onDataChange,
     onUpdateWorkerFields,
+    onGoToInput,
 }) => {
 
     const { showNotification } = useIsland();
@@ -216,8 +219,17 @@ const TfrCalculationTable: React.FC<TfrCalculationTableProps> = ({
                 </div>
                 <h2 className="text-2xl font-black text-slate-800 dark:text-slate-200 mb-3 tracking-tight">Nessun TFR Calcolato</h2>
                 <p className="text-slate-500 dark:text-slate-400 max-w-md mb-8 leading-relaxed text-base font-medium">
-                    Non ci sono dati sufficienti per il calcolo del TFR. Assicurati che siano presenti importi spettanti nel tab "Gestione Dati" per gli anni lavorati.
+                    Non ci sono dati sufficienti per il calcolo del TFR. Assicurati che siano presenti importi spettanti nel tab "Inserimento Mensile" per gli anni lavorati.
                 </p>
+                {onGoToInput && (
+                    <button
+                        onClick={onGoToInput}
+                        className="flex items-center gap-2 px-6 py-3 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold shadow-lg shadow-blue-500/30 transition-all active:scale-95"
+                    >
+                        <LayoutGrid className="w-4 h-4" />
+                        Vai all'Inserimento Mensile
+                    </button>
+                )}
             </div>
         );
     }

@@ -963,6 +963,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
             startClaimYear={startClaimYear}
             years={dynamicYears}
             includePaidLeave={includePaidLeave}
+            onGoToInput={() => setActiveTab('input')}
           />
         </div>
       )}
@@ -974,6 +975,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
             eliorType={worker.eliorType}
             startClaimYear={startClaimYear}
             years={dynamicYears}
+            onGoToInput={() => setActiveTab('input')}
           />
         </div>
       )}
@@ -985,6 +987,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
             startClaimYear={startClaimYear}
             onDataChange={handleDataChange}
             onUpdateWorkerFields={onUpdateWorkerFields}
+            onGoToInput={() => setActiveTab('input')}
           />
         </div>
       )}

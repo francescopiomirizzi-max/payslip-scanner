@@ -25,7 +25,8 @@ import {
   Percent,
   CalendarPlus,
   Info,
-  FileSearch
+  FileSearch,
+  LayoutGrid
 } from 'lucide-react';
 
 interface AnnualCalculationTableProps {
@@ -37,6 +38,8 @@ interface AnnualCalculationTableProps {
   startClaimYear: number;
   years: number[];  // Range dinamico controllato dal parent
   includePaidLeave?: boolean; // Strategia B: assenze retribuite nel divisore
+  /** Porta al tab Inserimento Mensile (azione dell'empty state). */
+  onGoToInput?: () => void;
 }
 
 const MONTH_COLORS = [
@@ -57,6 +60,7 @@ const AnnualCalculationTable: React.FC<AnnualCalculationTableProps> = ({
   startClaimYear,
   years,
   includePaidLeave = false,
+  onGoToInput,
 }) => {
   const [expandedYears, setExpandedYears] = useState<Set<number>>(new Set());
   const [isCopied, setIsCopied] = useState(false);
@@ -199,8 +203,17 @@ const AnnualCalculationTable: React.FC<AnnualCalculationTableProps> = ({
         </div>
         <h2 className="text-2xl font-black text-slate-800 dark:text-slate-200 mb-3 tracking-tight">Nessun Dato Calcolabile</h2>
         <p className="text-slate-500 dark:text-slate-400 max-w-md mb-8 leading-relaxed text-base font-medium">
-          La tabella di calcolo annuale è vuota. Inserisci i dati mensili (ore o giornate lavorate/ferie) nel tab "Gestione Dati" per generare automaticamente il prospetto differenze.
+          La tabella di calcolo annuale è vuota. Inserisci i dati mensili (ore o giornate lavorate/ferie) nel tab "Inserimento Mensile" per generare automaticamente il prospetto differenze.
         </p>
+        {onGoToInput && (
+          <button
+            onClick={onGoToInput}
+            className="flex items-center gap-2 px-6 py-3 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold shadow-lg shadow-blue-500/30 transition-all active:scale-95"
+          >
+            <LayoutGrid className="w-4 h-4" />
+            Vai all'Inserimento Mensile
+          </button>
+        )}
       </div>
     );
   }

@@ -11,7 +11,7 @@ import {
 import { parseLocalFloat, formatCurrency, formatDay, getProfiloBadgeLabel } from '../../utils/formatters';
 import { SYSTEM_PROFILES, getCustomColorIndex, getCompanyLogo } from '../../config/profiles';
 import { CompanyLogo } from '../ui/CompanyLogo';
-import { Info, TrendingUp, DollarSign, FileSearch } from 'lucide-react';
+import { Info, TrendingUp, DollarSign, FileSearch, LayoutGrid } from 'lucide-react';
 
 
 
@@ -41,6 +41,8 @@ interface IndemnityPivotTableProps {
   eliorType?: 'viaggiante' | 'magazzino';
   startClaimYear?: number;
   years: number[];  // Range dinamico controllato dal parent
+  /** Porta al tab Inserimento Mensile (azione dell'empty state). */
+  onGoToInput?: () => void;
 }
 
 type ViewMode = 'total' | 'average';
@@ -50,7 +52,8 @@ const IndemnityPivotTable: React.FC<IndemnityPivotTableProps> = ({
   profilo,
   eliorType,
   startClaimYear = 2008,
-  years
+  years,
+  onGoToInput
 }) => {
 
   const [viewMode, setViewMode] = useState<ViewMode>('total');
@@ -187,8 +190,17 @@ const IndemnityPivotTable: React.FC<IndemnityPivotTableProps> = ({
         </div>
         <h2 className="text-2xl font-black text-slate-800 dark:text-slate-200 mb-3 tracking-tight">Nessun Riepilogo Disponibile</h2>
         <p className="text-slate-500 dark:text-slate-400 max-w-md mb-8 leading-relaxed text-base font-medium">
-          Non ci sono voci variabili registrate. Inserisci i dati mensili nel tab "Gestione Dati" per visualizzare la tabella pivot delle indennità.
+          Non ci sono voci variabili registrate. Inserisci i dati mensili nel tab "Inserimento Mensile" per visualizzare la tabella pivot delle indennità.
         </p>
+        {onGoToInput && (
+          <button
+            onClick={onGoToInput}
+            className="flex items-center gap-2 px-6 py-3 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold shadow-lg shadow-blue-500/30 transition-all active:scale-95"
+          >
+            <LayoutGrid className="w-4 h-4" />
+            Vai all'Inserimento Mensile
+          </button>
+        )}
       </div>
     );
   }
