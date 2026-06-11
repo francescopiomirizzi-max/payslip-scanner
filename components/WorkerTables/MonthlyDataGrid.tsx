@@ -1014,11 +1014,11 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
         `}</style>
 
         {/* --- HEADER --- */}
-        {/* TUTTI gli anni visibili (flex-wrap, colpo d'occhio richiesto
-            dall'utente); il gruppo controlli è una colonna FISSA fuori dal
-            contenitore che va a capo, così il wrap non lo trascina più. */}
+        {/* TUTTI gli anni visibili, in GRIGLIA a colonne uniformi (auto-fill):
+            le righe si allineano in colonne identiche, niente effetto "alla
+            rinfusa" del wrap libero. Logo/label/frecce sono colonne fisse. */}
         <div className="bg-slate-800 text-white p-2 flex items-center justify-between shrink-0 z-20 shadow-md">
-          <div className="flex flex-wrap items-center gap-1 flex-1 mr-3 min-w-0">
+          <div className="flex items-center gap-1 flex-1 mr-3 min-w-0">
             {/* Logo azienda: la barra resta visibile lavorando nella griglia,
                 quando l'header di pagina (nome+logo) è ormai scrollato via */}
             {getCompanyLogo(profilo) && (
@@ -1038,6 +1038,7 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
             >
               <ChevronLeft className="w-4 h-4" strokeWidth={2.5} />
             </button>
+            <div className="flex-1 min-w-0 grid gap-1 [grid-template-columns:repeat(auto-fill,minmax(78px,1fr))]">
             {years.map(year => {
               const filled = filledByYear.get(year)?.size ?? 0;
               const isSel = selectedYear === year;
@@ -1046,7 +1047,7 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
                   key={year}
                   onClick={() => handleYearChange(year)}
                   title={filled === 12 ? `${year} · completo (12/12)` : filled > 0 ? `${year} · ${filled}/12 mesi` : `${year} · nessun dato`}
-                  className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium transition-all duration-200 border ${
+                  className={`flex items-center justify-center gap-1.5 px-2 py-1 rounded-full text-sm font-medium transition-all duration-200 border ${
                     isSel ? 'bg-blue-500 text-white shadow-md border-blue-400'
                     : filled > 0 ? 'text-slate-200 bg-slate-700/60 border-slate-600/60 hover:bg-slate-600 hover:text-white'
                     : 'text-slate-500 border-transparent hover:bg-slate-700 hover:text-slate-200'
@@ -1058,6 +1059,7 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
                 </button>
               );
             })}
+            </div>
             <button
               onClick={goNextYear}
               disabled={selectedYearIdx === -1 || selectedYearIdx >= years.length - 1}
