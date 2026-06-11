@@ -3,8 +3,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     FileText, Trash2, ExternalLink, Archive, Loader2,
     AlertTriangle, Bot, CheckCircle2, ChevronDown, FolderOpen, Folder,
-    ShieldCheck, Download,
+    ShieldCheck, Download, LayoutGrid,
 } from 'lucide-react';
+import { CompanyLogo } from '../ui/CompanyLogo';
+import { getProfiloBadgeLabel } from '../../utils/formatters';
 import { zip } from 'fflate';
 import { usePayslipArchive, PayslipRecord, VerifyLogEntry } from '../../hooks/usePayslipArchive';
 import { notifyIsland } from '../DynamicIsland';
@@ -19,6 +21,8 @@ interface PayslipArchiveTabProps {
     // Se fornita, il visore in sola lettura apre la busta scelta nel SplitView
     // laterale invece che in una nuova scheda del browser.
     onOpenInViewer?: (url: string, name: string) => void;
+    /** Torna al tab Inserimento Mensile (tasto nell'header dell'archivio). */
+    onBackToGrid?: () => void;
 }
 
 const MONTH_ORDER: Record<string, number> = {
@@ -50,7 +54,7 @@ const MONTH_COLOR: Record<string, string> = {
 const formatDate = (iso: string) =>
     new Date(iso).toLocaleDateString('it-IT', { day: '2-digit', month: 'short', year: 'numeric' });
 
-export default function PayslipArchiveTab({ workerId, workerProfilo, workerEliorType, workerName, onCountChange, onOpenInViewer }: PayslipArchiveTabProps) {
+export default function PayslipArchiveTab({ workerId, workerProfilo, workerEliorType, workerName, onCountChange, onOpenInViewer, onBackToGrid }: PayslipArchiveTabProps) {
     const { getPayslipsByWorker, deletePayslip, getSignedUrl, getSignedUrls, updateExtractedData } = usePayslipArchive();
     const isReadOnly = useIsReadOnly();
 
@@ -113,6 +117,14 @@ export default function PayslipArchiveTab({ workerId, workerProfilo, workerElior
         });
         return { total, success, warning, error, discrepancies };
     }, [records]);
+
+    // "Vai all'anno": apre la cartella e ci scrolla sopra (19 anni = tanto scroll a mano)
+    const jumpToYear = (year: number) => {
+        setOpenYears(prev => new Set(prev).add(year));
+        requestAnimationFrame(() => {
+            document.getElementById(`archive-year-${year}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+    };
 
     const toggleYear = (year: number) => {
         setOpenYears(prev => {
@@ -277,13 +289,49 @@ export default function PayslipArchiveTab({ workerId, workerProfilo, workerElior
     return (
         <div className="h-full overflow-auto custom-scrollbar p-4 space-y-3">
 
-            {/* Totale + Download ZIP */}
-            <div className="flex items-center justify-between px-1">
-                <p className="text-xs font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">
-                    {records.length} busta{records.length !== 1 ? ' paga archiviate' : ' paga archiviata'}
-                    {' · '}
-                    {sortedYears.length} ann{sortedYears.length !== 1 ? 'i' : 'o'}
-                </p>
+            {/* Identità + totale | Vai all'anno + Torna alla griglia + Download ZIP */}
+            <div className="flex items-center justify-between gap-3 px-1 flex-wrap">
+                <div className="flex items-center gap-3 min-w-0">
+                    <CompanyLogo
+                        profilo={workerProfilo}
+                        eliorType={workerEliorType as 'viaggiante' | 'magazzino' | undefined}
+                        h={24}
+                        title={getProfiloBadgeLabel(workerProfilo as any, workerEliorType as any)}
+                    />
+                    <p className="text-xs font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">
+                        {records.length} busta{records.length !== 1 ? ' paga archiviate' : ' paga archiviata'}
+                        {' · '}
+                        {sortedYears.length} ann{sortedYears.length !== 1 ? 'i' : 'o'}
+                    </p>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                    {/* VAI ALL'ANNO: apre la cartella giusta senza scroll a mano */}
+                    <select
+                        value=""
+                        onChange={e => { const y = Number(e.target.value); if (y) jumpToYear(y); }}
+                        title="Salta direttamente a un anno dell'archivio"
+                        className="px-2 py-1.5 rounded-xl text-xs font-bold bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 cursor-pointer hover:border-slate-400 dark:hover:border-slate-500 transition-colors"
+                    >
+                        <option value="" disabled>Vai all'anno…</option>
+                        {sortedYears.map(y => (
+                            <option key={y} value={y}>{y} · {byYear[y].length} bust{byYear[y].length !== 1 ? 'e' : 'a'}</option>
+                        ))}
+                    </select>
+                    {/* TORNA ALLA GRIGLIA: ritorno rapido all'Inserimento Mensile */}
+                    {onBackToGrid && (
+                        <motion.button
+                            whileTap={{ scale: 0.93 }}
+                            onClick={onBackToGrid}
+                            title="Torna alla tabella di inserimento mensile"
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold
+                                bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600
+                                text-slate-700 dark:text-slate-200 shadow-sm transition-colors
+                                hover:border-blue-400 hover:text-blue-600 dark:hover:text-cyan-400 dark:hover:border-cyan-600"
+                        >
+                            <LayoutGrid className="w-3.5 h-3.5" />
+                            Torna alla griglia
+                        </motion.button>
+                    )}
                 <motion.button
                     whileTap={{ scale: 0.93 }}
                     onClick={handleDownloadAllZip}
@@ -306,6 +354,7 @@ export default function PayslipArchiveTab({ workerId, workerProfilo, workerElior
                         </>
                     )}
                 </motion.button>
+                </div>
             </div>
 
             {/* Banner statistiche verifiche AI */}
@@ -351,7 +400,7 @@ export default function PayslipArchiveTab({ workerId, workerProfilo, workerElior
                 const FolderIcon = isOpen ? FolderOpen : Folder;
 
                 return (
-                    <div key={year} className="rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-700 shadow-sm">
+                    <div key={year} id={`archive-year-${year}`} className="rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-700 shadow-sm scroll-mt-2">
 
                         {/* ── HEADER ANNO ────────────────────────────────── */}
                         <button

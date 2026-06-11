@@ -1066,6 +1066,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
               workerName={`${worker.cognome} ${worker.nome}`}
               onCountChange={setArchiveCount}
               onOpenInViewer={handleOpenArchivedInSplit}
+              onBackToGrid={() => setActiveTab('input')}
             />
           </div>
         </div>
