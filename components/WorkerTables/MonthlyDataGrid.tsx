@@ -205,7 +205,7 @@ interface MonthlyDataGridProps {
   // Verifica AI: chiave `${year}-${monthIndex}` → storage_path
   archiveEntries?: Record<string, string>;
   verifyStates?: Record<string, VerifyState>;
-  onVerifyRequest?: (row: AnnoDati) => void;
+  onVerifyRequest?: (row: AnnoDati) => void | Promise<void>;
   onAcceptCorrection?: (year: number, monthIndex: number, field: string, value: number) => void;
   onAcceptAllCorrections?: (year: number, monthIndex: number) => void;
   // Sincronizzazione col visore: mese (0-11) e anno del PDF attualmente mostrato.
@@ -240,6 +240,27 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
 }) => {
   const isReadOnly = useIsReadOnly();
   const [selectedYear, setSelectedYear] = useState<number>(initialYear);
+
+  // --- VERIFICA ANNO (batch AI) ---
+  // Lancia la verifica AI su tutti i mesi dell'anno selezionato che hanno sia
+  // dati sia il PDF in archivio, in SEQUENZA (una chiamata Gemini alla volta:
+  // quota e compute Netlify ringraziano). I semafori per-riga si aggiornano
+  // man mano via verifyStates.
+  const [batchVerify, setBatchVerify] = useState<{ done: number; total: number } | null>(null);
+  const verifiableRows = useMemo(
+    () => Array.from({ length: 12 }, (_, m) => data.find(d => d.year === selectedYear && d.monthIndex === m))
+      .filter((r): r is AnnoDati => !!r && !!archiveEntries[`${selectedYear}-${r.monthIndex}`]),
+    [data, selectedYear, archiveEntries]
+  );
+  const runVerifyYear = async () => {
+    if (!onVerifyRequest || batchVerify || verifiableRows.length === 0) return;
+    setBatchVerify({ done: 0, total: verifiableRows.length });
+    for (let i = 0; i < verifiableRows.length; i++) {
+      await onVerifyRequest(verifiableRows[i]);
+      setBatchVerify({ done: i + 1, total: verifiableRows.length });
+    }
+    setBatchVerify(null);
+  };
   // Vista colonne: 'variabili' (indennità del credito) ⇄ 'fisse' (Quadro B, base % incidenza).
   const [gridMode, setGridMode] = useState<'variabili' | 'fisse'>('variabili');
 
@@ -1068,6 +1089,25 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
                   </button>
                 </div>
               )}
+              {/* VERIFICA ANNO (batch AI): un click, 12 confronti busta↔griglia in sequenza */}
+              {!isReadOnly && onVerifyRequest && verifiableRows.length > 0 && (
+                <button
+                  onClick={runVerifyYear}
+                  disabled={!!batchVerify}
+                  title={`Verifica AI di tutti i mesi del ${selectedYear} con PDF in archivio (${verifiableRows.length} ${verifiableRows.length === 1 ? 'mese' : 'mesi'}, in sequenza)`}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all duration-300 border ${
+                    batchVerify
+                      ? 'text-violet-300 bg-violet-900/40 border-violet-700/60 cursor-wait'
+                      : 'text-violet-200 bg-violet-600/30 border-violet-500/50 hover:bg-violet-600/50 hover:text-white shadow-sm active:scale-95'
+                  }`}
+                >
+                  {batchVerify ? <Loader2 size={14} className="animate-spin" /> : <ShieldCheck size={14} />}
+                  <span className="hidden sm:inline">
+                    {batchVerify ? `Verifico ${batchVerify.done}/${batchVerify.total}…` : 'Verifica anno'}
+                  </span>
+                </button>
+              )}
+
               {/* TASTO UNDO (FRECCIA INDIETRO) - VERSIONE DEFINITIVA */}
               <button
                 onClick={handleUndo}
