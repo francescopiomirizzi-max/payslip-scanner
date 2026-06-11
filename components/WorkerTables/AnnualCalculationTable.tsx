@@ -10,7 +10,8 @@ import {
   getProfiloBadgeLabel
 } from '../../utils/formatters';
 import { computeHolidayIndemnity, computePeriodIncidence } from '../../utils/calculationEngine';
-import { SYSTEM_PROFILES, getCustomColorIndex } from '../../config/profiles';
+import { SYSTEM_PROFILES, getCustomColorIndex, getCompanyLogo } from '../../config/profiles';
+import { CompanyLogo } from '../ui/CompanyLogo';
 import {
   ChevronRight,
   ChevronDown,
@@ -210,9 +211,14 @@ const AnnualCalculationTable: React.FC<AnnualCalculationTableProps> = ({
           <div className="flex items-center gap-2">
             <Calculator className="w-4 h-4 text-emerald-400" />
             <span>CALCOLO DIFFERENZE PER ANNO</span>
-            <span className={`px-2 py-0.5 rounded text-[10px] font-bold tracking-widest border uppercase ${badgeClass}`}>
-              {getProfiloBadgeLabel(profilo)}
-            </span>
+            {getCompanyLogo(profilo) ? (
+              /* La barra è scura in entrambi i temi → silhouette bianca */
+              <CompanyLogo profilo={profilo} eliorType={eliorType} h={16} forceWhite title={getProfiloBadgeLabel(profilo, eliorType)} />
+            ) : (
+              <span className={`px-2 py-0.5 rounded text-[10px] font-bold tracking-widest border uppercase ${badgeClass}`}>
+                {getProfiloBadgeLabel(profilo)}
+              </span>
+            )}
           </div>
 
           <button

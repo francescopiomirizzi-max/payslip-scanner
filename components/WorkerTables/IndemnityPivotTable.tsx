@@ -9,7 +9,8 @@ import {
   ProfiloAzienda
 } from '../../types';
 import { parseLocalFloat, formatCurrency, formatDay, getProfiloBadgeLabel } from '../../utils/formatters';
-import { SYSTEM_PROFILES, getCustomColorIndex } from '../../config/profiles';
+import { SYSTEM_PROFILES, getCustomColorIndex, getCompanyLogo } from '../../config/profiles';
+import { CompanyLogo } from '../ui/CompanyLogo';
 import { Info, TrendingUp, DollarSign, FileSearch } from 'lucide-react';
 
 
@@ -197,9 +198,14 @@ const IndemnityPivotTable: React.FC<IndemnityPivotTableProps> = ({
       <div className="p-3 bg-slate-800 text-white font-bold text-sm tracking-wide flex justify-between items-center shrink-0">
         <div className="flex items-center gap-2">
           <span>RIEPILOGO VOCI VARIABILI</span>
-          <span className={`px-2 py-0.5 rounded text-[10px] border border-slate-600 uppercase tracking-tighter ${badgeClass}`}>
-            {getProfiloBadgeLabel(profilo)}
-          </span>
+          {getCompanyLogo(profilo) ? (
+            /* La barra è scura in entrambi i temi → silhouette bianca */
+            <CompanyLogo profilo={profilo} eliorType={eliorType} h={16} forceWhite title={getProfiloBadgeLabel(profilo, eliorType)} />
+          ) : (
+            <span className={`px-2 py-0.5 rounded text-[10px] border border-slate-600 uppercase tracking-tighter ${badgeClass}`}>
+              {getProfiloBadgeLabel(profilo)}
+            </span>
+          )}
         </div>
 
         {/* --- TOGGLE VIEW MODE --- */}
