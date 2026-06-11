@@ -216,8 +216,9 @@ export const useWorkers = (addToast: AddToast) => {
         const query = searchQuery.toLowerCase().trim();
         const fullName = `${w.nome} ${w.cognome}`.toLowerCase();
         const reverseName = `${w.cognome} ${w.nome}`.toLowerCase();
-        // L'azienda si cerca come la mostra la UI ("clean service", non "clean_service")
-        const azienda = (w.profilo ?? '').replace(/_/g, ' ').toLowerCase();
+        // L'azienda si cerca come la mostra la UI ("clean service", non "clean_service");
+        // per Elior entra anche il tipo: "elior viaggiante" / "elior magazzino"
+        const azienda = `${(w.profilo ?? '').replace(/_/g, ' ')}${w.profilo === 'ELIOR' && w.eliorType ? ' ' + w.eliorType : ''}`.toLowerCase();
         const ruolo = (w.ruolo ?? '').toLowerCase();
         const matchesSearch = !searchQuery
             || fullName.includes(query)

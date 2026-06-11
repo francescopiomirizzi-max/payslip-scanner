@@ -405,6 +405,11 @@ const WorkerModal: React.FC<WorkerModalProps> = ({ isOpen, onClose, onConfirm, i
                 });
             }
         }
+        // Autofocus sul primo campo, dopo l'animazione di ingresso del pannello
+        if (isOpen) {
+            const t = setTimeout(() => nomeRef.current?.focus(), 350);
+            return () => clearTimeout(t);
+        }
     }, [isOpen, mode, initialData]);
     // 👆 FINE BLOCCO DA AGGIUNGERE 👆
     const handleSubmit = (e?: React.FormEvent) => {
@@ -414,8 +419,14 @@ const WorkerModal: React.FC<WorkerModalProps> = ({ isOpen, onClose, onConfirm, i
             onClose();
         }
     };
-    // Navigazione Aggiornata
+    // Navigazione Aggiornata. Enter: naviga al campo successivo finché il form
+    // è incompleto, SALVA quando è valido (stessa semantica del bottone).
     const handleInputNavigation = (e: React.KeyboardEvent, currentField: string) => {
+        if (e.key === 'Enter' && isFormValid) {
+            e.preventDefault();
+            handleSubmit();
+            return;
+        }
         if (e.key === 'ArrowDown' || e.key === 'Enter') {
             e.preventDefault();
             if (currentField === 'nome') cognomeRef.current?.focus();
