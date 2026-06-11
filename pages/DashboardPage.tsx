@@ -772,19 +772,21 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                     {/* Footer Badge Stats */}
                     <div className="px-6 pb-6 relative z-10">
                         <div className="flex flex-wrap gap-3 opacity-90 group-hover:opacity-100 transition-opacity duration-500 translate-y-2 group-hover:translate-y-0">
-                            {SYSTEM_PROFILE_KEYS.map((key) => {
-                                const p = SYSTEM_PROFILES[key];
+                            {/* ELIOR sdoppiata per tipo, come i pill filtro (stessa famiglia arancio) */}
+                            {SYSTEM_PROFILE_KEYS.flatMap(k => k === 'ELIOR' ? [k, 'ELIOR_MAGAZZINO'] : [k]).map((key) => {
+                                const isEliorMag = key === 'ELIOR_MAGAZZINO';
+                                const p = SYSTEM_PROFILES[isEliorMag ? 'ELIOR' : key];
                                 return (
                                     <div key={key} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border backdrop-blur-md transition-colors ${p.footer.wrap}`}>
-                                        {getCompanyLogo(key) ? (
-                                            <CompanyLogo profilo={key} h={16} title={p.label} />
+                                        {getCompanyLogo(isEliorMag ? 'ELIOR' : key) ? (
+                                            <CompanyLogo profilo={isEliorMag ? 'ELIOR' : key} eliorType={isEliorMag ? 'magazzino' : undefined} h={16} title={isEliorMag ? 'Elior Magazzino' : p.label} />
                                         ) : (
                                             <>
                                                 <div className={`w-2 h-2 rounded-full ${p.footer.dot}`}></div>
                                                 <span className={`text-[11px] font-black transition-colors ${p.footer.name}`}>{p.label}</span>
                                             </>
                                         )}
-                                        <span className={`text-[11px] font-bold transition-colors ${p.footer.count}`}>{workers.filter(w => w.profilo === key).length}</span>
+                                        <span className={`text-[11px] font-bold transition-colors ${p.footer.count}`}>{workers.filter(w => matchesCompanyFilter(w, key)).length}</span>
                                     </div>
                                 );
                             })}
