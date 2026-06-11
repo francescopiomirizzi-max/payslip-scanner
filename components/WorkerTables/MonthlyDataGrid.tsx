@@ -38,6 +38,7 @@ import {
   ClipboardPaste,
   ShieldCheck,
   Loader2,
+  Archive as ArchiveIcon,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useIsReadOnly } from '../../lib/readonly';
@@ -206,6 +207,8 @@ interface MonthlyDataGridProps {
   archiveEntries?: Record<string, string>;
   verifyStates?: Record<string, VerifyState>;
   onVerifyRequest?: (row: AnnoDati) => void | Promise<void>;
+  /** Apre il tab Archivio del lavoratore (scorciatoia dalla barra, senza risalire). */
+  onOpenArchive?: () => void;
   onAcceptCorrection?: (year: number, monthIndex: number, field: string, value: number) => void;
   onAcceptAllCorrections?: (year: number, monthIndex: number) => void;
   // Sincronizzazione col visore: mese (0-11) e anno del PDF attualmente mostrato.
@@ -233,6 +236,7 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
   archiveEntries = {},
   verifyStates = {},
   onVerifyRequest,
+  onOpenArchive,
   onAcceptCorrection,
   onAcceptAllCorrections,
   activeMonthIndex = null,
@@ -1014,22 +1018,23 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
         `}</style>
 
         {/* --- HEADER --- */}
-        {/* TUTTI gli anni visibili, in GRIGLIA a colonne uniformi (auto-fill):
-            le righe si allineano in colonne identiche, niente effetto "alla
-            rinfusa" del wrap libero. Logo/label/frecce sono colonne fisse. */}
-        <div className="bg-slate-800 text-white p-2 flex items-center justify-between shrink-0 z-20 shadow-md">
-          <div className="flex items-center gap-1 flex-1 mr-3 min-w-0">
-            {/* Logo azienda: la barra resta visibile lavorando nella griglia,
-                quando l'header di pagina (nome+logo) è ormai scrollato via */}
+        {/* Barra a ZONE: identità in colonna (logo sopra PERIODO, riempie
+            l'altezza), griglia anni a colonne uniformi con larghezza minima
+            (a pagina stretta la zona va a capo INTERA, mai a 1 colonna),
+            controlli su due righe (niente angoli morti). */}
+        <div className="bg-slate-800 text-white p-2 flex flex-wrap items-center justify-between gap-y-2 shrink-0 z-20 shadow-md">
+          {/* IDENTITÀ — logo visibile anche con l'header di pagina scrollato via */}
+          <div className="flex flex-col items-start justify-center gap-1.5 px-3 border-r border-slate-600 shrink-0 self-stretch">
             {getCompanyLogo(profilo) && (
-              <div className="flex items-center px-3 border-r border-slate-600 mr-1 h-8 shrink-0">
-                <CompanyLogo profilo={profilo} eliorType={eliorType} h={16} forceWhite title={getProfiloBadgeLabel(profilo, eliorType)} />
-              </div>
+              <CompanyLogo profilo={profilo} eliorType={eliorType} h={18} forceWhite title={getProfiloBadgeLabel(profilo, eliorType)} />
             )}
-            <div className="flex items-center px-3 text-slate-400 border-r border-slate-600 mr-2 h-8 shrink-0">
+            <div className="flex items-center text-slate-400">
               <Calendar className="w-4 h-4 mr-2" />
               <span className="text-xs font-bold uppercase tracking-widest select-none">Periodo</span>
             </div>
+          </div>
+          {/* ANNI */}
+          <div className="flex items-center gap-1 flex-1 min-w-[300px] px-1.5">
             <button
               onClick={goPrevYear}
               disabled={selectedYearIdx <= 0}
@@ -1070,8 +1075,9 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
             </button>
           </div>
 
-          {/* --- GRUPPO TASTI (UNDO + MANUALE LEGALE) — colonna fissa, fuori dal wrap --- */}
-          <div className="flex items-center gap-2 shrink-0 mr-4">
+          {/* --- GRUPPO TASTI su DUE RIGHE (riempie l'altezza della barra) --- */}
+          <div className="flex flex-col items-stretch justify-center gap-1.5 shrink-0 mr-4">
+            <div className="flex items-center justify-end gap-2">
               {/* TOGGLE VISTA: Variabili (credito) ⇄ Fisse (Quadro B, % incidenza) */}
               {hasFixedCols && (
                 <div className="flex items-center rounded-full bg-slate-900/60 border border-slate-600 p-0.5 shadow-inner">
@@ -1109,7 +1115,8 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
                   </span>
                 </button>
               )}
-
+            </div>
+            <div className="flex items-center justify-end gap-2">
               {/* TASTO UNDO (FRECCIA INDIETRO) - VERSIONE DEFINITIVA */}
               <button
                 onClick={handleUndo}
@@ -1139,6 +1146,19 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
                 <Scale size={14} className="text-amber-400 group-hover:scale-110 transition-transform" />
                 <span>Manuale Legale</span>
               </button>
+
+              {/* ARCHIVIO BUSTE — scorciatoia: niente risalita ai tab in alto */}
+              {onOpenArchive && (
+                <button
+                  onClick={onOpenArchive}
+                  title="Apri l'archivio buste paga di questo lavoratore"
+                  className="flex items-center gap-2 px-4 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-200 hover:text-white rounded-full text-xs font-bold transition-all duration-300 border border-slate-600 hover:border-slate-500 shadow-sm group dark:bg-slate-800 dark:border-slate-700 dark:hover:bg-slate-700"
+                >
+                  <ArchiveIcon size={14} className="text-sky-400 group-hover:scale-110 transition-transform" />
+                  <span>Archivio</span>
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="flex items-center gap-4 pr-2 pl-4 border-l border-slate-600 shrink-0">

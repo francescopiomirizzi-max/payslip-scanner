@@ -946,6 +946,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
             onVerifyRequest={handleVerifyRequest}
             onAcceptCorrection={handleAcceptCorrection}
             onAcceptAllCorrections={handleAcceptAllCorrections}
+            onOpenArchive={() => setActiveTab('archive')}
           />
         </div>
       )}
