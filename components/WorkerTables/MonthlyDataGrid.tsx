@@ -295,6 +295,14 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
   const topScrollRef = useRef<HTMLDivElement>(null);
   const bottomScrollRef = useRef<HTMLDivElement>(null);
 
+  // Striscia anni: l'anno selezionato resta sempre in vista (scroll silenzioso)
+  const yearsStripRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    yearsStripRef.current
+      ?.querySelector(`[data-year="${selectedYear}"]`)
+      ?.scrollIntoView({ inline: 'nearest', block: 'nearest', behavior: 'smooth' });
+  }, [selectedYear]);
+
   // Larghezza dinamica per scorrere fino alla fine
   const [tableScrollWidth, setTableScrollWidth] = useState(0);
   // STATO SCROLL (Per disabilitare hover pesanti mentre si muove)
@@ -987,12 +995,18 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
           .gpu-render {
             contain: layout style; /* Isola la tabella: se cambia una cella, il browser non ricalcola l'intera pagina */
           }
+          /* Striscia anni: scroll senza scrollbar visibile (l'hint è il fade ai bordi) */
+          .years-strip { scrollbar-width: none; }
+          .years-strip::-webkit-scrollbar { display: none; }
         `}</style>
 
         {/* --- HEADER --- */}
+        {/* Anni su UNA riga a scroll silenzioso (scrollbar nascosta + fade ai
+            bordi); l'anno selezionato resta sempre in vista via scrollIntoView.
+            Niente flex-wrap: il gruppo destro non finisce più a capo. */}
         <div className="bg-slate-800 text-white p-2 flex items-center justify-between shrink-0 z-20 shadow-md">
-          <div className="flex flex-wrap items-center gap-1 flex-1 mr-4">
-            <div className="flex items-center px-3 text-slate-400 border-r border-slate-600 mr-2 h-8">
+          <div className="flex items-center gap-1 flex-1 mr-4 min-w-0">
+            <div className="flex items-center px-3 text-slate-400 border-r border-slate-600 mr-2 h-8 shrink-0">
               <Calendar className="w-4 h-4 mr-2" />
               <span className="text-xs font-bold uppercase tracking-widest select-none">Periodo</span>
             </div>
@@ -1000,19 +1014,24 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
               onClick={goPrevYear}
               disabled={selectedYearIdx <= 0}
               title="Anno precedente"
-              className="p-1 rounded-full text-slate-400 hover:text-white hover:bg-slate-700 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-slate-400 transition-colors"
+              className="p-1 rounded-full text-slate-400 hover:text-white hover:bg-slate-700 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-slate-400 transition-colors shrink-0"
             >
               <ChevronLeft className="w-4 h-4" strokeWidth={2.5} />
             </button>
+            <div
+              ref={yearsStripRef}
+              className="flex items-center gap-1 flex-1 min-w-0 overflow-x-auto years-strip [mask-image:linear-gradient(to_right,transparent,black_14px,black_calc(100%-14px),transparent)]"
+            >
             {years.map(year => {
               const filled = filledByYear.get(year)?.size ?? 0;
               const isSel = selectedYear === year;
               return (
                 <button
                   key={year}
+                  data-year={year}
                   onClick={() => handleYearChange(year)}
                   title={filled === 12 ? `${year} · completo (12/12)` : filled > 0 ? `${year} · ${filled}/12 mesi` : `${year} · nessun dato`}
-                  className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium transition-all duration-200 border ${
+                  className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium transition-all duration-200 border shrink-0 ${
                     isSel ? 'bg-blue-500 text-white shadow-md border-blue-400'
                     : filled > 0 ? 'text-slate-200 bg-slate-700/60 border-slate-600/60 hover:bg-slate-600 hover:text-white'
                     : 'text-slate-500 border-transparent hover:bg-slate-700 hover:text-slate-200'
@@ -1024,17 +1043,18 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
                 </button>
               );
             })}
+            </div>
             <button
               onClick={goNextYear}
               disabled={selectedYearIdx === -1 || selectedYearIdx >= years.length - 1}
               title="Anno successivo"
-              className="p-1 rounded-full text-slate-400 hover:text-white hover:bg-slate-700 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-slate-400 transition-colors"
+              className="p-1 rounded-full text-slate-400 hover:text-white hover:bg-slate-700 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-slate-400 transition-colors shrink-0"
             >
               <ChevronRight className="w-4 h-4" strokeWidth={2.5} />
             </button>
 
             {/* --- GRUPPO TASTI DESTRA (UNDO + MANUALE LEGALE) --- */}
-            <div className="ml-auto flex items-center gap-2">
+            <div className="ml-2 flex items-center gap-2 shrink-0">
               {/* TOGGLE VISTA: Variabili (credito) ⇄ Fisse (Quadro B, % incidenza) */}
               {hasFixedCols && (
                 <div className="flex items-center rounded-full bg-slate-900/60 border border-slate-600 p-0.5 shadow-inner">

@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { useIsland } from '../IslandContext'; // 👈 ECCOLA QUI!
 import { Worker, AnnoDati, getColumnsByProfile } from '../types';
-import { parseLocalFloat, formatCurrency, formatNumber, formatLongDate } from '../utils/formatters';
+import { parseLocalFloat, formatCurrency, formatNumber, formatLongDate, getProfiloBadgeLabel } from '../utils/formatters';
 import { EXCLUDED_INDEMNITY_COLS } from '../utils/calculationEngine';
 import { computeRiepilogoData } from '../utils/riepilogoReport';
 // exportSingleWorkerZip / captureReportPdfBlob sono import DINAMICI (vedi handleDownloadAll):
@@ -550,7 +550,8 @@ Distinti saluti.
                   Incidenza degli elementi accessori ai fini del calcolo annuale della retribuzione feriale lavoratore:
                 </div>
                 <div className="text-lg font-normal normal-case print:text-base">
-                  <span className="font-bold mr-2">{worker.cognome} {worker.nome}</span> - Profilo: {worker.ruolo}
+                  {/* Azienda in chiaro: è un documento (Stampa) → testo, mai logo */}
+                  <span className="font-bold mr-2">{worker.cognome} {worker.nome}</span> - Azienda: {getProfiloBadgeLabel(worker.profilo, worker.eliorType)} - Profilo: {worker.ruolo}
                 </div>
                 <div className="text-lg font-normal normal-case">
                   Periodo interessato: dal 01-01-{startYear} al 31-12-{endYear}
