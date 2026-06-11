@@ -423,7 +423,6 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
     return {
       rawColor: c,
       spotlight: c.glow.replace('0.5', '0.25'),
-      iconClasses: c.classes, // <--- LA NOSTRA NUOVA MAGIA TAILWIND
       iconStyle: { color: c.text }, // (Mantenuto per vecchi elementi)
       iconBgStyle: { backgroundColor: c.bg, borderColor: c.border }, // (Mantenuto per sicurezza)
       btnTextStyle: { color: c.text },
@@ -474,6 +473,13 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
                 style={{ ...theme.shadowStyle, borderColor: opacity > 0 ? theme.rawColor.start : '' }}
               >
                 <div className="absolute inset-0 pointer-events-none z-0" style={{ backgroundImage: noiseBg, opacity: 0.4 }}></div>
+
+                {/* TESTATA AZIENDA: gradiente del brand sulla fascia alta (avatar+nome+logo)
+                    che sfuma nel vetro — l'azienda si riconosce a colpo d'occhio. */}
+                <div
+                  className="absolute inset-x-0 top-0 h-36 pointer-events-none z-0"
+                  style={{ background: `linear-gradient(160deg, ${theme.rawColor.start}38 0%, ${theme.rawColor.end}1c 55%, transparent 100%)` }}
+                />
                 <div className="pointer-events-none absolute -inset-px opacity-0 transition duration-300 z-10" style={{ opacity, background: `radial-gradient(600px circle at ${position.x}px ${position.y}px, ${theme.spotlight}, transparent 40%)` }} />
 
                 {/* TACCA STATO — il colore della card dice l'azienda, questa dice
@@ -489,7 +495,10 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
 
                 <div className="relative p-7 flex flex-col h-full z-20 pl-8">
                   <div className="flex items-start gap-3 mb-4">
-                    <div className={`w-16 h-16 rounded-2xl flex items-center justify-center border shadow-sm transition-all duration-500 group-hover:rotate-3 group-hover:scale-110 shrink-0 ${theme.iconClasses}`}>
+                    <div
+                      className="w-16 h-16 rounded-2xl flex items-center justify-center border border-white/30 shadow-md transition-all duration-500 group-hover:rotate-3 group-hover:scale-110 shrink-0 text-white"
+                      style={{ ...theme.gradientStyle, boxShadow: `0 6px 18px -6px ${theme.rawColor.glow}` }}
+                    >
                       <RoleIcon className="w-8 h-8" strokeWidth={1.5} />
                     </div>
                     <div className="flex-1 min-w-0">
