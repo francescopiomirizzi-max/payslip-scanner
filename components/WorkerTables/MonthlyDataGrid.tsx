@@ -9,7 +9,9 @@ import {
   ProfiloAzienda,
   evaluateFormula
 } from '../../types';
-import { parseLocalFloat, formatCurrency, formatDay } from '../../utils/formatters';
+import { parseLocalFloat, formatCurrency, formatDay, getProfiloBadgeLabel } from '../../utils/formatters';
+import { getCompanyLogo } from '../../config/profiles';
+import { CompanyLogo } from '../ui/CompanyLogo';
 import { monthsByYearFromAnni } from '../../utils/workerStatus';
 import { PortalTooltip } from '../ui/PortalTooltip';
 import {
@@ -996,6 +998,13 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
             contenitore che va a capo, così il wrap non lo trascina più. */}
         <div className="bg-slate-800 text-white p-2 flex items-center justify-between shrink-0 z-20 shadow-md">
           <div className="flex flex-wrap items-center gap-1 flex-1 mr-3 min-w-0">
+            {/* Logo azienda: la barra resta visibile lavorando nella griglia,
+                quando l'header di pagina (nome+logo) è ormai scrollato via */}
+            {getCompanyLogo(profilo) && (
+              <div className="flex items-center px-3 border-r border-slate-600 mr-1 h-8 shrink-0">
+                <CompanyLogo profilo={profilo} eliorType={eliorType} h={16} forceWhite title={getProfiloBadgeLabel(profilo, eliorType)} />
+              </div>
+            )}
             <div className="flex items-center px-3 text-slate-400 border-r border-slate-600 mr-2 h-8 shrink-0">
               <Calendar className="w-4 h-4 mr-2" />
               <span className="text-xs font-bold uppercase tracking-widest select-none">Periodo</span>
