@@ -42,8 +42,6 @@ export function usePayslipUpload({
     }
   }, [batchNotification]);
 
-  const delay = (ms: number) => new Promise<void>(res => setTimeout(res, ms));
-
   const toBase64 = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -282,9 +280,20 @@ export function usePayslipUpload({
 
     const expectedColumns = getColumnsByProfile(worker.profilo, worker.eliorType) || [];
 
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
+    // Flush incrementale: snapshot dello stato ogni FLUSH_EVERY buste completate.
+    // Cadenza ~1 per anno = stesse scritture Supabase del vecchio flusso manuale
+    // per-anno (ogni setMonthlyInputs innesca l'autosave debounced del parent);
+    // così un crash del tab a metà di un batch multi-anno non perde le scansioni
+    // già riuscite.
+    const FLUSH_EVERY = 12;
+    let completedCount = 0;
+    const flushPartial = () => {
+      const snapshot: AnnoDati[] = JSON.parse(JSON.stringify(currentAnni));
+      snapshot.sort((a, b) => a.year - b.year || a.monthIndex - b.monthIndex);
+      setMonthlyInputs(snapshot);
+    };
 
+    const processFile = async (file: File) => {
       const monthNames = [
         'Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
         'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre',
@@ -303,8 +312,6 @@ export function usePayslipUpload({
         label = file.name.length > 18 ? file.name.substring(0, 18) + '...' : file.name;
       }
       window.dispatchEvent(new CustomEvent('island-scan-label', { detail: label }));
-
-      if (!isSingle) updateUploadProgress(i + 1);
 
       try {
         const base64String = await toBase64(file);
@@ -364,7 +371,7 @@ export function usePayslipUpload({
           }
           errorCount++;
           failedFiles.push(label);
-          continue;
+          return;
         }
 
         // TRADUTTORE TITANIUM V3 — priorità assoluta all'anno nel nome file
@@ -410,7 +417,7 @@ export function usePayslipUpload({
           console.error('❌ Impossibile determinare data per il file:', file.name);
           errorCount++;
           failedFiles.push(label);
-          continue;
+          return;
         }
 
         lastDetectedYear = targetYear;
@@ -536,12 +543,33 @@ export function usePayslipUpload({
         console.error('Errore generico batch', error);
         errorCount++;
         failedFiles.push(label);
+      } finally {
+        completedCount++;
+        if (!isSingle) {
+          updateUploadProgress(completedCount);
+          if (completedCount % FLUSH_EVERY === 0 && completedCount < files.length) {
+            flushPartial();
+          }
+        }
       }
+    };
 
-      if (!isSingle && i < files.length - 1) {
-        await delay(1500);
-      }
-    }
+    // Pool di concorrenza: 3 scansioni simultanee invece del giro sequenziale con
+    // pausa fissa di 1.5s — il throttling lo fa la dimensione del pool. Il backend
+    // parte da una chiave API casuale del suo pool da 3: statisticamente le
+    // richieste parallele non si accodano sullo stesso progetto GCP. Le mutazioni
+    // su currentAnni avvengono in blocchi sincroni (nessun await tra findIndex/push
+    // e le scritture) → nessuna race tra file dello stesso mese.
+    const SCAN_CONCURRENCY = 3;
+    const fileArray = Array.from(files);
+    let nextFile = 0;
+    await Promise.all(
+      Array.from({ length: Math.min(SCAN_CONCURRENCY, fileArray.length) }, async () => {
+        while (nextFile < fileArray.length) {
+          await processFile(fileArray[nextFile++]);
+        }
+      })
+    );
 
     currentAnni.sort((a: AnnoDati, b: AnnoDati) => {
       if (a.year !== b.year) return a.year - b.year;

@@ -40,7 +40,12 @@ export function clientIp(event: { headers: Record<string, string | undefined> })
 
 /**
  * Helper per le scan functions: limita per session_id E per IP.
- * Soglie: 30 chiamate / 5 min per session_id; 60 / 5 min per IP.
+ * Soglie: 30 chiamate / 5 min per session_id (path QR); 300 / 5 min per IP.
+ * Il bucket IP è largo apposta: l'upload massivo desktop (che non manda
+ * sessionId) deve poter caricare l'intero archivio 2008-2025 in un colpo solo
+ * (~216 file + retry, pool da 3 simultanee ≈ 75 req/5min) senza farsi
+ * strozzare. 300/5min resta comunque un freno reale contro chi brutalizza la
+ * quota Gemini da un singolo IP.
  */
 export function checkScanRateLimit(sessionId: string | undefined, ip: string): { allowed: boolean; reason?: string } {
     const FIVE_MIN = 5 * 60 * 1000;
@@ -48,7 +53,7 @@ export function checkScanRateLimit(sessionId: string | undefined, ip: string): {
         const r = checkRateLimit(`scan:sess:${sessionId}`, 30, FIVE_MIN);
         if (!r.allowed) return { allowed: false, reason: `Limite sessione raggiunto. Riprova tra ${Math.ceil(r.resetInMs / 1000)}s.` };
     }
-    const ipResult = checkRateLimit(`scan:ip:${ip}`, 60, FIVE_MIN);
+    const ipResult = checkRateLimit(`scan:ip:${ip}`, 300, FIVE_MIN);
     if (!ipResult.allowed) return { allowed: false, reason: `Troppe scansioni dallo stesso dispositivo. Riprova tra ${Math.ceil(ipResult.resetInMs / 1000)}s.` };
     return { allowed: true };
 }

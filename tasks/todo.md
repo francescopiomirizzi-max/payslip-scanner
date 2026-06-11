@@ -48,3 +48,35 @@ Piano approvato in conversazione: cross-link funzionali sul dettaglio Riposi + b
     combaciano via slice(0,4).
 - ux-backlog.md aggiornato (N+S spuntati); prossimi del bundle: E (tilt 3D), O (skeleton).
 - NON deployato (batching Netlify, deploy fissato 2026-06-17).
+
+# Upload massivo parallelo (2026-06-11)
+
+Obiettivo: batch 2008–2025 in un colpo solo, non presidiato, senza cambiare
+NIENTE della logica di estrazione/applicazione dati (Titanium V3 intatto).
+
+- [x] 1. usePayslipUpload: pool di concorrenza 3 (una per chiave API) al posto
+      del for sequenziale; via la pausa fissa 1500ms; progresso = completati.
+      Il corpo per-file resta IDENTICO (solo estratto in funzione): le mutazioni
+      su currentAnni sono in blocchi sincroni → nessuna race su findIndex/push.
+- [x] 2. Flush incrementale: setMonthlyInputs con snapshot deep-copy ogni 12
+      buste completate (stessa cadenza di scritture Supabase del flusso manuale
+      attuale, via autosave debounced 300ms) — un crash a metà non perde tutto.
+- [x] 3. _rateLimit: bucket IP 60→300 / 5 min (il batch desktop non manda
+      sessionId: conta solo l'IP; 216 file + retry a pool 3 ≈ 75 req/5min).
+      Bucket sessione QR resta 30/5min.
+- [x] 4. Verifica: tsc --noEmit pulito · vite build ok · **173 test verdi** ·
+      diff riletto a freddo.
+
+## Review (upload parallelo)
+
+- Il corpo per-file è IDENTICO al precedente (solo estratto in `processFile`,
+  `continue`→`return`): zero modifiche alla logica Titanium V3 / merge codici.
+- Sicurezza concorrenza: dopo l'ultimo `await` (fetch) l'applicazione del
+  risultato a `currentAnni` è un unico blocco sincrono → niente race su
+  findIndex/push anche con 3 file in volo.
+- Progresso island = buste completate (in parallelo "file corrente" non ha
+  più senso); flush ogni 12 completate ma MAI sull'ultima (il flush finale
+  c'è già, si evita il doppio autosave).
+- Resa attesa: anno da ~3 min → ~1 min; archivio intero 2008-2025 caricabile
+  in un colpo (~15 min non presidiati) grazie al bucket IP 300/5min.
+- NON deployato (batching Netlify, deploy ufficiale 2026-06-18).
