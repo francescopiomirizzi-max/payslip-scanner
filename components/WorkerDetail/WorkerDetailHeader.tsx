@@ -130,7 +130,7 @@ const WorkerDetailHeader: React.FC = () => {
                   <BadgeCheck className="w-6 h-6 text-blue-500 dark:text-cyan-400 transition-colors" />
                   {getCompanyLogo(worker.profilo) ? (
                     <span className="ml-2 inline-flex items-center gap-1.5">
-                      <CompanyLogo profilo={worker.profilo} eliorType={worker.eliorType} h={16} title={getProfiloBadgeLabel(worker.profilo, worker.eliorType)} />
+                      <CompanyLogo profilo={worker.profilo} eliorType={worker.eliorType} h={20} title={getProfiloBadgeLabel(worker.profilo, worker.eliorType)} />
                       {worker.profilo === 'ELIOR' && worker.eliorType && (
                         <span className={`px-2 py-1 rounded-md text-[11px] font-black uppercase tracking-tighter border transition-colors ${badgeStyles}`}>{worker.eliorType === 'viaggiante' ? 'Viag.' : 'Mag.'}</span>
                       )}
