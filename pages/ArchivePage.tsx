@@ -475,18 +475,18 @@ const ArchivePage: React.FC<ArchivePageProps> = ({ workers, onBack, initialWorke
                     <button
                       type="button"
                       onClick={() => toggleGroup(group.id)}
-                      className="w-full sticky top-0 z-10 flex items-center gap-2 px-4 py-2.5 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors text-left"
+                      className="w-full sticky top-0 z-10 flex items-center gap-2.5 px-4 py-3.5 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors text-left"
                     >
                       {isGroupOpen
-                        ? <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                        : <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                        ? <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />
+                        : <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
                       }
                       {getCompanyLogo(logoProfilo) ? (
-                        <CompanyLogo profilo={logoProfilo} eliorType={isEliorMag ? 'magazzino' : undefined} h={14} title={groupLabel} />
+                        <CompanyLogo profilo={logoProfilo} eliorType={isEliorMag ? 'magazzino' : undefined} h={19} title={groupLabel} />
                       ) : (
-                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">{groupLabel}</span>
+                        <span className="text-xs font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">{groupLabel}</span>
                       )}
-                      <span className="ml-auto text-[10px] font-bold tabular-nums text-slate-400">{group.workers.length}</span>
+                      <span className="ml-auto text-xs font-bold tabular-nums text-slate-400">{group.workers.length}</span>
                     </button>
                     <AnimatePresence initial={false}>
                     {isGroupOpen && (
