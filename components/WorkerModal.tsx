@@ -905,13 +905,14 @@ const WorkerModal: React.FC<WorkerModalProps> = ({ isOpen, onClose, onConfirm, i
                                                         <div className="relative z-10 flex flex-col items-center gap-3">
                                                             {getCompanyLogo(opt.value) ? (
                                                                 /* Logo nudo (niente riquadro bianco): colori originali a riposo,
-                                                                   silhouette bianca quando la tile è riempita dal gradiente. */
+                                                                   silhouette bianca quando la tile è riempita dal gradiente.
+                                                                   La tile ELIOR segue il toggle viaggiante/magazzino. */
                                                                 <motion.div
                                                                     animate={isSelected ? { rotate: [0, -4, 4, 0], scale: 1.1 } : { rotate: 0, scale: 1 }}
                                                                     transition={{ duration: 0.5, ease: "easeInOut" }}
                                                                     className="h-14 flex items-center"
                                                                 >
-                                                                    <CompanyLogo profilo={opt.value} h={28} forceWhite={isSelected} />
+                                                                    <CompanyLogo profilo={opt.value} eliorType={opt.value === 'ELIOR' ? formData.eliorType : undefined} h={30} forceWhite={isSelected} />
                                                                 </motion.div>
                                                             ) : (
                                                             <motion.div
@@ -925,9 +926,12 @@ const WorkerModal: React.FC<WorkerModalProps> = ({ isOpen, onClose, onConfirm, i
                                                             )}
 
                                                             <div>
-                                                                <p className={`text-lg font-black transition-colors duration-300 leading-none ${isSelected ? 'text-white drop-shadow-sm' : 'text-slate-700 dark:text-slate-300'}`}>
-                                                                    {opt.label}
-                                                                </p>
+                                                                {/* Col logo il nome è ridondante: resta solo il sottotitolo */}
+                                                                {!getCompanyLogo(opt.value) && (
+                                                                    <p className={`text-lg font-black transition-colors duration-300 leading-none ${isSelected ? 'text-white drop-shadow-sm' : 'text-slate-700 dark:text-slate-300'}`}>
+                                                                        {opt.label}
+                                                                    </p>
+                                                                )}
                                                                 <p className={`text-[10px] font-bold uppercase mt-1.5 transition-colors duration-300 tracking-wider ${isSelected ? 'text-white/90' : 'text-slate-400 dark:text-slate-500'}`}>
                                                                     {opt.sub}
                                                                 </p>
