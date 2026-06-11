@@ -1085,7 +1085,7 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
         {compact ? (
         /* Barra COMPATTA (visore affiancato): una sola riga — logo, ‹ anno ›,
            vista, verifica, annulla. Tutta l'altezza risparmiata va alla tabella. */
-        <div className="bg-slate-800 text-white px-2 py-1 flex flex-wrap items-center gap-x-2 gap-y-1 shrink-0 z-20 shadow-md">
+        <div className="bg-slate-800 text-white px-2 py-2 flex flex-wrap items-center gap-x-2 gap-y-1 shrink-0 z-20 shadow-md">
           {getCompanyLogo(profilo) && (
             <div className="px-1.5 border-r border-slate-600 self-stretch flex items-center shrink-0">
               <CompanyLogo profilo={profilo} eliorType={eliorType} h={14} forceWhite title={getProfiloBadgeLabel(profilo, eliorType)} />
@@ -1309,7 +1309,9 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
           </div>
 
           <div ref={tableContainerRef} className="flex-1 overflow-auto hide-native-scrollbar relative gpu-scroll">
-            <table className="text-sm border-collapse table-fixed relative gpu-render" style={{ minWidth: `${currentColumns.length * 100}px` }}>
+            {/* h-full: se la finestra è più alta del contenuto, l'altezza extra si
+                distribuisce sulle righe dei mesi (niente fascia vuota sotto la nota). */}
+            <table className="text-sm border-collapse table-fixed relative gpu-render h-full" style={{ minWidth: `${currentColumns.length * 100}px` }}>
               <thead className="sticky top-0 z-[150] shadow-sm relative">
                 <tr className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-b border-slate-300 dark:border-slate-700 transition-colors">
                   {currentColumns.map((col, idx) => {
