@@ -277,23 +277,37 @@ export const DEFAULT_PROFILE_ICON: LucideIcon = Building2;
 // ── Loghi aziendali (solo UI, mai nei documenti generati) ───────────────────
 // File in public/logos/. Le aziende custom non hanno logo: getCompanyLogo →
 // null e la UI tiene il suo fallback colorato. Per aggiungerne uno basta il
-// file + una riga qui. Clean Service = Clean Service S.r.l. di Mozzagrogna
-// (CH), P.IVA 01856200694 (verificata sull'intestazione busta Cianci),
-// logo da cleanservicesrl.it.
+// file + una riga qui. `scale` compensa i loghi visivamente più piccoli a
+// parità di altezza (la capsula Clean Service è poco densa).
+// Clean Service = Clean Service S.r.l. di Mozzagrogna (CH), P.IVA 01856200694
+// (verificata sull'intestazione busta Cianci), logo da cleanservicesrl.it.
+// Elior: rosa fucsia = brand dell'epoca delle buste (viaggiante); il
+// magazzino usa "ELIOR SERVICES" (bisonte) per distinguersi a colpo d'occhio.
 
-const COMPANY_LOGOS: Record<string, string> = {
-  RFI: 'rfi.svg',
-  TRENITALIA: 'trenitalia.svg',
-  ELIOR: 'elior.svg',
-  MERCITALIA: 'mercitalia.svg',
-  CLEAN_SERVICE: 'cleanservice.png',
+const COMPANY_LOGOS: Record<string, { file: string; scale?: number }> = {
+  RFI: { file: 'rfi.svg' },
+  TRENITALIA: { file: 'trenitalia.svg' },
+  ELIOR: { file: 'elior.png' },
+  MERCITALIA: { file: 'mercitalia.svg' },
+  CLEAN_SERVICE: { file: 'cleanservice.png', scale: 1.3 },
 };
 
-/** URL del logo aziendale, o null se l'azienda non ne ha uno. */
-export const getCompanyLogo = (profilo?: string | null): string | null =>
-  profilo && COMPANY_LOGOS[profilo]
-    ? `${import.meta.env.BASE_URL}logos/${COMPANY_LOGOS[profilo]}`
-    : null;
+const ELIOR_MAGAZZINO_LOGO = 'elior-services.png';
+
+/** URL del logo aziendale (per ELIOR dipende dal tipo), o null se non c'è. */
+export const getCompanyLogo = (
+  profilo?: string | null,
+  eliorType?: 'viaggiante' | 'magazzino'
+): string | null => {
+  if (profilo === 'ELIOR' && eliorType === 'magazzino')
+    return `${import.meta.env.BASE_URL}logos/${ELIOR_MAGAZZINO_LOGO}`;
+  const entry = profilo ? COMPANY_LOGOS[profilo] : undefined;
+  return entry ? `${import.meta.env.BASE_URL}logos/${entry.file}` : null;
+};
+
+/** Fattore di resa visiva del logo a parità di altezza nominale. */
+export const getCompanyLogoScale = (profilo?: string | null): number =>
+  (profilo && COMPANY_LOGOS[profilo]?.scale) || 1;
 
 // ── Colore-azienda: linguaggio cromatico unico in tutta l'app ────────────────
 // La famiglia Tailwind di ogni azienda (card, header dettaglio, modali, stats):

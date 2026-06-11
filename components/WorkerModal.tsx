@@ -911,7 +911,7 @@ const WorkerModal: React.FC<WorkerModalProps> = ({ isOpen, onClose, onConfirm, i
                                                                     transition={{ duration: 0.5, ease: "easeInOut" }}
                                                                     className="h-14 flex items-center"
                                                                 >
-                                                                    <CompanyLogo profilo={opt.value} imgClass="h-7" forceWhite={isSelected} />
+                                                                    <CompanyLogo profilo={opt.value} h={28} forceWhite={isSelected} />
                                                                 </motion.div>
                                                             ) : (
                                                             <motion.div

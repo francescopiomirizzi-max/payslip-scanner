@@ -459,7 +459,7 @@ const ArchivePage: React.FC<ArchivePageProps> = ({ workers, onBack, initialWorke
                       </p>
                       <div className="flex items-center gap-1.5 mt-0.5">
                         {getCompanyLogo(worker.profilo) ? (
-                          <CompanyLogo profilo={worker.profilo} imgClass="h-3" title={getProfiloBadgeLabel(worker.profilo, worker.eliorType)} />
+                          <CompanyLogo profilo={worker.profilo} eliorType={worker.eliorType} h={12} title={getProfiloBadgeLabel(worker.profilo, worker.eliorType)} />
                         ) : (
                           <span className={`text-[8px] font-bold uppercase px-1.5 py-0.5 rounded border ${badgeStyle(worker.profilo)}`}>
                             {getProfiloBadgeLabel(worker.profilo, worker.eliorType, true)}
