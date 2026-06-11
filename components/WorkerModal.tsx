@@ -511,7 +511,7 @@ const WorkerModal: React.FC<WorkerModalProps> = ({ isOpen, onClose, onConfirm, i
                             animate={{ opacity: 1, scale: 1, y: 0, rotateX: 0 }}
                             exit={{ opacity: 0, scale: 0.9, y: 80, rotateX: 5 }}
                             transition={FRAMER_PHYSICS.heavyBounce}
-                            className="relative w-full max-w-[700px] bg-white/90 dark:bg-slate-900/90 backdrop-blur-2xl rounded-[3.5rem] overflow-hidden border-2 border-white/60 dark:border-slate-700 transition-colors duration-500"
+                            className="relative w-full max-w-[700px] max-h-[92vh] flex flex-col bg-white/90 dark:bg-slate-900/90 backdrop-blur-2xl rounded-[3.5rem] overflow-hidden border-2 border-white/60 dark:border-slate-700 transition-colors duration-500"
                             style={{
                                 // Usiamo l'operatore document.documentElement per verificare se siamo dark mode e togliere l'inset shadow bianco
                                 boxShadow: document.documentElement.classList.contains('dark')
@@ -526,7 +526,7 @@ const WorkerModal: React.FC<WorkerModalProps> = ({ isOpen, onClose, onConfirm, i
                             />
 
                             {/* === HEADER === */}
-                            <div className="relative overflow-hidden rounded-t-[3.5rem] border-b border-white/10">
+                            <div className="relative overflow-hidden rounded-t-[3.5rem] border-b border-white/10 shrink-0">
                                 {/* Dynamic Light Source */}
                                 <motion.div
                                     animate={{
@@ -541,7 +541,7 @@ const WorkerModal: React.FC<WorkerModalProps> = ({ isOpen, onClose, onConfirm, i
                                     className="absolute top-[-40%] right-[-30%] w-[70%] h-[180%] rounded-full blur-[120px] opacity-20 pointer-events-none"
                                 />
 
-                                <div className="relative px-12 pt-12 pb-8 flex justify-between items-start z-10">
+                                <div className="relative px-12 pt-9 pb-7 flex justify-between items-start z-10">
                                     <div className="flex items-center gap-6">
                                         <div className="relative group">
                                             <motion.div
@@ -600,7 +600,7 @@ const WorkerModal: React.FC<WorkerModalProps> = ({ isOpen, onClose, onConfirm, i
                             </div>
 
                             {/* PROGRESS BEAM */}
-                            <div className="relative h-[4px] w-full bg-slate-100/50 overflow-hidden">
+                            <div className="relative h-[4px] w-full bg-slate-100/50 overflow-hidden shrink-0">
                                 <motion.div
                                     initial={{ width: 0 }}
                                     animate={{ width: `${progress}%`, backgroundColor: activeTheme.color }}
@@ -612,8 +612,9 @@ const WorkerModal: React.FC<WorkerModalProps> = ({ isOpen, onClose, onConfirm, i
                                 </motion.div>
                             </div>
 
-                            {/* FORM BODY */}
-                            <form className="px-12 py-10 space-y-9 relative z-10 bg-white/30 dark:bg-slate-950/30 transition-colors">
+                            {/* FORM BODY — scrollabile: il pannello è vincolato a 92vh,
+                                header e footer restano sempre visibili */}
+                            <form className="px-12 pt-8 pb-0 space-y-9 relative z-10 bg-white/30 dark:bg-slate-950/30 transition-colors flex-1 min-h-0 overflow-y-auto custom-scrollbar">
 
                                 {/* --- TASTO MAGICO AUTOCOMPILAZIONE AI --- */}
                                 {mode === 'create' && (
@@ -1018,8 +1019,9 @@ const WorkerModal: React.FC<WorkerModalProps> = ({ isOpen, onClose, onConfirm, i
 
                                 </div>
 
-                                {/* FOOTER */}
-                                <div className="flex gap-5 pt-8 border-t border-slate-200/50 mt-6 items-center">
+                                {/* FOOTER — sticky in fondo allo scrollport: Annulla/Salva
+                                    raggiungibili anche quando il form è più alto dello schermo */}
+                                <div className="flex gap-5 pt-6 pb-7 border-t border-slate-200/50 dark:border-slate-700/50 mt-6 items-center sticky bottom-0 z-20 -mx-12 px-12 bg-white/85 dark:bg-slate-950/85 backdrop-blur-xl">
                                     <button
                                         type="button"
                                         onClick={onClose}
