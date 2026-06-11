@@ -1201,9 +1201,10 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
                       <th key={col.id}
                         className={`
                          p-2 font-bold text-center border-r border-slate-300 dark:border-slate-700 select-none transition-colors
-                          ${col.width ? col.width : 'w-24'} 
-                          ${col.id === 'total' ? 'bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200' : ''} 
+                          ${col.width ? col.width : 'w-24'}
+                          ${col.id === 'total' ? 'bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200' : ''}
                           ${idx === 0 ? 'sticky left-0 bg-slate-100 dark:bg-slate-800 border-r-2 border-slate-300 dark:border-slate-600 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] dark:shadow-[2px_0_5px_-2px_rgba(0,0,0,0.5)] z-200' : 'z-150'}
+                          ${col.id === activeColId ? 'bg-blue-100 dark:bg-cyan-900/60 text-blue-800 dark:text-cyan-200 shadow-[inset_0_-3px_0_0_#3b82f6] dark:shadow-[inset_0_-3px_0_0_#06b6d4]' : ''}
                           relative hover:z-9999!
                         `}
                       >
