@@ -275,15 +275,18 @@ export const getSystemProfile = (key?: string | null): SystemProfile | undefined
 export const DEFAULT_PROFILE_ICON: LucideIcon = Building2;
 
 // ── Loghi aziendali (solo UI, mai nei documenti generati) ───────────────────
-// SVG ufficiali in public/logos/. Clean Service non ha un logo pubblico
-// affidabile e le custom non ne hanno: getCompanyLogo → null e la UI tiene
-// il suo fallback colorato. Per aggiungerne uno basta il file + una riga qui.
+// File in public/logos/. Le aziende custom non hanno logo: getCompanyLogo →
+// null e la UI tiene il suo fallback colorato. Per aggiungerne uno basta il
+// file + una riga qui. Clean Service = Clean Service S.r.l. di Mozzagrogna
+// (CH), P.IVA 01856200694 (verificata sull'intestazione busta Cianci),
+// logo da cleanservicesrl.it.
 
 const COMPANY_LOGOS: Record<string, string> = {
   RFI: 'rfi.svg',
   TRENITALIA: 'trenitalia.svg',
   ELIOR: 'elior.svg',
   MERCITALIA: 'mercitalia.svg',
+  CLEAN_SERVICE: 'cleanservice.png',
 };
 
 /** URL del logo aziendale, o null se l'azienda non ne ha uno. */

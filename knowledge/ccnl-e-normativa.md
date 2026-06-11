@@ -65,6 +65,11 @@ lette dalle buste (= Strategia A). Quindi **non** vale la regola "divisore = 26 
 
 ## CCNL Multiservizi (Clean Service SRL)
 
+**Identità azienda** (verificata 2026-06-11 sull'intestazione busta Cianci gen-2019):
+**Clean Service S.r.l.**, Zona industriale snc, 66030 Mozzagrogna (CH) — C.F./P.IVA
+**01856200694**, gruppo Consorzio Italia Servizi, sito cleanservicesrl.it. La busta riporta
+qualifica "ADD.SERV.RISTORAZ." su TRENI: è la loro divisione ristorazione/catering a bordo.
+
 CCNL "**a divisore mensile**". La quantità **"26"** della voce RETRIBUZIONE ORDINARIA (cod.
 `6001`) **non** è "giorni lavorati" ma **"giorni retribuiti del mese"** — include sia il lavoro
 effettivo sia le ferie godute, pagate a tariffa ordinaria.
