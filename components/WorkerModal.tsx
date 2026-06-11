@@ -7,7 +7,8 @@ import {
     Check, Train, AlignLeft, ArrowRight,
     Fingerprint, BadgeCheck, Wand2, Loader2, UploadCloud, Smartphone, FileText, Cpu
 } from 'lucide-react';
-import { SYSTEM_PROFILES, SYSTEM_PROFILE_KEYS } from '../config/profiles';
+import { SYSTEM_PROFILES, SYSTEM_PROFILE_KEYS, getCompanyLogo } from '../config/profiles';
+import { CompanyLogo } from './ui/CompanyLogo';
 import QRCode from 'react-qr-code';
 import { v4 as uuidv4 } from 'uuid';
 import { supabase } from '../supabaseClient';
@@ -902,6 +903,17 @@ const WorkerModal: React.FC<WorkerModalProps> = ({ isOpen, onClose, onConfirm, i
 
                                                         {/* CONTENT */}
                                                         <div className="relative z-10 flex flex-col items-center gap-3">
+                                                            {getCompanyLogo(opt.value) ? (
+                                                                /* Logo nudo (niente riquadro bianco): colori originali a riposo,
+                                                                   silhouette bianca quando la tile è riempita dal gradiente. */
+                                                                <motion.div
+                                                                    animate={isSelected ? { rotate: [0, -4, 4, 0], scale: 1.1 } : { rotate: 0, scale: 1 }}
+                                                                    transition={{ duration: 0.5, ease: "easeInOut" }}
+                                                                    className="h-14 flex items-center"
+                                                                >
+                                                                    <CompanyLogo profilo={opt.value} imgClass="h-7" forceWhite={isSelected} />
+                                                                </motion.div>
+                                                            ) : (
                                                             <motion.div
                                                                 animate={isSelected ? { rotate: [0, -8, 8, 0], scale: 1.15 } : { rotate: 0, scale: 1 }}
                                                                 transition={{ duration: 0.5, ease: "easeInOut" }}
@@ -910,6 +922,7 @@ const WorkerModal: React.FC<WorkerModalProps> = ({ isOpen, onClose, onConfirm, i
                                                             >
                                                                 <style.icon className="w-8 h-8" />
                                                             </motion.div>
+                                                            )}
 
                                                             <div>
                                                                 <p className={`text-lg font-black transition-colors duration-300 leading-none ${isSelected ? 'text-white drop-shadow-sm' : 'text-slate-700 dark:text-slate-300'}`}>
