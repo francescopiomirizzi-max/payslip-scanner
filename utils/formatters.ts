@@ -30,18 +30,26 @@ export const parseLocalFloat = (value: any): number => {
 // Alias per compatibilità
 export const parseFloatSafe = parseLocalFloat;
 
+// Il CLDR italiano ha minimumGroupingDigits=2: i numeri a 4 cifre escono SENZA
+// punto delle migliaia (1932 → "1932", ma 19300 → "19.300"). Nei conteggi
+// legali il separatore serve sempre: questo post-processa una stringa già
+// formattata it-IT aggiungendo i punti mancanti alla parte intera iniziale
+// (no-op se il numero è già raggruppato o sotto le 4 cifre).
+export const groupThousandsIT = (formatted: string): string =>
+  formatted.replace(/^(-?\d+)/, int => int.replace(/\B(?=(\d{3})+(?!\d))/g, '.'));
+
 export const formatCurrency = (value: number | string | undefined | null) => {
   if (value === undefined || value === null || value === '') return '-';
   const num = typeof value === 'string' ? parseFloat(value.replace(',', '.')) : value;
   if (isNaN(num) || num === 0) return '-';
-  return `€ ${num.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return `€ ${groupThousandsIT(num.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))}`;
 };
 
 export const formatNumber = (value: number | string | undefined | null) => {
   if (value === undefined || value === null || value === '') return '0';
   const num = typeof value === 'string' ? parseLocalFloat(value) : value;
   if (isNaN(num as number)) return '0';
-  return new Intl.NumberFormat('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(num as number);
+  return groupThousandsIT(new Intl.NumberFormat('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(num as number));
 };
 
 export const formatInteger = (value: number | string | undefined | null) => {

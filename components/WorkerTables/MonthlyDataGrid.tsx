@@ -9,7 +9,7 @@ import {
   ProfiloAzienda,
   evaluateFormula
 } from '../../types';
-import { parseLocalFloat, formatCurrency, formatDay, getProfiloBadgeLabel } from '../../utils/formatters';
+import { parseLocalFloat, formatCurrency, formatDay, getProfiloBadgeLabel, groupThousandsIT } from '../../utils/formatters';
 import { getCompanyLogo } from '../../config/profiles';
 import { CompanyLogo } from '../ui/CompanyLogo';
 import { monthsByYearFromAnni } from '../../utils/workerStatus';
@@ -1797,9 +1797,9 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
                                         <div className="px-3 py-2.5">
                                           <div className="text-[9px] uppercase tracking-wider text-slate-400 mb-1">AI Suggerisce</div>
                                           <div className="font-bold text-white tabular-nums text-sm">
-                                            {cellDiscrepancy.suggested.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                            {groupThousandsIT(cellDiscrepancy.suggested.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))}
                                           </div>
-                                          <div className="text-[9px] text-slate-500 mt-0.5">estratto: {cellDiscrepancy.extracted.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                                          <div className="text-[9px] text-slate-500 mt-0.5">estratto: {groupThousandsIT(cellDiscrepancy.extracted.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))}</div>
                                           <div className="text-[9px] text-slate-400 mt-1.5 leading-tight border-t border-slate-700/60 pt-1.5">{cellDiscrepancy.message}</div>
                                         </div>
                                         <button

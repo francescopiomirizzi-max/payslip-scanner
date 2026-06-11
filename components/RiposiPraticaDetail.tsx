@@ -4,8 +4,9 @@ import { ArrowLeft, AlertTriangle, Moon, CalendarClock, Euro, CheckCircle2, Sear
 import { computeRestViolations, formatHm, parseHmm, type Violazione, type GiornataInput } from '../utils/restEngine';
 import { AnimatedCounter } from './ui/AnimatedCounter';
 import type { PraticaRiposi } from '../hooks/usePraticheRiposi';
+import { groupThousandsIT } from '../utils/formatters';
 
-const euro = (n: number) => '€ ' + n.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const euro = (n: number) => '€ ' + groupThousandsIT(n.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
 const dmy = (iso: string) => new Date(iso).toLocaleDateString('it-IT');
 const GIORNI = ['Dom', 'Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab'];
 const weekday = (data: string) => { const [d, m, y] = data.split('/').map(Number); return GIORNI[new Date(y, m - 1, d).getDay()]; };
@@ -171,7 +172,7 @@ const RiposiPraticaDetail: React.FC<Props> = ({ pratica, onBack }) => {
                                             <span className="text-[11px] font-bold uppercase tracking-wide">Indennità secondo il PDF</span>
                                         </div>
                                         <p className="text-2xl font-black tabular-nums text-slate-800 dark:text-slate-100"><AnimatedCounter value={fonte.ind} isCurrency /></p>
-                                        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">{fonte.gg.toLocaleString('it-IT')} giornate indennizzate · {Math.round(fonte.ore).toLocaleString('it-IT')} h mancanti · tariffe e criteri di chi ha prodotto il documento</p>
+                                        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">{groupThousandsIT(fonte.gg.toLocaleString('it-IT'))} giornate indennizzate · {groupThousandsIT(Math.round(fonte.ore).toLocaleString('it-IT'))} h mancanti · tariffe e criteri di chi ha prodotto il documento</p>
                                     </div>
                                     <div className="rounded-2xl border border-indigo-200 dark:border-indigo-500/30 bg-indigo-50/60 dark:bg-indigo-500/10 p-4">
                                         <div className="flex items-center gap-2 mb-2 text-indigo-700 dark:text-indigo-300">
@@ -179,7 +180,7 @@ const RiposiPraticaDetail: React.FC<Props> = ({ pratica, onBack }) => {
                                             <span className="text-[11px] font-bold uppercase tracking-wide">Indennità secondo il motore (Reg. 561/2006)</span>
                                         </div>
                                         <p className="text-2xl font-black tabular-nums text-slate-800 dark:text-slate-100"><AnimatedCounter value={result.totIndennita} isCurrency /></p>
-                                        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">{totViol} violazioni · {Math.round(result.totOreMancanti).toLocaleString('it-IT')} h mancanti · tariffa placeholder {euro(pratica.tariffaOraria)}/h</p>
+                                        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">{totViol} violazioni · {groupThousandsIT(Math.round(result.totOreMancanti).toLocaleString('it-IT'))} h mancanti · tariffa placeholder {euro(pratica.tariffaOraria)}/h</p>
                                     </div>
                                 </div>
                                 <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-3 leading-relaxed">Criteri di calcolo diversi: la fonte applica le proprie regole, il motore le soglie del Reg. (CE) 561/2006 sui soli orari di turno. Le due serie si affiancano, non si sommano — confronto neutro per l'avvocato.</p>
@@ -249,8 +250,8 @@ const RiposiPraticaDetail: React.FC<Props> = ({ pratica, onBack }) => {
                                             <span className="font-semibold text-slate-700 dark:text-slate-200">{y}</span>
                                             <span className="text-right tabular-nums text-rose-500">{g}</span>
                                             <span className="text-right tabular-nums text-indigo-500">{s}</span>
-                                            <span className="text-right tabular-nums text-slate-500 dark:text-slate-400">{Math.round(ind).toLocaleString('it-IT')}</span>
-                                            <span className="text-right tabular-nums text-sky-600 dark:text-sky-400">{indFonte ? Math.round(indFonte).toLocaleString('it-IT') : '—'}</span>
+                                            <span className="text-right tabular-nums text-slate-500 dark:text-slate-400">{groupThousandsIT(Math.round(ind).toLocaleString('it-IT'))}</span>
+                                            <span className="text-right tabular-nums text-sky-600 dark:text-sky-400">{indFonte ? groupThousandsIT(Math.round(indFonte).toLocaleString('it-IT')) : '—'}</span>
                                         </div>
                                     ))}
                                 </div>
@@ -419,7 +420,7 @@ const MeseFocus: React.FC<{ year: number; month: number; giornate: GiornataInput
                                         <td className="px-3 py-2">{riposo ? <span className="text-slate-400 dark:text-slate-500">{g.servizio ?? '—'}</span> : <span className="font-semibold text-indigo-600 dark:text-indigo-400">{g.servizio ?? '—'}</span>}</td>
                                         <td className="px-3 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">{g.inizio ?? '—'}</td>
                                         <td className={`${hasFonte ? 'px-3' : 'px-4'} py-2 text-right tabular-nums text-slate-600 dark:text-slate-300`}>{g.termine ?? '—'}</td>
-                                        {hasFonte && <td className="px-4 py-2 text-right tabular-nums font-semibold text-sky-600 dark:text-sky-400">{g.indennitaFonte != null ? g.indennitaFonte.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : <span className="font-normal text-slate-300 dark:text-slate-600">—</span>}</td>}
+                                        {hasFonte && <td className="px-4 py-2 text-right tabular-nums font-semibold text-sky-600 dark:text-sky-400">{g.indennitaFonte != null ? groupThousandsIT(g.indennitaFonte.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })) : <span className="font-normal text-slate-300 dark:text-slate-600">—</span>}</td>}
                                     </tr>
                                 );
                             })}

@@ -37,6 +37,7 @@ import {
     CalendarDays,
 } from 'lucide-react';
 import WorkerCard from '../components/WorkerCard';
+import { groupThousandsIT } from '../utils/formatters';
 import { AnimatedCounter } from '../components/ui/AnimatedCounter';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { useIsReadOnly } from '../lib/readonly';
@@ -1318,17 +1319,17 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                                                             </div>
                                                             <span className="block text-lg font-black tabular-nums text-slate-300 dark:text-slate-600 tracking-tight line-through decoration-2 decoration-red-400/50">
                                                                 {/* Mostriamo il potenziale barrato, oppure 0 */}
-                                                                {item.potential.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })}
+                                                                {groupThousandsIT(item.potential.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' }))}
                                                             </span>
                                                             <span className="text-[9px] font-bold text-slate-400 mt-0.5">
-                                                                Maturati: <span className="text-slate-500 font-mono">{item.potential.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €</span>
+                                                                Maturati: <span className="text-slate-500 font-mono">{groupThousandsIT(item.potential.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))} €</span>
                                                             </span>
                                                         </>
                                                     ) : (
                                                         /* CASO 2: NORMALE */
                                                         <>
                                                             <span className={`block text-lg font-black tabular-nums ${theme.text} ${theme.textDark} tracking-tight`}>
-                                                                {item.amount.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })}
+                                                                {groupThousandsIT(item.amount.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' }))}
                                                             </span>
                                                         </>
                                                     )}
@@ -1347,7 +1348,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                             {/* FOOTER */}
                             <div className={`p-6 ${COLOR_VARIANTS[modalConfig.color].bgSoft} ${COLOR_VARIANTS[modalConfig.color].bgSoftDark} border-t ${COLOR_VARIANTS[modalConfig.color].border} ${COLOR_VARIANTS[modalConfig.color].borderDark} flex justify-between items-center`}>
                                 <span className={`font-bold ${COLOR_VARIANTS[modalConfig.color].text} ${COLOR_VARIANTS[modalConfig.color].textDark} uppercase tracking-widest text-sm`}>{modalConfig.totalLabel}</span>
-                                <span className={`text-2xl font-black tabular-nums ${COLOR_VARIANTS[modalConfig.color].text} ${COLOR_VARIANTS[modalConfig.color].textDark}`}>{modalConfig.totalValue.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })}</span>
+                                <span className={`text-2xl font-black tabular-nums ${COLOR_VARIANTS[modalConfig.color].text} ${COLOR_VARIANTS[modalConfig.color].textDark}`}>{groupThousandsIT(modalConfig.totalValue.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' }))}</span>
                             </div>
                         </motion.div>
                     </motion.div>

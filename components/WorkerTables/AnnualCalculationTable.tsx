@@ -7,7 +7,8 @@ import {
   parseLocalFloat,
   formatCurrency,
   formatDay,
-  getProfiloBadgeLabel
+  getProfiloBadgeLabel,
+  groupThousandsIT
 } from '../../utils/formatters';
 import { computeHolidayIndemnity, computePeriodIncidence } from '../../utils/calculationEngine';
 import { SYSTEM_PROFILES, getCustomColorIndex, getCompanyLogo } from '../../config/profiles';
@@ -167,7 +168,7 @@ const AnnualCalculationTable: React.FC<AnnualCalculationTableProps> = ({
   }, [annualRows, interestRate, startClaimYear]); // <--- Assicurati che startClaimYear sia qui
 
   const handleCopyTotal = () => {
-    navigator.clipboard.writeText(summary.grandTotal.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+    navigator.clipboard.writeText(groupThousandsIT(summary.grandTotal.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })));
     setIsCopied(true);
     setTimeout(() => setIsCopied(false), 2000);
   };

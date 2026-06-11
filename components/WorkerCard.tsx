@@ -3,7 +3,7 @@ import ReactDOM from 'react-dom';
 import { Worker, getColumnsByProfile, resolveIncludePaidLeave } from '../types';
 import { SYSTEM_PROFILES, getCustomColorIndex, getCompanyColorKey, getCompanyLogo } from '../config/profiles';
 import { CompanyLogo } from './ui/CompanyLogo';
-import { parseLocalFloat, getProfiloBadgeLabel } from '../utils/formatters';
+import { parseLocalFloat, getProfiloBadgeLabel, groupThousandsIT } from '../utils/formatters';
 import { computeHolidayIndemnity } from '../utils/calculationEngine';
 import { getYearCoverage } from '../utils/workerStatus';
 import { useIsReadOnly } from '../lib/readonly';
@@ -698,7 +698,7 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
                             <p className="text-[8px] font-black uppercase tracking-widest text-emerald-600/70 dark:text-emerald-400/60">Credito</p>
                           </div>
                           <p className="text-sm font-black text-emerald-700 dark:text-emerald-400 tabular-nums leading-none">
-                            {financialStats.netto.toLocaleString('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })}
+                            {groupThousandsIT(financialStats.netto.toLocaleString('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }))}
                           </p>
                         </div>
                         {includeTickets && (
@@ -709,7 +709,7 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
                             </div>
                             <p className="text-sm font-black text-amber-700 dark:text-amber-400 tabular-nums leading-none">
                               {financialStats.ticket > 0
-                                ? financialStats.ticket.toLocaleString('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })
+                                ? groupThousandsIT(financialStats.ticket.toLocaleString('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }))
                                 : '—'}
                             </p>
                           </div>
@@ -782,7 +782,7 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
                       <Wallet className="w-4 h-4 opacity-60" style={theme.iconStyle} />
                     </div>
                     <p className="text-3xl font-black tracking-tight tabular-nums bg-clip-text text-transparent" style={theme.textGradientStyle}>
-                      {financialStats.netto.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })}
+                      {groupThousandsIT(financialStats.netto.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' }))}
                     </p>
                   </div>
 
@@ -809,7 +809,7 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
 
                     {includeTickets ? (
                       <p className="text-lg font-black tabular-nums text-slate-600 dark:text-slate-200 transition-colors">
-                        {financialStats.ticket.toLocaleString('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })}
+                        {groupThousandsIT(financialStats.ticket.toLocaleString('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }))}
                       </p>
                     ) : (
                       <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-100/80 dark:bg-rose-900/30 border border-rose-200 dark:border-rose-800/50 shadow-sm transition-colors">
@@ -825,7 +825,7 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
                       <Layers className="w-3.5 h-3.5 text-blue-400 dark:text-cyan-400 mb-1" />
                       <p className="text-[9px] uppercase tracking-wide text-slate-400 font-bold mb-0.5">Lordo</p>
                       <p className="text-sm font-black tabular-nums text-slate-600 dark:text-slate-200 transition-colors">
-                        {financialStats.lordo.toLocaleString('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })}
+                        {groupThousandsIT(financialStats.lordo.toLocaleString('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }))}
                       </p>
                     </div>
 

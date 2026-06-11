@@ -5,7 +5,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { calculateLegalInterestsAndRevaluation, fetchIstatFOI } from '../../istatService';
 import { Worker, AnnoDati, getColumnsByProfile } from '../../types';
-import { parseFloatSafe } from '../../utils/formatters';
+import { parseFloatSafe, groupThousandsIT } from '../../utils/formatters';
 
 interface IstatDashboardModalProps {
     isOpen: boolean;
@@ -164,30 +164,30 @@ const IstatDashboardModal: React.FC<IstatDashboardModalProps> = ({
 
         doc.setFontSize(10); doc.setFont('helvetica', 'normal');
         doc.text(`Capitale Netto Base:`, 20, currentY + 22);
-        doc.text(`€ ${istatResults.capitalePuro.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 180, currentY + 22, { align: 'right' });
+        doc.text(`€ ${groupThousandsIT(istatResults.capitalePuro.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))}`, 180, currentY + 22, { align: 'right' });
 
         doc.text(`Rivalutazione Monetaria (Indici FOI):`, 20, currentY + 28);
-        doc.text(`€ ${istatResults.rivalutazioneTotale.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 180, currentY + 28, { align: 'right' });
+        doc.text(`€ ${groupThousandsIT(istatResults.rivalutazioneTotale.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))}`, 180, currentY + 28, { align: 'right' });
 
         doc.text(`Interessi Legali Maturati:`, 20, currentY + 34);
-        doc.text(`€ ${istatResults.interessiMaturati.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 180, currentY + 34, { align: 'right' });
+        doc.text(`€ ${groupThousandsIT(istatResults.interessiMaturati.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))}`, 180, currentY + 34, { align: 'right' });
 
         doc.setDrawColor(150, 150, 150);
         doc.line(20, currentY + 38, 188, currentY + 38);
 
         doc.setFont('helvetica', 'bold'); doc.setTextColor(22, 163, 74);
         doc.text(`TOTALE DOVUTO:`, 20, currentY + 45);
-        doc.text(`€ ${istatResults.totaleAssoluto.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 180, currentY + 45, { align: 'right' });
+        doc.text(`€ ${groupThousandsIT(istatResults.totaleAssoluto.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))}`, 180, currentY + 45, { align: 'right' });
 
         currentY += 60;
 
         // TABELLA ANALITICA
         const tableBody = istatResults.breakdown.map((b: any) => [
             b.anno.toString(),
-            `€ ${b.originale.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-            `€ ${b.rivalutazione.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-            `€ ${b.interessi.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-            `€ ${b.totale.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+            `€ ${groupThousandsIT(b.originale.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))}`,
+            `€ ${groupThousandsIT(b.rivalutazione.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))}`,
+            `€ ${groupThousandsIT(b.interessi.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))}`,
+            `€ ${groupThousandsIT(b.totale.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))}`
         ]);
 
         autoTable(doc, {
@@ -285,7 +285,7 @@ const IstatDashboardModal: React.FC<IstatDashboardModalProps> = ({
                                         <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1 flex items-center justify-between">
                                             Capitale Netto <Info size={12} className="opacity-50" />
                                         </span>
-                                        <span className="text-2xl font-black text-white tracking-tight">€ {istatResults.capitalePuro.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                        <span className="text-2xl font-black text-white tracking-tight">€ {groupThousandsIT(istatResults.capitalePuro.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))}</span>
                                     </div>
                                     {/* TOOLTIP 1 */}
                                     <div className="absolute top-full left-1/2 -translate-x-1/2 mt-3 opacity-0 scale-95 group-hover:opacity-100 group-hover:scale-100 pointer-events-none transition-all duration-300 w-72 bg-slate-900/95 backdrop-blur-2xl border border-slate-600 shadow-[0_20px_50px_rgba(0,0,0,0.6)] rounded-2xl p-5">
@@ -302,7 +302,7 @@ const IstatDashboardModal: React.FC<IstatDashboardModalProps> = ({
                                             <span className="flex items-center gap-1"><TrendingUp size={10} /> Rivalutazione FOI</span>
                                             <Info size={12} className="opacity-50" />
                                         </span>
-                                        <span className="text-2xl font-black text-amber-400 tracking-tight">+ € {istatResults.rivalutazioneTotale.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                        <span className="text-2xl font-black text-amber-400 tracking-tight">+ € {groupThousandsIT(istatResults.rivalutazioneTotale.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))}</span>
                                     </div>
                                     {/* TOOLTIP 2 */}
                                     <div className="absolute top-full left-1/2 -translate-x-1/2 mt-3 opacity-0 scale-95 group-hover:opacity-100 group-hover:scale-100 pointer-events-none transition-all duration-300 w-80 bg-slate-900/95 backdrop-blur-2xl border border-amber-500/50 shadow-[0_20px_50px_rgba(245,158,11,0.2)] rounded-2xl p-5">
@@ -319,7 +319,7 @@ const IstatDashboardModal: React.FC<IstatDashboardModalProps> = ({
                                             <span className="flex items-center gap-1"><Percent size={10} /> Interessi Legali</span>
                                             <Info size={12} className="opacity-50" />
                                         </span>
-                                        <span className="text-2xl font-black text-fuchsia-400 tracking-tight">+ € {istatResults.interessiMaturati.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                        <span className="text-2xl font-black text-fuchsia-400 tracking-tight">+ € {groupThousandsIT(istatResults.interessiMaturati.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))}</span>
                                     </div>
                                     {/* TOOLTIP 3 */}
                                     <div className="absolute top-full left-1/2 -translate-x-1/2 mt-3 opacity-0 scale-95 group-hover:opacity-100 group-hover:scale-100 pointer-events-none transition-all duration-300 w-80 bg-slate-900/95 backdrop-blur-2xl border border-fuchsia-500/50 shadow-[0_20px_50px_rgba(217,70,239,0.2)] rounded-2xl p-5">
@@ -337,7 +337,7 @@ const IstatDashboardModal: React.FC<IstatDashboardModalProps> = ({
                                             Nuovo Totale
                                             <Info size={12} className="opacity-50 text-emerald-200" />
                                         </span>
-                                        <span className="text-3xl font-black text-white tracking-tight">€ {istatResults.totaleAssoluto.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                        <span className="text-3xl font-black text-white tracking-tight">€ {groupThousandsIT(istatResults.totaleAssoluto.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))}</span>
                                     </div>
                                     {/* TOOLTIP 4 */}
                                     <div className="absolute top-full right-0 mt-3 opacity-0 scale-95 group-hover:opacity-100 group-hover:scale-100 pointer-events-none transition-all duration-300 w-80 bg-slate-900/95 backdrop-blur-2xl border border-emerald-500/50 shadow-[0_20px_50px_rgba(16,185,129,0.3)] rounded-2xl p-5 origin-top-right">
@@ -366,10 +366,10 @@ const IstatDashboardModal: React.FC<IstatDashboardModalProps> = ({
                                             {istatResults.breakdown.map((row: any, index: number) => (
                                                 <tr key={row.anno ? `row-${row.anno}` : `fallback-${index}`} className="hover:bg-slate-800/50 transition-colors">
                                                     <td className="px-6 py-4 font-black text-white">{row.anno}</td>
-                                                    <td className="px-6 py-4 text-right font-mono">€ {row.originale.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                                                    <td className="px-6 py-4 text-right font-mono text-amber-300">+ € {row.rivalutazione.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                                                    <td className="px-6 py-4 text-right font-mono text-fuchsia-300">+ € {row.interessi.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                                                    <td className="px-6 py-4 text-right font-mono font-bold text-emerald-300">€ {row.totale.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                                    <td className="px-6 py-4 text-right font-mono">€ {groupThousandsIT(row.originale.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))}</td>
+                                                    <td className="px-6 py-4 text-right font-mono text-amber-300">+ € {groupThousandsIT(row.rivalutazione.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))}</td>
+                                                    <td className="px-6 py-4 text-right font-mono text-fuchsia-300">+ € {groupThousandsIT(row.interessi.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))}</td>
+                                                    <td className="px-6 py-4 text-right font-mono font-bold text-emerald-300">€ {groupThousandsIT(row.totale.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))}</td>
                                                 </tr>
                                             ))}
                                         </tbody>

@@ -3,12 +3,13 @@ import { X, Printer, Copy, FileText, CheckCircle, PenTool } from 'lucide-react';
 import { motion } from 'framer-motion';
 // Se questo import fallisce, il codice sotto userà comunque un anno di default per non crashare
 import { YEARS, AnnoDati } from '../../types';
+import { groupThousandsIT } from '../../utils/formatters';
 
 // --- HELPER DI SICUREZZA (Questo impedisce il crash su .toLocaleString) ---
 const fmt = (val: any) => {
     const num = Number(val);
     if (isNaN(num)) return '0,00';
-    return num.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return groupThousandsIT(num.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
 };
 
 const generaRelazioneTestuale = (worker: any, totali: any, includeExFest: boolean) => {

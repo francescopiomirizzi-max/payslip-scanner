@@ -1,5 +1,6 @@
 import React, { useRef, useEffect } from 'react';
 import { useSpring, useMotionValue } from 'framer-motion';
+import { groupThousandsIT } from '../../utils/formatters';
 
 // --- COMPONENTE ANIMAZIONE NUMERI (CORRETTO CON DECIMALI) ---
 export const AnimatedCounter = ({ value, isCurrency = false }: { value: number, isCurrency?: boolean }) => {
@@ -15,7 +16,7 @@ export const AnimatedCounter = ({ value, isCurrency = false }: { value: number, 
         return springValue.on("change", (latest) => {
             if (ref.current) {
                 ref.current.textContent = isCurrency
-                    ? latest.toLocaleString('it-IT', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                    ? groupThousandsIT(latest.toLocaleString('it-IT', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 }))
                     : Math.round(latest).toString();
             }
         });

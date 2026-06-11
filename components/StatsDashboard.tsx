@@ -20,6 +20,7 @@ import { motion, useSpring, useMotionValue, AnimatePresence } from 'framer-motio
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { Worker, resolveIncludePaidLeave } from '../types';
+import { groupThousandsIT } from '../utils/formatters';
 import { SYSTEM_PROFILES, getCustomColorIndex, getCompanyHex, getCompanyLogo } from '../config/profiles';
 import { CompanyLogo } from './ui/CompanyLogo';
 import { computeHolidayIndemnity } from '../utils/calculationEngine';
@@ -38,7 +39,7 @@ const AnimatedCounter = ({ value, currency = false }: { value: number, currency?
         return springValue.on("change", (latest) => {
             if (ref.current) {
                 ref.current.textContent = currency
-                    ? latest.toLocaleString('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })
+                    ? groupThousandsIT(latest.toLocaleString('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }))
                     : Math.round(latest).toString();
             }
         });
@@ -181,7 +182,7 @@ const InteractiveChart = ({ data }: { data: number[] }) => {
                         <div className="bg-slate-900/90 backdrop-blur-xl border border-indigo-500/30 text-white rounded-xl px-4 py-2 shadow-2xl flex flex-col items-center min-w-[120px]">
                             <span className="text-[10px] text-indigo-300 font-bold uppercase tracking-widest mb-1">Valore Stimato</span>
                             <span className="text-lg font-black font-mono text-white drop-shadow-md">
-                                € {points[hoverIndex].val.toLocaleString('it-IT', { maximumFractionDigits: 0 })}
+                                € {groupThousandsIT(points[hoverIndex].val.toLocaleString('it-IT', { maximumFractionDigits: 0 }))}
                             </span>
                             <div className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-slate-900/90 border-r border-b border-indigo-500/30 rotate-45"></div>
                         </div>
@@ -294,9 +295,9 @@ const StatsDashboard: React.FC<StatsDashboardProps> = ({ workers = [], onBack })
             doc.setFontSize(12); doc.setTextColor(0); doc.text(val, x + 4, y + 22);
         };
 
-        printKpi("TOTALE RECUPERABILE", stats.totalRevenue.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' }), 15);
+        printKpi("TOTALE RECUPERABILE", groupThousandsIT(stats.totalRevenue.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })), 15);
         printKpi("NUMERO PRATICHE", stats.totalWorkers.toString(), 75);
-        printKpi("MEDIA PER PRATICA", stats.avgRevenue.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' }), 135);
+        printKpi("MEDIA PER PRATICA", groupThousandsIT(stats.avgRevenue.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })), 135);
 
         y += 40;
         doc.text("2. DETTAGLIO PRATICHE", 15, y);
@@ -306,7 +307,7 @@ const StatsDashboard: React.FC<StatsDashboardProps> = ({ workers = [], onBack })
             `${w.cognome} ${w.nome}`,
             w.profilo,
             w.isTicketExcluded ? 'ESCLUSO' : 'Incluso',
-            w.computedTotal.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })
+            groupThousandsIT(w.computedTotal.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' }))
         ]);
 
         autoTable(doc, {
@@ -482,7 +483,7 @@ const StatsDashboard: React.FC<StatsDashboardProps> = ({ workers = [], onBack })
                                                 )}
                                             </div>
                                             <div className="text-right">
-                                                <span className="block font-black text-xl tabular-nums drop-shadow-md" style={{ color: barColor }}>{data.value.toLocaleString('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })}</span>
+                                                <span className="block font-black text-xl tabular-nums drop-shadow-md" style={{ color: barColor }}>{groupThousandsIT(data.value.toLocaleString('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }))}</span>
                                                 <span className="text-xs font-bold text-slate-600">{percent.toFixed(1)}% market share</span>
                                             </div>
                                         </div>
@@ -555,7 +556,7 @@ const StatsDashboard: React.FC<StatsDashboardProps> = ({ workers = [], onBack })
                                     </div>
                                     <div className="text-right">
                                         <p className={`font-black text-sm tracking-tight tabular-nums drop-shadow-md ${w.computedTotal === 0 ? 'text-slate-500' : 'text-emerald-400'}`}>
-                                            {w.computedTotal.toLocaleString('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })}
+                                            {groupThousandsIT(w.computedTotal.toLocaleString('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }))}
                                         </p>
                                         <ArrowUpRight className="w-3 h-3 text-slate-500 ml-auto mt-1 opacity-0 group-hover:opacity-100 transition-all -translate-x-2 group-hover:translate-x-0" />
                                     </div>
@@ -595,7 +596,7 @@ const StatsDashboard: React.FC<StatsDashboardProps> = ({ workers = [], onBack })
                             <div className="mt-8 relative z-10 pt-6 border-t border-white/10">
                                 <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Valore Stimato</p>
                                 <p className="text-4xl font-black tabular-nums text-transparent bg-clip-text drop-shadow-sm bg-gradient-to-r from-yellow-200 to-yellow-500">
-                                    {stats.topPerformer.computedTotal.toLocaleString('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })}
+                                    {groupThousandsIT(stats.topPerformer.computedTotal.toLocaleString('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }))}
                                 </p>
                             </div>
                         </motion.div>

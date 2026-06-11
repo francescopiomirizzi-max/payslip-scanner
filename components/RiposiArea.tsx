@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { Clock, FileUp, ListChecks, FileText, ShieldCheck, Moon, CalendarClock, Coffee, CheckCircle2, BookOpen, ChevronRight, AlertTriangle, Euro } from 'lucide-react';
 import { usePraticheRiposi, type PraticaRiposi } from '../hooks/usePraticheRiposi';
+import { groupThousandsIT } from '../utils/formatters';
 import { computeRestViolations } from '../utils/restEngine';
 import RiposiPraticaDetail from './RiposiPraticaDetail';
 
@@ -201,7 +202,7 @@ const PraticaCard: React.FC<{ pratica: PraticaRiposi; onOpen: () => void }> = ({
                 <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{pratica.mansione} · {pratica.periodoStart}–{pratica.periodoEnd}</p>
                 <div className="flex items-center gap-2 mt-1.5">
                     <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-rose-100 dark:bg-rose-500/15 text-rose-600 dark:text-rose-400"><AlertTriangle className="w-3 h-3" />{tot} violazioni</span>
-                    <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-500/15 text-indigo-600 dark:text-indigo-400"><Euro className="w-3 h-3" />{indennita.toLocaleString('it-IT', { maximumFractionDigits: 0 })}</span>
+                    <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-500/15 text-indigo-600 dark:text-indigo-400"><Euro className="w-3 h-3" />{groupThousandsIT(indennita.toLocaleString('it-IT', { maximumFractionDigits: 0 }))}</span>
                 </div>
             </div>
             <ChevronRight className="relative w-5 h-5 text-slate-300 group-hover:text-indigo-500 group-hover:translate-x-0.5 transition-all shrink-0" />
