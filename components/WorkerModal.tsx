@@ -933,7 +933,8 @@ const WorkerModal: React.FC<WorkerModalProps> = ({ isOpen, onClose, onConfirm, i
                                                                     </p>
                                                                 )}
                                                                 <p className={`text-[10px] font-bold uppercase mt-1.5 transition-colors duration-300 tracking-wider ${isSelected ? 'text-white/90' : 'text-slate-400 dark:text-slate-500'}`}>
-                                                                    {opt.sub}
+                                                                    {/* Il sottotitolo ELIOR segue il toggle, come il logo */}
+                                                                    {opt.value === 'ELIOR' && formData.eliorType === 'magazzino' ? 'Magazzino' : opt.sub}
                                                                 </p>
                                                             </div>
                                                         </div>
