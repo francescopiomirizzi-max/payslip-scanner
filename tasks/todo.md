@@ -109,3 +109,20 @@ NIENTE della logica di estrazione/applicazione dati (Titanium V3 intatto).
       + bordo conico rotante + glow) in AMBRA per distinguerlo (fucsia=AI,
       ciano=scan). Tooltip spiega il drag per più cartelle.
 - [x] Verifica: tsc pulito · build ok · 173 test verdi.
+
+## Iterazione 3: Live Activity "cartella" sull'island
+
+- [x] Nuovo tipo upload 'folder' end-to-end (IslandContext → usePayslipUpload →
+      DynamicIsland → pill satellite). Auto-rilevato: webkitRelativePath dal
+      picker-cartella, entry directory dal drop.
+- [x] Tema AMBRA coerente col tasto CARTELLA: gradient bg, anelli, badge,
+      laser bar, glow; icona FolderUp al posto del Bot (header + pill).
+- [x] Avanzamento esplicito: contatore collassato con pillola % viva accanto a
+      n/total; pannello espanso dedicato (la griglia per-file del batch sarebbe
+      illeggibile su 50-200+ buste) con % grande, n/total, barra ambra, ETA
+      reale (riusa uploadEta che prima viveva solo nella pill) e cartellina
+      che "ingoia" un foglietto ad ogni busta completata.
+- [x] Stall detection 5s→20s: col pool il progresso avanza solo a busta
+      completata (~12-15s la prima) → 5s dava falsi "Verifica…".
+- [x] Larghezze island: folder 300px collassata / 320px espansa.
+- [x] Verifica: tsc pulito · build ok · 173 test verdi.

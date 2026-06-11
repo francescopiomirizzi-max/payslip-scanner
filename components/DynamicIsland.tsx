@@ -4,7 +4,7 @@ import {
     Bot, Calculator, Search, X, Loader2,
     CheckCircle2, AlertCircle, LayoutGrid, Sun, Moon,
     Database, Settings, LogOut, Copy, User, DownloadCloud, Trash2, ArrowRight, QrCode, Smartphone, Sparkles, LoaderCircle, FileText, Check, XCircle, ArrowLeft, Download, FileSpreadsheet, Printer, Archive, Minimize2,
-    ScrollText, ExternalLink
+    ScrollText, ExternalLink, FolderUp
 } from 'lucide-react';
 import { useIsland } from '../IslandContext';
 import { useIsReadOnly } from '../lib/readonly';
@@ -78,6 +78,13 @@ const getIslandWidth = (mode: string, isExpanded: boolean, uploadState: any): nu
         case 'quick_actions': return 180;
         case 'menu': return 420;
         case 'uploading':
+            // Il caricamento-cartella mostra anche la % nel contatore e un pannello
+            // di avanzamento più ricco: gli serve qualche px in più.
+            if (uploadState.type === 'folder') {
+                if (isExpanded) return 320;
+                if (uploadState.isFinishing) return 280;
+                return 300;
+            }
             if (isExpanded) return 300;
             if (uploadState.isFinishing) return 280;
             return 260;
@@ -631,8 +638,10 @@ const DynamicIsland = ({ workers = [] }: { workers?: { id: string | number; nome
                     setUploadEta('—');
                 }
             }
-            // Stall: nessun progress update da > 5s e progress < total
-            if (Date.now() - lastProgressUpdateRef.current > 5000 && uploadState.progress < uploadState.total) {
+            // Stall: nessun progress update da > 20s e progress < total.
+            // Soglia tarata sul pool parallelo: il progresso avanza solo a busta
+            // COMPLETATA (~12-15s la prima), quindi 5s dava falsi "Verifica…".
+            if (Date.now() - lastProgressUpdateRef.current > 20000 && uploadState.progress < uploadState.total) {
                 setUploadIsStalled(true);
             }
         };
@@ -672,6 +681,7 @@ const DynamicIsland = ({ workers = [] }: { workers?: { id: string | number; nome
         if (mode === 'quick_actions') return 'rgba(148, 163, 184, 0.4)';
         if (mode === 'uploading') {
             if (uploadState.isFinishing) return uploadState.isError ? 'rgba(239, 68, 68, 0.9)' : 'rgba(16, 185, 129, 0.9)';
+            if (uploadState.type === 'folder') return 'rgba(245, 158, 11, 0.6)';
             if (uploadState.type === 'batch') return 'rgba(139, 92, 246, 0.6)';
             if (uploadState.type === 'mobile') return 'rgba(99, 102, 241, 0.6)';
             return 'rgba(6, 182, 212, 0.6)';
@@ -796,7 +806,18 @@ const DynamicIsland = ({ workers = [] }: { workers?: { id: string | number; nome
                     {/* STATO UPLOADING: I 3 SCENARI CONSERVATI E CLICCABILI */}
                     {mode === 'uploading' && (() => {
                         // ✨ BLOCCO 1 SOSTITUITO: I NUOVI COLORI E OMBRE PER I BAGLIORI
-                        const activeTheme = uploadState.type === 'batch' ? {
+                        const activeTheme = uploadState.type === 'folder' ? {
+                            // Tema AMBRA: richiama il tasto CARTELLA (caricamento multi-anno)
+                            bg: 'bg-linear-to-br from-amber-900 via-[#f59e0b] to-orange-700',
+                            laser: 'border-amber-300 shadow-[0_0_12px_1px_#f59e0b]',
+                            sparkle: 'text-amber-100',
+                            timeline: 'bg-amber-300 shadow-[0_0_12px_#fbbf24,0_0_4px_#fff]',
+                            nodeOn: 'bg-white border-amber-200 shadow-[0_0_10px_rgba(251,191,36,0.9)]',
+                            text: 'text-amber-600 dark:text-amber-400',
+                            badge: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-700',
+                            border: 'border-amber-400 shadow-[0_4px_12px_rgba(245,158,11,0.25)]',
+                            laserBar: 'bg-amber-400'
+                        } : uploadState.type === 'batch' ? {
                             bg: 'bg-linear-to-br from-violet-900 via-[#8b5cf6] to-fuchsia-800',
                             laser: 'border-fuchsia-400 shadow-[0_0_12px_1px_#d946ef]', // Updated rings
                             sparkle: 'text-fuchsia-200', // Robot color
@@ -913,10 +934,17 @@ const DynamicIsland = ({ workers = [] }: { workers?: { id: string | number; nome
                                                             animate={{ opacity: [0.5, 1, 0.5] }} transition={{ repeat: Infinity, duration: 1.5, ease: "easeInOut" }}
                                                         />
 
+                                                        {uploadState.type === 'folder' ? (
+                                                            <FolderUp size={13}
+                                                                className={`relative z-10 ${activeTheme.sparkle} transition-colors duration-500`}
+                                                                style={{ filter: `drop-shadow(0 0 1px white) drop-shadow(0 0 4px currentColor) drop-shadow(0 0 8px currentColor)` }}
+                                                            />
+                                                        ) : (
                                                         <Bot size={13}
                                                             className={`relative z-10 ${activeTheme.sparkle} transition-colors duration-500`}
                                                             style={{ filter: `drop-shadow(0 0 1px white) drop-shadow(0 0 4px currentColor) drop-shadow(0 0 8px currentColor)` }}
                                                         />
+                                                        )}
                                                     </motion.div>
                                                 </motion.div>
                                             )}
@@ -935,7 +963,7 @@ const DynamicIsland = ({ workers = [] }: { workers?: { id: string | number; nome
                                             >
                                                 {/* RIMESSO BIANCO E CON IL TUO TESTO ORIGINALE */}
                                                 <span className="text-[11px] font-black text-white tracking-[0.15em] uppercase drop-shadow-md">
-                                                    {uploadState.isFinishing ? (uploadState.isError ? 'Errore' : 'Completato') : 'Scansione...'}
+                                                    {uploadState.isFinishing ? (uploadState.isError ? 'Errore' : 'Completato') : uploadState.type === 'folder' ? 'Cartella…' : 'Scansione...'}
                                                 </span>
                                             </motion.div>
                                         )}
@@ -981,18 +1009,29 @@ const DynamicIsland = ({ workers = [] }: { workers?: { id: string | number; nome
                                                 ) : (
                                                     <>
                                                         <span className="text-[10px] uppercase tracking-widest mr-2 opacity-90 truncate text-slate-300">
-                                                            Scansione
+                                                            {uploadState.type === 'folder' ? 'Cartella' : 'Scansione'}
                                                         </span>
                                                         <div className="flex items-center justify-end shrink-0">
                                                             <motion.span key={uploadState.progress} initial={{ y: -10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="drop-shadow-md text-lg text-white">
                                                                 {uploadState.progress}
                                                             </motion.span>
                                                         </div>
-                                                        {uploadState.type === 'batch' && (
+                                                        {(uploadState.type === 'batch' || uploadState.type === 'folder') && (
                                                             <div className="flex items-center ml-1">
                                                                 <span className="opacity-50 text-[10px] mx-0.5">/</span>
                                                                 <span className="opacity-80">{uploadState.total}</span>
                                                             </div>
+                                                        )}
+                                                        {/* Percentuale viva accanto al contatore: il batch-cartella può durare
+                                                            minuti, il colpo d'occhio sul % dice subito a che punto sta. */}
+                                                        {uploadState.type === 'folder' && (
+                                                            <motion.span
+                                                                key={`pct-${Math.round(progressRatio * 100)}`}
+                                                                initial={{ opacity: 0.4 }} animate={{ opacity: 1 }}
+                                                                className="ml-2 px-1.5 py-0.5 rounded-md bg-white/15 text-[10px] font-black text-amber-200 tabular-nums shadow-[0_0_8px_rgba(245,158,11,0.35)]"
+                                                            >
+                                                                {Math.round(progressRatio * 100)}%
+                                                            </motion.span>
                                                         )}
                                                         {/* ✨ IL FIX: ORA IL % APPARE SOLO SE È UNA SCANSIONE SINGOLA (0-100) */}
                                                         {uploadState.type === 'single' && (
@@ -1100,7 +1139,7 @@ const DynamicIsland = ({ workers = [] }: { workers?: { id: string | number; nome
 
                                                         <div className="relative z-10 text-center mb-4">
                                                             <h4 className="text-xs font-black text-slate-800 dark:text-white uppercase tracking-wide">
-                                                                {uploadState.type === 'batch' ? 'Motore IA Neurale:' : uploadState.type === 'mobile' ? 'Sincronizzazione Dati:' : 'Deep Scan Busta:'}
+                                                                {uploadState.type === 'folder' ? 'Caricamento Cartella:' : uploadState.type === 'batch' ? 'Motore IA Neurale:' : uploadState.type === 'mobile' ? 'Sincronizzazione Dati:' : 'Deep Scan Busta:'}
                                                             </h4>
                                                             <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-2">Analisi Documentale</p>
                                                             <span className={`inline-block px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border shadow-sm ${activeTheme.badge}`}>
@@ -1147,6 +1186,63 @@ const DynamicIsland = ({ workers = [] }: { workers?: { id: string | number; nome
                                                                         </motion.div>
                                                                     );
                                                                 })}
+                                                            </div>
+                                                        )}
+
+                                                        {/* SCENARIO 4: CARICAMENTO CARTELLA — avanzamento esplicito.
+                                                            Il batch-cartella può contare 50-200+ buste: la griglia per-file del
+                                                            batch sarebbe illeggibile. Qui comanda il colpo d'occhio: % grande,
+                                                            n/totale, barra ambra ed ETA reale. La cartellina "ingoia" un
+                                                            foglietto ad ogni busta completata. */}
+                                                        {uploadState.type === 'folder' && (
+                                                            <div className="relative z-10 flex items-center gap-5 mb-4 w-full px-1">
+                                                                <div className="relative w-[58px] h-[52px] shrink-0 flex items-end justify-center">
+                                                                    {/* linguetta + retro cartella */}
+                                                                    <div className="absolute bottom-7 left-1.5 w-6 h-3 rounded-t-md bg-amber-500 border border-b-0 border-amber-300/70" />
+                                                                    <div className="absolute bottom-0 w-14 h-9 rounded-md bg-amber-500 border border-amber-300/70 shadow-[0_4px_14px_rgba(245,158,11,0.35)]" />
+                                                                    {/* foglietto che si infila ad ogni busta completata */}
+                                                                    <motion.div
+                                                                        key={`folder-sheet-${uploadState.progress}`}
+                                                                        initial={{ y: -22, opacity: 0, rotate: -10 }}
+                                                                        animate={{ y: 4, opacity: [0, 1, 1, 0], rotate: 0 }}
+                                                                        transition={{ duration: 0.8, ease: 'easeIn' }}
+                                                                        className="absolute bottom-4 w-6 h-8 bg-white rounded-[3px] border border-slate-200 shadow-md z-10"
+                                                                    >
+                                                                        <div className="mt-1 ml-1 flex flex-col gap-[2px] opacity-40">
+                                                                            <div className="w-2.5 h-[1.5px] bg-slate-500 rounded-full" />
+                                                                            <div className="w-3.5 h-[1.5px] bg-slate-500 rounded-full" />
+                                                                            <div className="w-3 h-[1.5px] bg-slate-500 rounded-full" />
+                                                                        </div>
+                                                                    </motion.div>
+                                                                    {/* fronte cartella, sopra il foglietto */}
+                                                                    <div className="absolute bottom-0 w-14 h-6 rounded-md bg-linear-to-t from-amber-600 to-amber-400 border border-amber-300 z-20" />
+                                                                </div>
+
+                                                                <div className="flex flex-col items-start flex-1 min-w-0">
+                                                                    <div className="flex items-baseline gap-2 w-full">
+                                                                        <motion.span
+                                                                            key={`folder-pct-${uploadState.progress}`}
+                                                                            initial={{ scale: 1.25 }} animate={{ scale: 1 }}
+                                                                            transition={{ type: 'spring', damping: 15 }}
+                                                                            className="text-3xl font-black text-slate-800 dark:text-white tabular-nums leading-none"
+                                                                        >
+                                                                            {Math.round(progressRatio * 100)}<span className="text-base">%</span>
+                                                                        </motion.span>
+                                                                        <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 tabular-nums">
+                                                                            {uploadState.progress}/{uploadState.total} buste
+                                                                        </span>
+                                                                    </div>
+                                                                    <div className="w-full h-2 bg-slate-200 dark:bg-slate-700/80 rounded-full mt-2 overflow-hidden">
+                                                                        <motion.div
+                                                                            className="h-full rounded-full bg-linear-to-r from-amber-500 via-orange-400 to-amber-300 shadow-[0_0_8px_rgba(245,158,11,0.6)]"
+                                                                            animate={{ width: `${progressRatio * 100}%` }}
+                                                                            transition={{ type: 'spring', damping: 22 }}
+                                                                        />
+                                                                    </div>
+                                                                    <span className="text-[9px] font-black uppercase tracking-[0.15em] text-amber-600 dark:text-amber-400 mt-1.5">
+                                                                        {uploadEta !== '—' ? `≈ ${uploadEta} al termine` : 'Stima tempo in corso…'}
+                                                                    </span>
+                                                                </div>
                                                             </div>
                                                         )}
 
@@ -1300,8 +1396,8 @@ const DynamicIsland = ({ workers = [] }: { workers?: { id: string | number; nome
                                                             </div>
                                                         )}
 
-                                                        {/* Diciture Sotto (Solo Batch) */}
-                                                        {uploadState.type === 'batch' && (
+                                                        {/* Diciture Sotto (Batch e Cartella) */}
+                                                        {(uploadState.type === 'batch' || uploadState.type === 'folder') && (
                                                             <div className="relative z-10 flex justify-between text-[8px] font-bold text-slate-400 uppercase tracking-widest mb-4">
                                                                 <span>Elaborate ({uploadState.progress}/{uploadState.total})</span>
                                                                 <span>In attesa ({uploadState.total - uploadState.progress})</span>
@@ -1313,7 +1409,7 @@ const DynamicIsland = ({ workers = [] }: { workers?: { id: string | number; nome
                                                             <p className="text-[10px] text-emerald-800 dark:text-emerald-300 font-medium leading-tight">
                                                                 Nessuna anomalia rilevata.<br />
                                                                 <b className="font-black text-emerald-900 dark:text-emerald-200">
-                                                                    {uploadState.type === 'batch' ? `${uploadState.progress} Buste elaborate.` : 'Controllo integrità superato.'}
+                                                                    {(uploadState.type === 'batch' || uploadState.type === 'folder') ? `${uploadState.progress} Buste elaborate.` : 'Controllo integrità superato.'}
                                                                 </b>
                                                             </p>
                                                         </div>
@@ -2085,7 +2181,9 @@ const DynamicIsland = ({ workers = [] }: { workers?: { id: string | number; nome
             <AnimatePresence>
                 {uploadState.isUploading && uploadState.minimized && (() => {
                     // Color theming per tipo
-                    const baseTheme = uploadState.type === 'batch'
+                    const baseTheme = uploadState.type === 'folder'
+                        ? { from: '#f59e0b', to: '#fb923c', glow: 'rgba(245,158,11,0.5)', border: 'rgba(245,158,11,0.4)' }
+                        : uploadState.type === 'batch'
                         ? { from: '#a855f7', to: '#d946ef', glow: 'rgba(217,70,239,0.5)', border: 'rgba(217,70,239,0.4)' }
                         : uploadState.type === 'mobile'
                             ? { from: '#0ea5e9', to: '#22d3ee', glow: 'rgba(34,211,238,0.5)', border: 'rgba(34,211,238,0.4)' }
@@ -2104,7 +2202,7 @@ const DynamicIsland = ({ workers = [] }: { workers?: { id: string | number; nome
                         : theme;
 
                     // Label principale (counter o stato)
-                    const label = uploadState.type === 'batch'
+                    const label = (uploadState.type === 'batch' || uploadState.type === 'folder')
                         ? `${uploadState.progress}/${uploadState.total}`
                         : uploadState.type === 'mobile'
                             ? `${uploadState.progress}`
@@ -2182,7 +2280,9 @@ const DynamicIsland = ({ workers = [] }: { workers?: { id: string | number; nome
                                 >
                                     {isCompleteFlash
                                         ? <Check size={11} className="text-emerald-300" strokeWidth={3} />
-                                        : <Bot size={11} className="text-white" />
+                                        : uploadState.type === 'folder'
+                                            ? <FolderUp size={11} className="text-white" />
+                                            : <Bot size={11} className="text-white" />
                                     }
                                 </motion.div>
                             </div>

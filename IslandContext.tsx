@@ -25,10 +25,12 @@ interface IslandContextType {
   closeIsland: () => void;
 
   // STATO CARICAMENTI E AZIONI
-  uploadState: { isUploading: boolean; isFinishing: boolean; isError: boolean; type: 'single' | 'batch' | 'mobile'; progress: number; total: number; minimized: boolean };
-  startUpload: (type: 'single' | 'batch' | 'mobile', total: number) => void;
+  // 'folder' = batch da cartella (tasto CARTELLA / drop di cartelle): stessa
+  // meccanica del batch ma con Live Activity dedicata in ambra.
+  uploadState: { isUploading: boolean; isFinishing: boolean; isError: boolean; type: 'single' | 'batch' | 'mobile' | 'folder'; progress: number; total: number; minimized: boolean };
+  startUpload: (type: 'single' | 'batch' | 'mobile' | 'folder', total: number) => void;
   updateUploadProgress: (progress: number) => void;
-  finishUpload: (successCount: number, errorCount: number, type: 'single' | 'batch' | 'mobile', customError?: string) => void;
+  finishUpload: (successCount: number, errorCount: number, type: 'single' | 'batch' | 'mobile' | 'folder', customError?: string) => void;
   minimizeUpload: () => void;
   restoreUpload: () => void;
 
@@ -45,7 +47,7 @@ export const IslandProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const [workerStats, setWorkerStats] = useState<any | null>(null);
   const [calcHistory, setCalcHistory] = useState<CalcHistoryItem[]>([]);
 
-  const [uploadState, setUploadState] = useState<{ isUploading: boolean; isFinishing: boolean; isError: boolean; type: 'single' | 'batch' | 'mobile'; progress: number; total: number; minimized: boolean }>({ isUploading: false, isFinishing: false, isError: false, type: 'batch', progress: 0, total: 0, minimized: false });
+  const [uploadState, setUploadState] = useState<{ isUploading: boolean; isFinishing: boolean; isError: boolean; type: 'single' | 'batch' | 'mobile' | 'folder'; progress: number; total: number; minimized: boolean }>({ isUploading: false, isFinishing: false, isError: false, type: 'batch', progress: 0, total: 0, minimized: false });
 
   // ✨ FIX 2: FUNZIONI BASE RICOSTRUITE
   const closeIsland = useCallback(() => {
@@ -83,7 +85,7 @@ export const IslandProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   }, []);
 
   // --- MOTORE DEI CARICAMENTI ---
-  const startUpload = useCallback((type: 'single' | 'batch' | 'mobile', total: number) => {
+  const startUpload = useCallback((type: 'single' | 'batch' | 'mobile' | 'folder', total: number) => {
     setUploadState({ isUploading: true, isFinishing: false, isError: false, type, progress: 0, total, minimized: false });
     setMode('uploading');
   }, []);
@@ -101,7 +103,7 @@ export const IslandProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     setUploadState(prev => ({ ...prev, minimized: false }));
   }, []);
 
-  const finishUpload = useCallback((successCount: number, errorCount: number, type: 'single' | 'batch' | 'mobile', customError?: string) => {
+  const finishUpload = useCallback((successCount: number, errorCount: number, type: 'single' | 'batch' | 'mobile' | 'folder', customError?: string) => {
     const isError = successCount === 0;
 
     // Restore implicito così il completion è visibile sull'isola principale (non sulla pill).
@@ -117,6 +119,7 @@ export const IslandProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       } else {
         if (type === 'single') msg = 'Busta Paga acquisita e tradotta.';
         else if (type === 'batch') msg = `${successCount} Buste Paga sincronizzate.`;
+        else if (type === 'folder') msg = `${successCount} Buste Paga sincronizzate dalla cartella.`;
         else if (type === 'mobile') msg = 'Documento Mobile acquisito con successo.';
         if (errorCount > 0) msg += `\n(⚠️ ${errorCount} illeggibili)`;
       }

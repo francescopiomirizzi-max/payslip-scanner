@@ -281,7 +281,9 @@ export function usePayslipUpload({
 
   // --- LOGICA UPLOAD COLLEGATA ALLA DYNAMIC ISLAND (CON PARSER TITANIUM V2) ---
   // Core del batch: riceve File già filtrati, dall'input file/cartella o dal drop.
-  const runBatch = async (files: File[], isSingle: boolean) => {
+  // fromFolder accende la Live Activity "cartella" dell'island (tema ambra,
+  // avanzamento %/ETA): stessa meccanica del batch, solo presentazione diversa.
+  const runBatch = async (files: File[], isSingle: boolean, fromFolder = false) => {
     if (files.length === 0) return;
 
     if (batchRunningRef.current) {
@@ -292,7 +294,8 @@ export function usePayslipUpload({
       return;
     }
 
-    startUpload(isSingle ? 'single' : 'batch', files.length);
+    const uploadType = isSingle ? 'single' : fromFolder ? 'folder' : 'batch';
+    startUpload(uploadType, files.length);
 
     let currentAnni = JSON.parse(JSON.stringify(monthlyInputs));
     let successCount = 0;
@@ -613,7 +616,7 @@ export function usePayslipUpload({
     setMonthlyInputs(currentAnni);
     if (lastDetectedYear) setCurrentYear(lastDetectedYear);
 
-    finishUpload(successCount, errorCount, isSingle ? 'single' : 'batch');
+    finishUpload(successCount, errorCount, uploadType);
 
     // Feedback per-file: su un batch con errori elenca QUALI buste paga riprovare,
     // così l'utente non deve indovinare quale ricaricare.
@@ -643,7 +646,10 @@ export function usePayslipUpload({
     const files = filterPayslipFiles(Array.from(rawFiles));
     // Reset subito: ri-selezionare la stessa cartella/file ri-scatta onChange.
     e.target.value = '';
-    await runBatch(files, isSingle);
+    // webkitRelativePath è valorizzato SOLO dal picker-cartella (webkitdirectory):
+    // è il discriminante naturale per la Live Activity "cartella".
+    const fromFolder = files.some(f => (f as any).webkitRelativePath);
+    await runBatch(files, isSingle, !isSingle && fromFolder);
   };
 
   // --- DROP DI FILE E CARTELLE (anche più cartelle-anno in un colpo solo) ---
@@ -678,13 +684,14 @@ export function usePayslipUpload({
           .map(it => (typeof it.webkitGetAsEntry === 'function' ? it.webkitGetAsEntry() : null))
           .filter(Boolean)
       : [];
+    const hasFolder = entries.some((entry: any) => entry?.isDirectory);
     let dropped: File[] = [];
     if (entries.length > 0) {
       for (const entry of entries) await collectEntryFiles(entry, dropped);
     } else {
       dropped = Array.from(dataTransfer.files || []);
     }
-    await runBatch(filterPayslipFiles(dropped), false);
+    await runBatch(filterPayslipFiles(dropped), false, hasFolder);
   };
 
   // --- UPLOAD SINGOLO (wrapper) ---
