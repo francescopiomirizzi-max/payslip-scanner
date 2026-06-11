@@ -20,6 +20,8 @@ export interface WorkerDetailContextValue {
   isGlobalDragging: boolean;
   onSetIsGlobalDragging: (v: boolean) => void;
   onBatchUpload: (e: any, isSingle?: boolean) => void;
+  /** Drop di file E cartelle (traversate ricorsivamente, anche più cartelle-anno). */
+  onBatchDrop: (dataTransfer: DataTransfer) => void;
   isTimelineOpen: boolean;
   onToggleTimeline: () => void;
   legalStatus: 'analisi' | 'pronta' | 'inviata' | 'trattativa' | 'chiusa';

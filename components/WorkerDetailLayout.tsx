@@ -24,7 +24,7 @@ const MovingGrid = () => (
 // context via useWorkerDetail(). Qui restano solo il root con i drag handler globali, la
 // dropzone magnetica e i wrapper strutturali (invariati per non alterare il layout).
 const WorkerDetailLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { isGlobalDragging, onSetIsGlobalDragging, onBatchUpload } = useWorkerDetail();
+  const { isGlobalDragging, onSetIsGlobalDragging, onBatchDrop } = useWorkerDetail();
 
   return (
     <div
@@ -34,9 +34,9 @@ const WorkerDetailLayout: React.FC<{ children: React.ReactNode }> = ({ children 
       onDrop={(e) => {
         e.preventDefault();
         onSetIsGlobalDragging(false);
-        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-          onBatchUpload({ target: { files: e.dataTransfer.files } } as any);
-        }
+        // onBatchDrop attraversa anche le CARTELLE trascinate (più cartelle-anno
+        // insieme): dataTransfer.files da solo le vedrebbe come file illeggibili.
+        onBatchDrop(e.dataTransfer);
       }}
     >
       {/* --- 1. GLOBAL MAGNETIC DROPZONE --- */}
@@ -53,8 +53,8 @@ const WorkerDetailLayout: React.FC<{ children: React.ReactNode }> = ({ children 
             <motion.div animate={{ scale: [1, 1.1, 1] }} transition={{ repeat: Infinity, duration: 1.5 }}>
               <Bot className="w-32 h-32 text-fuchsia-400 drop-shadow-[0_0_40px_rgba(217,70,239,0.8)]" />
             </motion.div>
-            <h2 className="text-4xl font-black text-white mt-8 tracking-widest uppercase text-center">Sgancia i file qui</h2>
-            <p className="text-fuchsia-300 font-bold mt-2 text-center">Il Motore Neurale li processerà in automatico.</p>
+            <h2 className="text-4xl font-black text-white mt-8 tracking-widest uppercase text-center">Sgancia qui file o cartelle</h2>
+            <p className="text-fuchsia-300 font-bold mt-2 text-center">Puoi trascinare anche più cartelle-anno insieme: il Motore Neurale processa tutto in automatico.</p>
             <div className="mt-12 flex flex-col items-center">
               <span className="text-slate-400 dark:text-slate-200 text-sm mb-4">oppure</span>
               <button

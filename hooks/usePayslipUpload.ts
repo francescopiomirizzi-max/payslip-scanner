@@ -268,25 +268,20 @@ export function usePayslipUpload({
   // pilotava il vecchio HUD bloccante, sostituito dalla Dynamic Island.)
   const batchRunningRef = useRef(false);
 
-  // --- LOGICA UPLOAD COLLEGATA ALLA DYNAMIC ISLAND (CON PARSER TITANIUM V2) ---
-  const handleBatchUpload = async (
-    e: React.ChangeEvent<HTMLInputElement>,
-    isSingle = false
-  ) => {
-    const rawFiles = e.target.files;
-    if (!rawFiles || rawFiles.length === 0) return;
-
-    // Il picker-cartella (webkitdirectory) ignora `accept` e porta dentro anche
-    // .DS_Store, Excel, ecc.: si tengono solo PDF e immagini. L'input si resetta
-    // subito, così ri-selezionare la stessa cartella fa scattare di nuovo onChange.
-    const files = Array.from(rawFiles).filter(
+  // Tiene solo PDF e immagini: il picker-cartella (webkitdirectory) e il drop di
+  // cartelle ignorano `accept` e portano dentro anche .DS_Store, Excel, ecc.
+  const filterPayslipFiles = (list: File[]): File[] =>
+    list.filter(
       f =>
         !f.name.startsWith('.') &&
         (f.type === 'application/pdf' ||
           f.type.startsWith('image/') ||
           /\.(pdf|jpe?g|png|webp|heic)$/i.test(f.name))
     );
-    e.target.value = '';
+
+  // --- LOGICA UPLOAD COLLEGATA ALLA DYNAMIC ISLAND (CON PARSER TITANIUM V2) ---
+  // Core del batch: riceve File già filtrati, dall'input file/cartella o dal drop.
+  const runBatch = async (files: File[], isSingle: boolean) => {
     if (files.length === 0) return;
 
     if (batchRunningRef.current) {
@@ -333,7 +328,8 @@ export function usePayslipUpload({
       // "2022": l'anno si cerca anche nel nome della cartella IMMEDIATA. Solo
       // quella: usare l'intero percorso regalerebbe a tutti i file l'anno di una
       // eventuale cartella madre tipo "Avella 2008-2025".
-      const relPath: string = (file as any).webkitRelativePath || '';
+      const relPath: string =
+        (file as any).webkitRelativePath || (file as any).relativePath || '';
       const parentDir = relPath.split('/').slice(-2, -1)[0] || '';
       const yearMatchUI =
         file.name.match(/(20\d{2})/) || parentDir.match(/(20\d{2})/);
@@ -638,6 +634,59 @@ export function usePayslipUpload({
     }
   };
 
+  const handleBatchUpload = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+    isSingle = false
+  ) => {
+    const rawFiles = e.target.files;
+    if (!rawFiles || rawFiles.length === 0) return;
+    const files = filterPayslipFiles(Array.from(rawFiles));
+    // Reset subito: ri-selezionare la stessa cartella/file ri-scatta onChange.
+    e.target.value = '';
+    await runBatch(files, isSingle);
+  };
+
+  // --- DROP DI FILE E CARTELLE (anche più cartelle-anno in un colpo solo) ---
+  // dataTransfer.files per una cartella trascinata contiene la directory stessa
+  // (size 0, illeggibile): i file veri si raccolgono attraversando le entry con
+  // webkitGetAsEntry. readEntries restituisce blocchi da max 100 e va richiamato
+  // finché non torna vuoto. Ogni file è annotato con il percorso relativo per il
+  // riconoscimento dell'anno dalla cartella che lo contiene.
+  const collectEntryFiles = async (entry: any, collected: File[]): Promise<void> => {
+    if (!entry) return;
+    if (entry.isFile) {
+      const f: File = await new Promise((resolve, reject) => entry.file(resolve, reject));
+      (f as any).relativePath = entry.fullPath || f.name;
+      collected.push(f);
+    } else if (entry.isDirectory) {
+      const reader = entry.createReader();
+      while (true) {
+        const batch: any[] = await new Promise((resolve, reject) =>
+          reader.readEntries(resolve, reject)
+        );
+        if (batch.length === 0) break;
+        for (const child of batch) await collectEntryFiles(child, collected);
+      }
+    }
+  };
+
+  const handleBatchDrop = async (dataTransfer: DataTransfer) => {
+    // Le entry vanno estratte SINCRONAMENTE: dopo il primo await il browser
+    // invalida i DataTransferItem del drop.
+    const entries = dataTransfer.items
+      ? Array.from(dataTransfer.items)
+          .map(it => (typeof it.webkitGetAsEntry === 'function' ? it.webkitGetAsEntry() : null))
+          .filter(Boolean)
+      : [];
+    let dropped: File[] = [];
+    if (entries.length > 0) {
+      for (const entry of entries) await collectEntryFiles(entry, dropped);
+    } else {
+      dropped = Array.from(dataTransfer.files || []);
+    }
+    await runBatch(filterPayslipFiles(dropped), false);
+  };
+
   // --- UPLOAD SINGOLO (wrapper) ---
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files.length > 0) {
@@ -657,6 +706,7 @@ export function usePayslipUpload({
     setIsQRModalOpen,
     scanRef,
     handleBatchUpload,
+    handleBatchDrop,
     handleFileUpload,
     handleQRData,
   };

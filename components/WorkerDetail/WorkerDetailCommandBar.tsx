@@ -101,27 +101,36 @@ const WorkerDetailCommandBar: React.FC = () => {
             )}
 
             {/* TASTO CARICA CARTELLA — batch multi-anno in un colpo solo:
-                stessa pipeline di AI AGENT, ma si seleziona una cartella intera
-                (es. la cartella del lavoratore con le sottocartelle per anno). */}
+                stessa pipeline di AI AGENT (e stesso trattamento hover, in ambra),
+                ma si seleziona una cartella intera con le sottocartelle per anno. */}
             {!isReadOnly && (
             <button
               onClick={() => document.getElementById('dashboard-ai-upload-folder')?.click()}
               disabled={isBatchProcessing}
-              title="Carica una cartella intera: prende tutte le buste paga dentro, anche nelle sottocartelle divise per anno"
-              className={`group relative px-5 py-3 rounded-xl font-bold text-sm transition-all duration-300 flex items-center gap-2.5 overflow-hidden border-2 shrink-0
+              title="Carica una cartella intera: prende tutte le buste paga dentro, anche nelle sottocartelle divise per anno. Per più cartelle insieme, trascinale sulla pagina."
+              className={`group relative px-6 py-3 rounded-xl font-bold text-sm transition-all duration-500 flex items-center gap-3 overflow-hidden border-2 shrink-0
                   ${isBatchProcessing
                   ? 'bg-slate-100 border-slate-200 opacity-50 dark:opacity-80 cursor-not-allowed'
-                  : 'bg-white/40 dark:bg-slate-800/40 text-slate-600 dark:text-slate-400 dark:text-slate-200 border-transparent hover:border-fuchsia-400/50 hover:shadow-[0_0_20px_rgba(217,70,239,0.3)]'
+                  : 'bg-white/40 dark:bg-slate-800/40 text-slate-600 dark:text-slate-400 dark:text-slate-200 border-transparent hover:border-transparent hover:shadow-[0_0_40px_rgba(245,158,11,0.3)]'
                 }`}
             >
-              <FolderUp className="w-5 h-5 transition-colors duration-300 group-hover:text-fuchsia-400" />
-              <div className="flex flex-col items-start leading-none text-left">
-                <span className="text-[8.5px] uppercase tracking-[0.2em] opacity-70 group-hover:opacity-100 transition-all duration-300 mb-0.5 font-black">
-                  Multi-anno
-                </span>
-                <span className="tracking-widest font-black text-[13px] transition-all duration-300">
-                  CARTELLA
-                </span>
+              <div className="absolute inset-0 bg-slate-900 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+              <div className="absolute inset-[-150%] bg-[conic-gradient(from_0deg,transparent_0_300deg,#f59e0b_360deg)] opacity-0 group-hover:opacity-100 group-hover:animate-[spin_2s_linear_infinite] transition-opacity duration-300"></div>
+              <div className="absolute inset-[2px] bg-slate-900 rounded-[10px] opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-0"></div>
+              <div className="absolute inset-0 bg-amber-500/20 opacity-0 group-hover:opacity-100 transition-opacity duration-500 z-0 blur-xl"></div>
+              <div className="relative z-10 flex items-center gap-2.5 transition-colors duration-300">
+                <div className="relative flex items-center justify-center">
+                  <FolderUp className="w-5 h-5 transition-all duration-500 group-hover:text-amber-400" />
+                  <div className="absolute inset-0 bg-amber-400 blur-md opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+                </div>
+                <div className="flex flex-col items-start leading-none text-left">
+                  <span className="text-[8.5px] uppercase tracking-[0.2em] opacity-70 group-hover:opacity-100 group-hover:text-amber-200 transition-all duration-300 mb-0.5 font-black">
+                    Multi-anno
+                  </span>
+                  <span className="tracking-widest font-black text-[13px] group-hover:text-white group-hover:drop-shadow-[0_0_10px_rgba(245,158,11,0.8)] transition-all duration-300">
+                    CARTELLA
+                  </span>
+                </div>
               </div>
             </button>
             )}

@@ -360,6 +360,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
     setIsQRModalOpen,
     scanRef,
     handleBatchUpload,
+    handleBatchDrop,
     handleFileUpload,
     handleQRData,
   } = usePayslipUpload({
@@ -860,6 +861,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
       isGlobalDragging,
       onSetIsGlobalDragging: setIsGlobalDragging,
       onBatchUpload: handleBatchUpload,
+      onBatchDrop: handleBatchDrop,
       isTimelineOpen,
       onToggleTimeline: () => setIsTimelineOpen(!isTimelineOpen),
       legalStatus,

@@ -96,3 +96,16 @@ NIENTE della logica di estrazione/applicazione dati (Titanium V3 intatto).
       clobberavano lo snapshot a vicenda. NON cablato isBatchProcessing: avrebbe
       resuscitato il vecchio HUD bloccante (sostituito dalla Dynamic Island).
 - [x] Verifica: tsc pulito · build ok · 173 test verdi.
+
+## Iterazione 2: drop multi-cartella + restyling tasto
+
+- [x] Dropzone globale potenziata: onBatchDrop attraversa le CARTELLE trascinate
+      (webkitGetAsEntry ricorsivo, readEntries a blocchi da 100, entry estratte
+      sincronamente prima del primo await) → si trascinano PIÙ cartelle-anno
+      insieme dal Finder. Prima dataTransfer.files vedeva le directory come file
+      illeggibili. Percorso annotato in (file as any).relativePath per l'anno.
+- [x] Copy dropzone: "Sgancia qui file o cartelle".
+- [x] Tasto CARTELLA restylato: stesso trattamento hover di AI AGENT (fill scuro
+      + bordo conico rotante + glow) in AMBRA per distinguerlo (fucsia=AI,
+      ciano=scan). Tooltip spiega il drag per più cartelle.
+- [x] Verifica: tsc pulito · build ok · 173 test verdi.
