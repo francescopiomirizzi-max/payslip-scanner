@@ -20,7 +20,8 @@ import { motion, useSpring, useMotionValue, AnimatePresence } from 'framer-motio
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { Worker, resolveIncludePaidLeave } from '../types';
-import { SYSTEM_PROFILES, getCustomColorIndex, getCompanyHex } from '../config/profiles';
+import { SYSTEM_PROFILES, getCustomColorIndex, getCompanyHex, getCompanyLogo } from '../config/profiles';
+import { CompanyLogo } from './ui/CompanyLogo';
 import { computeHolidayIndemnity } from '../utils/calculationEngine';
 
 // --- COMPONENTE NUMERO ANIMATO (TICKING) ---
@@ -462,13 +463,23 @@ const StatsDashboard: React.FC<StatsDashboardProps> = ({ workers = [], onBack })
                                     <div key={profile} className="group">
                                         <div className="flex justify-between items-end mb-3">
                                             <div className="flex items-center gap-3">
-                                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-white text-sm shadow-lg ${bgClass}`}>
-                                                    {profile.substring(0, 1)}
-                                                </div>
-                                                <div>
-                                                    <span className="block font-bold text-white text-lg leading-none tracking-tight">{profile}</span>
-                                                    <span className="text-xs font-medium text-slate-500">{data.count} pratiche attive</span>
-                                                </div>
+                                                {/* Pagina sempre dark → logo in silhouette bianca; il colore-azienda lo dà la barra */}
+                                                {getCompanyLogo(profile) ? (
+                                                    <div>
+                                                        <CompanyLogo profilo={profile} h={20} forceWhite title={profile} />
+                                                        <span className="block text-xs font-medium text-slate-500 mt-1.5">{data.count} pratiche attive</span>
+                                                    </div>
+                                                ) : (
+                                                    <>
+                                                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-white text-sm shadow-lg ${bgClass}`}>
+                                                            {profile.substring(0, 1)}
+                                                        </div>
+                                                        <div>
+                                                            <span className="block font-bold text-white text-lg leading-none tracking-tight">{profile}</span>
+                                                            <span className="text-xs font-medium text-slate-500">{data.count} pratiche attive</span>
+                                                        </div>
+                                                    </>
+                                                )}
                                             </div>
                                             <div className="text-right">
                                                 <span className="block font-black text-xl tabular-nums drop-shadow-md" style={{ color: barColor }}>{data.value.toLocaleString('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })}</span>
@@ -524,17 +535,21 @@ const StatsDashboard: React.FC<StatsDashboardProps> = ({ workers = [], onBack })
                                                 )}
                                             </div>
                                             <div className="flex items-center gap-2 mt-1">
-                                                {/* BADGE PROFILO */}
-                                                <span
-                                                    className="text-[9px] font-black px-1.5 py-0.5 rounded border shadow-sm uppercase"
-                                                    style={{
-                                                        color: getCompanyHex(w.profilo),
-                                                        borderColor: `${getCompanyHex(w.profilo)}4D`,
-                                                        backgroundColor: `${getCompanyHex(w.profilo)}1A`,
-                                                    }}
-                                                >
-                                                    {w.profilo}
-                                                </span>
+                                                {/* Logo azienda (silhouette su pagina dark); fallback badge per le custom */}
+                                                {getCompanyLogo(w.profilo) ? (
+                                                    <CompanyLogo profilo={w.profilo} eliorType={w.eliorType} h={11} forceWhite className="opacity-80" title={w.profilo} />
+                                                ) : (
+                                                    <span
+                                                        className="text-[9px] font-black px-1.5 py-0.5 rounded border shadow-sm uppercase"
+                                                        style={{
+                                                            color: getCompanyHex(w.profilo),
+                                                            borderColor: `${getCompanyHex(w.profilo)}4D`,
+                                                            backgroundColor: `${getCompanyHex(w.profilo)}1A`,
+                                                        }}
+                                                    >
+                                                        {w.profilo}
+                                                    </span>
+                                                )}
                                             </div>
                                         </div>
                                     </div>
