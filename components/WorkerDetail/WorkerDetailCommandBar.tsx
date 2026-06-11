@@ -215,9 +215,12 @@ const WorkerDetailCommandBar: React.FC = () => {
               <span className="relative z-10">Analisi Voci</span>
             </button>
 
+            {/* TAB: PROSPETTO TFR — fuori dal piano di consultazione del viewer
+                (sarà un modulo a pagamento): nascosto in sola lettura */}
+            {!isReadOnly && (
+            <>
             <div className="w-px bg-slate-300 dark:bg-slate-700 mx-1" />
 
-            {/* TAB: PROSPETTO TFR */}
             <button
               onClick={() => onSetActiveTab('tfr')}
               className={`group relative px-6 py-3 rounded-xl font-bold text-sm transition-colors duration-200 flex items-center gap-2 overflow-hidden border-2 shrink-0
@@ -233,6 +236,8 @@ const WorkerDetailCommandBar: React.FC = () => {
               <Wallet className={`w-5 h-5 transition-transform duration-300 relative z-10 ${activeTab === 'tfr' ? 'rotate-0' : 'group-hover:-translate-y-1 group-hover:translate-x-1'}`} />
               <span className="relative z-10">Prospetto TFR</span>
             </button>
+            </>
+            )}
 
           </div>
         </div>

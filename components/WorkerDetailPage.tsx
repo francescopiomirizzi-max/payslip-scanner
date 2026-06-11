@@ -248,6 +248,12 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isReadOnly]);
 
+  // Prospetto TFR: fuori dal piano di consultazione (sarà un modulo a pagamento).
+  // Il viewer non deve arrivarci nemmeno via hash/deep-link: rimbalzo su 'calc'.
+  useEffect(() => {
+    if (isReadOnly && activeTab === 'tfr') setActiveTab('calc');
+  }, [isReadOnly, activeTab]);
+
   // --- BACKFILL VOCI FISSE (Quadro B) dalle buste già in archivio ---
   // Solo profili con voci fisse definite (RFI/Trenitalia). Merge-safe: scrive SOLO i 3B...
   const { progress: backfillProgress, run: runFixedBackfill, runFromFiles: runFixedBackfillFromFiles, stop: stopFixedBackfill } = useFixedVociBackfill();
@@ -805,6 +811,15 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
     monthlyInputs, worker, startClaimYear, includeExFest, includeTickets, includePaidLeave,
   });
 
+  // Le card TFR seguono il Prospetto TFR: fuori dal piano di consultazione del
+  // viewer (modulo a pagamento futuro), quindi via anche dalla barra ticker.
+  const visibleTickerItems = useMemo(
+    () => isReadOnly
+      ? tickerItems.filter(t => t.label !== 'TFR SU DIFFERENZE' && t.label !== 'FONDO TFR STORICO')
+      : tickerItems,
+    [tickerItems, isReadOnly]
+  );
+
   const { handleContainerScroll } = useIslandSync({
     onBack,
     showReport,
@@ -850,7 +865,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
       legalStatus,
       onLegalStatusChange: (s: string) => setLegalStatus(s as LegalStatus),
       onUpdateStatus,
-      tickerItems,
+      tickerItems: visibleTickerItems,
       activeTickerModal,
       onSetActiveTickerModal: setActiveTickerModal,
       includeExFest,
@@ -979,7 +994,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
           />
         </div>
       )}
-      {activeTab === 'tfr' && (
+      {activeTab === 'tfr' && !isReadOnly && (
         <div className="h-full overflow-hidden">
           <TfrCalculationTable
             data={monthlyInputs}
