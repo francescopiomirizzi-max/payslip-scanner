@@ -658,6 +658,18 @@ const PROMPT_CLEAN_SERVICE = `
 
   REGOLA ANTI-DUPLICAZIONE: il valore di una stessa voce deve comparire UNA SOLA volta. Se hai messo X nel codice 8191, NON metterlo anche in "arretrati". Se hai messo X in "arretrati", NON metterlo in nessun codice.
 
+  ### 4-bis. VOCI FISSE CONTINUATIVE (base retributiva mensile — "Quadro B")
+  [SCOPO]: servono SOLO al calcolo delle percentuali di incidenza, NON al credito ferie.
+  Il JSON DEVE contenere SEMPRE anche le 4 chiavi MC01, MC06, MC07, MC10 in "codes" (0.0 se illeggibili). Il cedolino le stampa in DUE layout possibili:
+  a) LAYOUT NUOVO (dal 2021 circa): righe in TESTA alla tabella voci con codici espliciti:
+     - MC01 (MINIMO)
+     - MC06 (SAL. PROF.)
+     - MC07 (SCATTI ANZ)
+     - MC10 (AD PERS.)
+     ⚠️ La riga MCT (TOTALE RETRIBUZIONE) è il totale di controllo: NON inserirla in "codes".
+  b) LAYOUT VECCHIO (fino al 2019/2020): le righe MC.. NON esistono. I 4 valori sono nella BANDA DI TESTATA del cedolino (riquadro anagrafico in alto), sotto le etichette "MINIMO", "SAL. PROF.", "SCATTI ANZ", "AD PERS.": usa la riga "ATT." (attuale), NON la riga "PREC.". Mappali sulle stesse chiavi: MINIMO→MC01, SAL. PROF.→MC06, SCATTI ANZ→MC07, AD PERS.→MC10.
+  Verifica di sanità in entrambi i layout: MC01+MC06+MC07+MC10 deve ≈ "TOTALE RETRIBUZIONE"/"RETRIBUZIONE DI FATTO" stampata sul cedolino.
+
   ### 5. ARRETRATI E NOTE
   - "arretrati": somma SOLO gli importi POSITIVI delle voci la cui DESCRIZIONE contiene "UNA TANTUM", "ARRETRATI", "CONGUAGLIO", "ARR." (case-insensitive). IGNORA categoricamente la colonna Trattenute.
   - "eventNote":
@@ -696,7 +708,8 @@ const PROMPT_CLEAN_SERVICE = `
       "565": 0.0, "739": 0.0, "820": 0.0, "8001": 0.0, "8005": 0.0,
       "8007": 0.0, "8019": 31.11, "8029": 38.0, "8032": 0.0, "8037": 38.78, "8038": 28.0,
       "8053": 26.4, "8057": 45.0, "8191": 99.62, "8258": 0.0, "8350": 0.0,
-      "9117": 0.0, "9119": 0.0, "7173": 0.0
+      "9117": 0.0, "9119": 0.0, "7173": 0.0,
+      "MC01": 1670.92, "MC06": 22.00, "MC07": 146.04, "MC10": 25.63
     }
   }
 `;
@@ -774,7 +787,7 @@ const PROMPT_MERCITALIA = `
   ### 6. MASTER LIST CODICI ADP — importi dalla colonna "Competenze"
   Per ognuno dei 12 codici elencati sotto, estrai l'importo in euro dalla colonna "Competenze" (6ª colonna, importi positivi).
   NON leggere la colonna "Valori" né "Numero o base di calcolo": l'importo pagato dell'indennità è in "Competenze".
-  REGOLA D'ORO: il JSON DEVE contenere TUTTE le 12 chiavi. Codice assente -> valore 0.0.
+  REGOLA D'ORO: il JSON DEVE contenere TUTTE le 15 chiavi (12 variabili + 3 fisse del §6-bis). Codice assente -> valore 0.0.
 
   Indennità variabili di presenza:
   - 1801 (INDEN.LAV NOTTURNO)
@@ -791,6 +804,14 @@ const PROMPT_MERCITALIA = `
   Festività:
   - 2263 (FESTIVITA')
   - 2293 (FESTIVITA INFRAS.)
+
+  ### 6-bis. VOCI FISSE CONTINUATIVE (base retributiva mensile — "Quadro B")
+  [SCOPO]: servono SOLO al calcolo delle percentuali di incidenza, NON al credito ferie.
+  ⚠️ ECCEZIONE DI COLONNA: queste 3 voci sono le righe in TESTA alla tabella voci e il loro importo si legge nella colonna "Valori" (3ª colonna), NON in "Competenze":
+  - 1000 (RETRIBUZIONE BASE)
+  - 1001 (SALARIO PROFESS.)
+  - 1025 (SCATTI ANZIANITA' — assente per i neoassunti senza scatti: in tal caso 0.0)
+  ⚠️ La riga 1100 (TOT.RETRIBUZIONE) è il TOTALE delle tre voci sopra: NON inserirla in "codes", usala solo come verifica (1000+1001+1025 deve ≈ 1100).
 
   ### 7. CODICI DI FILTRO / ARRETRATI
   I seguenti codici NON devono comparire in "codes". I loro importi POSITIVI (colonna "Competenze") vanno SOMMATI nel campo "arretrati":
@@ -828,7 +849,8 @@ const PROMPT_MERCITALIA = `
     "codes": {
       "1801": 96.00, "1802": 34.00, "1811": 40.00, "1819": 0.0, "1879": 0.0, "2331": 0.0,
       "2013": 0.0, "2023": 0.0, "2033": 0.0, "2073": 130.35,
-      "2263": 133.69, "2293": 0.0
+      "2263": 133.69, "2293": 0.0,
+      "1000": 1630.30, "1001": 107.73, "1025": 25.22
     }
   }
 `;
@@ -1047,11 +1069,16 @@ REGOLE ASSOLUTE:
 
     // =========================================================================
     // 🧱 MODALITÀ VOCI FISSE (Quadro B): backfill leggero delle sole voci fisse
-    // continuative su buste RFI/Trenitalia già in archivio. Estrae SOLO i codici 3B..
+    // continuative su buste già in archivio. Estrae SOLO i codici fissi del profilo
     // (no giorni, no variabili) → veloce/economica. Il client scrive in merge-safe.
     // =========================================================================
     if (action === 'fixed-voci') {
-      const fixedPrompt = `Sei un estrattore dati preciso per buste paga ferroviarie RFI/Trenitalia.
+      const PERIODO_E_OUTPUT = `Restituisci ESCLUSIVAMENTE un oggetto JSON crudo (NIENTE markdown, niente \`\`\`), con TUTTE le chiavi elencate. Se un codice è assente nella busta, il suo valore DEVE essere 0.0.
+Aggiungi infine "month" (numero 1-12) e "year" (4 cifre): identificali dalla testata del cedolino (mese/anno di competenza). Se non identificabili, scrivi 0.`;
+
+      const FIXED_RFI = {
+        ids: ['3B01','3B03','3B05','3B10','3B15','3B20','3B30','3B35','3B70','3B71'],
+        prompt: `Sei un estrattore dati preciso per buste paga ferroviarie RFI/Trenitalia.
 Estrai ESCLUSIVAMENTE le seguenti VOCI FISSE CONTINUATIVE dalla colonna "Competenze" (importi positivi, in euro).
 ⚠️ IGNORA TASSATIVAMENTE la colonna "Trattenute"/"Assorbimenti": i codici 2B30 e 2B35 hanno descrizione simile (EDR) ma sono TRATTENUTE → NON usarli.
 Cerca questi codici in TUTTE le pagine:
@@ -1065,11 +1092,50 @@ Cerca questi codici in TUTTE le pagine:
 - 3B35 (EDR acc. 11.9.98)
 - 3B70 (Salario Produttività)
 - 3B71 (Produttività Incrementale)
-Restituisci ESCLUSIVAMENTE un oggetto JSON crudo (NIENTE markdown, niente \`\`\`), con TUTTE le chiavi elencate. Se un codice è assente nella busta, il suo valore DEVE essere 0.0.
+${PERIODO_E_OUTPUT}
 Aggiungi inoltre "retribuzioneMensile": il valore del riquadro "RETRIBUZIONE MENSILE" in alto (numero di controllo; 0.0 se assente).
-Aggiungi infine "month" (numero 1-12) e "year" (4 cifre): identificali dalla testata del cedolino (mese/anno di competenza). Se non identificabili, scrivi 0.
 Esempio di output perfetto:
-{"codes":{"3B01":1609.30,"3B03":1.61,"3B05":40.38,"3B10":89.25,"3B15":0.0,"3B20":179.46,"3B30":63.01,"3B35":57.17,"3B70":69.49,"3B71":52.46},"retribuzioneMensile":1920.00,"month":3,"year":2019}`;
+{"codes":{"3B01":1609.30,"3B03":1.61,"3B05":40.38,"3B10":89.25,"3B15":0.0,"3B20":179.46,"3B30":63.01,"3B35":57.17,"3B70":69.49,"3B71":52.46},"retribuzioneMensile":1920.00,"month":3,"year":2019}`,
+      };
+
+      const FIXED_MERCITALIA = {
+        ids: ['1000','1001','1025'],
+        prompt: `Sei un estrattore dati preciso per buste paga MERCITALIA (layout gestionale ADP).
+Estrai ESCLUSIVAMENTE le seguenti VOCI FISSE CONTINUATIVE. Sono le righe in TESTA alla tabella voci di PAGINA 1 e il loro importo è nella colonna "Valori" (3ª colonna), NON in "Competenze":
+- 1000 (RETRIBUZIONE BASE)
+- 1001 (SALARIO PROFESS.)
+- 1025 (SCATTI ANZIANITA' — assente per i neoassunti senza scatti: in tal caso 0.0)
+⚠️ La riga 1100 (TOT.RETRIBUZIONE) è il TOTALE delle voci sopra: NON inserirla in "codes", usala SOLO come verifica (1000+1001+1025 deve ≈ 1100) e riportala in "retribuzioneMensile".
+⚠️ NON usare la riga 1213 (RETRIBUZ.ORDINARIA): è la stessa base erogata a giorni, non una voce fissa.
+${PERIODO_E_OUTPUT}
+Esempio di output perfetto:
+{"codes":{"1000":1630.30,"1001":107.73,"1025":25.22},"retribuzioneMensile":1763.25,"month":5,"year":2021}`,
+      };
+
+      const FIXED_CLEAN_SERVICE = {
+        ids: ['MC01','MC06','MC07','MC10'],
+        prompt: `Sei un estrattore dati preciso per buste paga CLEAN SERVICE SRL (CCNL Multiservizi).
+Estrai ESCLUSIVAMENTE le 4 VOCI FISSE CONTINUATIVE della base retributiva mensile. Il cedolino le stampa in DUE layout possibili:
+a) LAYOUT NUOVO (dal 2021 circa): righe in TESTA alla tabella voci con codici espliciti:
+   - MC01 (MINIMO)
+   - MC06 (SAL. PROF.)
+   - MC07 (SCATTI ANZ)
+   - MC10 (AD PERS.)
+   ⚠️ La riga MCT (TOTALE RETRIBUZIONE) è il totale di controllo: NON inserirla in "codes", riportala in "retribuzioneMensile".
+b) LAYOUT VECCHIO (fino al 2019/2020): le righe MC.. NON esistono. I 4 valori sono nella BANDA DI TESTATA del cedolino (riquadro anagrafico in alto), sotto le etichette "MINIMO", "SAL. PROF.", "SCATTI ANZ", "AD PERS.": usa la riga "ATT." (attuale), NON la riga "PREC.". Mappali sulle stesse chiavi: MINIMO→MC01, SAL. PROF.→MC06, SCATTI ANZ→MC07, AD PERS.→MC10. In questo layout "retribuzioneMensile" = valore "RETRIBUZIONE DI FATTO" in testata.
+Verifica di sanità in entrambi i layout: MC01+MC06+MC07+MC10 deve ≈ retribuzioneMensile.
+${PERIODO_E_OUTPUT}
+Esempio di output perfetto:
+{"codes":{"MC01":1670.92,"MC06":22.00,"MC07":146.04,"MC10":25.63},"retribuzioneMensile":1864.59,"month":5,"year":2023}`,
+      };
+
+      const FIXED_VOCI_DIRECTORY: Record<string, { ids: string[]; prompt: string }> = {
+        RFI: FIXED_RFI,
+        TRENITALIA: FIXED_RFI,
+        MERCITALIA: FIXED_MERCITALIA,
+        CLEAN_SERVICE: FIXED_CLEAN_SERVICE,
+      };
+      const fixedCfg = FIXED_VOCI_DIRECTORY[(company || 'RFI').toUpperCase()] || FIXED_RFI;
 
       const result = await generateContentWithRetry(
         SCAN_API_KEYS,
@@ -1077,14 +1143,13 @@ Esempio di output perfetto:
           model: GEMINI_MODEL,
           generationConfig: { responseMimeType: "application/json", temperature: 0.0, thinkingConfig: { thinkingBudget: THINKING_BUDGET } } as any,
         }),
-        [fixedPrompt, { inlineData: { data: cleanData, mimeType: mimeType || "application/pdf" } }]
+        [fixedCfg.prompt, { inlineData: { data: cleanData, mimeType: mimeType || "application/pdf" } }]
       );
 
       let parsed: any = {};
       try { parsed = JSON.parse(result.response.text().trim()); } catch { parsed = {}; }
-      const FIXED_IDS = ['3B01','3B03','3B05','3B10','3B15','3B20','3B30','3B35','3B70','3B71'];
       const codes: Record<string, number> = {};
-      for (const id of FIXED_IDS) {
+      for (const id of fixedCfg.ids) {
         const v = Number(parsed?.codes?.[id]);
         codes[id] = isFinite(v) ? v : 0;
       }

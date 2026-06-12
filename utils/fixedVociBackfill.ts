@@ -1,10 +1,15 @@
-import { AnnoDati } from '../types';
+import { AnnoDati, ProfiloAzienda, getFixedColumnsByProfile } from '../types';
 
 // Codici delle VOCI FISSE continuative (Quadro B) per RFI/Trenitalia.
-// Unica fonte di verità per il backfill: SOLO questi campi possono essere scritti.
+// Whitelist storica, default di mergeFixedVociIntoAnni per retrocompatibilità.
 export const FIXED_VOCI_IDS = [
   '3B01', '3B03', '3B05', '3B10', '3B15', '3B20', '3B30', '3B35', '3B70', '3B71',
 ] as const;
+
+// Whitelist per profilo: unica fonte di verità = getFixedColumnsByProfile (types.ts).
+// SOLO questi campi possono essere scritti dal backfill di quel profilo.
+export const getFixedVociIds = (profilo: ProfiloAzienda): string[] =>
+  getFixedColumnsByProfile(profilo).map(c => c.id);
 
 /**
  * Esito del merge della risposta AI sull'array `anni` di un lavoratore.
@@ -16,7 +21,8 @@ export interface FixedMergeResult {
 }
 
 /**
- * MERGE-SAFE: scrive ESCLUSIVAMENTE i codici 3B.. (whitelist FIXED_VOCI_IDS) sulla riga
+ * MERGE-SAFE: scrive ESCLUSIVAMENTE i codici della whitelist `fixedIds` (default: i 3B..
+ * di RFI/Trenitalia; per gli altri profili passare `getFixedVociIds(profilo)`) sulla riga
  * (year, monthIndex) GIÀ esistente. Garanzie:
  *  - non crea righe nuove (se il mese non esiste, no-op);
  *  - non tocca NESSUN altro campo (giorni, indennità variabili, note, ticket…) →
@@ -28,7 +34,8 @@ export function mergeFixedVociIntoAnni(
   anni: AnnoDati[],
   year: number,
   monthIndex: number,
-  fixedCodes: Record<string, unknown> | null | undefined
+  fixedCodes: Record<string, unknown> | null | undefined,
+  fixedIds: readonly string[] = FIXED_VOCI_IDS
 ): FixedMergeResult {
   if (!Array.isArray(anni)) return { anni: [], updated: false };
   if (!fixedCodes || typeof fixedCodes !== 'object') return { anni, updated: false };
@@ -40,7 +47,7 @@ export function mergeFixedVociIntoAnni(
 
   const row: AnnoDati = { ...anni[idx] };
   let changed = false;
-  for (const id of FIXED_VOCI_IDS) {
+  for (const id of fixedIds) {
     const v = Number((fixedCodes as Record<string, unknown>)[id]);
     if (isFinite(v) && v !== 0 && row[id] !== v) {
       row[id] = v;

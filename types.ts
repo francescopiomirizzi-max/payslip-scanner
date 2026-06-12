@@ -210,6 +210,18 @@ export const INDENNITA_CLEAN_SERVICE: ColumnDef[] = [
   { id: '8053', label: 'Maneggio Den.',    subLabel: '(8053)', width: 'min-w-[110px]', type: 'currency' },
 ];
 
+// Voci FISSE CLEAN SERVICE (Quadro B — base retributiva mensile, CCNL Multiservizi).
+// Verificate sulle buste reali di Cianci (2014-2025): dal 2021 sono righe della tabella
+// voci con codici MC.. (MCT = totale, non sommare); sui layout precedenti (≤2019) gli
+// stessi 4 valori vivono nella BANDA DI TESTATA (riga ATT.) sotto le etichette
+// MINIMO / SAL. PROF. / SCATTI ANZ / AD PERS., con totale = "RETRIBUZIONE DI FATTO".
+export const INDENNITA_CLEAN_SERVICE_FISSE: ColumnDef[] = [
+  { id: 'MC01', label: 'Minimo',        subLabel: '(MC01)', width: 'min-w-[120px]', type: 'currency' },
+  { id: 'MC06', label: 'Sal. Prof.',    subLabel: '(MC06)', width: 'min-w-[110px]', type: 'currency' },
+  { id: 'MC07', label: 'Scatti Anz.',   subLabel: '(MC07)', width: 'min-w-[110px]', type: 'currency' },
+  { id: 'MC10', label: 'Ad Personam',   subLabel: '(MC10)', width: 'min-w-[120px]', type: 'currency' },
+];
+
 // Colonne MERCITALIA (Mercitalia Shunting & Terminal - layout gestionale ADP)
 // Master List a 4 cifre: A) indennità variabili di presenza, B) straordinario, C) festività.
 // I ticket NON hanno colonna: vivono solo nella nota del mese.
@@ -229,6 +241,17 @@ export const INDENNITA_MERCITALIA: ColumnDef[] = [
   // C — Festività
   { id: '2263', label: 'Festività',         subLabel: '(2263)', width: 'min-w-[120px]', type: 'currency' },
   { id: '2293', label: 'Festività Infras.', subLabel: '(2293)', width: 'min-w-[130px]', type: 'currency' },
+];
+
+// Voci FISSE MERCITALIA (Quadro B — base retributiva mensile, layout ADP).
+// Verificate sulle buste reali di Gagliano (2019-2025): sono le righe in TESTA alla
+// tabella voci, con l'importo nella colonna "Valori" (NON "Competenze"). La riga
+// 1100 TOT.RETRIBUZIONE = 1000+1001+1025 è solo un totale di controllo (non sommare);
+// la riga 1213 RETRIBUZ.ORDINARIA in Competenze è la stessa base erogata a giorni.
+export const INDENNITA_MERCITALIA_FISSE: ColumnDef[] = [
+  { id: '1000', label: 'Retrib. Base',  subLabel: '(1000)', width: 'min-w-[120px]', type: 'currency' },
+  { id: '1001', label: 'Salario Prof.', subLabel: '(1001)', width: 'min-w-[120px]', type: 'currency' },
+  { id: '1025', label: 'Scatti Anz.',   subLabel: '(1025)', width: 'min-w-[110px]', type: 'currency' },
 ];
 
 // --- COLONNA ARRETRATI (Universale) ---
@@ -318,7 +341,7 @@ export const getColumnsByProfile = (profilo: ProfiloAzienda, eliorType?: 'viaggi
 /**
  * Voci FISSE continuative ("Quadro B") per profilo, usate SOLO come denominatore
  * delle percentuali di incidenza. Restituisce [] per i profili che non le hanno
- * ancora definite (oggi: solo RFI/TRENITALIA). NON include la colonna mese né i totali:
+ * ancora definite (oggi: solo ELIOR). NON include la colonna mese né i totali:
  * è una lista pura di voci, da sommare per ottenere la base fissa mensile.
  */
 /**
@@ -359,6 +382,10 @@ export const getFixedColumnsByProfile = (profilo: ProfiloAzienda): ColumnDef[] =
     case 'RFI':
     case 'TRENITALIA':
       return INDENNITA_RFI_FISSE;
+    case 'MERCITALIA':
+      return INDENNITA_MERCITALIA_FISSE;
+    case 'CLEAN_SERVICE':
+      return INDENNITA_CLEAN_SERVICE_FISSE;
     default:
       return [];
   }

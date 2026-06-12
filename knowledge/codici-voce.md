@@ -4,10 +4,11 @@ Legenda dei codici voce delle buste, per profilo azienda. Per la base contrattua
 [`ccnl-e-normativa.md`](ccnl-e-normativa.md); per cosa entra nel credito vedi
 [`metodologia-calcolo.md`](metodologia-calcolo.md).
 
-Touch points nel codice: set variabili = `INDENNITA_RFI` (types.ts) filtrato da
-`EXCLUDED_INDEMNITY_COLS` (calculationEngine.ts); set fisse = `INDENNITA_RFI_FISSE` (types.ts) +
-`FIXED_VOCI_IDS` (utils/fixedVociBackfill.ts); estrazione = prompt RFI/TRENITALIA e action
-`fixed-voci` in `netlify/functions/scan-payslip.ts`.
+Touch points nel codice: set variabili = `INDENNITA_<AZIENDA>` (types.ts) filtrato da
+`EXCLUDED_INDEMNITY_COLS` (calculationEngine.ts); set fisse = `INDENNITA_<AZIENDA>_FISSE`
+(types.ts) via `getFixedColumnsByProfile` + whitelist per profilo `getFixedVociIds`
+(utils/fixedVociBackfill.ts); estrazione = prompt per azienda e action `fixed-voci`
+(parametrica per company) in `netlify/functions/scan-payslip.ts`.
 
 > ⚠️ Qualsiasi modifica al set **VARIABILE** cambia gli **euro del credito** → ricalcolare,
 > aggiornare i test, ri-deployare. Le voci **fisse** e le **%** sono additive (non toccano gli euro).
@@ -100,6 +101,54 @@ Validato il 2026-05-28 su 14 buste di un lavoratore (Cianci, 2013–2019).
 **Range tipici (sanity check):** ANF (8001) 86,35 (dal 07/2014) o 193,33 (fino 06/2014);
 9117 ~3,93/mese; 9119 ~3,93/mese; TFR mensile Dic 15000–25000 (cumulativo anno); bonus Renzi
 (8258) 0–292.
+
+### Fisse — Quadro B, NON generano credito (servono per le %), 4 voci
+
+Mappate il 2026-06-12 sulle buste reali di Cianci (2014, 2019, 2021, 2023). Il cedolino le
+stampa in **due layout**:
+
+| Chiave app | Voce | Layout nuovo (dal 2021 ca.) | Layout vecchio (≤ 2019/2020) |
+|---|---|---|---|
+| `MC01` | Minimo | riga `MC01 MINIMO` in testa alla tabella voci | banda di testata, etichetta "MINIMO", riga **ATT.** |
+| `MC06` | Sal. Prof. | riga `MC06 SAL. PROF.` | etichetta "SAL. PROF." |
+| `MC07` | Scatti Anz. | riga `MC07 SCATTI ANZ` | etichetta "SCATTI ANZ" |
+| `MC10` | Ad Personam | riga `MC10 AD PERS.` | etichetta "AD PERS." |
+
+- Totale di controllo: `MCT TOTALE RETRIBUZIONE` (layout nuovo) = "RETRIBUZIONE DI FATTO"
+  in testata (layout vecchio) = MC01+MC06+MC07+MC10. **Non** va in `codes`.
+- Nel layout vecchio usare la riga **ATT.** (attuale), mai la riga PREC.
+- Esempio Cianci 05/2023: 1.670,92 + 22,00 + 146,04 + 25,63 = 1.864,59.
+
+> ⚠️ Nota osservata sulle buste reali (2014 e 2023): la retribuzione ordinaria è stampata col
+> codice **8001** (non 6001 come dice il prompt) e l'ANF col codice **8300** (l'app la chiama
+> 8001). Il set variabile funziona via descrizioni, ma il mapping interno ha questi alias
+> storici: NON "correggerli" senza rivalidare le 14 buste.
+
+---
+
+## Mercitalia Shunting & Terminal (layout ADP)
+
+Lavoratore di riferimento: Gagliano (buste 2019–2025, PDF). Le **variabili** sono le 12 voci
+di `INDENNITA_MERCITALIA` (types.ts): 1801/1802/1811/1819/1879/2331 (presenza),
+2013/2023/2033/2073 (straordinari), 2263/2293 (festività) — importi dalla colonna
+**Competenze** (6ª).
+
+### Fisse — Quadro B, NON generano credito (servono per le %), 3 voci
+
+Mappate il 2026-06-12 sulle buste reali di Gagliano (2019, 2021, 2024). Sono le righe in
+**testa** alla tabella voci e l'importo si legge nella colonna **"Valori"** (3ª), NON in
+Competenze:
+
+| Codice | Descrizione | Note |
+|---|---|---|
+| `1000` | RETRIBUZIONE BASE | sempre presente |
+| `1001` | SALARIO PROFESS. | sempre presente |
+| `1025` | SCATTI ANZIANITA' | assente per i neoassunti senza scatti (Gagliano 2019) |
+
+- Totale di controllo: riga `1100 TOT.RETRIBUZIONE` = 1000+1001+1025. **Non** va in `codes`.
+- La riga `1213 RETRIBUZ.ORDINARIA` (Competenze) è la stessa base erogata a giorni
+  (26 × tariffa = 1100): non è una voce fissa né variabile.
+- Esempio Gagliano 05/2021: 1.630,30 + 107,73 + 25,22 = 1.763,25.
 
 ---
 

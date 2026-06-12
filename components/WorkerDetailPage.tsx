@@ -2,7 +2,7 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { usePayslipUpload } from '../hooks/usePayslipUpload';
 import { usePayslipArchive } from '../hooks/usePayslipArchive';
 import { useFixedVociBackfill } from '../hooks/useFixedVociBackfill';
-import { FIXED_VOCI_IDS } from '../utils/fixedVociBackfill';
+import { getFixedVociIds } from '../utils/fixedVociBackfill';
 import { useOCRSniper } from '../hooks/useOCRSniper';
 import { useIslandSync } from '../hooks/useIslandSync';
 import { useStatsData } from '../hooks/useStatsData';
@@ -255,10 +255,11 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
   }, [isReadOnly, activeTab]);
 
   // --- BACKFILL VOCI FISSE (Quadro B) dalle buste già in archivio ---
-  // Solo profili con voci fisse definite (RFI/Trenitalia). Merge-safe: scrive SOLO i 3B...
+  // Solo profili con voci fisse definite. Merge-safe: scrive SOLO le voci fisse del profilo.
   const { progress: backfillProgress, run: runFixedBackfill, runFromFiles: runFixedBackfillFromFiles, stop: stopFixedBackfill } = useFixedVociBackfill();
   const fixedUploadRef = useRef<HTMLInputElement>(null);
-  const hasFixedProfile = ['RFI', 'TRENITALIA'].includes(worker.profilo);
+  const fixedVociIds = useMemo(() => getFixedVociIds(worker.profilo), [worker.profilo]);
+  const hasFixedProfile = fixedVociIds.length > 0;
   // Anni che hanno effettivamente buste in archivio (per lo scope annuale del backfill).
   const archiveYears = useMemo(
     () => [...new Set(archivedPicks.map(p => p.year))].sort((a, b) => a - b),
@@ -289,7 +290,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
       if (p.year !== backfillYear) return false;
       const row = monthlyInputs.find(r => Number(r.year) === p.year && Number(r.monthIndex) === p.monthIdx);
       if (!row) return false; // nessuna riga dati per quel mese: niente in cui fare merge
-      return !FIXED_VOCI_IDS.some(id => Number((row as any)[id]) > 0);
+      return !fixedVociIds.some(id => Number((row as any)[id]) > 0);
     });
     if (needs.length === 0) {
       setBackfillModal({ kind: 'info', text: `Anno ${backfillYear}: voci fisse già presenti (o nessuna busta in archivio per quest'anno).` });

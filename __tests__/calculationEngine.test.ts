@@ -548,6 +548,48 @@ describe('percentuali di incidenza (Quadro A/B/C)', () => {
     expect(period.pctVariabile).toBeCloseTo(23.91, 1);
   });
 
+  it('MERCITALIA: incidenza attiva con base fissa 1000+1001+1025', () => {
+    // Maggio 2021 di Gagliano: fisse 1630.30+107.73+25.22=1763.25, variabili 100.
+    const merci: AnnoDati[] = [{
+      year: 2021, monthIndex: 4, daysWorked: 20, daysVacation: 0, ticket: 0,
+      '1000': 1630.30, '1001': 107.73, '1025': 25.22, '1801': 100,
+    }];
+    const [y] = computeHolidayIndemnity(
+      { data: merci, profilo: 'MERCITALIA', includeExFest: false, includeTickets: false, startClaimYear: 2024, years: [2021] }
+    );
+    expect(y.hasIncidence).toBe(true);
+    expect(y.sumQuadroFisse).toBeCloseTo(1763.25, 2);
+    const m = y.monthlyDetails[0]; // unico mese presente nei dati
+    expect(m.quadroFisse).toBeCloseTo(1763.25, 2);
+    expect(m.pctVariabile).toBeCloseTo(100 * 100 / 1863.25, 2);
+  });
+
+  it('CLEAN_SERVICE: incidenza attiva con base fissa MC01+MC06+MC07+MC10', () => {
+    // Maggio 2023 di Cianci: fisse 1670.92+22.00+146.04+25.63=1864.59, variabili 50.
+    const cs: AnnoDati[] = [{
+      year: 2023, monthIndex: 4, daysWorked: 20, daysVacation: 0, ticket: 0,
+      MC01: 1670.92, MC06: 22.00, MC07: 146.04, MC10: 25.63, '8037': 50,
+    }];
+    const [y] = computeHolidayIndemnity(
+      { data: cs, profilo: 'CLEAN_SERVICE', includeExFest: false, includeTickets: false, startClaimYear: 2024, years: [2023] }
+    );
+    expect(y.hasIncidence).toBe(true);
+    expect(y.sumQuadroFisse).toBeCloseTo(1864.59, 2);
+    const m = y.monthlyDetails[0]; // unico mese presente nei dati
+    expect(m.pctFissa).toBeCloseTo(1864.59 * 100 / 1914.59, 2);
+  });
+
+  it('le voci fisse MERCITALIA/CLEAN_SERVICE non alterano il credito (netto invariato)', () => {
+    const mesi = (extra: Partial<AnnoDati>): AnnoDati[] => [
+      { year: 2022, monthIndex: 0, daysWorked: 20, daysVacation: 5, ticket: 0, '1801': 800, ...extra },
+      { year: 2023, monthIndex: 0, daysWorked: 20, daysVacation: 5, ticket: 0, '1801': 800, ...extra },
+    ];
+    const p = { profilo: 'MERCITALIA' as const, includeExFest: false, includeTickets: false, startClaimYear: 2024, years: [2022, 2023] };
+    const senza = computeHolidayIndemnity({ data: mesi({}), ...p });
+    const con = computeHolidayIndemnity({ data: mesi({ '1000': 1630.30, '1001': 107.73, '1025': 25.22 }), ...p });
+    expect(con.map(y => y.sumNetto)).toEqual(senza.map(y => y.sumNetto));
+  });
+
   it('profilo senza voci fisse (ELIOR): nessuna incidenza, percentuali a 0', () => {
     const elior: AnnoDati[] = [
       { year: 2008, monthIndex: 0, daysWorked: 20, daysVacation: 0, ticket: 0, '1130': 100 },

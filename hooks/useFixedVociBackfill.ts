@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef } from 'react';
-import { AnnoDati, MONTH_NAMES } from '../types';
-import { mergeFixedVociIntoAnni, deriveFixedVociPeriod } from '../utils/fixedVociBackfill';
+import { AnnoDati, MONTH_NAMES, ProfiloAzienda } from '../types';
+import { mergeFixedVociIntoAnni, deriveFixedVociPeriod, getFixedVociIds } from '../utils/fixedVociBackfill';
 import { useIsland } from '../IslandContext';
 
 export interface BackfillPick {
@@ -34,7 +34,7 @@ const blobToBase64 = (blob: Blob): Promise<string> =>
 /**
  * Backfill MIRATO delle voci fisse (Quadro B) dalle buste già archiviate.
  * Per ogni busta: signed URL → immagine → action 'fixed-voci' (estrazione leggera) →
- * `mergeFixedVociIntoAnni` (scrive SOLO i 3B.., niente clobber). Alla fine richiama
+ * `mergeFixedVociIntoAnni` (scrive SOLO le voci fisse del profilo, niente clobber). Alla fine richiama
  * `onResult` con il nuovo array `anni`. Sequenziale per non saturare la quota Gemini.
  */
 export function useFixedVociBackfill() {
@@ -54,6 +54,7 @@ export function useFixedVociBackfill() {
   }): Promise<{ updated: number; errors: number }> => {
     const { picks, anni, company, getSignedUrls, onResult } = params;
     if (!Array.isArray(picks) || picks.length === 0) return { updated: 0, errors: 0 };
+    const fixedIds = getFixedVociIds(company as ProfiloAzienda);
 
     abortRef.current = false;
     setProgress({ running: true, total: picks.length, done: 0, updated: 0, errors: 0 });
@@ -123,7 +124,7 @@ export function useFixedVociBackfill() {
         }
         if (!codes) throw new Error('Estrazione fallita');
 
-        const merged = mergeFixedVociIntoAnni(working, pick.year, pick.monthIdx, codes);
+        const merged = mergeFixedVociIntoAnni(working, pick.year, pick.monthIdx, codes, fixedIds);
         if (merged.updated) { working = merged.anni; updated++; }
       } catch {
         errors++;
@@ -156,6 +157,7 @@ export function useFixedVociBackfill() {
   }): Promise<{ updated: number; errors: number; skipped: number }> => {
     const { files, anni, company, onResult, onArchive } = params;
     if (!Array.isArray(files) || files.length === 0) return { updated: 0, errors: 0, skipped: 0 };
+    const fixedIds = getFixedVociIds(company as ProfiloAzienda);
 
     abortRef.current = false;
     setProgress({ running: true, total: files.length, done: 0, updated: 0, errors: 0 });
@@ -198,7 +200,7 @@ export function useFixedVociBackfill() {
         if (!period) {
           skipped++; // periodo non identificabile: non indoviniamo dove scrivere
         } else {
-          const merged = mergeFixedVociIntoAnni(working, period.year, period.monthIdx, parsed.codes);
+          const merged = mergeFixedVociIntoAnni(working, period.year, period.monthIdx, parsed.codes, fixedIds);
           if (merged.updated) { working = merged.anni; updated++; }
           else skipped++; // nessuna riga per quel mese, o valori già identici
           if (onArchive) { try { await onArchive(file, period.year, period.monthIdx); } catch { /* archiviazione best-effort */ } }

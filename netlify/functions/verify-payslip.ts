@@ -152,6 +152,8 @@ In questo caso NON segnalare discrepanza su daysWorked.
 **ticket:** Codice 311 (descrizione "TICKET") → colonna "Valore Unitario" o "Base/Aliquota". IGNORA la colonna Quantità e i totali. Il codice 311 NON deve comparire nella mappa "codes" (è gestito solo come "ticketRate", come per RFI/Elior).
 
 **Arretrati (CLEAN SERVICE):** Somma SOLO importi positivi delle voci la cui DESCRIZIONE contiene "UNA TANTUM", "ARRETRATI", "CONGUAGLIO", "ARR." (case-insensitive). Queste voci NON devono comparire in "codes" anche se il loro codice numerico coincide con uno dei codici Clean Service (la descrizione testuale prevale sul codice). Se segnali una discrepanza su un codice "codes.NNNN", verifica prima che la voce nel PDF non sia in realtà un UNA TANTUM/ARRETRATO.
+
+**Voci fisse (MC01 MINIMO, MC06 SAL. PROF., MC07 SCATTI ANZ, MC10 AD PERS.):** possono comparire tra i dati estratti. Sui cedolini dal 2021 circa sono le righe MC.. in TESTA alla tabella voci (MCT = totale di controllo); sui layout precedenti gli stessi 4 valori sono nella BANDA DI TESTATA (riga "ATT.") sotto le etichette MINIMO / SAL. PROF. / SCATTI ANZ / AD PERS. Confrontale SOLO lì: NON sono indennità variabili, NON vanno cercate tra le Competenze delle voci e NON vanno segnalate come discrepanza se assenti dal corpo voci.
 `;
 
   } else if (co === "MERCITALIA") {
@@ -191,6 +193,8 @@ I codici 1723, 1733, 2469, 2501, 2502, 2512 (13ma/14ma, Una Tantum, Welfare) NON
 indennità ordinarie: sono confluiti in "arretrati". Non segnalarli come discrepanza su "codes".
 
 **Arretrati:** somma degli importi positivi (colonna "Competenze") di 1723, 1733, 2469, 2501, 2502, 2512.
+
+**Voci fisse (1000 RETRIBUZIONE BASE, 1001 SALARIO PROFESS., 1025 SCATTI ANZIANITA'):** possono comparire tra i dati estratti. Sono le righe in TESTA alla tabella voci e il loro importo si legge nella colonna "Valori" (3ª colonna), NON in "Competenze". La riga 1100 (TOT.RETRIBUZIONE) è il loro totale di controllo. Confrontale SOLO con la colonna "Valori": NON segnalarle come discrepanza per il fatto che in "Competenze" non hanno importo.
 `;
 
   } else {

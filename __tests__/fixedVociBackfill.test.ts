@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mergeFixedVociIntoAnni, FIXED_VOCI_IDS, deriveFixedVociPeriod } from '../utils/fixedVociBackfill';
+import { mergeFixedVociIntoAnni, FIXED_VOCI_IDS, getFixedVociIds, deriveFixedVociPeriod } from '../utils/fixedVociBackfill';
 import type { AnnoDati } from '../types';
 
 const baseRow = (over: Partial<AnnoDati> = {}): AnnoDati => ({
@@ -77,6 +77,62 @@ describe('mergeFixedVociIntoAnni — merge-safe', () => {
     expect([...FIXED_VOCI_IDS].sort()).toEqual(
       ['3B01','3B03','3B05','3B10','3B15','3B20','3B30','3B35','3B70','3B71'].sort()
     );
+  });
+});
+
+describe('getFixedVociIds — whitelist per profilo', () => {
+  it('RFI/Trenitalia = i 10 codici 3B storici', () => {
+    expect(getFixedVociIds('RFI').sort()).toEqual([...FIXED_VOCI_IDS].sort());
+    expect(getFixedVociIds('TRENITALIA')).toEqual(getFixedVociIds('RFI'));
+  });
+
+  it('MERCITALIA = 1000/1001/1025 (1100 totale escluso)', () => {
+    expect(getFixedVociIds('MERCITALIA').sort()).toEqual(['1000', '1001', '1025']);
+  });
+
+  it('CLEAN_SERVICE = MC01/MC06/MC07/MC10 (MCT totale escluso)', () => {
+    expect(getFixedVociIds('CLEAN_SERVICE').sort()).toEqual(['MC01', 'MC06', 'MC07', 'MC10']);
+  });
+
+  it('ELIOR: nessuna voce fissa definita (ancora)', () => {
+    expect(getFixedVociIds('ELIOR')).toEqual([]);
+  });
+});
+
+describe('mergeFixedVociIntoAnni — whitelist per profilo', () => {
+  it('MERCITALIA: scrive 1000/1001/1025 e ignora il totale 1100 e le variabili', () => {
+    const anni = [baseRow({ '1801': 96.0 } as Partial<AnnoDati>)];
+    const { anni: out, updated } = mergeFixedVociIntoAnni(anni, 2013, 0, {
+      '1000': 1630.30, '1001': 107.73, '1025': 25.22, '1100': 1763.25, '1801': 99999,
+    }, getFixedVociIds('MERCITALIA'));
+    expect(updated).toBe(true);
+    expect(out[0]['1000']).toBe(1630.30);
+    expect(out[0]['1001']).toBe(107.73);
+    expect(out[0]['1025']).toBe(25.22);
+    expect(out[0]['1100']).toBeUndefined(); // totale di controllo: mai scritto
+    expect(out[0]['1801']).toBe(96.0);      // variabile NON clobberata
+  });
+
+  it('CLEAN_SERVICE: scrive solo le MC.. (MCT escluso)', () => {
+    const anni = [baseRow()];
+    const { anni: out, updated } = mergeFixedVociIntoAnni(anni, 2013, 0, {
+      MC01: 1670.92, MC06: 22.0, MC07: 146.04, MC10: 25.63, MCT: 1864.59,
+    }, getFixedVociIds('CLEAN_SERVICE'));
+    expect(updated).toBe(true);
+    expect(out[0]['MC01']).toBe(1670.92);
+    expect(out[0]['MC10']).toBe(25.63);
+    expect(out[0]['MCT']).toBeUndefined();
+  });
+
+  it('senza whitelist esplicita resta il default RFI (retrocompatibilità)', () => {
+    const anni = [baseRow()];
+    const { anni: out, updated } = mergeFixedVociIntoAnni(anni, 2013, 0, {
+      '3B01': 1609.30, MC01: 1670.92, '1000': 1630.30,
+    });
+    expect(updated).toBe(true);
+    expect(out[0]['3B01']).toBe(1609.30);
+    expect(out[0]['MC01']).toBeUndefined();
+    expect(out[0]['1000']).toBeUndefined();
   });
 });
 

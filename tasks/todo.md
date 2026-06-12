@@ -157,3 +157,26 @@ NIENTE della logica di estrazione/applicazione dati (Titanium V3 intatto).
 - [x] PDF ~/Desktop/Nota_Integrazione_Pratiche_RFI_v3.pdf verificato (2 pagine,
       layout pulito); sorgente knowledge/fonti/...v3.html (gitignorata); v1/v2
       intatte. Memoria aggiornata.
+
+## Voci fisse Mercitalia + Clean Service (12/06)
+
+Mappatura derivata dalle buste reali sul Desktop (Gagliano 2019/2021/2024;
+Cianci 2014/2019/2021/2023). Le % di incidenza si attivano da sole appena
+`getFixedColumnsByProfile` restituisce le colonne (motore già generico).
+
+- [x] types.ts: INDENNITA_MERCITALIA_FISSE (1000 Retrib. Base, 1001 Salario
+      Prof., 1025 Scatti Anz.) + INDENNITA_CLEAN_SERVICE_FISSE (MC01 Minimo,
+      MC06 Sal. Prof., MC07 Scatti Anz., MC10 Ad Pers.) + switch
+      getFixedColumnsByProfile.
+- [x] utils/fixedVociBackfill.ts: whitelist per profilo (getFixedVociIds) al
+      posto della lista RFI hardcoded; merge invariato ma parametrico.
+- [x] hooks/useFixedVociBackfill.ts + WorkerDetailPage: passare la whitelist
+      del profilo; gating `hasFixedProfile` derivato da getFixedColumnsByProfile.
+- [x] scan-payslip.ts: sezione VOCI FISSE nei prompt MERCITALIA (colonna
+      "Valori", righe in testa; 1100 = totale di controllo, NON sommare) e
+      CLEAN_SERVICE (righe MC01.. dal 2021; testata MINIMO/SAL.PROF./SCATTI/
+      AD PERS. riga ATT. sui layout vecchi; MCT/Retrib. di fatto = controllo);
+      action 'fixed-voci' parametrica per company (prompt + whitelist).
+- [x] Test: merge per-profilo + incidenza motore per MERCITALIA/CLEAN_SERVICE.
+- [x] knowledge/codici-voce.md: sezioni fisse per le due aziende.
+- [x] Verifica: tsc · build · suite verde. NIENTE deploy (batching, 18/06).
