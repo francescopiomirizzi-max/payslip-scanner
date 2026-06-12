@@ -128,6 +128,26 @@ Da chiedere: (a) chi ha prodotto il PDF (azienda? sindacato? consulente?); (b) r
 - [ ] Motore validato a mano su almeno un periodo reale (quando arriva il PDF) confrontando col conteggio atteso.
 - [x] Tutto **locale, non deployato** (commit sì, push no — da indicazione utente).
 
-## Review (da compilare a fine lavoro)
+## Review
 
-_(vuoto — si compila man mano)_
+### Sessione 2026-06-12 — Fase 3 completa + persistenza (4 commit: cc67deb, a068c5d, e3cd9d4, b42f17a)
+
+- **Tre export coerenti** (stampa HTML, .docx, .xlsx) costruiti su builder PURI e
+  testati end-to-end (HTML: asserzioni su stringa; docx: unzip di document.xml;
+  xlsx: round-trip writeBuffer→load). I pezzi comuni (`computeSerieFonte`,
+  `causaleSintetica`) vivono nel motore, una sola fonte di verità.
+- **Verifica su dati reali**, non solo fixture: Chrome headless per il PDF
+  (20 pag., fonte €98.732,03 quadrata), textutil per il docx, somma per-foglio
+  per l'xlsx (€98.732,03 esatta). Motore: 278 violazioni, €19.178,22.
+- **Scelte tecniche degne di nota:** exceljs serializza le date in UTC → tutte
+  le date passano da `Date.UTC(...)` o slittano di un giorno; orari non
+  interpretabili restano TESTO grezzo nell'xlsx (policy segnala-non-indovinare);
+  tariffa in `Riepilogo!B7` come unica cella da cui dipendono le formule;
+  file-saver importato dinamicamente (CJS browser-only, così i builder girano
+  anche in node per le verifiche).
+- **Seed → archivio con azione esplicita**, mai auto-insert: un auto-seed
+  avrebbe clonato la pratica sull'account viewer di Vincenzo al primo accesso.
+- **DB live:** migration 013 (estesa con stato/date/importo) applicata; RLS
+  verificata a posteriori via SQL (4 policy owner-scoped, nessuna anon).
+- Suite finale: **206 test verdi** · tsc pulito · build ok. NIENTE deploy
+  (batching Netlify, finestra 18/06).
