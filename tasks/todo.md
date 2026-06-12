@@ -180,3 +180,13 @@ Cianci 2014/2019/2021/2023). Le % di incidenza si attivano da sole appena
 - [x] Test: merge per-profilo + incidenza motore per MERCITALIA/CLEAN_SERVICE.
 - [x] knowledge/codici-voce.md: sezioni fisse per le due aziende.
 - [x] Verifica: tsc · build · suite verde. NIENTE deploy (batching, 18/06).
+
+## Preparazione incontro lunedì 15/06 (avvocato + Vincenzo)
+
+- [x] Specchietto voci RFI per l'avvocato: variabili (17+ticket, Quadro C) vs
+      fisse (10 voci 3B, Quadro B), prima/adesso, formule %, metodo credito
+      invariato, punti aperti (3B50 nel denominatore?, D'Errico divisore,
+      reperibilità remoto €6). PDF ~/Desktop/Specchietto_Voci_RFI.pdf (3 pag.),
+      sorgente knowledge/fonti/specchietto_voci_rfi.html.
+- [ ] Rebrand "Ufficio vertenze sede … Consaf sindacato": SOLO quando Vincenzo
+      manda il logo (memoria project-rebrand-consaf).
