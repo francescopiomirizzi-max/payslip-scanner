@@ -1,5 +1,16 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { supabase } from '../supabaseClient';
 import type { GiornataInput } from '../utils/restEngine';
+
+export type StatoPratica = 'in_corso' | 'conclusa' | 'pagata';
+
+/** Etichette/colori dello stato (badge lista + controllo dettaglio): qui per
+ *  evitare l'import circolare RiposiArea ⇄ RiposiPraticaDetail. */
+export const STATO_META: Record<StatoPratica, { label: string; chip: string; dot: string }> = {
+    in_corso: { label: 'In corso', chip: 'bg-amber-100 dark:bg-amber-500/15 text-amber-700 dark:text-amber-400', dot: 'bg-amber-500' },
+    conclusa: { label: 'Conclusa', chip: 'bg-emerald-100 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-400', dot: 'bg-emerald-500' },
+    pagata:   { label: 'Pagata',   chip: 'bg-sky-100 dark:bg-sky-500/15 text-sky-700 dark:text-sky-400', dot: 'bg-sky-500' },
+};
 
 /** Una "pratica" dell'area Turni & Riposi: un autista con il suo prospetto turni. */
 export interface PraticaRiposi {
@@ -13,18 +24,119 @@ export interface PraticaRiposi {
     tariffaOraria: number;
     fonteTariffa?: string;
     giornate: GiornataInput[];
+    // Gestione pratica (fase 3)
+    stato: StatoPratica;
+    dataApertura?: string;   // 'YYYY-MM-DD' (come arrivano dal DB)
+    dataChiusura?: string;
+    dataPagamento?: string;
+    importoRiconosciuto?: number;
+    /** true = caricata dal seed locale, NON ancora nell'archivio Supabase. */
+    isSeed?: boolean;
+}
+
+/** Campi di gestione aggiornabili dal dettaglio. */
+export type PraticaRiposiUpdate = Partial<Pick<PraticaRiposi,
+    'stato' | 'dataApertura' | 'dataChiusura' | 'dataPagamento' | 'importoRiconosciuto' | 'tariffaOraria' | 'fonteTariffa'
+>>;
+
+// ─── Mappers (esportati per i test) ──────────────────────────────────────────
+
+const isoToDmy = (iso?: string | null): string | undefined => {
+    if (!iso) return undefined;
+    const [y, m, d] = iso.slice(0, 10).split('-');
+    return y && m && d ? `${d}/${m}/${y}` : undefined;
+};
+const dmyToIso = (dmy?: string): string | null => {
+    if (!dmy) return null;
+    const [d, m, y] = dmy.trim().split(/[\/\-.]/);
+    return y && m && d ? `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}` : null;
+};
+
+export function dbToPratica(row: any): PraticaRiposi {
+    return {
+        id: row.id,
+        nome: row.nome ?? '',
+        cognome: row.cognome ?? '',
+        azienda: row.azienda ?? undefined,
+        mansione: row.mansione ?? undefined,
+        periodoStart: isoToDmy(row.periodo_start),
+        periodoEnd: isoToDmy(row.periodo_end),
+        tariffaOraria: Number(row.tariffa_oraria ?? 0),
+        fonteTariffa: row.fonte_tariffa ?? undefined,
+        giornate: row.giornate ?? [],
+        stato: row.stato ?? 'in_corso',
+        dataApertura: row.data_apertura ?? undefined,
+        dataChiusura: row.data_chiusura ?? undefined,
+        dataPagamento: row.data_pagamento ?? undefined,
+        importoRiconosciuto: row.importo_riconosciuto != null ? Number(row.importo_riconosciuto) : undefined,
+    };
+}
+
+export function praticaToDb(p: PraticaRiposi): Record<string, unknown> {
+    // Niente id/owner_id: li genera il DB (owner_id DEFAULT auth.uid()).
+    return {
+        nome: p.nome,
+        cognome: p.cognome,
+        azienda: p.azienda ?? null,
+        mansione: p.mansione ?? null,
+        periodo_start: dmyToIso(p.periodoStart),
+        periodo_end: dmyToIso(p.periodoEnd),
+        tariffa_oraria: p.tariffaOraria,
+        fonte_tariffa: p.fonteTariffa ?? null,
+        giornate: p.giornate,
+        stato: p.stato,
+        data_apertura: p.dataApertura ?? null,
+        data_chiusura: p.dataChiusura ?? null,
+        data_pagamento: p.dataPagamento ?? null,
+        importo_riconosciuto: p.importoRiconosciuto ?? null,
+    };
+}
+
+const updateToDb = (u: PraticaRiposiUpdate): Record<string, unknown> => {
+    const out: Record<string, unknown> = { updated_at: new Date().toISOString() };
+    if ('stato' in u) out.stato = u.stato;
+    if ('dataApertura' in u) out.data_apertura = u.dataApertura ?? null;
+    if ('dataChiusura' in u) out.data_chiusura = u.dataChiusura ?? null;
+    if ('dataPagamento' in u) out.data_pagamento = u.dataPagamento ?? null;
+    if ('importoRiconosciuto' in u) out.importo_riconosciuto = u.importoRiconosciuto ?? null;
+    if ('tariffaOraria' in u) out.tariffa_oraria = u.tariffaOraria;
+    if ('fonteTariffa' in u) out.fonte_tariffa = u.fonteTariffa ?? null;
+    return out;
+};
+
+// ─── Seed locale (fallback finché la pratica non è in archivio) ───────────────
+
+async function loadSeed(): Promise<PraticaRiposi[]> {
+    try {
+        const r = await fetch(`${import.meta.env.BASE_URL}viterbo-seed.json`);
+        if (!r.ok) return [];
+        const giornate: GiornataInput[] = await r.json();
+        const date = giornate.map((g) => g.data).filter(Boolean);
+        return [{
+            id: 'viterbo-seed',
+            nome: 'Tommaso',
+            cognome: 'Viterbo',
+            mansione: 'Operatore di esercizio (TPL)',
+            periodoStart: date[0],
+            periodoEnd: date[date.length - 1],
+            tariffaOraria: 10.03,
+            fonteTariffa: 'placeholder — da confermare con l\'avvocato',
+            giornate,
+            stato: 'in_corso',
+            isSeed: true,
+        }];
+    } catch {
+        return [];
+    }
 }
 
 /**
- * Carica le pratiche dell'area Turni & Riposi.
+ * Pratiche dell'area Turni & Riposi su Supabase (`pratiche_riposi`, RLS owner-scoped).
  *
- * FASE ATTUALE (scaffold): seed locale di Viterbo generato dal PDF sorgente con
- * `scripts/parse-mancati-riposi-pdf.py` (parser deterministico, quadrato coi
- * totali del documento), servito da `public/viterbo-seed.json` (gitignored,
- * dati personali). Include la serie della fonte (indennitaFonte/mancatoRip*).
- *
- * FASE 2: qui andrà il fetch da Supabase `pratiche_riposi` (mirror di
- * useWorkers). Il seed sparisce.
+ * Il seed locale di Viterbo resta come FALLBACK quando l'archivio dell'utente è
+ * vuoto, marcato `isSeed`: si salva nell'archivio SOLO con l'azione esplicita
+ * `salvaInArchivio` (mai auto-insert: un account viewer non deve clonarsi la
+ * pratica al primo accesso).
  */
 export function usePraticheRiposi() {
     const [pratiche, setPratiche] = useState<PraticaRiposi[]>([]);
@@ -32,29 +144,49 @@ export function usePraticheRiposi() {
 
     useEffect(() => {
         let alive = true;
-        fetch(`${import.meta.env.BASE_URL}viterbo-seed.json`)
-            .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
-            .then((giornate: GiornataInput[]) => {
-                if (!alive) return;
-                const date = giornate.map((g) => g.data).filter(Boolean);
-                setPratiche([
-                    {
-                        id: 'viterbo-seed',
-                        nome: 'Tommaso',
-                        cognome: 'Viterbo',
-                        mansione: 'Operatore di esercizio (TPL)',
-                        periodoStart: date[0],
-                        periodoEnd: date[date.length - 1],
-                        tariffaOraria: 10.03,
-                        fonteTariffa: 'placeholder — da confermare con l\'avvocato',
-                        giornate,
-                    },
-                ]);
-            })
-            .catch(() => { if (alive) setPratiche([]); })
-            .finally(() => { if (alive) setIsLoading(false); });
+        (async () => {
+            const { data, error } = await supabase
+                .from('pratiche_riposi')
+                .select('*')
+                .order('created_at', { ascending: true });
+            if (!alive) return;
+            if (!error && data && data.length > 0) {
+                setPratiche(data.map(dbToPratica));
+            } else {
+                // archivio vuoto (o non raggiungibile) → seed locale come fallback
+                setPratiche(await loadSeed());
+            }
+            setIsLoading(false);
+        })();
         return () => { alive = false; };
     }, []);
 
-    return { pratiche, isLoading };
+    /** Salva una pratica-seed nell'archivio Supabase; restituisce la riga vera. */
+    const salvaInArchivio = useCallback(async (pratica: PraticaRiposi): Promise<PraticaRiposi | null> => {
+        const { data, error } = await supabase
+            .from('pratiche_riposi')
+            .insert(praticaToDb(pratica))
+            .select()
+            .single();
+        if (error || !data) {
+            console.error('[riposi] salvataggio in archivio fallito:', error);
+            return null;
+        }
+        const salvata = dbToPratica(data);
+        setPratiche((prev) => prev.map((p) => (p.id === pratica.id ? salvata : p)));
+        return salvata;
+    }, []);
+
+    /** Aggiorna i campi di gestione (stato, date, importo, tariffa). Ottimistico. */
+    const updatePratica = useCallback(async (id: string, fields: PraticaRiposiUpdate): Promise<boolean> => {
+        setPratiche((prev) => prev.map((p) => (p.id === id ? { ...p, ...fields } : p)));
+        const { error } = await supabase
+            .from('pratiche_riposi')
+            .update(updateToDb(fields))
+            .eq('id', id);
+        if (error) console.error('[riposi] update pratica fallito:', error);
+        return !error;
+    }, []);
+
+    return { pratiche, isLoading, salvaInArchivio, updatePratica };
 }

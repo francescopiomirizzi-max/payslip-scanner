@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { Clock, FileUp, ListChecks, FileText, ShieldCheck, Moon, CalendarClock, Coffee, CheckCircle2, BookOpen, ChevronRight, AlertTriangle, Euro } from 'lucide-react';
-import { usePraticheRiposi, type PraticaRiposi } from '../hooks/usePraticheRiposi';
+import { Clock, FileUp, ListChecks, FileText, ShieldCheck, Moon, CalendarClock, Coffee, CheckCircle2, BookOpen, ChevronRight, AlertTriangle, Euro, CloudUpload, Loader2 } from 'lucide-react';
+import { usePraticheRiposi, STATO_META, type PraticaRiposi, type StatoPratica } from '../hooks/usePraticheRiposi';
 import { groupThousandsIT } from '../utils/formatters';
 import { computeRestViolations } from '../utils/restEngine';
 import RiposiPraticaDetail from './RiposiPraticaDetail';
@@ -34,11 +34,35 @@ const VIOLAZIONI: { n: string; titolo: string; rif: string; attiva: boolean; not
  * persistenza (pratiche_riposi) e UI di review arrivano in Fase 2.
  */
 const RiposiArea: React.FC = () => {
-    const { pratiche, isLoading } = usePraticheRiposi();
+    const { pratiche, isLoading, salvaInArchivio, updatePratica } = usePraticheRiposi();
     const [selectedId, setSelectedId] = useState<string | null>(null);
+    const [statoFiltro, setStatoFiltro] = useState<StatoPratica | null>(null);
+    const [isSaving, setIsSaving] = useState(false);
     const selected = pratiche.find((p) => p.id === selectedId) ?? null;
 
-    if (selected) return <RiposiPraticaDetail pratica={selected} onBack={() => setSelectedId(null)} />;
+    const seedPratica = pratiche.find((p) => p.isSeed);
+    const visibili = statoFiltro ? pratiche.filter((p) => p.stato === statoFiltro) : pratiche;
+
+    const handleSalvaSeed = async () => {
+        if (!seedPratica || isSaving) return;
+        setIsSaving(true);
+        try {
+            const salvata = await salvaInArchivio(seedPratica);
+            if (salvata && selectedId === seedPratica.id) setSelectedId(salvata.id);
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    if (selected) {
+        return (
+            <RiposiPraticaDetail
+                pratica={selected}
+                onBack={() => setSelectedId(null)}
+                onUpdate={selected.isSeed ? undefined : (fields) => updatePratica(selected.id, fields)}
+            />
+        );
+    }
 
     return (
         <div className="min-h-screen px-6 py-12">
@@ -56,14 +80,54 @@ const RiposiArea: React.FC = () => {
 
                 {/* Pratiche */}
                 <section>
-                    <h2 className="text-lg font-bold text-slate-700 dark:text-slate-200 mb-3">Pratiche</h2>
+                    <div className="flex flex-wrap items-center gap-3 mb-3">
+                        <h2 className="text-lg font-bold text-slate-700 dark:text-slate-200">Pratiche</h2>
+                        {pratiche.length > 0 && (
+                            <div className="flex items-center gap-1">
+                                {(Object.keys(STATO_META) as StatoPratica[]).map((s) => {
+                                    const attivo = statoFiltro === s;
+                                    return (
+                                        <button
+                                            key={s}
+                                            type="button"
+                                            onClick={() => setStatoFiltro(attivo ? null : s)}
+                                            title={attivo ? 'Mostra tutte le pratiche' : `Solo pratiche «${STATO_META[s].label}»`}
+                                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold transition-colors ${attivo ? STATO_META[s].chip + ' ring-2 ring-current/30' : 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'}`}
+                                        >
+                                            <span className={`w-1.5 h-1.5 rounded-full ${STATO_META[s].dot}`} />{STATO_META[s].label}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Pratica dal seed locale: in archivio solo con azione esplicita */}
+                    {seedPratica && (
+                        <div className="flex flex-wrap items-center gap-3 rounded-2xl bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 px-4 py-3 mb-3 text-sm text-amber-800 dark:text-amber-200">
+                            <AlertTriangle className="w-4 h-4 shrink-0" />
+                            <span className="flex-1 min-w-[16rem]">La pratica <strong>{seedPratica.cognome} {seedPratica.nome}</strong> è caricata dal <strong>seed locale</strong>: salvala nell'archivio per gestirne lo stato.</span>
+                            <button
+                                type="button"
+                                onClick={handleSalvaSeed}
+                                disabled={isSaving}
+                                className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold shadow-sm transition-colors disabled:opacity-60 disabled:cursor-wait"
+                            >
+                                {isSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CloudUpload className="w-3.5 h-3.5" />}
+                                Salva nell'archivio
+                            </button>
+                        </div>
+                    )}
+
                     {isLoading ? (
                         <div className="h-20 rounded-2xl bg-slate-100 dark:bg-slate-800/60 animate-pulse" />
                     ) : pratiche.length === 0 ? (
                         <p className="text-sm text-slate-500 dark:text-slate-400">Nessuna pratica. Carica un prospetto turni per iniziare.</p>
+                    ) : visibili.length === 0 ? (
+                        <p className="text-sm text-slate-500 dark:text-slate-400">Nessuna pratica «{STATO_META[statoFiltro!].label}». Togli il filtro per vederle tutte.</p>
                     ) : (
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            {pratiche.map((p) => (
+                            {visibili.map((p) => (
                                 <PraticaCard key={p.id} pratica={p} onOpen={() => setSelectedId(p.id)} />
                             ))}
                         </div>
@@ -200,9 +264,11 @@ const PraticaCard: React.FC<{ pratica: PraticaRiposi; onOpen: () => void }> = ({
             <div className="relative min-w-0 flex-1">
                 <p className="font-bold text-slate-800 dark:text-slate-100 truncate">{pratica.cognome} {pratica.nome}</p>
                 <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{pratica.mansione} · {pratica.periodoStart}–{pratica.periodoEnd}</p>
-                <div className="flex items-center gap-2 mt-1.5">
+                <div className="flex flex-wrap items-center gap-2 mt-1.5">
+                    <span className={`inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full ${STATO_META[pratica.stato].chip}`}><span className={`w-1.5 h-1.5 rounded-full ${STATO_META[pratica.stato].dot}`} />{STATO_META[pratica.stato].label}</span>
                     <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-rose-100 dark:bg-rose-500/15 text-rose-600 dark:text-rose-400"><AlertTriangle className="w-3 h-3" />{tot} violazioni</span>
                     <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-500/15 text-indigo-600 dark:text-indigo-400"><Euro className="w-3 h-3" />{groupThousandsIT(indennita.toLocaleString('it-IT', { maximumFractionDigits: 0 }))}</span>
+                    {pratica.isSeed && <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-700/60 text-slate-500 dark:text-slate-400">seed locale</span>}
                 </div>
             </div>
             <ChevronRight className="relative w-5 h-5 text-slate-300 group-hover:text-indigo-500 group-hover:translate-x-0.5 transition-all shrink-0" />

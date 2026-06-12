@@ -25,6 +25,13 @@ CREATE TABLE IF NOT EXISTS public.pratiche_riposi (
     fonte_tariffa   text,
     -- Righe giornaliere estratte dal PDF/SA20: [{ data, gset, tipo, servizio, inizio, termine, ... }]
     giornate        jsonb NOT NULL DEFAULT '[]'::jsonb,
+    -- Gestione pratica (fase 3): stato + date utili + importo riconosciuto a chiusura.
+    stato           text NOT NULL DEFAULT 'in_corso'
+                    CHECK (stato IN ('in_corso', 'conclusa', 'pagata')),
+    data_apertura   date,
+    data_chiusura   date,
+    data_pagamento  date,
+    importo_riconosciuto numeric,
     created_at      timestamptz NOT NULL DEFAULT now(),
     updated_at      timestamptz NOT NULL DEFAULT now()
 );

@@ -4,7 +4,8 @@ import { ArrowLeft, AlertTriangle, Moon, CalendarClock, Euro, CheckCircle2, Sear
 import { computeRestViolations, computeSerieFonte, formatHm, type Violazione, type GiornataInput } from '../utils/restEngine';
 import { printConteggiRiposi } from '../utils/riposiPrint';
 import { AnimatedCounter } from './ui/AnimatedCounter';
-import type { PraticaRiposi } from '../hooks/usePraticheRiposi';
+import { STATO_META, type PraticaRiposi, type PraticaRiposiUpdate, type StatoPratica } from '../hooks/usePraticheRiposi';
+import { useIsReadOnly } from '../lib/readonly';
 import { groupThousandsIT } from '../utils/formatters';
 
 const euro = (n: number) => '€ ' + groupThousandsIT(n.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
@@ -22,6 +23,8 @@ const servLabel = (code: string) => SERV_LABEL[code] ?? 'sigla da decodificare';
 interface Props {
     pratica: PraticaRiposi;
     onBack: () => void;
+    /** Assente per le pratiche-seed (non ancora in archivio): gestione stato disabilitata. */
+    onUpdate?: (fields: PraticaRiposiUpdate) => void;
 }
 
 type Tone = 'rose' | 'amber' | 'indigo' | 'emerald' | 'slate';
@@ -33,9 +36,21 @@ const TONE: Record<Tone, { icon: string; glow: string; hover: string }> = {
     slate:   { icon: 'bg-slate-100 dark:bg-slate-700/50 text-slate-500 dark:text-slate-300',     glow: 'from-slate-500/[0.06]',   hover: 'hover:shadow-[0_20px_50px_-22px_rgba(100,116,139,0.5)]' },
 };
 
-const RiposiPraticaDetail: React.FC<Props> = ({ pratica, onBack }) => {
+const RiposiPraticaDetail: React.FC<Props> = ({ pratica, onBack, onUpdate }) => {
     const [tab, setTab] = useState<'violazioni' | 'prospetto'>('violazioni');
     const [isExportingDocx, setIsExportingDocx] = useState(false);
+    const isReadOnly = useIsReadOnly();
+    const canManage = Boolean(onUpdate) && !isReadOnly;
+
+    // Cambio stato: scrive da sé la data utile corrispondente (se mancante).
+    const handleStato = (stato: StatoPratica) => {
+        if (!onUpdate || stato === pratica.stato) return;
+        const oggi = new Date().toISOString().slice(0, 10);
+        const fields: PraticaRiposiUpdate = { stato };
+        if (stato === 'conclusa' && !pratica.dataChiusura) fields.dataChiusura = oggi;
+        if (stato === 'pagata' && !pratica.dataPagamento) fields.dataPagamento = oggi;
+        onUpdate(fields);
+    };
 
     const result = useMemo(
         () => computeRestViolations(pratica.giornate, { tariffaOraria: pratica.tariffaOraria, fonteTariffa: pratica.fonteTariffa }),
@@ -155,6 +170,25 @@ const RiposiPraticaDetail: React.FC<Props> = ({ pratica, onBack }) => {
                         <p className="text-sm text-slate-500 dark:text-slate-400">{pratica.mansione} · {pratica.periodoStart} – {pratica.periodoEnd} · {pratica.giornate.length} giornate</p>
                     </div>
                     <div className="ml-auto flex items-center gap-2">
+                        {canManage ? (
+                            <label className={`relative inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold cursor-pointer ${STATO_META[pratica.stato].chip}`} title="Stato della pratica: cambiarlo scrive da sé la data di chiusura/pagamento">
+                                <span className={`w-2 h-2 rounded-full ${STATO_META[pratica.stato].dot}`} />
+                                <select
+                                    value={pratica.stato}
+                                    onChange={(e) => handleStato(e.target.value as StatoPratica)}
+                                    className="appearance-none bg-transparent font-bold text-inherit pr-4 cursor-pointer focus:outline-none"
+                                >
+                                    {(Object.keys(STATO_META) as StatoPratica[]).map((s) => (
+                                        <option key={s} value={s} className="text-slate-800 bg-white">{STATO_META[s].label}</option>
+                                    ))}
+                                </select>
+                                <ChevronRight className="w-3 h-3 absolute right-2 rotate-90 pointer-events-none" />
+                            </label>
+                        ) : (
+                            <span className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold ${STATO_META[pratica.stato].chip}`} title={onUpdate ? 'Sola consultazione' : 'Pratica dal seed locale: salvala nell\'archivio per gestirne lo stato'}>
+                                <span className={`w-2 h-2 rounded-full ${STATO_META[pratica.stato].dot}`} />{STATO_META[pratica.stato].label}
+                            </span>
+                        )}
                         <button
                             type="button"
                             onClick={handleExcel}
@@ -183,6 +217,41 @@ const RiposiPraticaDetail: React.FC<Props> = ({ pratica, onBack }) => {
                         </button>
                     </div>
                 </div>
+
+                {/* Gestione pratica: date utili + importo riconosciuto */}
+                {pratica.stato !== 'in_corso' && (
+                    <div className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-2xl bg-white/60 dark:bg-slate-800/60 backdrop-blur-2xl border border-white/60 dark:border-slate-700/60 px-4 py-3 text-sm text-slate-600 dark:text-slate-300">
+                        {pratica.dataChiusura && <span>Conclusa il <strong>{dmy(pratica.dataChiusura)}</strong></span>}
+                        {pratica.stato === 'pagata' && (
+                            <>
+                                {pratica.dataPagamento && <span>Pagata il <strong>{dmy(pratica.dataPagamento)}</strong></span>}
+                                <span className="inline-flex items-center gap-2">
+                                    Importo riconosciuto:
+                                    {canManage ? (
+                                        <input
+                                            type="number"
+                                            step="0.01"
+                                            min="0"
+                                            defaultValue={pratica.importoRiconosciuto ?? ''}
+                                            placeholder="0,00"
+                                            title="Importo effettivamente riconosciuto a chiusura (Invio o click fuori per salvare)"
+                                            onBlur={(e) => {
+                                                const n = parseFloat(e.target.value);
+                                                const v = Number.isFinite(n) && n >= 0 ? n : undefined;
+                                                if (v !== pratica.importoRiconosciuto) onUpdate?.({ importoRiconosciuto: v });
+                                            }}
+                                            onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                                            className="w-28 px-2 py-1 rounded-lg bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 text-right tabular-nums font-bold text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-400/60"
+                                        />
+                                    ) : (
+                                        <strong className="tabular-nums">{pratica.importoRiconosciuto != null ? euro(pratica.importoRiconosciuto) : '—'}</strong>
+                                    )}
+                                    {canManage && <span className="text-slate-400">€</span>}
+                                </span>
+                            </>
+                        )}
+                    </div>
+                )}
 
                 {/* Banner onestà dati */}
                 <div className="flex items-start gap-2 rounded-2xl bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 px-4 py-3 text-sm text-amber-800 dark:text-amber-200">

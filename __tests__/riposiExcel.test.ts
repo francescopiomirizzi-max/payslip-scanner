@@ -22,6 +22,7 @@ const pratica: PraticaRiposi = {
     periodoStart: '30/12/2023',
     periodoEnd: '03/01/2024',
     tariffaOraria: 10.03,
+    stato: 'in_corso',
     giornate,
 };
 
