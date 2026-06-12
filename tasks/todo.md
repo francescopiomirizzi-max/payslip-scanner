@@ -126,3 +126,13 @@ NIENTE della logica di estrazione/applicazione dati (Titanium V3 intatto).
       completata (~12-15s la prima) → 5s dava falsi "Verifica…".
 - [x] Larghezze island: folder 300px collassata / 320px espansa.
 - [x] Verifica: tsc pulito · build ok · 173 test verdi.
+
+## Iterazione 4: click su CARTELLA apre l'area di sgancio
+
+- [x] Il tasto CARTELLA ora apre l'overlay "Sgancia qui file o cartelle"
+      (onSetIsGlobalDragging(true)) invece del picker nativo: il picker accetta
+      UNA sola cartella, il drag ne accetta N — l'overlay è il bersaglio giusto.
+- [x] Nell'overlay, accanto ad "Annulla": bottone ambra "Scegli una cartella"
+      che chiude l'overlay e apre il picker nativo (ripiego senza drag).
+- [x] Timing reale misurato dall'utente: 4 anni (48 buste) in 1m30s col pool 3.
+- [x] Verifica: tsc pulito · build ok · 173 test verdi.

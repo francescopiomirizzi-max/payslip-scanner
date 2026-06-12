@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bot, X } from 'lucide-react';
+import { Bot, X, FolderUp } from 'lucide-react';
 import { useWorkerDetail } from './WorkerDetail/WorkerDetailContext';
 import WorkerDetailHeader from './WorkerDetail/WorkerDetailHeader';
 import VertenzaTimeline from './WorkerDetail/VertenzaTimeline';
@@ -57,12 +57,26 @@ const WorkerDetailLayout: React.FC<{ children: React.ReactNode }> = ({ children 
             <p className="text-fuchsia-300 font-bold mt-2 text-center">Puoi trascinare anche più cartelle-anno insieme: il Motore Neurale processa tutto in automatico.</p>
             <div className="mt-12 flex flex-col items-center">
               <span className="text-slate-400 dark:text-slate-200 text-sm mb-4">oppure</span>
-              <button
-                onClick={(e) => { e.stopPropagation(); onSetIsGlobalDragging(false); }}
-                className="flex items-center gap-2 px-6 py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-full font-bold transition-all border border-slate-600 hover:border-slate-400 shadow-xl active:scale-95"
-              >
-                <X className="w-5 h-5" /> Annulla e Chiudi
-              </button>
+              <div className="flex items-center gap-3">
+                {/* Picker nativo come ripiego: accetta UNA sola cartella (limite
+                    del browser), per più anni insieme serve il drag qui sopra. */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSetIsGlobalDragging(false);
+                    document.getElementById('dashboard-ai-upload-folder')?.click();
+                  }}
+                  className="flex items-center gap-2 px-6 py-3 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-full font-black transition-all shadow-[0_0_25px_rgba(245,158,11,0.45)] active:scale-95"
+                >
+                  <FolderUp className="w-5 h-5" /> Scegli una cartella
+                </button>
+                <button
+                  onClick={(e) => { e.stopPropagation(); onSetIsGlobalDragging(false); }}
+                  className="flex items-center gap-2 px-6 py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-full font-bold transition-all border border-slate-600 hover:border-slate-400 shadow-xl active:scale-95"
+                >
+                  <X className="w-5 h-5" /> Annulla
+                </button>
+              </div>
             </div>
           </motion.div>
         )}

@@ -11,7 +11,7 @@ import { useWorkerDetail } from './WorkerDetailContext';
 // Possiede commandBarRef per l'effetto spotlight. Legge dal context.
 const WorkerDetailCommandBar: React.FC = () => {
   const {
-    isBatchProcessing, onBatchUpload,
+    isBatchProcessing, onBatchUpload, onSetIsGlobalDragging,
     isAnalyzing, scanRef, onFileUpload, onOpenQR, activeTab, onSetActiveTab,
   } = useWorkerDetail();
   const isReadOnly = useIsReadOnly();
@@ -100,14 +100,15 @@ const WorkerDetailCommandBar: React.FC = () => {
             </button>
             )}
 
-            {/* TASTO CARICA CARTELLA — batch multi-anno in un colpo solo:
-                stessa pipeline di AI AGENT (e stesso trattamento hover, in ambra),
-                ma si seleziona una cartella intera con le sottocartelle per anno. */}
+            {/* TASTO CARICA CARTELLA — batch multi-anno in un colpo solo: apre
+                l'area di sgancio (il picker nativo accetta UNA sola cartella,
+                il drag invece ne accetta N). Dentro l'overlay resta il bottone
+                "Scegli una cartella" per chi preferisce il picker classico. */}
             {!isReadOnly && (
             <button
-              onClick={() => document.getElementById('dashboard-ai-upload-folder')?.click()}
+              onClick={() => onSetIsGlobalDragging(true)}
               disabled={isBatchProcessing}
-              title="Carica una cartella intera: prende tutte le buste paga dentro, anche nelle sottocartelle divise per anno. Per più cartelle insieme, trascinale sulla pagina."
+              title="Apre l'area di sgancio: trascinaci le cartelle degli anni (anche più di una), oppure scegli una singola cartella dal disco"
               className={`group relative px-6 py-3 rounded-xl font-bold text-sm transition-all duration-500 flex items-center gap-3 overflow-hidden border-2 shrink-0
                   ${isBatchProcessing
                   ? 'bg-slate-100 border-slate-200 opacity-50 dark:opacity-80 cursor-not-allowed'
