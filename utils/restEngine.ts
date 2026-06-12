@@ -296,6 +296,14 @@ export function computeRestViolations(giornate: GiornataInput[], params: RestPar
   };
 }
 
+/** Causale sintetica per tabelle/export (il motivo esteso resta nella violazione). */
+export function causaleSintetica(v: Violazione): string {
+  if (v.tipo === 'riposo_giornaliero') {
+    return /Quarto/.test(v.motivo) ? 'Riposo ridotto oltre i 3 consentiti' : 'Riposo inferiore al minimo ridotto (9h)';
+  }
+  return /Secondo/.test(v.motivo) ? 'Secondo ridotto consecutivo senza alternanza (45h)' : 'Riposo inferiore al minimo ridotto (24h)';
+}
+
 // ─── Serie della FONTE ────────────────────────────────────────────────────────
 
 export interface SerieFonte {

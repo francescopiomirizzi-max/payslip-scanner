@@ -9,7 +9,8 @@
 // mai sommate: confronto neutro, la scelta della base spetta all'avvocato.
 // ==========================================
 
-import { computeSerieFonte, formatHm, type RestResult, type Violazione, type GiornataInput } from './restEngine';
+import { causaleSintetica, computeSerieFonte, formatHm, type RestResult, type Violazione } from './restEngine';
+
 import { groupThousandsIT } from './formatters';
 import type { PraticaRiposi } from '../hooks/usePraticheRiposi';
 
@@ -35,14 +36,6 @@ function righePerAnno(violazioni: Violazione[], perAnnoFonte: Record<string, num
     }
     for (const [y, ind] of Object.entries(perAnnoFonte)) riga(y).indFonte = ind;
     return Object.values(m).sort((a, b) => a.y.localeCompare(b.y));
-}
-
-/** Causale sintetica per l'elenco (il motivo esteso del motore è ridondante in tabella). */
-function causale(v: Violazione): string {
-    if (v.tipo === 'riposo_giornaliero') {
-        return /Quarto/.test(v.motivo) ? 'ridotto oltre i 3 consentiti' : 'inferiore al minimo ridotto (9h)';
-    }
-    return /Secondo/.test(v.motivo) ? '2° ridotto consecutivo (no alternanza 45h)' : 'inferiore al minimo ridotto (24h)';
 }
 
 export function buildConteggiRiposiHtml(pratica: PraticaRiposi, result: RestResult): string {
@@ -76,7 +69,7 @@ export function buildConteggiRiposiHtml(pratica: PraticaRiposi, result: RestResu
             <td class="num">${formatHm(v.oreMancanti)}</td>
             <td class="num">${euro(v.indennita)}</td>
             <td class="${v.gravita === 'grave' ? 'grave' : ''}">${v.gravita}</td>
-            <td class="motivo">${esc(causale(v))}</td>
+            <td class="motivo">${esc(causaleSintetica(v))}</td>
         </tr>`;
     }
 

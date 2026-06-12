@@ -15,7 +15,7 @@ import {
     Document, Packer, Paragraph, Table, TableCell, TableRow,
     TextRun, HeadingLevel, AlignmentType, WidthType, BorderStyle, ShadingType,
 } from 'docx';
-import { computeSerieFonte, formatHm, type RestResult, type Violazione } from './restEngine';
+import { causaleSintetica, computeSerieFonte, formatHm, type RestResult } from './restEngine';
 import { groupThousandsIT } from './formatters';
 import type { PraticaRiposi } from '../hooks/usePraticheRiposi';
 
@@ -72,14 +72,6 @@ const bordered = (rows: TableRow[]): Table =>
     });
 
 // ─── Contenuto ────────────────────────────────────────────────────────────────
-
-/** Causale sintetica della violazione (il motivo esteso resta nel motore). */
-const causale = (v: Violazione): string => {
-    if (v.tipo === 'riposo_giornaliero') {
-        return /Quarto/.test(v.motivo) ? 'Riposo ridotto oltre i 3 consentiti' : 'Riposo inferiore al minimo ridotto (9h)';
-    }
-    return /Secondo/.test(v.motivo) ? 'Secondo ridotto consecutivo senza alternanza (45h)' : 'Riposo inferiore al minimo ridotto (24h)';
-};
 
 export function buildRelazioneRiposiDoc(pratica: PraticaRiposi, result: RestResult): Document {
     const fonte = computeSerieFonte(pratica.giornate);
@@ -211,7 +203,7 @@ export function buildRelazioneRiposiDoc(pratica: PraticaRiposi, result: RestResu
                     dataCell(formatHm(v.ore), { right: true }), dataCell(formatHm(v.oreMancanti), { right: true }),
                     dataCell(euro(v.indennita), { right: true }),
                     dataCell(v.gravita, { bold: v.gravita === 'grave' }),
-                    dataCell(causale(v)),
+                    dataCell(causaleSintetica(v)),
                 ],
             })),
         ]),

@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowLeft, AlertTriangle, Moon, CalendarClock, Euro, CheckCircle2, Search, CalendarDays, ListChecks, FileText, Scale, ChevronLeft, ChevronRight, X, Printer } from 'lucide-react';
+import { ArrowLeft, AlertTriangle, Moon, CalendarClock, Euro, CheckCircle2, Search, CalendarDays, ListChecks, FileText, FileSpreadsheet, Scale, ChevronLeft, ChevronRight, X, Printer } from 'lucide-react';
 import { computeRestViolations, computeSerieFonte, formatHm, type Violazione, type GiornataInput } from '../utils/restEngine';
 import { printConteggiRiposi } from '../utils/riposiPrint';
 import { AnimatedCounter } from './ui/AnimatedCounter';
@@ -51,6 +51,19 @@ const RiposiPraticaDetail: React.FC<Props> = ({ pratica, onBack }) => {
             await generateRelazioneRiposi(pratica, result);
         } finally {
             setIsExportingDocx(false);
+        }
+    };
+
+    // Import dinamico: exceljs resta fuori dal bundle principale.
+    const [isExportingXlsx, setIsExportingXlsx] = useState(false);
+    const handleExcel = async () => {
+        if (isExportingXlsx) return;
+        setIsExportingXlsx(true);
+        try {
+            const { generateExcelRiposi } = await import('../utils/riposiExcel');
+            await generateExcelRiposi(pratica, result);
+        } finally {
+            setIsExportingXlsx(false);
         }
     };
 
@@ -142,6 +155,15 @@ const RiposiPraticaDetail: React.FC<Props> = ({ pratica, onBack }) => {
                         <p className="text-sm text-slate-500 dark:text-slate-400">{pratica.mansione} · {pratica.periodoStart} – {pratica.periodoEnd} · {pratica.giornate.length} giornate</p>
                     </div>
                     <div className="ml-auto flex items-center gap-2">
+                        <button
+                            type="button"
+                            onClick={handleExcel}
+                            disabled={isExportingXlsx}
+                            title="Scarica l'Excel pulito: numeri veri, formule vive (la tariffa nel Riepilogo ricalcola tutto), un foglio per anno"
+                            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-600 dark:text-slate-300 hover:text-emerald-600 dark:hover:text-emerald-400 hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-wait"
+                        >
+                            <FileSpreadsheet className="w-4 h-4" /> Excel
+                        </button>
                         <button
                             type="button"
                             onClick={handleRelazioneDocx}
