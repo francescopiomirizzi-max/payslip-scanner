@@ -35,11 +35,24 @@ const TONE: Record<Tone, { icon: string; glow: string; hover: string }> = {
 
 const RiposiPraticaDetail: React.FC<Props> = ({ pratica, onBack }) => {
     const [tab, setTab] = useState<'violazioni' | 'prospetto'>('violazioni');
+    const [isExportingDocx, setIsExportingDocx] = useState(false);
 
     const result = useMemo(
         () => computeRestViolations(pratica.giornate, { tariffaOraria: pratica.tariffaOraria, fonteTariffa: pratica.fonteTariffa }),
         [pratica]
     );
+
+    // Import dinamico: docx resta fuori dal bundle principale.
+    const handleRelazioneDocx = async () => {
+        if (isExportingDocx) return;
+        setIsExportingDocx(true);
+        try {
+            const { generateRelazioneRiposi } = await import('../utils/riposiRelazione');
+            await generateRelazioneRiposi(pratica, result);
+        } finally {
+            setIsExportingDocx(false);
+        }
+    };
 
     const perAnno = useMemo(() => {
         const m: Record<string, { g: number; s: number; ind: number }> = {};
@@ -128,14 +141,25 @@ const RiposiPraticaDetail: React.FC<Props> = ({ pratica, onBack }) => {
                         <h1 className="text-2xl font-black text-slate-800 dark:text-slate-100 leading-tight">{pratica.cognome} {pratica.nome}</h1>
                         <p className="text-sm text-slate-500 dark:text-slate-400">{pratica.mansione} · {pratica.periodoStart} – {pratica.periodoEnd} · {pratica.giornate.length} giornate</p>
                     </div>
-                    <button
-                        type="button"
-                        onClick={() => printConteggiRiposi(pratica, result)}
-                        title="Apre il documento dei conteggi (due serie, riepilogo per anno, elenco violazioni) nella finestra di stampa: da lì si salva in PDF"
-                        className="ml-auto inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-bold shadow-lg shadow-indigo-500/30 hover:bg-indigo-700 hover:-translate-y-0.5 transition-all"
-                    >
-                        <Printer className="w-4 h-4" /> Stampa conteggi
-                    </button>
+                    <div className="ml-auto flex items-center gap-2">
+                        <button
+                            type="button"
+                            onClick={handleRelazioneDocx}
+                            disabled={isExportingDocx}
+                            title="Scarica la relazione tecnica in Word (.docx vero): quadro normativo, metodo, due serie, elenco violazioni, riserve"
+                            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-wait"
+                        >
+                            <FileText className="w-4 h-4" /> Relazione .docx
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => printConteggiRiposi(pratica, result)}
+                            title="Apre il documento dei conteggi (due serie, riepilogo per anno, elenco violazioni) nella finestra di stampa: da lì si salva in PDF"
+                            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-bold shadow-lg shadow-indigo-500/30 hover:bg-indigo-700 hover:-translate-y-0.5 transition-all"
+                        >
+                            <Printer className="w-4 h-4" /> Stampa conteggi
+                        </button>
+                    </div>
                 </div>
 
                 {/* Banner onestà dati */}
