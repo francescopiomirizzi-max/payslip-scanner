@@ -106,7 +106,7 @@ const WorkerDetailCommandBar: React.FC = () => {
                 "Scegli una cartella" per chi preferisce il picker classico. */}
             {!isReadOnly && (
             <button
-              onClick={() => onSetIsGlobalDragging(true)}
+              onClick={() => onSetIsGlobalDragging('folder')}
               disabled={isBatchProcessing}
               title="Apre l'area di sgancio: trascinaci le cartelle degli anni (anche più di una), oppure scegli una singola cartella dal disco"
               className={`group relative px-6 py-3 rounded-xl font-bold text-sm transition-all duration-500 flex items-center gap-3 overflow-hidden border-2 shrink-0

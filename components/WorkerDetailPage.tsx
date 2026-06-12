@@ -508,7 +508,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
     return customPalette[getCustomColorIndex(worker.profilo)];
   }, [worker.profilo]);
 
-  const [isGlobalDragging, setIsGlobalDragging] = useState(false);
+  const [isGlobalDragging, setIsGlobalDragging] = useState<false | 'drag' | 'folder'>(false);
   const [showSupernova] = useState(false);
 
   // --- GLOBAL SHORTCUTS (ESC & CTRL+S) ---

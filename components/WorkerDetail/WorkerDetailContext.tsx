@@ -17,8 +17,10 @@ export interface WorkerDetailContextValue {
   onStartClaimYearChange: (y: number) => void;
   /** Persistenza campi worker (cloud-synced via auto-sync useWorkers). */
   onUpdateWorkerFields: (fields: Partial<Worker>) => void;
-  isGlobalDragging: boolean;
-  onSetIsGlobalDragging: (v: boolean) => void;
+  /** false = chiusa; 'drag' = overlay fucsia da trascinamento; 'folder' = overlay
+      ambra aperto dal tasto CARTELLA (stesso tema del tasto). */
+  isGlobalDragging: false | 'drag' | 'folder';
+  onSetIsGlobalDragging: (v: false | 'drag' | 'folder') => void;
   onBatchUpload: (e: any, isSingle?: boolean) => void;
   /** Drop di file E cartelle (traversate ricorsivamente, anche più cartelle-anno). */
   onBatchDrop: (dataTransfer: DataTransfer) => void;

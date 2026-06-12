@@ -136,3 +136,13 @@ NIENTE della logica di estrazione/applicazione dati (Titanium V3 intatto).
       che chiude l'overlay e apre il picker nativo (ripiego senza drag).
 - [x] Timing reale misurato dall'utente: 4 anni (48 buste) in 1m30s col pool 3.
 - [x] Verifica: tsc pulito · build ok · 173 test verdi.
+
+## Iterazione 5: dropzone a due varianti
+
+- [x] isGlobalDragging: boolean → false | 'drag' | 'folder' (context + page).
+- [x] Variante AMBRA (dal tasto CARTELLA): FolderUp pulsante con alone, bordo
+      tratteggiato ambra, copy "Sgancia qui le cartelle degli anni", chips
+      2022-2025 fluttuanti, bottone picker "Scegli una cartella" SOLO qui.
+- [x] Variante classica (dragEnter): fucsia col Bot, invariata, solo "Annulla
+      e Chiudi". dragEnter non degrada la variante folder se già aperta.
+- [x] Verifica: tsc pulito · build ok · 173 test verdi.
