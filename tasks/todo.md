@@ -146,3 +146,14 @@ NIENTE della logica di estrazione/applicazione dati (Titanium V3 intatto).
 - [x] Variante classica (dragEnter): fucsia col Bot, invariata, solo "Annulla
       e Chiudi". dragEnter non degrada la variante folder se già aperta.
 - [x] Verifica: tsc pulito · build ok · 173 test verdi.
+
+## Nota Vincenzo v3 (12/06)
+
+- [x] Riscritta in tono diretto da messaggio: proposta (750 €) SUBITO in box
+      verde, poi le motivazioni (450 = seconda lavorazione richiesta avvocato a
+      metà prezzo; 300 = una tantum < 17 €/pratica, sviluppo a carico nostro).
+- [x] Novità motore in box ambra: carriera intera caricata in minuti vs ~1 ora
+      → per Vincenzo (viewer) il beneficio è "consegne più rapide, meno errori".
+- [x] PDF ~/Desktop/Nota_Integrazione_Pratiche_RFI_v3.pdf verificato (2 pagine,
+      layout pulito); sorgente knowledge/fonti/...v3.html (gitignorata); v1/v2
+      intatte. Memoria aggiornata.
