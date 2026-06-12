@@ -1,7 +1,8 @@
 import React, { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowLeft, AlertTriangle, Moon, CalendarClock, Euro, CheckCircle2, Search, CalendarDays, ListChecks, FileText, Scale, ChevronLeft, ChevronRight, X } from 'lucide-react';
-import { computeRestViolations, formatHm, parseHmm, type Violazione, type GiornataInput } from '../utils/restEngine';
+import { ArrowLeft, AlertTriangle, Moon, CalendarClock, Euro, CheckCircle2, Search, CalendarDays, ListChecks, FileText, Scale, ChevronLeft, ChevronRight, X, Printer } from 'lucide-react';
+import { computeRestViolations, computeSerieFonte, formatHm, type Violazione, type GiornataInput } from '../utils/restEngine';
+import { printConteggiRiposi } from '../utils/riposiPrint';
 import { AnimatedCounter } from './ui/AnimatedCounter';
 import type { PraticaRiposi } from '../hooks/usePraticheRiposi';
 import { groupThousandsIT } from '../utils/formatters';
@@ -53,21 +54,7 @@ const RiposiPraticaDetail: React.FC<Props> = ({ pratica, onBack }) => {
 
     /** Serie della FONTE: indennità/ore come calcolate nel PDF sorgente (criteri di
      *  chi l'ha prodotto), da affiancare — non sommare — alla serie del motore. */
-    const fonte = useMemo(() => {
-        let gg = 0, minuti = 0, ind = 0;
-        const perAnnoF: Record<string, number> = {};
-        for (const g of pratica.giornate) {
-            if (g.indennitaFonte == null) continue;
-            gg++; ind += g.indennitaFonte;
-            for (const v of [g.mancatoRipGiorn, g.mancatoRipSett]) {
-                const m = parseHmm(v);
-                if (!Number.isNaN(m)) minuti += m;
-            }
-            const y = yearOf(g.data);
-            perAnnoF[y] = (perAnnoF[y] ?? 0) + g.indennitaFonte;
-        }
-        return { gg, ore: minuti / 60, ind, perAnno: perAnnoF };
-    }, [pratica]);
+    const fonte = useMemo(() => computeSerieFonte(pratica.giornate), [pratica]);
 
     const perAnnoRows = useMemo(() => {
         const m = new Map(perAnno.map((a) => [a.y, a]));
@@ -141,6 +128,14 @@ const RiposiPraticaDetail: React.FC<Props> = ({ pratica, onBack }) => {
                         <h1 className="text-2xl font-black text-slate-800 dark:text-slate-100 leading-tight">{pratica.cognome} {pratica.nome}</h1>
                         <p className="text-sm text-slate-500 dark:text-slate-400">{pratica.mansione} · {pratica.periodoStart} – {pratica.periodoEnd} · {pratica.giornate.length} giornate</p>
                     </div>
+                    <button
+                        type="button"
+                        onClick={() => printConteggiRiposi(pratica, result)}
+                        title="Apre il documento dei conteggi (due serie, riepilogo per anno, elenco violazioni) nella finestra di stampa: da lì si salva in PDF"
+                        className="ml-auto inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-bold shadow-lg shadow-indigo-500/30 hover:bg-indigo-700 hover:-translate-y-0.5 transition-all"
+                    >
+                        <Printer className="w-4 h-4" /> Stampa conteggi
+                    </button>
                 </div>
 
                 {/* Banner onestà dati */}

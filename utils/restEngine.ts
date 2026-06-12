@@ -296,6 +296,40 @@ export function computeRestViolations(giornate: GiornataInput[], params: RestPar
   };
 }
 
+// ─── Serie della FONTE ────────────────────────────────────────────────────────
+
+export interface SerieFonte {
+  /** Giornate con indennità valorizzata nella fonte. */
+  gg: number;
+  /** Ore mancanti totali secondo la fonte (somma mancatoRipGiorn + mancatoRipSett). */
+  ore: number;
+  /** € indennità totale secondo la fonte. */
+  ind: number;
+  /** € indennità per anno ('YYYY'). */
+  perAnno: Record<string, number>;
+}
+
+/**
+ * Aggrega la serie della FONTE (colonne indennità del PDF sorgente, criteri di
+ * chi l'ha prodotto). Solo lettura dei campi informativi: il motore 561/2006
+ * non c'entra. Le due serie si AFFIANCANO, non si sommano.
+ */
+export function computeSerieFonte(giornate: GiornataInput[]): SerieFonte {
+  let gg = 0, minuti = 0, ind = 0;
+  const perAnno: Record<string, number> = {};
+  for (const g of giornate) {
+    if (g.indennitaFonte == null) continue;
+    gg++; ind += g.indennitaFonte;
+    for (const v of [g.mancatoRipGiorn, g.mancatoRipSett]) {
+      const m = parseHmm(v);
+      if (!Number.isNaN(m)) minuti += m;
+    }
+    const y = g.data.split('/')[2] ?? '';
+    perAnno[y] = (perAnno[y] ?? 0) + g.indennitaFonte;
+  }
+  return { gg, ore: minuti / 60, ind: round2(ind), perAnno };
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function round2(n: number): number {
