@@ -61,6 +61,10 @@ export interface SystemProfile {
   ccnl: string;
   /** Riferimento CCNL nel corpus vettoriale RAG (legal_documents.ccnl_ref). */
   ccnlRef: string;
+  /** Informativa CCNL breve per la scheda azienda (2-4 righe, linguaggio piano). */
+  ccnlSummary: string;
+  /** Punti salienti del CCNL per la scheda azienda (bullet brevi). */
+  ccnlHighlights: string[];
   /** Colore identificativo esadecimale. */
   hex: string;
   /** Classi badge per ogni contesto UI. */
@@ -90,6 +94,13 @@ export const SYSTEM_PROFILES: Record<string, SystemProfile> = {
     pec: 'ru.rfi@pec.rfi.it',
     ccnl: 'CCNL Mobilità',
     ccnlRef: 'Mobilità/Ferroviari',
+    ccnlSummary: 'Si applica il CCNL della Mobilità / Area Attività Ferroviarie (rinnovo 22 maggio 2025, scadenza 31/12/2026), lo stesso di Trenitalia. La base giuridica delle ferie sono gli artt. 30 (Ferie) e 83 (Indennità diverse): il credito si calcola sulle effettive giornate lavorative lette dalle buste.',
+    ccnlHighlights: [
+      'Ferie: artt. 30 e 83 CCNL Mobilità',
+      'Tetto 28 giorni/anno (Cass. 20216/2022)',
+      'Reperibilità ex art. 79 (codici 0470/0482/0496/0584)',
+      'Divisore 26 = solo parte fissa, non le variabili',
+    ],
     hex: '#3b82f6',
     badge: {
       filter: 'bg-blue-600 text-white shadow-lg shadow-blue-500/40 ring-2 ring-blue-400 scale-105 border-transparent',
@@ -125,6 +136,13 @@ export const SYSTEM_PROFILES: Record<string, SystemProfile> = {
     pec: '',
     ccnl: 'CCNL Mobilità',
     ccnlRef: 'Mobilità/Ferroviari',
+    ccnlSummary: 'Stesso CCNL della Mobilità / Area Attività Ferroviarie di RFI (rinnovo 22 maggio 2025). Le ferie sono regolate dagli artt. 30 e 83; il credito si calcola sulle effettive giornate lavorative lette dalle buste, con il tetto di 28 giorni annui conteggiabili.',
+    ccnlHighlights: [
+      'CCNL Mobilità, come RFI',
+      'Ferie: artt. 30 e 83',
+      'Tetto 28 giorni/anno (Cass. 20216/2022)',
+      'Calcolo sulle giornate effettive',
+    ],
     hex: '#dc2626',
     badge: {
       filter: 'bg-red-600 text-white shadow-lg shadow-red-500/40 ring-2 ring-red-400 scale-105 border-transparent',
@@ -160,6 +178,12 @@ export const SYSTEM_PROFILES: Record<string, SystemProfile> = {
     pec: 'elior@legalmail.it',
     ccnl: 'CCNL Ristorazione',
     ccnlRef: 'Ristorazione Collettiva',
+    ccnlSummary: 'Si applica il CCNL della Ristorazione collettiva, contratto "a divisore mensile": i "GIORNI INPS" (≈26) includono le ferie godute, che vanno quindi sottratte. Giornate lavorate = GIORNI INPS − ferie; le ore si convertono in giorni con una soglia.',
+    ccnlHighlights: [
+      'CCNL Ristorazione collettiva',
+      'Divisore mensile (i GIORNI INPS includono le ferie)',
+      'GG lavorati = GIORNI INPS − ferie',
+    ],
     hex: '#f97316',
     badge: {
       filter: 'bg-orange-500 text-white shadow-lg shadow-orange-500/40 ring-2 ring-orange-300 scale-105 border-transparent',
@@ -195,6 +219,12 @@ export const SYSTEM_PROFILES: Record<string, SystemProfile> = {
     pec: '',
     ccnl: 'CCNL Multiservizi',
     ccnlRef: 'Multiservizi',
+    ccnlSummary: 'Clean Service S.r.l. (divisione ristorazione/catering a bordo treno) applica il CCNL Multiservizi, "a divisore mensile": il "26" della retribuzione ordinaria sono i giorni RETRIBUITI del mese (lavoro + ferie godute), non i soli lavorati. Giornate effettive = giorni retribuiti − ferie.',
+    ccnlHighlights: [
+      'CCNL Multiservizi',
+      'Divisore mensile (26 = giorni retribuiti)',
+      'GG lavorati = giorni retribuiti − ferie',
+    ],
     hex: '#10b981',
     badge: {
       filter: 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/40 ring-2 ring-emerald-300 scale-105 border-transparent',
@@ -230,6 +260,12 @@ export const SYSTEM_PROFILES: Record<string, SystemProfile> = {
     pec: '',
     ccnl: 'CCNL Mobilità',
     ccnlRef: 'Mobilità/Ferroviari',
+    ccnlSummary: 'Inquadramento nell\'area della Mobilità (gestione ADP). Sul cedolino a 7 colonne gli importi delle indennità si leggono dalla colonna "Competenze"; le giornate lavorate derivano dai "GIORNI INPS", già al netto delle ferie (cod. 3833): nessuna sottrazione.',
+    ccnlHighlights: [
+      'Cedolino ADP a 7 colonne',
+      'Importi indennità → colonna "Competenze"',
+      'GG lavorati = GIORNI INPS (ferie già escluse)',
+    ],
     hex: '#d97706',
     badge: {
       filter: 'bg-amber-600 text-white shadow-lg shadow-amber-500/40 ring-2 ring-amber-400 scale-105 border-transparent',

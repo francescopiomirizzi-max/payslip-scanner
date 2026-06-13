@@ -12,12 +12,15 @@ function makeDeps(overrides: Partial<Deps> = {}): Deps {
         viewMode: 'home',
         selectedWorkerId: null,
         archiveWorkerId: null,
+        selectedCompany: null,
         workerExists: (id: string) => id === 'w1',
+        companyKeyValid: (key: string) => key === 'RFI' || key === 'ELIOR_MAGAZZINO',
         setArea: vi.fn(),
         setViewMode: vi.fn(),
         openComplex: vi.fn(),
         openSimple: vi.fn(),
         openArchive: vi.fn(),
+        openCompany: vi.fn(),
         goHome: vi.fn(),
         ...overrides,
     };
@@ -77,6 +80,25 @@ describe('useHashRoute', () => {
         render(plain);
         expect(plain.setViewMode).toHaveBeenCalledWith('archive');
         expect(plain.openArchive).not.toHaveBeenCalled();
+    });
+
+    it('#/azienda/:key apre la scheda azienda se la chiave è valida, altrimenti home', () => {
+        window.history.replaceState(null, '', '#/azienda/RFI');
+        const ok = makeDeps();
+        render(ok);
+        expect(ok.openCompany).toHaveBeenCalledWith('RFI');
+
+        window.history.replaceState(null, '', '#/azienda/SCONOSCIUTA');
+        const ko = makeDeps();
+        render(ko);
+        expect(ko.openCompany).not.toHaveBeenCalled();
+        expect(ko.goHome).toHaveBeenCalled();
+    });
+
+    it('lo stato company pusha #/azienda/:key', () => {
+        const { rerender } = render(makeDeps());
+        rerender({ d: makeDeps({ viewMode: 'company', selectedCompany: 'ELIOR_MAGAZZINO' }) });
+        expect(window.location.hash).toBe('#/azienda/ELIOR_MAGAZZINO');
     });
 
     it('un cambio di stato dopo l’init pusha la rotta corrispondente', () => {

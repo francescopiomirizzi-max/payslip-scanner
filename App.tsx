@@ -65,6 +65,7 @@ const App: React.FC = () => {
         handleDeleteWorker, handleDeleteWorkersBulk, recentlyCreatedId,
         handleUpdateWorkerData, handleUpdateStatus, handleUpdateWorkerFields, updateWorkerById,
         handleOpenSimple, handleOpenComplex, handleBack, archiveWorkerId, handleOpenArchive,
+        selectedCompany, handleOpenCompany,
         fileInputRef, isImportModalOpen, setIsImportModalOpen, importPendingData, setImportPendingData,
         handleExportData, handleImportData, executeImport,
     } = useWorkers(addToast);
@@ -92,12 +93,15 @@ const App: React.FC = () => {
         viewMode,
         selectedWorkerId: selectedWorker?.id ?? null,
         archiveWorkerId: archiveWorkerId ?? null,
+        selectedCompany: selectedCompany ?? null,
         workerExists: (id) => workers.some(w => w.id === id),
+        companyKeyValid: (key) => key === 'ELIOR_MAGAZZINO' || key in SYSTEM_PROFILES,
         setArea,
         setViewMode,
         openComplex: handleOpenComplex,
         openSimple: handleOpenSimple,
         openArchive: handleOpenArchive,
+        openCompany: handleOpenCompany,
         goHome: handleBack,
     });
 
@@ -115,17 +119,19 @@ const App: React.FC = () => {
         let title = `${base} — Gestionale Ferrovieri`;
         if (area === 'riposi') title = `Turni & Riposi · ${base}`;
         else if (viewMode === 'stats') title = `Statistiche · ${base}`;
+        else if (viewMode === 'company' && selectedCompany)
+            title = `${(SYSTEM_PROFILES[selectedCompany === 'ELIOR_MAGAZZINO' ? 'ELIOR' : selectedCompany]?.detailLabel) ?? 'Azienda'} · ${base}`;
         else if (viewMode === 'archive') title = `Archivio · ${base}`;
         else if ((viewMode === 'complex' || viewMode === 'simple') && selectedWorker)
             title = `${selectedWorker.cognome} ${selectedWorker.nome} · ${base}`;
         document.title = title;
-    }, [area, viewMode, selectedWorker]);
+    }, [area, viewMode, selectedWorker, selectedCompany]);
 
     const scrollToTop = () => window.scrollTo({ top: 0, behavior: 'smooth' });
 
     // --- DYNAMIC ISLAND SYNC ---
     useEffect(() => {
-        if (viewMode === 'home' || viewMode === 'stats' || viewMode === 'archive') {
+        if (viewMode === 'home' || viewMode === 'stats' || viewMode === 'archive' || viewMode === 'company') {
             setQuickActions(false);
         }
     }, [viewMode, setQuickActions]);
@@ -301,6 +307,8 @@ const App: React.FC = () => {
                 handleBack={handleBack}
                 archiveWorkerId={archiveWorkerId}
                 handleOpenArchive={handleOpenArchive}
+                selectedCompany={selectedCompany}
+                handleOpenCompany={handleOpenCompany}
                 addToast={addToast}
             />}
 

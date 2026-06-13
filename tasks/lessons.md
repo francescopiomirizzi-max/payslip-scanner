@@ -635,3 +635,26 @@ dell'utente: ho ottimizzato una metrica (px verticali) sacrificando l'identità 
    con corsia centrale vuota per l'isola).
 2. "Compatto" per l'utente non significa "minimo": il brand può perdere spazio ma non presenza.
    Quando riduco qualcosa di identitario, proporre il punto di mezzo (80px/4xl), non l'estremo.
+
+## 2026-06-13 — Niente "abbellimenti" aggiunti: l'utente vuole funzione + dati veri, non decorazioni
+
+**Contesto:** sul redesign cassetti ho aggiunto, uno dopo l'altro, elementi bocciati: panoramica
+"vetrata"/totali per stadio ("a noi interessano solo i badge"), legame gentile testata↔card
+(hairline+alone, "non mi piace per niente"), empty-state "n/d" sul Ticket OFF ("sembra rotto").
+Pattern coerente con altre bocciature passate: glow cursor-following (K/S), e in generale le
+aggiunte estetiche/aggregati che non sono dato operativo.
+
+**Lezione:**
+- Questo utente premia **funzione + immediatezza + dato reale**, non orpelli. Default per "renderlo
+  più bello": migliorare gerarchia/spaziatura/colore di ciò che ESISTE, NON aggiungere nuovi
+  elementi decorativi (aloni, hairline di collegamento, barre riassuntive, placeholder testuali).
+- Stati "vuoto": MAI placeholder che sembrano rotti (`-`, `n/d`). Mostrare un **valore reale**
+  (`0,00 €`) o lo stato esplicito; allineare i KPI fra loro.
+- Quando propongo qualcosa di "spettacolare", chiarire che lo spettacolo deve nascere dagli
+  elementi reali (le card, i badge), non da overlay aggiunti — e aspettarmi che gli overlay
+  vengano tagliati. Cfr. `tasks/ux-backlog.md` (famiglia cursor-following bandita).
+- **Non allargare lo scope ai vicini.** Stesso giorno: il fix era SOLO la barra strumenti, ma
+  io ho "unificato" anche i filtri azienda e cambiato larghezze/allineamento → bocciato ("i
+  filtri andavano lasciati identici, dovevamo sistemare solo la barra sotto"). Quando l'utente
+  indica UN elemento, toccare solo quello; le incoerenze percepite da me sui vicini NON sono un
+  invito a rifattorizzarli. Se penso valga la pena, lo PROPONGO a parte, non lo eseguo d'ufficio.

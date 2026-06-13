@@ -5,10 +5,11 @@ import WorkerDetailPage from './WorkerDetailPage';
 import TableComponent from './TableComponent';
 import DashboardPage from '../pages/DashboardPage';
 import ArchivePage from '../pages/ArchivePage';
+import CompanyPage from '../pages/CompanyPage';
 import { Worker, AnnoDati } from '../types';
 import { DashboardStats, WorkerStatItem, ModalConfig } from '../hooks/useDashboardStats';
 
-type ViewMode = 'home' | 'simple' | 'complex' | 'stats' | 'archive';
+type ViewMode = 'home' | 'simple' | 'complex' | 'stats' | 'archive' | 'company';
 
 interface AppRouterProps {
     viewMode: ViewMode;
@@ -51,6 +52,8 @@ interface AppRouterProps {
     handleBack: () => void;
     archiveWorkerId?: string | null;
     handleOpenArchive: (id: string) => void;
+    selectedCompany: string | null;
+    handleOpenCompany: (key: string) => void;
     addToast: (
         message: string,
         type?: 'success' | 'error' | 'info',
@@ -99,6 +102,8 @@ const AppRouter: React.FC<AppRouterProps> = ({
     handleBack,
     archiveWorkerId,
     handleOpenArchive,
+    selectedCompany,
+    handleOpenCompany,
     addToast,
 }) => {
     const pageAnim: Pick<HTMLMotionProps<'div'>, 'initial' | 'animate' | 'exit'> = {
@@ -119,6 +124,17 @@ const AppRouter: React.FC<AppRouterProps> = ({
                 {viewMode === 'archive' && (
                     <motion.div key="archive" {...pageAnim} className="h-screen">
                         <ArchivePage workers={workers} onBack={handleBack} initialWorkerId={archiveWorkerId ?? undefined} />
+                    </motion.div>
+                )}
+
+                {viewMode === 'company' && selectedCompany && (
+                    <motion.div key={`company-${selectedCompany}`} {...pageAnim}>
+                        <CompanyPage
+                            companyKey={selectedCompany}
+                            workers={workers}
+                            onBack={handleBack}
+                            onOpenWorker={handleOpenComplex}
+                        />
                     </motion.div>
                 )}
 
@@ -186,6 +202,7 @@ const AppRouter: React.FC<AppRouterProps> = ({
                 handleImportData={handleImportData}
                 setViewMode={setViewMode}
                 onOpenArchive={handleOpenArchive}
+                onOpenCompany={handleOpenCompany}
                 addToast={addToast}
             />
         </>

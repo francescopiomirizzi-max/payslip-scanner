@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 
-type ViewMode = 'home' | 'simple' | 'complex' | 'stats' | 'archive';
+type ViewMode = 'home' | 'simple' | 'complex' | 'stats' | 'archive' | 'company';
 type AppArea = 'incidenza' | 'riposi';
 
 interface HashRouteDeps {
@@ -10,20 +10,23 @@ interface HashRouteDeps {
     viewMode: ViewMode;
     selectedWorkerId: string | null;
     archiveWorkerId: string | null;
+    selectedCompany: string | null;
     workerExists: (id: string) => boolean;
+    companyKeyValid: (key: string) => boolean;
     setArea: (a: AppArea) => void;
     setViewMode: (m: ViewMode) => void;
     openComplex: (id: string) => void;
     openSimple: (id: string) => void;
     openArchive: (id: string) => void;
+    openCompany: (key: string) => void;
     goHome: () => void;
 }
 
 /**
  * Sincronizza lo stato di navigazione dell'app con l'hash dell'URL, senza router.
  *
- * Rotte: #/ (home) · #/stats · #/archive[/:workerId] · #/worker/:id (dettaglio)
- *        · #/report/:id (riepilogo) · #/riposi
+ * Rotte: #/ (home) · #/stats · #/azienda/:key (scheda azienda) · #/archive[/:workerId]
+ *        · #/worker/:id (dettaglio) · #/report/:id (riepilogo) · #/riposi
  *
  * Cosa abilita: Back/Forward del browser, F5 che riapre la vista corrente,
  * deep link condivisibili (es. la scheda di un lavoratore al viewer readonly).
@@ -57,6 +60,11 @@ export const useHashRoute = (deps: HashRouteDeps) => {
                 if (id && d.workerExists(id)) d.openArchive(id);
                 else d.setViewMode('archive');
                 return;
+            case 'azienda':
+                d.setArea('incidenza');
+                if (id && d.companyKeyValid(id)) d.openCompany(id);
+                else d.goHome();
+                return;
             case 'worker':
                 if (id && d.workerExists(id)) {
                     d.setArea('incidenza');
@@ -82,6 +90,7 @@ export const useHashRoute = (deps: HashRouteDeps) => {
         if (d.area === 'riposi') return '#/riposi';
         switch (d.viewMode) {
             case 'stats':   return '#/stats';
+            case 'company': return d.selectedCompany ? `#/azienda/${d.selectedCompany}` : '#/';
             case 'archive': return d.archiveWorkerId ? `#/archive/${d.archiveWorkerId}` : '#/archive';
             case 'complex': return d.selectedWorkerId ? `#/worker/${d.selectedWorkerId}` : '#/';
             case 'simple':  return d.selectedWorkerId ? `#/report/${d.selectedWorkerId}` : '#/';
@@ -111,7 +120,7 @@ export const useHashRoute = (deps: HashRouteDeps) => {
         const h = window.location.hash;
         if (h !== route && !h.startsWith(route + '/')) window.history.pushState(null, '', route);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [deps.area, deps.viewMode, deps.selectedWorkerId, deps.archiveWorkerId]);
+    }, [deps.area, deps.viewMode, deps.selectedWorkerId, deps.archiveWorkerId, deps.selectedCompany]);
 
     // Back/Forward → stato.
     useEffect(() => {

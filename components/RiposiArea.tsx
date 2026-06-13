@@ -5,6 +5,7 @@ import { usePraticheRiposi, STATO_META, type PraticaRiposi, type StatoPratica } 
 import { groupThousandsIT } from '../utils/formatters';
 import { computeRestViolations } from '../utils/restEngine';
 import RiposiPraticaDetail from './RiposiPraticaDetail';
+import { DevBadge } from './ui/DevBadge';
 
 // ─── Workflow (cosa farà la pratica, in 3 passi) ──────────────────────────────
 const STEPS: { icon: React.ComponentType<{ className?: string }>; title: string; desc: string }[] = [
@@ -75,6 +76,9 @@ const RiposiArea: React.FC = () => {
                     <div>
                         <h1 className="text-3xl font-black text-slate-800 dark:text-slate-100">Turni &amp; Riposi</h1>
                         <p className="text-slate-500 dark:text-slate-400">Mancati riposi · Reg. (CE) n. 561/2006 — area separata dalle buste paga</p>
+                        <div className="mt-2">
+                            <DevBadge label="Sezione nuova — in sviluppo, nuove funzioni in arrivo!" />
+                        </div>
                     </div>
                 </header>
 

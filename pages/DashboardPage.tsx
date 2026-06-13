@@ -28,9 +28,6 @@ import {
     CheckCircle2,
     Activity,
     FileText,
-    Clock,
-    FileBarChart,
-    AlertCircle,
     Handshake,
     Loader2,
     Eye,
@@ -43,34 +40,15 @@ import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { useIsReadOnly, useReadOnlyViewerName } from '../lib/readonly';
 import { Worker } from '../types';
 import { SYSTEM_PROFILES, SYSTEM_PROFILE_KEYS, getCompanyLogo } from '../config/profiles';
+import { CASSETTI, type CassettoId, type CassettoConfig } from '../config/cassetti';
 import { CompanyLogo } from '../components/ui/CompanyLogo';
 import { DashboardStats, WorkerStatItem, ModalConfig } from '../hooks/useDashboardStats';
 import { matchesCompanyFilter } from '../hooks/useWorkers';
 import { generateReport, generateRegistroPagate } from '../utils/reportGenerator';
 import { COLOR_VARIANTS } from '../utils/colorVariants';
 
-// ─── CONFIG DEI CASSETTI ─────────────────────────────────────────────────────
-// La griglia è strutturata come una cassettiera: ogni stato è un cassetto
-// indipendente, espandibile/comprimibile. "Da Analizzare" è sempre aperto
-// di default ed è il punto di atterraggio per ogni pratica nuova.
-type CassettoId = 'analisi' | 'pronta' | 'inviata' | 'trattativa' | 'chiusa';
-
-interface CassettoConfig {
-    id: CassettoId;
-    label: string;
-    icon: React.ComponentType<{ className?: string; strokeWidth?: number | string }>;
-    accentHex: string;
-    matches: (status: string | undefined) => boolean;
-    defaultOpen: boolean;
-}
-
-const CASSETTI: CassettoConfig[] = [
-    { id: 'analisi',    label: 'Da Analizzare',         icon: Clock,         accentHex: '#94a3b8', matches: (s) => !s || s === 'aperta' || s === 'in_corso', defaultOpen: true  },
-    { id: 'pronta',     label: 'Conteggi Pronti',       icon: FileBarChart,  accentHex: '#f59e0b', matches: (s) => s === 'pronta',                            defaultOpen: false },
-    { id: 'inviata',    label: 'Buste Paga Mancanti',   icon: AlertCircle,   accentHex: '#ef4444', matches: (s) => s === 'inviata',                           defaultOpen: false },
-    { id: 'trattativa', label: 'Concluse',              icon: Handshake,     accentHex: '#14b8a6', matches: (s) => s === 'trattativa',                        defaultOpen: false },
-    { id: 'chiusa',     label: 'Pagate',                icon: CheckCircle2,  accentHex: '#10b981', matches: (s) => s === 'chiusa',                            defaultOpen: false },
-];
+// Config dei cassetti (classificazione per stato) → fonte unica in config/cassetti.ts,
+// condivisa con la scheda azienda così le etichette di stato non divergono.
 
 // ─── COMPONENTE CASSETTO ─────────────────────────────────────────────────────
 // Bar compatta in singola riga: icona + label + count + badge cliccabili
@@ -81,6 +59,17 @@ const CASSETTI: CassettoConfig[] = [
 // Overflow del pannello aperto: parte hidden per animare la height, passa a
 // visible a fine apertura → così le WorkerCard non vengono tagliate ai lati
 // quando si inclinano in hover.
+// Cascata rapida delle card all'apertura del cassetto (stagger stretto, coordinato col pannello).
+const CASSETTO_GRID_VARIANTS = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.03, delayChildren: 0.04 } } };
+// Entrata delle card DENTRO il cassetto: tween corto e leggero (y piccolo) invece della molla
+// floaty globale (itemVariants) → coordinata con la glissata del pannello, niente doppia
+// animazione scoordinata che faceva percepire l'apertura "a scatti".
+const CASSETTO_ITEM_VARIANTS = {
+    hidden: { opacity: 0, y: 14 },
+    show: { opacity: 1, y: 0, transition: { duration: 0.3, ease: [0.22, 1, 0.36, 1] } },
+    exit: { opacity: 0, scale: 0.97, transition: { duration: 0.15 } },
+};
+
 const Cassetto: React.FC<{
     config: CassettoConfig;
     workers: Worker[];
@@ -111,11 +100,26 @@ const Cassetto: React.FC<{
                 onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggle(); }
                 }}
-                className="w-full flex items-center gap-3 px-3.5 py-2 rounded-xl bg-white/65 dark:bg-slate-800/65 backdrop-blur-xl border border-white/60 dark:border-slate-700/60 shadow-[0_1px_2px_0_rgb(0,0,0,0.04)] hover:shadow-[0_6px_20px_-10px_rgb(0,0,0,0.15)] transition-all duration-200 hover:-translate-y-px group relative z-10 cursor-pointer"
+                className="w-full flex items-center gap-3 pl-4 pr-3.5 py-2 rounded-xl bg-white/65 dark:bg-slate-800/65 backdrop-blur-xl border border-white/60 dark:border-slate-700/60 shadow-[0_1px_2px_0_rgb(0,0,0,0.04)] hover:shadow-[0_6px_20px_-10px_rgb(0,0,0,0.15)] transition-all duration-200 hover:-translate-y-px group relative z-10 cursor-pointer"
                 style={{
-                    backgroundImage: `linear-gradient(to right, ${config.accentHex}10, transparent 32%)`,
+                    // CHIUSO: cornice glow nel colore dello STATO (border + alone) così i
+                    // cassetti chiusi si distinguono a colpo d'occhio. APERTO: torna neutro
+                    // (border/ombra di default dalle classi) e l'accento resta sulla spina.
+                    backgroundImage: `linear-gradient(to right, ${config.accentHex}${isOpen ? '10' : '1f'}, transparent ${isOpen ? '32%' : '36%'})`,
+                    borderColor: isOpen ? undefined : `${config.accentHex}59`,
+                    boxShadow: isOpen ? undefined : `0 0 20px -6px ${config.accentHex}73, 0 1px 2px 0 rgba(0,0,0,0.05)`,
                 }}
             >
+                {/* Spina di colore (linguetta cartella) SOLO sulla testata: non scende
+                    lungo le card → niente conflitto. Si accende (glow) da aperto. */}
+                <span
+                    aria-hidden
+                    className="absolute left-0 top-1.5 bottom-1.5 w-1.5 rounded-full pointer-events-none transition-[box-shadow] duration-300"
+                    style={{
+                        background: `linear-gradient(to bottom, ${config.accentHex}, ${config.accentHex}99)`,
+                        boxShadow: isOpen ? `0 0 14px 1px ${config.accentHex}` : 'none',
+                    }}
+                />
                 {/* Icona compatta del cassetto */}
                 <div
                     className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-transform duration-200 group-hover:scale-105"
@@ -127,24 +131,23 @@ const Cassetto: React.FC<{
                     <Icon className="w-4 h-4 text-white" strokeWidth={2.5} />
                 </div>
 
-                {/* Label + count inline */}
-                <span className="font-black text-[11px] uppercase tracking-widest text-slate-700 dark:text-slate-200 shrink-0">
+                {/* Etichetta + conteggio (niente totali €: contano i badge lavoratori) */}
+                <span className="font-black text-xs uppercase tracking-widest text-slate-700 dark:text-slate-200 shrink-0">
                     {config.label}
                 </span>
-                <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 tabular-nums shrink-0 -ml-1">
+                <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500 tabular-nums shrink-0 -ml-1">
                     · {count}
                 </span>
 
-                {/* Badge lavoratori cliccabili — solo a cassetto chiuso. Scrollabili
-                    orizzontalmente (trackpad swipe / shift+wheel) quando non ci stanno.
-                    Colore preso da SYSTEM_PROFILES.footer; fallback slate per custom.
-                    Il wrapper flex-1 occupa sempre lo spazio centrale così il chevron
-                    resta ancorato a destra anche quando i badge non sono mostrati. */}
-                <div className="flex-1 min-w-0 ml-2 relative">
+                {/* Badge lavoratori cliccabili — solo a cassetto chiuso. Vanno a capo
+                    (flex-wrap) così si vedono TUTTI senza scroll: la barra cresce in
+                    altezza quel tanto che serve. Colore preso da SYSTEM_PROFILES.footer;
+                    fallback slate per custom. Il wrapper flex-1 occupa sempre lo spazio
+                    centrale così il chevron resta ancorato a destra anche quando i badge
+                    non sono mostrati. */}
+                <div className="flex-1 min-w-0 ml-2">
                     {!isOpen && count > 0 && (
-                        <>
-                            <div className="overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                                <div className="flex items-center gap-1.5 py-0.5">
+                        <div className="flex flex-wrap items-center gap-2.5 py-1">
                                     {workers.map(w => {
                                         const profilo = SYSTEM_PROFILES[w.profilo];
                                         const wrapCls = profilo?.footer.wrap ?? 'bg-slate-100 dark:bg-slate-700/40 border-slate-200 dark:border-slate-600/50';
@@ -155,18 +158,14 @@ const Cassetto: React.FC<{
                                                 key={w.id}
                                                 onClick={(e) => { e.stopPropagation(); onOpenWorker(w.id); }}
                                                 title={isReadOnly ? `Apri report ${w.nome} ${w.cognome}` : `Apri scheda ${w.nome} ${w.cognome}`}
-                                                className={`shrink-0 flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-bold border transition-all duration-150 hover:scale-[1.06] hover:shadow-sm ${wrapCls}`}
+                                                className={`shrink-0 flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold border shadow-sm transition-all duration-150 hover:scale-[1.06] hover:-translate-y-px hover:shadow-md ${wrapCls}`}
                                             >
-                                                <span className={`w-1.5 h-1.5 rounded-full ${dotCls}`} />
+                                                <span className={`w-2 h-2 rounded-full ${dotCls}`} />
                                                 <span className={`tracking-tight ${nameCls}`}>{w.cognome}</span>
                                             </button>
                                         );
                                     })}
-                                </div>
-                            </div>
-                            {/* fade-right: hint visivo che ci sono altri badge oltre il bordo */}
-                            <div className="absolute inset-y-0 right-0 w-8 pointer-events-none bg-gradient-to-l from-white/65 dark:from-slate-800/65 to-transparent" />
-                        </>
+                        </div>
                     )}
                 </div>
 
@@ -194,7 +193,10 @@ const Cassetto: React.FC<{
                         initial={{ height: 0, opacity: 0 }}
                         animate={{ height: 'auto', opacity: 1 }}
                         exit={{ height: 0, opacity: 0 }}
-                        transition={{ type: 'spring', stiffness: 350, damping: 30, mass: 0.9 }}
+                        transition={{
+                            height: { duration: 0.42, ease: [0.22, 1, 0.36, 1] },
+                            opacity: { duration: 0.28, ease: 'easeOut' },
+                        }}
                         onAnimationComplete={() => { if (isOpen) setOverflowVisible(true); }}
                         style={{ overflow: overflowVisible ? 'visible' : 'hidden' }}
                     >
@@ -207,7 +209,7 @@ const Cassetto: React.FC<{
 };
 
 interface DashboardPageProps {
-    viewMode: 'home' | 'simple' | 'complex' | 'stats' | 'archive';
+    viewMode: 'home' | 'simple' | 'complex' | 'stats' | 'archive' | 'company';
     workers: Worker[];
     filteredWorkers: Worker[];
     dashboardStats: DashboardStats;
@@ -239,8 +241,9 @@ interface DashboardPageProps {
     fileInputRef: React.RefObject<HTMLInputElement>;
     handleExportData: () => void;
     handleImportData: (e: React.ChangeEvent<HTMLInputElement>) => void;
-    setViewMode: (mode: 'home' | 'simple' | 'complex' | 'stats' | 'archive') => void;
+    setViewMode: (mode: 'home' | 'simple' | 'complex' | 'stats' | 'archive' | 'company') => void;
     onOpenArchive: (id: string) => void;
+    onOpenCompany?: (key: string) => void;
     addToast: (
         message: string,
         type?: 'success' | 'error' | 'info',
@@ -283,6 +286,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
     handleImportData,
     setViewMode,
     onOpenArchive,
+    onOpenCompany,
     addToast,
 }) => {
     const isReadOnly = useIsReadOnly();
@@ -357,6 +361,30 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
         localStorage.setItem('openCassetti', JSON.stringify([...openCassetti]));
     }, [openCassetti]);
 
+    // --- STATISTICHE HOME: compatte di default (striscia), espandibili. La scelta
+    // è ricordata, così l'utente e il viewer atterrano dritti sui cassetti. ---
+    const [statsCollapsed, setStatsCollapsed] = useState<boolean>(() => {
+        if (typeof window === 'undefined') return true;
+        try {
+            const saved = localStorage.getItem('statsCollapsed');
+            if (saved !== null) return JSON.parse(saved) as boolean;
+        } catch {}
+        return true;
+    });
+
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        localStorage.setItem('statsCollapsed', JSON.stringify(statsCollapsed));
+    }, [statsCollapsed]);
+
+    // overflow:hidden SOLO mentre la regione anima l'altezza; a riposo torna visibile
+    // (onAnimationComplete) così l'hover/ombre delle card non vengono tagliate in alto/basso.
+    const [statsAnimating, setStatsAnimating] = useState(false);
+    const toggleStats = (collapsed: boolean) => {
+        setStatsAnimating(true);
+        setStatsCollapsed(collapsed);
+    };
+
     const toggleCassetto = (id: CassettoId) => {
         setOpenCassetti(prev => {
             const next = new Set(prev);
@@ -429,11 +457,11 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
 
     // Helper: rendering di una card lavoratore (anello flash + overlay selezione + WorkerCard).
     // Estratto per essere usato sia dentro i cassetti che nella vista flat di ricerca.
-    const renderWorkerCard = (w: Worker) => {
+    const renderWorkerCard = (w: Worker, variants: any = itemVariants) => {
         const isJustCreated = w.id === recentlyCreatedId;
         return (
             // 440px: il badge-logo aziendale è più alto del vecchio badge testuale
-            <motion.div key={w.id} variants={itemVariants} layout initial="hidden" animate="show" exit="exit" className="relative h-[440px]">
+            <motion.div key={w.id} variants={variants} layout initial="hidden" animate="show" exit="exit" className="relative h-[440px]">
                 {isJustCreated && (
                     <motion.div
                         initial={{ opacity: 0 }}
@@ -549,7 +577,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
     };
 
     return (
-        <div className="relative max-w-7xl mx-auto px-6 py-10" style={{ display: viewMode === 'home' ? 'block' : 'none' }}>
+        <div className="relative max-w-screen-2xl mx-auto px-6 py-10" style={{ display: viewMode === 'home' ? 'block' : 'none' }}>
             {/* HEADER — barra a tre corsie: brand a sinistra, corsia centrale
                 RISERVATA alla Dynamic Island (fissa al centro-alto), azioni a destra.
                 Così l'isola non può mai coprire i bottoni, e il brand resta presente
@@ -748,8 +776,135 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                 </div>
             </div>
 
-            {/* STATISTICHE HOME (GOD TIER FX RESTORED) */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8 relative z-10">
+            {/* STATISTICHE HOME — compatte di default (striscia KPI + loghi azienda),
+                espandibili nelle 3 card. Lo stato (statsCollapsed) è ricordato così
+                l'utente e il viewer atterrano subito sui cassetti senza scorrere.
+                overflow: hidden SOLO durante la transizione di altezza (transitionEnd),
+                visibile a riposo per non clippare l'hover/ombre delle card. */}
+            <AnimatePresence initial={false} mode="wait">
+                {statsCollapsed ? (
+                    <motion.div
+                        key="stats-strip"
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
+                        onAnimationComplete={() => setStatsAnimating(false)}
+                        style={{ overflow: statsAnimating ? 'hidden' : 'visible' }}
+                        className="mb-8 relative z-10"
+                    >
+                        {/* === STRISCIA COMPATTA === */}
+                        <div className="isolate group relative overflow-hidden [clip-path:inset(0_round_2rem)] bg-white/60 dark:bg-slate-800/60 backdrop-blur-2xl border border-white/60 dark:border-slate-700/60 rounded-[2rem] shadow-lg transition-[box-shadow,border-color] duration-500 hover:shadow-xl hover:border-indigo-300/40 dark:hover:border-indigo-500/40">
+
+                            {/* Shimmer sweep — stessa famiglia delle card, solo on hover */}
+                            <div className="absolute inset-0 overflow-hidden rounded-[2rem] pointer-events-none">
+                                <div className="card-sweep absolute inset-0">
+                                    <div className="absolute inset-y-0 left-0 w-1/2 -skew-x-12 bg-gradient-to-r from-transparent via-white/25 dark:via-white/10 to-transparent"></div>
+                                </div>
+                            </div>
+
+                            <div className="relative z-10 flex items-center gap-2 px-4 sm:px-5 py-3">
+
+                                {/* KPI: cluster fisso, sempre su una riga */}
+                                <div className="flex items-center gap-3 shrink-0">
+
+                                    {/* KPI — Pratiche */}
+                                    <div className="flex items-center gap-2.5 shrink-0">
+                                        <div className="p-2 rounded-xl bg-blue-500/10 text-blue-500 dark:text-blue-400 border border-blue-500/20"><User className="w-4 h-4" strokeWidth={2.5} /></div>
+                                        <div className="leading-tight">
+                                            <div className="text-lg font-black tracking-tight tabular-nums text-slate-700 dark:text-white"><AnimatedCounter value={workers.length} /></div>
+                                            <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Pratiche Totali</div>
+                                        </div>
+                                    </div>
+
+                                    <div className="w-px h-9 bg-slate-200/70 dark:bg-slate-700/70 shrink-0"></div>
+
+                                    {/* KPI — Credito (apre il dettaglio) */}
+                                    <button onClick={() => setActiveStatsModal('net')} title="Apri il dettaglio del credito stimato" className="group/seg flex items-center gap-2.5 shrink-0 rounded-xl px-2 py-1 -mx-1 transition-colors hover:bg-emerald-500/10">
+                                        <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"><Wallet className="w-4 h-4" strokeWidth={2.5} /></div>
+                                        <div className="leading-tight text-left">
+                                            <div className="text-lg font-black tracking-tight tabular-nums text-emerald-600 dark:text-emerald-400"><AnimatedCounter value={dashboardStats.totalNet} isCurrency /></div>
+                                            <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400 flex items-center gap-0.5">Credito <ChevronRight className="w-2.5 h-2.5 -mr-1 opacity-40 group-hover/seg:opacity-100 transition-opacity" strokeWidth={3} /></div>
+                                        </div>
+                                    </button>
+
+                                    <div className="w-px h-9 bg-slate-200/70 dark:bg-slate-700/70 shrink-0"></div>
+
+                                    {/* KPI — Ticket (apre il dettaglio). Mostra sempre il valore come Credito
+                                        (a zero/OFF → "0,00 €"): un numero vero, niente trattino/n/d "rotto". */}
+                                    <button onClick={() => setActiveStatsModal('ticket')} title="Apri il dettaglio del valore ticket" className="group/seg flex items-center gap-2.5 shrink-0 rounded-xl px-2 py-1 -mx-1 transition-colors hover:bg-amber-500/10">
+                                        <div className="p-2 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20"><Ticket className="w-4 h-4" strokeWidth={2.5} /></div>
+                                        <div className="leading-tight text-left">
+                                            <div className="text-lg font-black tracking-tight tabular-nums text-amber-600 dark:text-amber-400"><AnimatedCounter value={dashboardStats.totalTicket} isCurrency /></div>
+                                            <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400 flex items-center gap-0.5">Ticket <ChevronRight className="w-2.5 h-2.5 -mr-1 opacity-40 group-hover/seg:opacity-100 transition-opacity" strokeWidth={3} /></div>
+                                        </div>
+                                    </button>
+                                </div>
+
+                                {/* Loghi delle aziende su cui si lavora DAVVERO (conteggio > 0) — stesso
+                                    linguaggio dei badge footer. Una sola riga (nowrap), niente a capo:
+                                    mostrando solo le aziende attive la riga resta compatta a h=20. */}
+                                <div className="hidden sm:block w-px h-9 bg-slate-200/70 dark:bg-slate-700/70 shrink-0"></div>
+                                <motion.div
+                                    variants={{ show: { transition: { staggerChildren: 0.05, delayChildren: 0.08 } } }}
+                                    initial="hidden"
+                                    animate="show"
+                                    className="hidden sm:flex items-center gap-2.5 shrink-0"
+                                >
+                                        {SYSTEM_PROFILE_KEYS.flatMap(k => k === 'ELIOR' ? [k, 'ELIOR_MAGAZZINO'] : [k]).map((key) => {
+                                            const isEliorMag = key === 'ELIOR_MAGAZZINO';
+                                            const p = SYSTEM_PROFILES[isEliorMag ? 'ELIOR' : key];
+                                            const count = workers.filter(w => matchesCompanyFilter(w, key)).length;
+                                            if (count === 0) return null; // solo le aziende su cui si lavora davvero
+                                            const companyName = isEliorMag ? 'Elior Magazzino' : p.label;
+                                            return (
+                                                <motion.button
+                                                    key={key}
+                                                    type="button"
+                                                    onClick={() => onOpenCompany?.(key)}
+                                                    title={`Apri la scheda ${companyName}`}
+                                                    aria-label={`Apri la scheda ${companyName}`}
+                                                    variants={{ hidden: { opacity: 0, y: 6 }, show: { opacity: 1, y: 0 } }}
+                                                    className={`flex items-center gap-2 px-2.5 py-2 rounded-xl border backdrop-blur-md shrink-0 cursor-pointer transition-transform hover:scale-105 hover:shadow-md ${p.footer.wrap}`}
+                                                >
+                                                    {getCompanyLogo(isEliorMag ? 'ELIOR' : key) ? (
+                                                        <CompanyLogo profilo={isEliorMag ? 'ELIOR' : key} eliorType={isEliorMag ? 'magazzino' : undefined} h={24} title={companyName} />
+                                                    ) : (
+                                                        <>
+                                                            <div className={`w-2 h-2 rounded-full ${p.footer.dot}`}></div>
+                                                            <span className={`text-[11px] font-black ${p.footer.name}`}>{p.label}</span>
+                                                        </>
+                                                    )}
+                                                    <span className={`flex items-center justify-center min-w-[1.25rem] h-[1.25rem] px-1 rounded-full bg-white/75 dark:bg-slate-900/55 shadow-sm text-[11px] font-black tabular-nums ${p.footer.count}`}>{count}</span>
+                                                </motion.button>
+                                            );
+                                        })}
+                                    </motion.div>
+
+                                {/* Espandi → torna alle 3 card */}
+                                <button
+                                    onClick={() => toggleStats(false)}
+                                    aria-label="Espandi statistiche"
+                                    title="Espandi le statistiche"
+                                    className="shrink-0 ml-auto p-2.5 rounded-xl bg-slate-100/80 dark:bg-slate-700/60 text-slate-400 hover:text-indigo-500 dark:hover:text-indigo-400 border border-slate-200/70 dark:border-slate-600/60 hover:border-indigo-300/60 transition-colors"
+                                >
+                                    <ChevronDown className="w-4 h-4" strokeWidth={2.5} />
+                                </button>
+                            </div>
+                        </div>
+                    </motion.div>
+                ) : (
+                    <motion.div
+                        key="stats-cards"
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+                        onAnimationComplete={() => setStatsAnimating(false)}
+                        style={{ overflow: statsAnimating ? 'hidden' : 'visible' }}
+                        className="mb-8 relative z-10"
+                    >
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
 
                 {/* 1. CARD PRATICHE (NEON BLU - CON SFONDO E PING) */}
                 <div className="isolate group relative h-full min-h-[180px] bg-white/60 dark:bg-slate-800/60 backdrop-blur-2xl border border-white/60 dark:border-slate-700/60 rounded-[2.5rem] overflow-hidden [clip-path:inset(0_round_2.5rem)] transition-[transform,box-shadow,border-color] duration-500 hover:scale-[1.03] hover:-translate-y-1 hover:border-blue-400/50 hover:shadow-[0_20px_60px_-15px_rgba(59,130,246,0.5)] flex flex-col justify-between cursor-default">
@@ -885,6 +1040,22 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                     </div>
                 </div>
             </div>
+
+                        {/* Linguetta "Comprimi" — affordance discreta sotto le card */}
+                        <div className="flex justify-center mt-4">
+                            <button
+                                onClick={() => toggleStats(true)}
+                                aria-label="Comprimi statistiche"
+                                title="Comprimi le statistiche"
+                                className="group/collapse flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl border border-white/60 dark:border-slate-700/60 text-[11px] font-bold uppercase tracking-widest text-slate-400 hover:text-indigo-500 dark:hover:text-indigo-400 hover:border-indigo-300/50 shadow-sm transition-colors"
+                            >
+                                <ChevronDown className="w-3.5 h-3.5 rotate-180 transition-transform group-hover/collapse:-translate-y-0.5" strokeWidth={2.5} />
+                                Comprimi statistiche
+                            </button>
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
             {/* --- SEARCH COMMAND CENTER (HOVER ACTIVATION EDITION) --- */}
             <div className="relative w-full max-w-4xl mx-auto mb-10 z-20">
 
@@ -991,13 +1162,14 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
             {/* --- 4. WORKERS GRID --- */}
             {(!searchQuery || filteredWorkers.length > 0) && (
                 <>
-                {/* CONTROL BAR — ordina + ticket + selezione in un'unica toolbar */}
-                <div className="flex items-center gap-2 mb-6 px-4 py-2.5 bg-white/50 dark:bg-slate-800/40 backdrop-blur-xl border border-slate-200/50 dark:border-slate-700/50 rounded-2xl flex-wrap">
+                {/* CONTROL BAR — ordina + ticket + selezione. Toolbar TRASPARENTE e slim
+                    (niente vetro/bordo/rounded): non deve sembrare un cassetto. Separata dai
+                    cassetti sotto da una sottile linea di sezione. */}
+                <div className="flex items-center gap-2.5 mb-5 pb-4 border-b border-slate-200/60 dark:border-slate-700/40 flex-wrap">
 
-                    {/* Gruppo: Ordina — segmented control con indicatore scorrevole */}
-                    <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 shrink-0">Ordina</span>
+                    {/* Ordina — segmented control (le icone direzione bastano: niente etichetta esterna) */}
                     <LayoutGroup id="sort-control">
-                        <div className="flex items-center bg-slate-100/90 dark:bg-slate-800/90 rounded-xl p-0.5 gap-0 shrink-0">
+                        <div className="flex items-center bg-slate-100/90 dark:bg-slate-800/80 rounded-xl p-1 gap-0.5 shrink-0">
                             {([
                                 { key: 'cognome', label: 'Cognome', pill: 'bg-indigo-500 shadow-indigo-500/40' },
                                 { key: 'credito', label: 'Credito', pill: 'bg-emerald-500 shadow-emerald-500/40' },
@@ -1010,12 +1182,12 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                                     <button
                                         key={opt.key}
                                         onClick={() => toggleSort(opt.key)}
-                                        className="relative flex items-center gap-1.5 px-3 py-1.5 rounded-[10px] text-[10px] font-black uppercase tracking-widest z-10 select-none"
+                                        className="relative flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-black uppercase tracking-wide z-10 select-none"
                                     >
                                         {isActive && (
                                             <motion.div
                                                 layoutId="sort-pill"
-                                                className={`absolute inset-0 rounded-[10px] shadow-md ${opt.pill}`}
+                                                className={`absolute inset-0 rounded-lg shadow-md ${opt.pill}`}
                                                 transition={{ type: 'spring', stiffness: 500, damping: 38 }}
                                             />
                                         )}
@@ -1029,42 +1201,39 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                         </div>
                     </LayoutGroup>
 
-                    <span className="w-px h-5 bg-slate-200 dark:bg-slate-700 mx-1 shrink-0" />
-
-                    {/* Gruppo: Ticket */}
-                    <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mr-0.5 shrink-0">Ticket</span>
+                    {/* Ticket — stessa famiglia: superficie neutra da spento, ambra acceso; "Ticket ON/OFF" nella pillola */}
                     <button
                         onClick={() => setIsTicketConfirmOpen(true)}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all duration-200 border ${
+                        title={`Ticket ${allTicketsOn ? 'inclusi' : 'esclusi'} nei conteggi`}
+                        className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-[11px] font-black uppercase tracking-wide transition-all duration-200 shrink-0 ${
                             allTicketsOn
-                                ? 'bg-amber-500 text-white border-amber-400 shadow-md shadow-amber-500/30'
-                                : 'bg-white/60 dark:bg-slate-700/40 text-slate-500 dark:text-slate-400 border-slate-200/70 dark:border-slate-600/50 hover:bg-white dark:hover:bg-slate-700/70'
+                                ? 'bg-amber-500 text-white shadow-md shadow-amber-500/30'
+                                : 'bg-slate-100/90 dark:bg-slate-800/80 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
                         }`}
                     >
-                        <Ticket className="w-3 h-3" />
-                        {allTicketsOn ? 'ON' : 'OFF'}
+                        <Ticket className="w-3.5 h-3.5" />
+                        Ticket
+                        <span className={`text-[9px] tracking-widest ${allTicketsOn ? 'text-white/80' : 'text-slate-400 dark:text-slate-500'}`}>{allTicketsOn ? 'ON' : 'OFF'}</span>
                     </button>
 
-                    <span className="w-px h-5 bg-slate-200 dark:bg-slate-700 mx-1 shrink-0" />
-
-                    {/* Gruppo: Selezione — nascosto in modalita' sola lettura (le bulk action sono tutte scritture) */}
+                    {/* Seleziona — stessa famiglia (nascosto in sola lettura: le bulk action sono scritture) */}
                     {!isReadOnly && (
                     <button
                         onClick={() => isSelectionMode ? exitSelectionMode() : setIsSelectionMode(true)}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all duration-200 border ${
+                        className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-[11px] font-black uppercase tracking-wide transition-all duration-200 shrink-0 ${
                             isSelectionMode
-                                ? 'bg-indigo-600 text-white border-indigo-500 shadow-md shadow-indigo-500/30'
-                                : 'bg-white/60 dark:bg-slate-700/40 text-slate-500 dark:text-slate-400 border-slate-200/70 dark:border-slate-600/50 hover:bg-white dark:hover:bg-slate-700/70'
+                                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/30'
+                                : 'bg-slate-100/90 dark:bg-slate-800/80 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
                         }`}
                     >
-                        <MousePointer2 className="w-3 h-3" />
+                        <MousePointer2 className="w-3.5 h-3.5" />
                         {isSelectionMode ? `${selectedIds.size} selezionate` : 'Seleziona'}
                     </button>
                     )}
 
-                    {/* Conteggio allineato a destra */}
-                    <span className="ml-auto text-[10px] font-bold text-slate-400 dark:text-slate-500 shrink-0">
-                        {filteredWorkers.length} {filteredWorkers.length === 1 ? 'pratica' : 'pratiche'}
+                    {/* Conteggio — tipografia pulita: numero in evidenza, "pratiche" smorzato */}
+                    <span className="ml-auto shrink-0 text-xs font-semibold text-slate-400 dark:text-slate-500">
+                        <span className="font-black text-slate-600 dark:text-slate-300 tabular-nums">{filteredWorkers.length}</span> {filteredWorkers.length === 1 ? 'pratica' : 'pratiche'}
                     </span>
                 </div>
 
@@ -1078,7 +1247,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                         animate="show"
                     >
                         <AnimatePresence mode="popLayout">
-                            {sortedWorkers.map(renderWorkerCard)}
+                            {sortedWorkers.map(w => renderWorkerCard(w))}
                         </AnimatePresence>
                     </motion.div>
                 ) : (
@@ -1104,12 +1273,12 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                                 >
                                     <motion.div
                                         className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8"
-                                        variants={containerVariants}
+                                        variants={CASSETTO_GRID_VARIANTS}
                                         initial="hidden"
                                         animate="show"
                                     >
                                         <AnimatePresence mode="popLayout">
-                                            {workersInCassetto.map(renderWorkerCard)}
+                                            {workersInCassetto.map(w => renderWorkerCard(w, CASSETTO_ITEM_VARIANTS))}
 
                                             {/* CARD "AGGIUNGI NUOVO" — solo dentro 'Da Analizzare', nascosta in modalita' sola lettura */}
                                             {config.id === 'analisi' && !isSelectionMode && !isReadOnly && (

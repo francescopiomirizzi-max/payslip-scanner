@@ -84,8 +84,9 @@ export const useWorkers = (addToast: AddToast) => {
     const [authInitialized, setAuthInitialized] = useState(false);
 
     const [selectedWorker, setSelectedWorker] = useState<Worker | null>(null);
-    const [viewMode, setViewMode] = useState<'home' | 'simple' | 'complex' | 'stats' | 'archive'>('home');
+    const [viewMode, setViewMode] = useState<'home' | 'simple' | 'complex' | 'stats' | 'archive' | 'company'>('home');
     const [archiveWorkerId, setArchiveWorkerId] = useState<string | null>(null);
+    const [selectedCompany, setSelectedCompany] = useState<string | null>(null);
 
     // --- STATO MODALE CRUD ---
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -256,6 +257,7 @@ export const useWorkers = (addToast: AddToast) => {
     const handleBack = () => {
         setSelectedWorker(null);
         setArchiveWorkerId(null);
+        setSelectedCompany(null);
         setViewMode('home');
         setRefreshStats(prev => prev + 1);
     };
@@ -263,6 +265,12 @@ export const useWorkers = (addToast: AddToast) => {
     const handleOpenArchive = (id: string) => {
         setArchiveWorkerId(id);
         setViewMode('archive');
+    };
+
+    // Scheda informativa azienda (key = profilo di sistema, incl. 'ELIOR_MAGAZZINO')
+    const handleOpenCompany = (key: string) => {
+        setSelectedCompany(key);
+        setViewMode('company');
     };
 
     // --- CRUD ---
@@ -627,6 +635,8 @@ export const useWorkers = (addToast: AddToast) => {
         handleBack,
         archiveWorkerId,
         handleOpenArchive,
+        selectedCompany,
+        handleOpenCompany,
 
         // Import/Export
         fileInputRef,
