@@ -7,6 +7,7 @@ import {
   Crosshair, Eye, ScanEye,
   Wand2, RotateCw, ZoomOut, ZoomIn, Maximize,
   Trash2, X, Bot, Upload, CalendarDays,
+  Archive, Check,
 } from 'lucide-react';
 
 // Una busta selezionabile dal picker archivio (visore in sola lettura).
@@ -19,7 +20,7 @@ export interface ArchivedPick {
   monthIdx: number;
 }
 
-const MONTH_SHORT = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC'];
+const MONTH_FULL = ['Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno', 'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'];
 
 interface SplitViewViewerProps {
   // File state
@@ -123,6 +124,17 @@ const SplitViewViewer: React.FC<SplitViewViewerProps> = ({
     ? Array.from(new Set(archivedPicks.map(p => p.year))).sort((a, b) => b - a)
     : [];
 
+  // Stato vuoto sull'account principale (NON visore read-only): scelta tra upload
+  // locale e archivio. Il toggle parte sempre da 'local' così l'apertura del visore
+  // si comporta come oggi; l'archivio è opt-in esplicito.
+  const hasArchive = !!archivedPicks && archivedPicks.length > 0;
+  const [emptyMode, setEmptyMode] = React.useState<'local' | 'archive'>('local');
+  // Anno selezionato nel pannello archivio master/detail (default = più recente).
+  const [selectedYear, setSelectedYear] = React.useState<number | null>(null);
+  const effectiveYear = selectedYear !== null && pickYears.includes(selectedYear)
+    ? selectedYear
+    : (pickYears[0] ?? null);
+
   // Tipo del file mostrato. Gli URL firmati Supabase conservano l'estensione reale
   // prima del ?token=… (…/2024_01_busta.jpg?token=…), così distinguiamo immagini da PDF.
   // I blob: locali (upload owner) non hanno estensione: ricadono nel ramo <object>
@@ -153,9 +165,9 @@ const SplitViewViewer: React.FC<SplitViewViewerProps> = ({
     <div className="p-4 bg-slate-800/80 backdrop-blur border-b border-slate-700 flex justify-between items-center z-20">
       <div className="flex items-center gap-3">
         {/* VISORE: torna al picker dell'archivio per scegliere altre buste */}
-        {isReadOnly && payslipFiles.length > 0 && onBackToArchivePicker && (
+        {payslipFiles.length > 0 && onBackToArchivePicker && (isReadOnly || hasArchive) && (
           <button
-            onClick={onBackToArchivePicker}
+            onClick={() => { if (!isReadOnly) setEmptyMode('archive'); onBackToArchivePicker(); }}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-700 hover:bg-cyan-600 text-white transition-colors"
             title="Torna all'archivio per scegliere altre buste"
           >
@@ -330,94 +342,76 @@ const SplitViewViewer: React.FC<SplitViewViewerProps> = ({
         // `absolute inset-0`: il picker scrolla DENTRO l'altezza del body (guidata dalla
         // tabella di fianco) invece di far crescere la pagina quando ci sono molti anni.
         archivedPicks && archivedPicks.length > 0 ? (
-          <div className="absolute inset-0 overflow-y-auto custom-scrollbar p-4 pb-20">
-            <p className="text-[11px] font-black uppercase tracking-widest text-slate-400 mb-4 text-center">
+          <div className="absolute inset-0 overflow-y-auto custom-scrollbar p-4">
+            <p className="text-[11px] font-black uppercase tracking-widest text-slate-400 mb-3 text-center">
               Buste paga archiviate
             </p>
-            {pickYears.map(year => {
+
+            {/* Selettore anno: un anno alla volta, niente muro di griglie */}
+            <div className="flex flex-wrap justify-center gap-1.5 mb-4">
+              {pickYears.map(year => {
+                const active = year === effectiveYear;
+                return (
+                  <button
+                    key={year}
+                    onClick={() => setSelectedYear(year)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-black tabular-nums transition-colors ${
+                      active
+                        ? 'bg-cyan-500 text-white shadow-[0_0_12px_rgba(6,182,212,0.4)]'
+                        : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700'
+                    }`}
+                  >
+                    {year}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Mesi dell'anno scelto: TAP = apre subito la busta (nessuna conferma) */}
+            {effectiveYear !== null && (() => {
               const yearPicks = archivedPicks
-                .filter(p => p.year === year)
+                .filter(p => p.year === effectiveYear)
                 .sort((a, b) => a.monthIdx - b.monthIdx);
-              // Griglia-calendario a 12 posizioni fisse (stesso linguaggio dell'Archivio):
-              // GEN è sempre nella stessa colonna, i mesi senza busta restano come
-              // tratteggi — i buchi si vedono a colpo d'occhio invece di sparire.
-              // Un mese può avere più buste (duplicati): la cella le rappresenta tutte.
               const byMonth = new Map<number, ArchivedPick[]>();
               yearPicks.forEach(p => {
                 const arr = byMonth.get(p.monthIdx) ?? [];
                 arr.push(p);
                 byMonth.set(p.monthIdx, arr);
               });
+              const months = [...byMonth.entries()].sort((a, b) => a[0] - b[0]);
               return (
-                <div key={year} className="mb-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-sm font-bold text-cyan-400">{year}</span>
-                    <span className="text-[10px] font-bold text-slate-500 tabular-nums">{byMonth.size}/12</span>
+                <>
+                  <div className="flex items-center gap-2 mb-2.5">
+                    <span className="text-sm font-bold text-cyan-400">{effectiveYear}</span>
+                    <span className="text-[10px] font-bold text-slate-500 tabular-nums">{byMonth.size} {byMonth.size === 1 ? 'busta' : 'buste'}</span>
                     <span className="flex-1 h-px bg-slate-700/60" />
-                    <button
-                      onClick={() => onOpenArchivedPicks?.(yearPicks.map(p => p.id))}
-                      className="px-2 py-1 rounded-md text-[10px] font-black uppercase tracking-wider bg-cyan-600/20 hover:bg-cyan-600 text-cyan-300 hover:text-white border border-cyan-500/40 hover:border-cyan-500 transition-colors"
-                      title={`Apri tutte le ${yearPicks.length} buste del ${year}`}
-                    >
-                      Tutto l'anno
-                    </button>
+                    {yearPicks.length > 0 && (
+                      <button
+                        onClick={() => onOpenArchivedPicks?.(yearPicks.map(p => p.id))}
+                        className="px-2 py-1 rounded-md text-[10px] font-black uppercase tracking-wider bg-cyan-600/20 hover:bg-cyan-600 text-cyan-300 hover:text-white border border-cyan-500/40 hover:border-cyan-500 transition-colors"
+                        title={`Apri tutte le ${yearPicks.length} buste del ${effectiveYear}`}
+                      >
+                        Tutto l'anno
+                      </button>
+                    )}
                   </div>
-                  <div className="grid grid-cols-6 xl:grid-cols-12 gap-1.5">
-                    {MONTH_SHORT.map((label, m) => {
-                      const picks = byMonth.get(m);
-                      if (!picks) {
-                        return (
-                          <div
-                            key={m}
-                            title={`${label} ${year} — busta non in archivio`}
-                            className="h-8 rounded-lg flex items-center justify-center text-[10px] font-bold tracking-wide border border-dashed border-slate-700/70 text-slate-600 select-none"
-                          >
-                            {label}
-                          </div>
-                        );
-                      }
-                      const selected = picks.some(p => selectedPickIds.has(p.id));
-                      return (
-                        <button
-                          key={m}
-                          onClick={() => setSelectedPickIds(prev => {
-                            const next = new Set(prev);
-                            picks.forEach(p => selected ? next.delete(p.id) : next.add(p.id));
-                            return next;
-                          })}
-                          className={`h-8 rounded-lg flex items-center justify-center gap-0.5 text-[10px] font-black tracking-wide border transition-all duration-150 hover:scale-[1.05] ${
-                            selected
-                              ? 'bg-cyan-500 text-white border-cyan-400 shadow-[0_0_12px_rgba(6,182,212,0.5)]'
-                              : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-600 hover:border-cyan-500'
-                          }`}
-                          title={picks.map(p => `${p.month} ${p.year} — ${p.filename}`).join('\n')}
-                        >
-                          {label}{picks.length > 1 ? <span className="text-[8px] font-bold opacity-80">×{picks.length}</span> : null}
-                        </button>
-                      );
-                    })}
+                  <div className="grid grid-cols-2 gap-2">
+                    {months.map(([m, picks]) => (
+                      <button
+                        key={m}
+                        onClick={() => onOpenArchivedPicks?.(picks.map(p => p.id))}
+                        className="group flex items-center gap-2 px-3 py-2.5 rounded-xl bg-slate-800 hover:bg-cyan-600 border border-slate-700 hover:border-cyan-500 text-left transition-colors"
+                        title={picks.map(p => `${p.month} ${p.year} — ${p.filename}`).join('\n')}
+                      >
+                        <CalendarDays className="w-4 h-4 text-cyan-400 group-hover:text-white shrink-0" />
+                        <span className="text-sm font-bold text-slate-100 group-hover:text-white truncate">{MONTH_FULL[m]}</span>
+                        <ChevronRight className="w-4 h-4 ml-auto text-slate-500 group-hover:text-white group-hover:translate-x-0.5 transition-all shrink-0" />
+                      </button>
+                    ))}
                   </div>
-                </div>
+                </>
               );
-            })}
-
-            {/* Barra di conferma: appare quando ci sono buste selezionate */}
-            {selectedPickIds.size > 0 && (
-              <div className="sticky bottom-0 -mx-4 -mb-20 px-4 py-3 bg-slate-900/95 backdrop-blur border-t border-slate-700 flex items-center gap-2">
-                <button
-                  onClick={() => setSelectedPickIds(new Set())}
-                  className="px-3 py-2 rounded-lg text-xs font-bold text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 transition-colors"
-                >
-                  Annulla
-                </button>
-                <button
-                  onClick={() => { onOpenArchivedPicks?.([...selectedPickIds]); setSelectedPickIds(new Set()); }}
-                  className="flex-1 px-3 py-2 rounded-lg text-xs font-black uppercase tracking-wider bg-cyan-500 hover:bg-cyan-400 text-white transition-colors"
-                >
-                  Apri {selectedPickIds.size} {selectedPickIds.size === 1 ? 'busta' : 'buste'}
-                </button>
-              </div>
-            )}
+            })()}
           </div>
         ) : (
           <div className="flex items-center justify-center text-slate-500 dark:text-slate-300 p-8 w-64 h-64">
@@ -425,19 +419,154 @@ const SplitViewViewer: React.FC<SplitViewViewerProps> = ({
           </div>
         )
       ) : (
-        // Empty upload area
-        <div
-          onClick={() => fileInputRef.current?.click()}
-          className="group flex flex-col items-center justify-center text-slate-500 dark:text-slate-300 hover:text-indigo-400 transition-all cursor-pointer p-8 border-2 border-dashed border-slate-700 rounded-3xl hover:border-indigo-500 hover:bg-slate-900/50 w-64 h-64"
-        >
-          <div className="mb-4 p-4 bg-slate-900 rounded-full group-hover:scale-110 transition-transform duration-300 border border-slate-800 group-hover:border-indigo-500/30">
-            <Upload className="w-8 h-8 group-hover:-translate-y-1 transition-transform duration-500 ease-in-out" />
-          </div>
-          <p className="font-bold text-sm uppercase tracking-wider text-slate-400 dark:text-slate-200 group-hover:text-white transition-colors">Carica Buste Paga</p>
-          <p className="text-[10px] mt-2 opacity-50 dark:opacity-80 text-center px-4 group-hover:opacity-100 transition-opacity">
-            Trascina qui o clicca.<br />Supporta PDF, JPG, PNG (Max 12)
-          </p>
-          <p className="text-[10px] mt-1 opacity-40 pointer-events-none">Carica fino a 12 file insieme!</p>
+        // Account principale: scelta tra upload locale e archivio (master/detail).
+        // Il toggle "Dall'archivio" appare solo se ci sono buste archiviate per il
+        // lavoratore; di default si parte dall'upload locale come oggi.
+        <div className="absolute inset-0 flex flex-col p-4">
+          {hasArchive && (
+            <div className="flex items-center justify-center mb-3 shrink-0">
+              <div className="inline-flex p-1 rounded-xl bg-slate-800/80 border border-slate-700">
+                <button
+                  onClick={() => setEmptyMode('local')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${emptyMode === 'local' ? 'bg-indigo-600 text-white shadow' : 'text-slate-300 hover:text-white'}`}
+                >
+                  <Upload className="w-3.5 h-3.5" /> Carica busta paga
+                </button>
+                <button
+                  onClick={() => setEmptyMode('archive')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${emptyMode === 'archive' ? 'bg-cyan-600 text-white shadow' : 'text-slate-300 hover:text-white'}`}
+                >
+                  <Archive className="w-3.5 h-3.5" /> Carica dall'archivio
+                </button>
+              </div>
+            </div>
+          )}
+
+          {(!hasArchive || emptyMode === 'local') ? (
+            // Upload locale (com'era): area drag&drop centrata.
+            <div className="flex-1 flex items-center justify-center">
+              <div
+                onClick={() => fileInputRef.current?.click()}
+                className="group flex flex-col items-center justify-center text-slate-500 dark:text-slate-300 hover:text-indigo-400 transition-all cursor-pointer p-8 border-2 border-dashed border-slate-700 rounded-3xl hover:border-indigo-500 hover:bg-slate-900/50 w-64 h-64"
+              >
+                <div className="mb-4 p-4 bg-slate-900 rounded-full group-hover:scale-110 transition-transform duration-300 border border-slate-800 group-hover:border-indigo-500/30">
+                  <Upload className="w-8 h-8 group-hover:-translate-y-1 transition-transform duration-500 ease-in-out" />
+                </div>
+                <p className="font-bold text-sm uppercase tracking-wider text-slate-400 dark:text-slate-200 group-hover:text-white transition-colors">Carica Buste Paga</p>
+                <p className="text-[10px] mt-2 opacity-50 dark:opacity-80 text-center px-4 group-hover:opacity-100 transition-opacity">
+                  Trascina qui o clicca.<br />Supporta PDF, JPG, PNG (Max 12)
+                </p>
+                <p className="text-[10px] mt-1 opacity-40 pointer-events-none">Carica fino a 12 file insieme!</p>
+              </div>
+            </div>
+          ) : (
+            // Archivio master/detail: anni a sinistra, mesi a destra in elenco.
+            // La griglia è solo metadati (zero egress); l'egress scatta solo quando
+            // si apre davvero una busta, come nel visore read-only.
+            (() => {
+              const yearPicks = effectiveYear === null
+                ? []
+                : archivedPicks!.filter(p => p.year === effectiveYear).sort((a, b) => a.monthIdx - b.monthIdx);
+              const byMonth = new Map<number, ArchivedPick[]>();
+              yearPicks.forEach(p => {
+                const arr = byMonth.get(p.monthIdx) ?? [];
+                arr.push(p);
+                byMonth.set(p.monthIdx, arr);
+              });
+              return (
+                <div className="flex-1 min-h-0 flex gap-3">
+                  {/* Colonna anni */}
+                  <div className="w-24 shrink-0 flex flex-col gap-1 overflow-y-auto custom-scrollbar border-r border-slate-700 pr-2">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 px-2 py-1">Anni</p>
+                    {pickYears.map(year => {
+                      const count = archivedPicks!.filter(p => p.year === year).length;
+                      const active = year === effectiveYear;
+                      return (
+                        <button
+                          key={year}
+                          onClick={() => setSelectedYear(year)}
+                          className={`flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-bold transition-colors ${active ? 'bg-cyan-600 text-white' : 'text-slate-300 hover:bg-slate-800'}`}
+                        >
+                          <span>{year}</span>
+                          <span className={`text-[10px] tabular-nums ${active ? 'text-cyan-100' : 'text-slate-500'}`}>{count}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Colonna mesi */}
+                  <div className="flex-1 min-h-0 flex flex-col">
+                    <div className="flex items-center justify-between mb-2 shrink-0">
+                      <p className="text-xs font-bold text-cyan-400">
+                        {effectiveYear ?? '—'} · {byMonth.size} {byMonth.size === 1 ? 'busta' : 'buste'}
+                      </p>
+                      {yearPicks.length > 0 && (
+                        <button
+                          onClick={() => onOpenArchivedPicks?.(yearPicks.map(p => p.id))}
+                          className="px-2 py-1 rounded-md text-[10px] font-black uppercase tracking-wider bg-cyan-600/20 hover:bg-cyan-600 text-cyan-300 hover:text-white border border-cyan-500/40 hover:border-cyan-500 transition-colors"
+                          title={`Apri tutte le ${yearPicks.length} buste del ${effectiveYear}`}
+                        >
+                          Tutto l'anno
+                        </button>
+                      )}
+                    </div>
+                    <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar pr-1 space-y-1">
+                      {MONTH_FULL.map((label, m) => {
+                        const picks = byMonth.get(m);
+                        if (!picks) {
+                          return (
+                            <div key={m} className="flex items-center gap-2.5 px-2.5 py-2 rounded-lg border border-dashed border-slate-700/60 text-slate-600 select-none">
+                              <span className="w-4 h-4 shrink-0 rounded border border-dashed border-slate-700" />
+                              <span className="text-xs font-medium w-20 shrink-0">{label}</span>
+                              <span className="text-[11px] opacity-60">—</span>
+                            </div>
+                          );
+                        }
+                        const selected = picks.some(p => selectedPickIds.has(p.id));
+                        return (
+                          <button
+                            key={m}
+                            onClick={() => setSelectedPickIds(prev => {
+                              const next = new Set(prev);
+                              picks.forEach(p => selected ? next.delete(p.id) : next.add(p.id));
+                              return next;
+                            })}
+                            className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg border text-left transition-colors ${selected ? 'bg-cyan-500/15 border-cyan-500/50' : 'bg-slate-800/60 border-slate-700 hover:border-cyan-500/40 hover:bg-slate-800'}`}
+                          >
+                            <span className={`w-4 h-4 shrink-0 rounded flex items-center justify-center border ${selected ? 'bg-cyan-500 border-cyan-400' : 'border-slate-500'}`}>
+                              {selected && <Check className="w-3 h-3 text-white" />}
+                            </span>
+                            <span className="text-xs font-bold text-slate-200 w-20 shrink-0">{label}</span>
+                            <span className="text-[11px] text-slate-400 truncate flex-1" title={picks.map(p => p.filename).join('\n')}>
+                              {picks[0].filename}{picks.length > 1 ? ` +${picks.length - 1}` : ''}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Barra apertura selezione (può attraversare più anni) */}
+                    {selectedPickIds.size > 0 && (
+                      <div className="shrink-0 mt-2 flex items-center gap-2">
+                        <button
+                          onClick={() => setSelectedPickIds(new Set())}
+                          className="px-3 py-2 rounded-lg text-xs font-bold text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 transition-colors"
+                        >
+                          Annulla
+                        </button>
+                        <button
+                          onClick={() => { onOpenArchivedPicks?.([...selectedPickIds]); setSelectedPickIds(new Set()); }}
+                          className="flex-1 px-3 py-2 rounded-lg text-xs font-black uppercase tracking-wider bg-cyan-500 hover:bg-cyan-400 text-white transition-colors"
+                        >
+                          Apri {selectedPickIds.size} {selectedPickIds.size === 1 ? 'busta' : 'buste'}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })()
+          )}
         </div>
       )}
     </div>
