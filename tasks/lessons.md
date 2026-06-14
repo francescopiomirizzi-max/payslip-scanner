@@ -3,6 +3,26 @@
 > Pattern e errori da evitare nelle prossime sessioni.
 > Aggiornato dopo ogni correzione utente.
 
+## 2026-06-13 — Split buste Elior cartacee (Ghiro/Mastropasqua): 2 trappole
+
+### Lezione A — Box "PERIODO DI PAGA" NON è a quota fissa: scansioni con margine variabile
+Dividendo i PDF scansionati ho ritagliato una fascia FISSA in fondo pagina (y≈0.90–0.96)
+per leggere il mese. Su un blocco di pagine il cedolino era scansionato più in alto (largo
+margine bianco sotto) → la fascia cadeva nel vuoto e ho scambiato **buste reali per pagine
+bianche** (Ghiro 1.pdf p29-45 = mesi Nov2019→Dic2020, NON vuote). **Regola:** per leggere un
+campo da scansioni, ritaglia una fascia ALTA/relativa al contenuto (qui [0.78,0.99]) o trova
+il bbox del contenuto; mai fidarsi di una soglia di "inchiostro" fissa (le scansioni Ghiro
+erano molto più chiare di Mastropasqua → stessa soglia = falsi vuoti). E i **doppioni di
+scansione** (stesso cedolino due volte, es. Set2023 ×2) sballano la sequenza monotòna: leggere
+il box di OGNI pagina, non inferire dal vicino.
+
+### Lezione B — Segno del deskew: VERIFICARE numericamente, non a occhio
+Ho raddrizzato 101 pagine ruotando di `corr` invece di `-corr` → ho **raddoppiato** lo storto
+(da −1.55° a −3.10°). Il test "before/after" a occhio mi era sembrato ok (ho visto ciò che mi
+aspettavo). L'ha smascherato solo la **ri-misura quantitativa** del residuo. **Regola:** dopo
+un'operazione geometrica (rotazione/deskew/scala) misura il risultato con la stessa metrica,
+non fidarti dell'eyeball; tieni il sorgente intatto così puoi rigenerare lossless e ricorreggere.
+
 ## 2026-06-06 — Variabili a virgola decimale: la mia query SQL li scartava e ho inventato un bug inesistente
 
 ### Lezione: normalizzare la virgola prima di sommare i valori di `anni`, e fidarsi del totale che l'utente vede nell'app
