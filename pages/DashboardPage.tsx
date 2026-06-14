@@ -32,8 +32,11 @@ import {
     Loader2,
     Eye,
     CalendarDays,
+    Mail,
 } from 'lucide-react';
 import WorkerCard from '../components/WorkerCard';
+import MessagesInbox from '../components/MessagesInbox';
+import { useUnreadMessages } from '../hooks/useMessages';
 import { groupThousandsIT } from '../utils/formatters';
 import { AnimatedCounter } from '../components/ui/AnimatedCounter';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
@@ -291,6 +294,10 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
 }) => {
     const isReadOnly = useIsReadOnly();
     const viewerName = useReadOnlyViewerName();
+    // Bacheca annunci di sistema (sola lettura): la vedono solo i viewer (es. Vincenzo),
+    // non l'owner. I messaggi li pubblica l'amministrazione, non l'app.
+    const { unread, markAllRead } = useUnreadMessages(isReadOnly);
+    const [isInboxOpen, setIsInboxOpen] = useState(false);
     type SortKey = 'cognome' | 'credito' | 'status' | 'data';
     const [sortBy, setSortBy] = useState<SortKey>('cognome');
     const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
@@ -739,6 +746,23 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                         </AnimatePresence>
                         <input type="file" accept=".json" ref={fileInputRef} onChange={handleImportData} className="hidden" />
                     </div>
+
+                    {/* BACHECA ANNUNCI — solo per i viewer in sola consultazione (es. Vincenzo).
+                        Badge col numero di messaggi non letti (stato locale al dispositivo). */}
+                    {isReadOnly && (
+                    <button
+                        onClick={() => { markAllRead(); setIsInboxOpen(true); }}
+                        className="relative h-11 w-11 rounded-xl flex items-center justify-center text-slate-500 dark:text-slate-300 bg-white/65 dark:bg-slate-800/65 border border-white/60 dark:border-slate-700/60 backdrop-blur-xl shadow-sm hover:text-indigo-600 dark:hover:text-indigo-300 hover:-translate-y-0.5 transition-all"
+                        title="Comunicazioni"
+                    >
+                        <Mail className="w-5 h-5" strokeWidth={2.2} />
+                        {unread > 0 && (
+                            <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-black flex items-center justify-center shadow">
+                                {unread > 9 ? '9+' : unread}
+                            </span>
+                        )}
+                    </button>
+                    )}
 
                     {/* GRUPPO AZIONE PRINCIPALE — per il viewer al suo posto c'è il chip
                         "Sola consultazione": senza, l'assenza dei bottoni sembra un bug */}
@@ -1542,6 +1566,13 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                     <motion.button initial={{ opacity: 0, y: 50, scale: 0.8 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 50, scale: 0.8 }} whileHover={{ scale: 1.1, boxShadow: "0 0 25px rgba(99, 102, 241, 0.6)" }} onClick={scrollToTop} className="fixed bottom-20 right-6 z-50 p-4 rounded-full bg-gradient-to-tr from-indigo-600 to-blue-500 text-white shadow-2xl border border-white/20 backdrop-blur-md flex items-center justify-center cursor-pointer">
                         <ArrowUp className="w-6 h-6" strokeWidth={3} />
                     </motion.button>
+                )}
+            </AnimatePresence>
+
+            {/* Bacheca annunci (owner ↔ viewer) */}
+            <AnimatePresence>
+                {isInboxOpen && (
+                    <MessagesInbox onClose={() => setIsInboxOpen(false)} />
                 )}
             </AnimatePresence>
         </div>
