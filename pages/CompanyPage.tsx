@@ -1,5 +1,5 @@
-import React, { useMemo } from 'react';
-import { motion } from 'framer-motion';
+import React, { useMemo, useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, Users, FileText, Mail, ChevronRight, UserX } from 'lucide-react';
 import { Worker } from '../types';
 import { SYSTEM_PROFILES, getCompanyLogo } from '../config/profiles';
@@ -7,13 +7,21 @@ import { CompanyLogo } from '../components/ui/CompanyLogo';
 import { DevBadge } from '../components/ui/DevBadge';
 import { matchesCompanyFilter } from '../hooks/useWorkers';
 import { getCassettoByStatus } from '../config/cassetti';
+import WorkerDestinationModal from '../components/WorkerDestinationModal';
 
 interface CompanyPageProps {
     /** Chiave azienda di sistema (incl. 'ELIOR_MAGAZZINO'). */
     companyKey: string;
     workers: Worker[];
     onBack: () => void;
+    /** Dettaglio inserimento del lavoratore. */
     onOpenWorker: (id: string) => void;
+    /** Report finale (riepilogo) del lavoratore. */
+    onOpenReport: (id: string) => void;
+    /** Archivio buste paga del lavoratore. */
+    onOpenArchive: (id: string) => void;
+    /** Torna alla dashboard/panoramica. */
+    onGoDashboard: () => void;
 }
 
 /**
@@ -22,7 +30,9 @@ interface CompanyPageProps {
  * Niente azioni operative (export/PEC/modifica): quelle vivono altrove.
  * Raggiungibile dai badge della striscia compatta della dashboard (#/azienda/:key).
  */
-const CompanyPage: React.FC<CompanyPageProps> = ({ companyKey, workers, onBack, onOpenWorker }) => {
+const CompanyPage: React.FC<CompanyPageProps> = ({ companyKey, workers, onBack, onOpenWorker, onOpenReport, onOpenArchive, onGoDashboard }) => {
+    // Lavoratore per cui è aperta la scelta della destinazione (modale).
+    const [navWorker, setNavWorker] = useState<Worker | null>(null);
     const isEliorMag = companyKey === 'ELIOR_MAGAZZINO';
     const profileKey = isEliorMag ? 'ELIOR' : companyKey;
     const profile = SYSTEM_PROFILES[profileKey];
@@ -213,8 +223,8 @@ const CompanyPage: React.FC<CompanyPageProps> = ({ companyKey, workers, onBack, 
                                 return (
                                     <button
                                         key={w.id}
-                                        onClick={() => onOpenWorker(w.id)}
-                                        title={`Apri ${w.cognome} ${w.nome}`}
+                                        onClick={() => setNavWorker(w)}
+                                        title={`Scegli destinazione · ${w.cognome} ${w.nome}`}
                                         className="w-full group flex items-center gap-4 px-6 py-3.5 text-left hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors"
                                     >
                                         <span
@@ -238,6 +248,21 @@ const CompanyPage: React.FC<CompanyPageProps> = ({ companyKey, workers, onBack, 
                     )}
                 </motion.div>
             </div>
+
+            {/* Scelta destinazione partendo dal lavoratore cliccato */}
+            <AnimatePresence>
+                {navWorker && (
+                    <WorkerDestinationModal
+                        worker={navWorker}
+                        hex={hex}
+                        onClose={() => setNavWorker(null)}
+                        onDashboard={() => { setNavWorker(null); onGoDashboard(); }}
+                        onDetail={() => { onOpenWorker(navWorker.id); setNavWorker(null); }}
+                        onReport={() => { onOpenReport(navWorker.id); setNavWorker(null); }}
+                        onArchive={() => { onOpenArchive(navWorker.id); setNavWorker(null); }}
+                    />
+                )}
+            </AnimatePresence>
         </div>
     );
 };

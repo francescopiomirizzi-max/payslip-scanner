@@ -134,6 +134,9 @@ const AppRouter: React.FC<AppRouterProps> = ({
                             workers={workers}
                             onBack={handleBack}
                             onOpenWorker={handleOpenComplex}
+                            onOpenReport={handleOpenSimple}
+                            onOpenArchive={handleOpenArchive}
+                            onGoDashboard={handleBack}
                         />
                     </motion.div>
                 )}
