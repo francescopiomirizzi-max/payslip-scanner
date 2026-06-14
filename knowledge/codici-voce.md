@@ -152,6 +152,32 @@ Competenze:
 
 ---
 
+## Elior Ristorazione (magazzino e viaggiante)
+
+Le variabili stanno in `INDENNITA_ELIOR` (viaggiante) / `INDENNITA_ELIOR_MAGAZZINO` (magazzino)
+in types.ts. Il sotto-profilo si distingue con `eliorType` ('magazzino' | 'viaggiante').
+
+### Fisse — Quadro B, NON generano credito (servono per le %), 1 voce
+
+Mappate il 2026-06-14 sulle buste magazzino reali (Ghiro, Mastropasqua 2017-2025). La base
+fissa ricorrente del mese è **una sola voce**:
+
+| Codice | Descrizione | Note |
+|---|---|---|
+| `1000` | RETRIBUZIONE/STIPENDIO | prima riga della tabella voci, colonna **Competenze** |
+
+- La voce `1000` **è già la somma** di quanto sta nel riquadro di testata: `Paga Base` +
+  `Scatti Imp.Rivalut.` + `Salario Professionale` + `Ad Pers. non assor.`. Per le % basta
+  leggere il solo `1000` (un numero, robusto), non i 4 componenti.
+- ⚠️ NON usare `TOTALE RETRIBUZIONE`/`TOTALE COMPETENZE` (è il totale di tutte le competenze
+  del mese, non la sola base fissa). ⚠️ NON confondere col `4285`/`5655 26/MI RETRIBUZIONE`
+  (quota giornaliera variabile).
+- Verifica: Mastropasqua 11/2017 → 1.577,51 + 73,02 + 22,00 + 34,66 = **1.707,19** = voce 1000.
+- Stessa voce `1000` per entrambi i sotto-profili → `getFixedColumnsByProfile('ELIOR')` non
+  ha bisogno di distinguere magazzino/viaggiante.
+
+---
+
 ## Note OCR (valide trasversalmente)
 
 - **Coda lunga troncata (Gemini):** sui cedolini con molte righe il modello "molla" le ultime

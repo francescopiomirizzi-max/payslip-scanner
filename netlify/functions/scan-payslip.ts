@@ -1129,11 +1129,25 @@ Esempio di output perfetto:
 {"codes":{"MC01":1670.92,"MC06":22.00,"MC07":146.04,"MC10":25.63},"retribuzioneMensile":1864.59,"month":5,"year":2023}`,
       };
 
+      const FIXED_ELIOR = {
+        ids: ['1000'],
+        prompt: `Sei un estrattore dati preciso per buste paga ELIOR RISTORAZIONE (magazzino e viaggiante).
+Estrai ESCLUSIVAMENTE l'unica VOCE FISSA della base retributiva mensile:
+- 1000 (RETRIBUZIONE/STIPENDIO) — è la PRIMA riga della tabella voci; importo nella colonna "Competenze" (a destra). Coincide con la somma, nel riquadro di testata, di Paga Base + Scatti Imp.Rivalut. + Salario Professionale + Ad Pers. non assorbibile.
+⚠️ NON usare "TOTALE RETRIBUZIONE"/"TOTALE COMPETENZE" (totale di TUTTE le competenze del mese, non la sola base fissa).
+⚠️ NON confondere con 4285/5655 "26/MI RETRIBUZIONE" (quota giornaliera variabile, non la base fissa).
+${PERIODO_E_OUTPUT}
+Aggiungi inoltre "retribuzioneMensile": il valore della voce 1000 stessa (numero di controllo; 0.0 se assente).
+Esempio di output perfetto:
+{"codes":{"1000":1707.19},"retribuzioneMensile":1707.19,"month":11,"year":2017}`,
+      };
+
       const FIXED_VOCI_DIRECTORY: Record<string, { ids: string[]; prompt: string }> = {
         RFI: FIXED_RFI,
         TRENITALIA: FIXED_RFI,
         MERCITALIA: FIXED_MERCITALIA,
         CLEAN_SERVICE: FIXED_CLEAN_SERVICE,
+        ELIOR: FIXED_ELIOR,
       };
       const fixedCfg = FIXED_VOCI_DIRECTORY[(company || 'RFI').toUpperCase()] || FIXED_RFI;
 

@@ -590,12 +590,25 @@ describe('percentuali di incidenza (Quadro A/B/C)', () => {
     expect(con.map(y => y.sumNetto)).toEqual(senza.map(y => y.sumNetto));
   });
 
-  it('profilo senza voci fisse (ELIOR): nessuna incidenza, percentuali a 0', () => {
+  it('ELIOR: la voce fissa 1000 abilita l\'incidenza (denominatore = 1000 + variabili)', () => {
     const elior: AnnoDati[] = [
+      { year: 2018, monthIndex: 0, daysWorked: 20, daysVacation: 0, ticket: 0, '1130': 100, '1000': 1500 },
+    ];
+    const [y] = computeHolidayIndemnity(
+      { data: elior, profilo: 'ELIOR', includeExFest: false, includeTickets: false, startClaimYear: 2024, years: [2018] }
+    );
+    expect(y.hasIncidence).toBe(true);
+    expect(y.sumQuadroFisse).toBeCloseTo(1500, 2);
+    const m = y.monthlyDetails[0]; // unico mese presente nei dati
+    expect(m.pctFissa).toBeCloseTo(1500 * 100 / 1600, 2);
+  });
+
+  it('profilo senza voci fisse definite (azienda custom): nessuna incidenza, percentuali a 0', () => {
+    const dati: AnnoDati[] = [
       { year: 2008, monthIndex: 0, daysWorked: 20, daysVacation: 0, ticket: 0, '1130': 100 },
     ];
     const [y] = computeHolidayIndemnity(
-      { data: elior, profilo: 'ELIOR', includeExFest: false, includeTickets: false, startClaimYear: 2024, years: [2008] }
+      { data: dati, profilo: 'AZIENDA_CUSTOM' as any, includeExFest: false, includeTickets: false, startClaimYear: 2024, years: [2008] }
     );
     expect(y.hasIncidence).toBe(false);
     expect(y.pctVariabileMediaAnnua).toBe(0);

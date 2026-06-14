@@ -183,6 +183,17 @@ export const INDENNITA_ELIOR_MAGAZZINO: ColumnDef[] = [
   { id: '4285', label: '26/MI Retrib.', subLabel: '(4285)', width: 'min-w-[100px]' },
 ];
 
+// Voci FISSE ELIOR (Quadro B — base retributiva mensile, layout Elior Ristorazione).
+// La base fissa ricorrente è Paga Base + Scatti Imp.Rivalut. + Salario Professionale +
+// Ad Personam, ed è già sommata nella voce 1000 RETRIBUZIONE/STIPENDIO (prima riga della
+// tabella voci). Verificata su buste magazzino reali (Ghiro, Mastropasqua 2017-2025):
+// es. Mastropasqua Nov2017 → 1.577,51 + 73,02 + 22,00 + 34,66 = 1.707,19 = voce 1000.
+// Usata SOLO come denominatore delle % di incidenza (Fisse + Variabili); non genera credito.
+// Vale per entrambi i sotto-profili (magazzino e viaggiante): stessa voce 1000.
+export const INDENNITA_ELIOR_FISSE: ColumnDef[] = [
+  { id: '1000', label: 'Retribuzione', subLabel: '(1000)', width: 'min-w-[130px]', type: 'currency' },
+];
+
 // Colonne CLEAN SERVICE SRL (CCNL Multiservizi - Ristorazione e Pulizie)
 export const INDENNITA_CLEAN_SERVICE: ColumnDef[] = [
   // Maggiorazioni Turni e Festività
@@ -386,6 +397,8 @@ export const getFixedColumnsByProfile = (profilo: ProfiloAzienda): ColumnDef[] =
       return INDENNITA_MERCITALIA_FISSE;
     case 'CLEAN_SERVICE':
       return INDENNITA_CLEAN_SERVICE_FISSE;
+    case 'ELIOR':
+      return INDENNITA_ELIOR_FISSE;
     default:
       return [];
   }

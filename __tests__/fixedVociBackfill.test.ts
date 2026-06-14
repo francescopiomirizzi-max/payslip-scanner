@@ -94,8 +94,8 @@ describe('getFixedVociIds — whitelist per profilo', () => {
     expect(getFixedVociIds('CLEAN_SERVICE').sort()).toEqual(['MC01', 'MC06', 'MC07', 'MC10']);
   });
 
-  it('ELIOR: nessuna voce fissa definita (ancora)', () => {
-    expect(getFixedVociIds('ELIOR')).toEqual([]);
+  it('ELIOR = la sola voce base 1000 (magazzino e viaggiante)', () => {
+    expect(getFixedVociIds('ELIOR')).toEqual(['1000']);
   });
 });
 
@@ -122,6 +122,17 @@ describe('mergeFixedVociIntoAnni — whitelist per profilo', () => {
     expect(out[0]['MC01']).toBe(1670.92);
     expect(out[0]['MC10']).toBe(25.63);
     expect(out[0]['MCT']).toBeUndefined();
+  });
+
+  it('ELIOR: scrive solo la base 1000 e ignora totali/variabili', () => {
+    const anni = [baseRow({ '1130': 65.86 } as Partial<AnnoDati>)];
+    const { anni: out, updated } = mergeFixedVociIntoAnni(anni, 2013, 0, {
+      '1000': 1707.19, '1130': 99999, '4285': 140.06,
+    }, getFixedVociIds('ELIOR'));
+    expect(updated).toBe(true);
+    expect(out[0]['1000']).toBe(1707.19);
+    expect(out[0]['1130']).toBe(65.86);   // variabile NON clobberata
+    expect(out[0]['4285']).toBeUndefined(); // 26/MI: NON è fissa, non scritta
   });
 
   it('senza whitelist esplicita resta il default RFI (retrocompatibilità)', () => {
