@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { ArrowLeft, AlertTriangle, Moon, CalendarClock, Euro, CheckCircle2, Search, CalendarDays, ListChecks, FileText, FileSpreadsheet, Scale, ChevronLeft, ChevronRight, X, Printer } from 'lucide-react';
-import { computeRestViolations, computeSerieFonte, formatHm, type Violazione, type GiornataInput } from '../utils/restEngine';
+import { computeRestViolations, computeSerieFonte, formatHm, hasCEEDays, type Violazione, type GiornataInput } from '../utils/restEngine';
 import { printConteggiRiposi } from '../utils/riposiPrint';
 import { AnimatedCounter } from './ui/AnimatedCounter';
 import { STATO_META, type PraticaRiposi, type PraticaRiposiUpdate, type StatoPratica } from '../hooks/usePraticheRiposi';
@@ -53,7 +53,7 @@ const RiposiPraticaDetail: React.FC<Props> = ({ pratica, onBack, onUpdate }) => 
     };
 
     const result = useMemo(
-        () => computeRestViolations(pratica.giornate, { tariffaOraria: pratica.tariffaOraria, fonteTariffa: pratica.fonteTariffa }),
+        () => computeRestViolations(pratica.giornate, { tariffaOraria: pratica.tariffaOraria, fonteTariffa: pratica.fonteTariffa, soloCEE: hasCEEDays(pratica.giornate) }),
         [pratica]
     );
 

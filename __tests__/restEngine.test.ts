@@ -7,6 +7,7 @@ import {
   classifyDailyRest,
   applyTwoWeekRule,
   computeRestViolations,
+  hasCEEDays,
   formatHm,
   type Riposo,
   type RestParams,
@@ -154,5 +155,35 @@ describe('computeRestViolations (roster end-to-end)', () => {
     const r = computeRestViolations(giornate, P);
     expect(r.warnings.length).toBeGreaterThan(0);
     expect(r.violazioni).toHaveLength(0);
+  });
+});
+
+// ─── Filtro "solo CEE" (Reg. 561/2006 art. 3; conferma avvocato Viterbo) ───────
+
+describe('soloCEE', () => {
+  // Due violazioni giornaliere: la prima ha il turno PRE-riposo marcato CEE, la seconda no.
+  const giornate: GiornataInput[] = [
+    { data: '05/01/2024', tipo: 'CEE', inizio: '6.00', termine: '22.00' }, // turno A (CEE)
+    { data: '06/01/2024', inizio: '4.00', termine: '22.00' },              // turno B: riposo A→B = 6h → violazione attribuita ad A (CEE)
+    { data: '07/01/2024', inizio: '4.00', termine: '12.00' },              // turno C: riposo B→C = 6h → violazione attribuita a B (non CEE)
+  ];
+
+  it('senza soloCEE conta tutte e marca il flag cee per violazione', () => {
+    const r = computeRestViolations(giornate, P);
+    expect(r.nViolazioniGiornaliere).toBe(2);
+    expect(r.violazioni.map((v) => v.cee)).toEqual([true, false]);
+  });
+
+  it('con soloCEE tiene solo la violazione del giorno-turno CEE', () => {
+    const r = computeRestViolations(giornate, { ...P, soloCEE: true });
+    expect(r.nViolazioniGiornaliere).toBe(1);
+    expect(r.violazioni).toHaveLength(1);
+    expect(r.violazioni[0].cee).toBe(true);
+    expect(r.totIndennita).toBe(r.violazioni[0].indennita); // totali ricalcolati sul solo claimable
+  });
+
+  it('hasCEEDays rileva la presenza di giornate CEE', () => {
+    expect(hasCEEDays(giornate)).toBe(true);
+    expect(hasCEEDays([{ data: '01/01/2024', inizio: '6.00', termine: '14.00' }])).toBe(false);
   });
 });

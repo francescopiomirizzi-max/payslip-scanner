@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { Clock, FileUp, ListChecks, FileText, ShieldCheck, Moon, CalendarClock, Coffee, CheckCircle2, BookOpen, ChevronRight, AlertTriangle, Euro, CloudUpload, Loader2 } from 'lucide-react';
 import { usePraticheRiposi, STATO_META, type PraticaRiposi, type StatoPratica } from '../hooks/usePraticheRiposi';
 import { groupThousandsIT } from '../utils/formatters';
-import { computeRestViolations } from '../utils/restEngine';
+import { computeRestViolations, hasCEEDays } from '../utils/restEngine';
 import RiposiPraticaDetail from './RiposiPraticaDetail';
 import { DevBadge } from './ui/DevBadge';
 
@@ -253,7 +253,7 @@ const RiposiArea: React.FC = () => {
 const PraticaCard: React.FC<{ pratica: PraticaRiposi; onOpen: () => void }> = ({ pratica, onOpen }) => {
     // Stima rapida per la card (1 pratica → costo trascurabile; in Fase 2 si precalcola).
     const { tot, indennita } = useMemo(() => {
-        const r = computeRestViolations(pratica.giornate, { tariffaOraria: pratica.tariffaOraria });
+        const r = computeRestViolations(pratica.giornate, { tariffaOraria: pratica.tariffaOraria, soloCEE: hasCEEDays(pratica.giornate) });
         return { tot: r.nViolazioniGiornaliere + r.nViolazioniSettimanali, indennita: r.totIndennita };
     }, [pratica]);
     return (

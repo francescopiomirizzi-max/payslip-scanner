@@ -44,9 +44,13 @@ export interface RestParams {
   maxRidottiGiornalieri?: number;       // default 3
   /** Sotto questa quota di riduzione il riposo settimanale è "grave" ai fini sanzionatori. */
   sogliaRiduzioneGrave?: number;        // default 10 (%) — gravità, NON trigger dell'illecito
+  /** Se true, conta SOLO le violazioni attribuite a giorni marcati CEE (servizio in
+   *  scope Reg. 561/2006, art. 3: linea regolare >50 km). Confermato dall'avvocato
+   *  per il caso Viterbo (15/06/2026). Default false = tutti i giorni. */
+  soloCEE?: boolean;
 }
 
-export const DEFAULT_REST_PARAMS: Required<Omit<RestParams, 'tariffaOraria' | 'fonteTariffa'>> = {
+export const DEFAULT_REST_PARAMS: Required<Omit<RestParams, 'tariffaOraria' | 'fonteTariffa' | 'soloCEE'>> = {
   riposoGiornalieroRegolare: 11,
   riposoGiornalieroRidotto: 9,
   riposoSettimanaleRegolare: 45,
@@ -65,6 +69,8 @@ export interface Riposo {
   fine: Date;            // inizio del turno successivo
   ore: number;           // durata in ore decimali
   esito: EsitoRiposo;
+  /** true se il turno che PRECEDE il riposo è marcato CEE (attribuzione del filtro). */
+  cee?: boolean;
 }
 
 export interface Violazione {
@@ -78,6 +84,8 @@ export interface Violazione {
   indennita: number;     // oreMancanti * tariffaOraria
   gravita: Gravita;
   motivo: string;
+  /** true se la violazione è attribuita a un giorno-turno CEE (turno che precede il riposo). */
+  cee: boolean;
 }
 
 export interface RestResult {
@@ -178,6 +186,7 @@ export function applyTwoWeekRule(riposiSettimanali: Riposo[], p: RestParams): Vi
         oreMancanti: round2(oreMancanti),
         indennita: round2(oreMancanti * p.tariffaOraria),
         gravita: grave ? 'grave' : 'lieve',
+        cee: r.cee ?? false,
         motivo:
           r.esito === 'insufficiente'
             ? `Riposo settimanale di ${formatHm(r.ore)} inferiore al minimo ridotto di 24h`
@@ -195,6 +204,7 @@ interface Duty {
   start: Date;
   end: Date;
   data: string;
+  tipo?: string;   // marcatore della giornata (es. 'CEE'), informativo per il filtro soloCEE
 }
 
 /** Costruisce i turni (giorni con inizio E termine), gestendo i turni a cavallo di mezzanotte. */
@@ -216,7 +226,7 @@ export function buildDuties(giornate: GiornataInput[], warnings: string[] = []):
     if (durationHours(start, end) > 16) {
       warnings.push(`${g.data}: turno di durata anomala (${formatHm(durationHours(start, end))}) — verificare a mano`);
     }
-    duties.push({ start, end, data: g.data });
+    duties.push({ start, end, data: g.data, tipo: g.tipo });
   }
   duties.sort((a, b) => a.start.getTime() - b.start.getTime());
   return duties;
@@ -234,6 +244,7 @@ export function computeRestViolations(giornate: GiornataInput[], params: RestPar
   const violazioni: Violazione[] = [];
   const riposiSettimanali: Riposo[] = [];
   let nRidottiLeciti = 0;
+  let nRidottiLecitiCEE = 0;
   let ridottiNelPeriodo = 0; // ridotti giornalieri dall'ultimo riposo settimanale
 
   const sogliaG = p.riposoGiornalieroRegolare;
@@ -247,7 +258,7 @@ export function computeRestViolations(giornate: GiornataInput[], params: RestPar
     if (ore >= p.riposoSettimanaleRidotto) {
       // contesto RIPOSO SETTIMANALE
       const esito = classifyWeeklyRest(ore, p);
-      riposiSettimanali.push({ inizio, fine, ore, esito });
+      riposiSettimanali.push({ inizio, fine, ore, esito, cee: isCEE(duties[i].tipo) });
       ridottiNelPeriodo = 0; // il cap dei ridotti giornalieri si azzera ad ogni settimanale
     } else {
       // contesto RIPOSO GIORNALIERO
@@ -258,6 +269,7 @@ export function computeRestViolations(giornate: GiornataInput[], params: RestPar
         ridottiNelPeriodo++;
         if (ridottiNelPeriodo <= p.maxRidottiGiornalieri) {
           nRidottiLeciti++;
+          if (isCEE(duties[i].tipo)) nRidottiLecitiCEE++;
           continue; // riduzione a 9–11h consentita entro il cap → lecito
         }
       }
@@ -273,6 +285,7 @@ export function computeRestViolations(giornate: GiornataInput[], params: RestPar
         oreMancanti: round2(oreMancanti),
         indennita: round2(oreMancanti * p.tariffaOraria),
         gravita: esito === 'insufficiente' ? 'grave' : 'lieve',
+        cee: isCEE(duties[i].tipo),
         motivo:
           esito === 'insufficiente'
             ? `Riposo giornaliero di ${formatHm(ore)} inferiore al minimo ridotto di 9h`
@@ -283,17 +296,34 @@ export function computeRestViolations(giornate: GiornataInput[], params: RestPar
 
   violazioni.push(...applyTwoWeekRule(riposiSettimanali, p));
 
-  const nG = violazioni.filter((v) => v.tipo === 'riposo_giornaliero').length;
-  const nS = violazioni.filter((v) => v.tipo === 'riposo_settimanale').length;
+  // Filtro "solo giorni CEE" (Reg. 561/2006, art. 3: si applica al servizio di linea
+  // regolare >50 km). Confermato dall'avvocato per Viterbo: ai fini del calcolo contano
+  // solo le giornate marcate CEE; la violazione è attribuita al turno che PRECEDE il
+  // riposo (coerente con la fonte). Il filtro NON altera l'analisi giuridica della
+  // sequenza (alternanza, cap dei ridotti) — scarta solo le violazioni non-CEE dal computo.
+  const claimable = p.soloCEE ? violazioni.filter((v) => v.cee) : violazioni;
+
+  const nG = claimable.filter((v) => v.tipo === 'riposo_giornaliero').length;
+  const nS = claimable.filter((v) => v.tipo === 'riposo_settimanale').length;
   return {
-    violazioni,
-    totOreMancanti: round2(violazioni.reduce((s, v) => s + v.oreMancanti, 0)),
-    totIndennita: round2(violazioni.reduce((s, v) => s + v.indennita, 0)),
+    violazioni: claimable,
+    totOreMancanti: round2(claimable.reduce((s, v) => s + v.oreMancanti, 0)),
+    totIndennita: round2(claimable.reduce((s, v) => s + v.indennita, 0)),
     nViolazioniGiornaliere: nG,
     nViolazioniSettimanali: nS,
-    nRidottiGiornalieriLeciti: nRidottiLeciti,
+    nRidottiGiornalieriLeciti: p.soloCEE ? nRidottiLecitiCEE : nRidottiLeciti,
     warnings,
   };
+}
+
+/** Marca la giornata come servizio in scope Reg. 561/2006 (colonna "tipo" = CEE). */
+function isCEE(tipo?: string): boolean {
+  return (tipo || '').trim().toUpperCase() === 'CEE';
+}
+
+/** True se almeno una giornata è marcata CEE → la pratica va calcolata in "solo CEE". */
+export function hasCEEDays(giornate: GiornataInput[]): boolean {
+  return giornate.some((g) => isCEE(g.tipo));
 }
 
 /** Causale sintetica per tabelle/export (il motivo esteso resta nella violazione). */
