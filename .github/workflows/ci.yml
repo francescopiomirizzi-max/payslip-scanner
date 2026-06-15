@@ -24,6 +24,12 @@ jobs:
           node-version-file: '.nvmrc'
           cache: 'npm'
 
+      # Il package-lock.json è generato con npm 11 (Node 24 in locale). L'npm 10
+      # montato da Node 22 rifiuta l'override "rollup -> @rollup/wasm-node" con
+      # EBADPLATFORM in `npm ci`. Allineiamo npm a quello con cui nasce il lockfile.
+      - name: Allinea npm al lockfile (npm 11)
+        run: npm i -g npm@11
+
       - name: Install (riproducibile dal lockfile)
         run: npm ci
 
