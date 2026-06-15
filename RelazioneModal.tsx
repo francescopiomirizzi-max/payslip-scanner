@@ -167,12 +167,12 @@ Periodo esaminato: Dal ${inizioPeriodo} al ${finePeriodo}
 
 --------------------------------------------------
 
-1. LA PREMESSA: PERCHÉ CHIEDIAMO QUESTE SOMME
-La legge europea (Direttiva 2003/88/CE) e la Suprema Corte di Cassazione (Sentenza n. 20216/2022) stabiliscono un principio fondamentale: quando un lavoratore va in ferie, ha il diritto di riposarsi senza subire alcuna penalizzazione economica.
-Durante l'anno, il lavoratore percepisce regolarmente indennità per disagi, turni notturni, festivi e altre voci legate al proprio lavoro. Se l'azienda smette di erogare queste indennità proprio durante le ferie, il lavoratore subisce una perdita economica ingiusta. Questa relazione serve a calcolare e richiedere l'esatta restituzione di queste somme.
+1. LA PREMESSA
+Il "diritto alle ferie annuali retribuite", oggetto del ricorso a cui la presente è allegata, viene posto a tutela della salute e della sicurezza del lavoratore, motivo per il quale si inserisce tra i principi cardine del diritto comunitario, ai quali non si può derogare. Il mantenimento della retribuzione durante il periodo feriale, pertanto, persegue il precipuo scopo di evitare l'insorgere di qualsiasi fattore che possa "dissuadere", anche solo a livello potenziale ovvero condizionare in termini negativi il godimento delle ferie e, dunque, costituisce un elemento che garantisce l'effettività dell'esercizio del diritto stesso.
+La retribuzione feriale spettante al lavoratore può, pertanto, determinarsi effettuando una media della retribuzione percepita durante un periodo di lavoro effettivo all'uopo giudicato rappresentativo; il diritto interno di ogni Stato europeo non può, dunque, prevedere norme o ammettere prassi che condizionino, in termini negativi, il diritto alle ferie retribuite o che dissuadano il lavoratore dall'esercitare tale diritto.
 
 2. LE VOCI ANALIZZATE (Rif. Allegato "Tabella 2 - Riepilogo Voci Variabili")
-Per calcolare quanto spetta al lavoratore, abbiamo analizzato minuziosamente i cedolini paga. Come illustrato nella "Tabella 2", abbiamo isolato solo le "voci ricorrenti", escludendo tassativamente rimborsi spese, una tantum o arretrati non pertinenti.
+Per quantificare il credito, sono stati esaminati i cedolini paga forniti. Come dettagliato nella "Tabella 2" dei conteggi, sono state isolate esclusivamente le "voci ricorrenti e continuative, aventi natura specificatamente retributiva", escludendo tassativamente rimborsi spese, ticket mensa, elargizioni una tantum o arretrati non pertinenti.
 Nello specifico del profilo lavorativo in questione, abbiamo tenuto conto di:
 ${voci.testo}
 
@@ -307,12 +307,12 @@ export async function buildRelazioneDocxBlob({
         infoRow(`Periodo Esaminato:`, `Dal ${inizioPeriodo} al ${finePeriodo}`),
     ] }));
 
-    children.push(sezTitle(`1. LA PREMESSA: PERCHÉ CHIEDIAMO QUESTE SOMME`));
-    children.push(para(`La legge europea (Direttiva 2003/88/CE) e la Suprema Corte di Cassazione (Sentenza n. 20216/2022) stabiliscono un principio fondamentale: quando un lavoratore va in ferie, ha il diritto di riposarsi senza subire alcuna penalizzazione economica rispetto al normale svolgimento dell'attività lavorativa.`));
-    children.push(para(`Durante l'anno, il lavoratore in esame percepisce regolarmente indennità connesse a disagi, turni notturni, festivi e altre voci legate al proprio profilo. La mancata erogazione di tali indennità in costanza di ferie determina un'evidente sperequazione economica, oggetto della presente richiesta di integrazione.`));
+    children.push(sezTitle(`1. LA PREMESSA`));
+    children.push(para(`Il "diritto alle ferie annuali retribuite", oggetto del ricorso a cui la presente è allegata, viene posto a tutela della salute e della sicurezza del lavoratore, motivo per il quale si inserisce tra i principi cardine del diritto comunitario, ai quali non si può derogare. Il mantenimento della retribuzione durante il periodo feriale, pertanto, persegue il precipuo scopo di evitare l'insorgere di qualsiasi fattore che possa "dissuadere", anche solo a livello potenziale ovvero condizionare in termini negativi il godimento delle ferie e, dunque, costituisce un elemento che garantisce l'effettività dell'esercizio del diritto stesso.`));
+    children.push(para(`La retribuzione feriale spettante al lavoratore può, pertanto, determinarsi effettuando una media della retribuzione percepita durante un periodo di lavoro effettivo all'uopo giudicato rappresentativo; il diritto interno di ogni Stato europeo non può, dunque, prevedere norme o ammettere prassi che condizionino, in termini negativi, il diritto alle ferie retribuite o che dissuadano il lavoratore dall'esercitare tale diritto.`));
 
     children.push(sezTitle(`2. LE VOCI ANALIZZATE (Rif. Allegato "Tabella 2 - Riepilogo Voci Variabili")`));
-    children.push(para(`Per quantificare il credito, sono stati esaminati minuziosamente i cedolini paga forniti. Come dettagliato nella "Tabella 2" dei conteggi, sono state isolate esclusivamente le "voci ricorrenti e continuative", escludendo tassativamente rimborsi spese, elargizioni una tantum o arretrati non pertinenti.`));
+    children.push(para(`Per quantificare il credito, sono stati esaminati i cedolini paga forniti. Come dettagliato nella "Tabella 2" dei conteggi, sono state isolate esclusivamente le "voci ricorrenti e continuative, aventi natura specificatamente retributiva", escludendo tassativamente rimborsi spese, ticket mensa, elargizioni una tantum o arretrati non pertinenti.`));
     children.push(para(`Nello specifico del profilo lavorativo, sono state computate le seguenti indennità:`));
     voci.testo.split('\n').map((l: string) => l.trim()).filter(Boolean).forEach((l: string) => children.push(bullet(l.replace(/^-\s*/, ''))));
 
@@ -320,39 +320,10 @@ export async function buildRelazioneDocxBlob({
     children.push(para(`A garanzia di inattaccabilità contabile, il sistema ha applicato il "Criterio della Media Storica" (Rif. Cass. 20216/2022). Il valore di una giornata feriale è stato calcolato estraendo la media matematica dell'anno solare precedente.`));
     fromTesto(esempio.testo).forEach((p: Paragraph) => children.push(p));
 
-    // Trattamento delle assenze retribuite — il testo dipende dalla Strategia scelta (toggle
-    // includePaidLeave). Compare solo se il lavoratore ha effettivamente assenze retribuite,
-    // con un esempio personalizzato sull'anno con più assenze (dati reali del lavoratore).
-    const usaAssenzeNelDivisore = resolveIncludePaidLeave(worker);
-    const haAssenzeRetribuite = (worker?.anni || []).some((a: AnnoDati) => parseLocalFloat(a.daysPaidLeave) > 0);
-    if (haAssenzeRetribuite) {
-      const perAnnoGg: Record<number, { w: number; p: number }> = {};
-      (worker?.anni || []).forEach((a: AnnoDati) => {
-        const y = Number(a.year);
-        if (!isFinite(y)) return;
-        if (!perAnnoGg[y]) perAnnoGg[y] = { w: 0, p: 0 };
-        perAnnoGg[y].w += parseLocalFloat(a.daysWorked);
-        perAnnoGg[y].p += parseLocalFloat(a.daysPaidLeave);
-      });
-      const annoEs = Object.keys(perAnnoGg).map(Number)
-        .filter(y => perAnnoGg[y].p > 0)
-        .sort((x, z) => perAnnoGg[z].p - perAnnoGg[x].p)[0];
-      const fmtGg = (n: number) => n.toLocaleString('it-IT', { maximumFractionDigits: 1 });
-
-      if (usaAssenzeNelDivisore) {
-        children.push(para(`Trattamento delle assenze retribuite. Le giornate di assenza retribuita — quali, a titolo esemplificativo, i permessi sindacali retribuiti (art. 23 della L. n. 300/1970), i permessi ex L. n. 104/1992 ed ulteriori permessi retribuiti — sono state computate, ai soli fini del divisore della media giornaliera, alla stregua delle giornate di effettiva prestazione lavorativa. Si tratta infatti di giornate retribuite nelle quali il lavoratore è legittimamente assente per l'esercizio di un diritto riconosciuto dall'ordinamento: la loro esclusione dal divisore determinerebbe una rappresentazione distorta della media delle voci variabili — fino ad azzerarla nei periodi di assenza prevalente — in danno del Ricorrente.`));
-        if (annoEs) {
-          const { w, p } = perAnnoGg[annoEs];
-          children.push(para(`A titolo esemplificativo, nell'anno ${annoEs} il Ricorrente ha prestato servizio per ${fmtGg(w)} giornate ed ha fruito di ${fmtGg(p)} giornate di assenza retribuita. Computando queste ultime, il divisore della media per tale anno è pari a ${fmtGg(w + p)} giornate, in luogo delle sole ${fmtGg(w)} di presenza: si evita così che i periodi di assenza retribuita alterino (o azzerino) la media delle voci variabili posta a base del ricalcolo feriale.`));
-        }
-      } else {
-        children.push(para(`Trattamento delle assenze retribuite. Le giornate di assenza retribuita non sono state computate nel divisore della media giornaliera, il quale riflette esclusivamente le giornate di effettiva prestazione lavorativa. Tale impostazione è coerente con la natura delle voci oggetto di domanda, erogate unicamente a fronte dell'effettiva prestazione resa nelle giornate di lavoro.`));
-        if (annoEs) {
-          const { w, p } = perAnnoGg[annoEs];
-          children.push(para(`A titolo esemplificativo, nell'anno ${annoEs} il divisore della media è costituito dalle sole ${fmtGg(w)} giornate di effettiva prestazione, restando escluse le ${fmtGg(p)} giornate di assenza retribuita.`));
-        }
-      }
-    }
+    // 2026-06-15 — su indicazione dell'avvocato (revisione relazione Micaletti): il paragrafo
+    // "Trattamento delle assenze retribuite" NON va più esplicitato in relazione. La scelta sul
+    // divisore (Strategia A/B, resolveIncludePaidLeave) resta nel CALCOLO; semplicemente non se
+    // ne descrive il metodo nel documento.
 
     children.push(sezTitle(`4. L'APPLICAZIONE MENSILE (Rif. Allegato "Tabella 3 - Dettaglio Analitico")`));
     children.push(para(`Come documentato analiticamente nella "Tabella 3", il procedimento è stato reiterato per ogni singolo mese in cui il dipendente ha fruito di ferie.`));
@@ -517,14 +488,14 @@ export const RelazioneModal = ({ isOpen, onClose, worker, totals, includeExFest 
                 </table>
 
                 <div class="section">
-                    <div class="section-title">1. La Premessa: Perché Chiediamo Queste Somme</div>
-                    <p>La legge europea (Direttiva 2003/88/CE) e la Suprema Corte di Cassazione (Sentenza n. 20216/2022) stabiliscono un principio fondamentale: quando un lavoratore va in ferie, ha il diritto di riposarsi senza subire alcuna penalizzazione economica rispetto al normale svolgimento dell'attività lavorativa.</p>
-                    <p>Durante l'anno, il lavoratore in esame percepisce regolarmente indennità connesse a disagi, turni notturni, festivi e altre voci legate al proprio profilo. La mancata erogazione di tali indennità in costanza di ferie determina un'evidente sperequazione economica, oggetto della presente richiesta di integrazione.</p>
+                    <div class="section-title">1. La Premessa</div>
+                    <p>Il "diritto alle ferie annuali retribuite", oggetto del ricorso a cui la presente è allegata, viene posto a tutela della salute e della sicurezza del lavoratore, motivo per il quale si inserisce tra i principi cardine del diritto comunitario, ai quali non si può derogare. Il mantenimento della retribuzione durante il periodo feriale, pertanto, persegue il precipuo scopo di evitare l'insorgere di qualsiasi fattore che possa "dissuadere", anche solo a livello potenziale ovvero condizionare in termini negativi il godimento delle ferie e, dunque, costituisce un elemento che garantisce l'effettività dell'esercizio del diritto stesso.</p>
+                    <p>La retribuzione feriale spettante al lavoratore può, pertanto, determinarsi effettuando una media della retribuzione percepita durante un periodo di lavoro effettivo all'uopo giudicato rappresentativo; il diritto interno di ogni Stato europeo non può, dunque, prevedere norme o ammettere prassi che condizionino, in termini negativi, il diritto alle ferie retribuite o che dissuadano il lavoratore dall'esercitare tale diritto.</p>
                 </div>
 
                 <div class="section">
                     <div class="section-title">2. Le Voci Analizzate (Rif. Allegato "Tabella 2 - Riepilogo Voci Variabili")</div>
-                    <p>Per quantificare il credito, sono stati esaminati minuziosamente i cedolini paga forniti. Come dettagliato nella "Tabella 2" dei conteggi, sono state isolate esclusivamente le "voci ricorrenti e continuative", escludendo tassativamente rimborsi spese, elargizioni una tantum o arretrati non pertinenti.</p>
+                    <p>Per quantificare il credito, sono stati esaminati i cedolini paga forniti. Come dettagliato nella "Tabella 2" dei conteggi, sono state isolate esclusivamente le "voci ricorrenti e continuative, aventi natura specificatamente retributiva", escludendo tassativamente rimborsi spese, ticket mensa, elargizioni una tantum o arretrati non pertinenti.</p>
                     <p>Nello specifico del profilo lavorativo, sono state computate le seguenti indennità:</p>
                     <ul>${voci.html}</ul>
                 </div>
