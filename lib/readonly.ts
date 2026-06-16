@@ -53,3 +53,55 @@ export function useIsReadOnly(): boolean {
 
   return isReadOnly;
 }
+
+export interface ViewerPaymentBlockState {
+  loading: boolean;
+  blocked: boolean;
+  amount: number;
+}
+
+/**
+ * Avviso di pagamento BLOCCANTE per il viewer readonly.
+ *
+ * Legge il flag dalla riga singola `app_settings` (id=1). Per l'owner e per
+ * chiunque non sia un viewer ritorna subito `blocked: false`. Fail-open: in caso
+ * di errore/rete NON blocca — il blocco è una leva commerciale, non un firewall,
+ * e un blip di rete non deve chiudere fuori il viewer per sbaglio. Lo spegnimento
+ * (owner che salda) avviene via UPDATE su `app_settings`; il viewer lo recepisce
+ * al successivo accesso/refresh.
+ */
+export function useViewerPaymentBlock(): ViewerPaymentBlockState {
+  const [state, setState] = useState<ViewerPaymentBlockState>({
+    loading: true, blocked: false, amount: 750,
+  });
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      const uid = session?.user?.id;
+      if (!uid || !READONLY_VIEWER_UIDS.has(uid)) {
+        if (alive) setState({ loading: false, blocked: false, amount: 750 });
+        return;
+      }
+      const { data, error } = await supabase
+        .from('app_settings')
+        .select('viewer_payment_block, payment_amount_eur')
+        .eq('id', 1)
+        .maybeSingle();
+      if (!alive) return;
+      if (error || !data) {
+        setState({ loading: false, blocked: false, amount: 750 });
+        return;
+      }
+      setState({
+        loading: false,
+        blocked: !!data.viewer_payment_block,
+        amount: data.payment_amount_eur ?? 750,
+      });
+    })();
+    return () => { alive = false; };
+  }, []);
+
+  return state;
+}

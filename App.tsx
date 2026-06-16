@@ -11,6 +11,7 @@ import Background from './components/Background';
 import AppRouter from './components/AppRouter';
 import AreaSwitch, { type AppArea } from './components/AreaSwitch';
 import RiposiArea from './components/RiposiArea';
+import ViewerPaymentBlock from './components/ViewerPaymentBlock';
 import HiddenClasses from './HiddenClasses';
 
 // UI Utils
@@ -30,6 +31,7 @@ import { useWorkers } from './hooks/useWorkers';
 import { useAuth } from './hooks/useAuth';
 import { useDashboardStats } from './hooks/useDashboardStats';
 import { useHashRoute } from './hooks/useHashRoute';
+import { useViewerPaymentBlock } from './lib/readonly';
 
 const App: React.FC = () => {
     const { isDarkMode, toggleTheme } = useTheme();
@@ -72,6 +74,10 @@ const App: React.FC = () => {
 
     const { isAuthenticated, isLoading, loginEmail, setLoginEmail, loginPassword, setLoginPassword, loginError, handleLogin, handleLogout } = useAuth(setViewMode);
     const { setQuickActions } = useIsland();
+
+    // Avviso di pagamento bloccante per il viewer (Vincenzo): se attivo su DB,
+    // sostituisce l'intera app con la schermata "Accesso sospeso".
+    const { blocked: viewerBlocked, loading: viewerBlockLoading, amount: viewerBlockAmount } = useViewerPaymentBlock();
 
     // --- MODALI SETTINGS ---
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -199,7 +205,7 @@ const App: React.FC = () => {
     };
 
     // --- MAIN RENDER LOGIC ---
-    if (isLoading || isWorkersLoading) return (
+    if (isLoading || isWorkersLoading || viewerBlockLoading) return (
         <>
         <DynamicIsland workers={[]} />
         <div className="min-h-screen bg-white dark:bg-slate-900 font-sans px-6 py-10">
@@ -258,6 +264,9 @@ const App: React.FC = () => {
         </>
     );
     if (!isAuthenticated) return <LoginPage loginEmail={loginEmail} setLoginEmail={setLoginEmail} loginPassword={loginPassword} setLoginPassword={setLoginPassword} loginError={loginError} handleLogin={handleLogin} />;
+
+    // Viewer con avviso di pagamento attivo: accesso sospeso, niente gestionale.
+    if (viewerBlocked) return <ViewerPaymentBlock amount={viewerBlockAmount} onLogout={handleLogout} />;
 
     return (
         <div className="min-h-screen font-sans selection:bg-indigo-100 dark:selection:bg-indigo-900/50 relative overflow-hidden transition-colors duration-500">
