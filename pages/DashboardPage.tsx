@@ -651,7 +651,9 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                         </button>
                     </div>
 
-                    {/* GRUPPO DATI */}
+                    {/* GRUPPO DATI — nascosto al viewer (sola lettura): ogni voce
+                        è un download/export di documenti (JSON, Word, Concluse). */}
+                    {!isReadOnly && (
                     <div className="relative" ref={dataMenuRef}>
                         <button
                             onClick={() => setIsDataMenuOpen(v => !v)}
@@ -746,6 +748,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                         </AnimatePresence>
                         <input type="file" accept=".json" ref={fileInputRef} onChange={handleImportData} className="hidden" />
                     </div>
+                    )}
 
                     {/* BACHECA ANNUNCI — solo per i viewer in sola consultazione (es. Vincenzo).
                         Badge col numero di messaggi non letti (stato locale al dispositivo). */}

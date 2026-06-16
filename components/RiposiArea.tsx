@@ -6,6 +6,7 @@ import { groupThousandsIT } from '../utils/formatters';
 import { computeRestViolations, hasCEEDays } from '../utils/restEngine';
 import RiposiPraticaDetail from './RiposiPraticaDetail';
 import { DevBadge } from './ui/DevBadge';
+import { useIsReadOnly } from '../lib/readonly';
 
 // ─── Workflow (cosa farà la pratica, in 3 passi) ──────────────────────────────
 const STEPS: { icon: React.ComponentType<{ className?: string }>; title: string; desc: string }[] = [
@@ -36,6 +37,7 @@ const VIOLAZIONI: { n: string; titolo: string; rif: string; attiva: boolean; not
  */
 const RiposiArea: React.FC = () => {
     const { pratiche, isLoading, salvaInArchivio, updatePratica } = usePraticheRiposi();
+    const isReadOnly = useIsReadOnly();
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [statoFiltro, setStatoFiltro] = useState<StatoPratica | null>(null);
     const [isSaving, setIsSaving] = useState(false);
@@ -157,6 +159,8 @@ const RiposiArea: React.FC = () => {
                         Strumento di preparazione: i risultati sono input neutri per la decisione dell'avvocato.
                     </p>
                     <div className="mt-5 flex flex-wrap items-center gap-3">
+                        {/* Vademecum (.docx) — nascosto al viewer (sola lettura): è un download. */}
+                        {!isReadOnly && (
                         <a
                             href={`${import.meta.env.BASE_URL}vademecum-turni-riposi.docx`}
                             download="Vademecum_Turni_Riposi_FAST.docx"
@@ -164,6 +168,7 @@ const RiposiArea: React.FC = () => {
                         >
                             <BookOpen className="w-4 h-4" /> Apri il vademecum
                         </a>
+                        )}
                         <button
                             type="button"
                             disabled

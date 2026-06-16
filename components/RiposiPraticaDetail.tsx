@@ -189,6 +189,10 @@ const RiposiPraticaDetail: React.FC<Props> = ({ pratica, onBack, onUpdate }) => 
                                 <span className={`w-2 h-2 rounded-full ${STATO_META[pratica.stato].dot}`} />{STATO_META[pratica.stato].label}
                             </span>
                         )}
+                        {/* Export/Stampa — nascosti al viewer (sola lettura): Excel,
+                            relazione .docx e stampa conteggi sono modi per portarsi via
+                            il documento. */}
+                        {!isReadOnly && (<>
                         <button
                             type="button"
                             onClick={handleExcel}
@@ -215,6 +219,7 @@ const RiposiPraticaDetail: React.FC<Props> = ({ pratica, onBack, onUpdate }) => 
                         >
                             <Printer className="w-4 h-4" /> Stampa conteggi
                         </button>
+                        </>)}
                     </div>
                 </div>
 

@@ -10,6 +10,7 @@ import { CompanyLogo } from '../components/ui/CompanyLogo';
 import { usePayslipArchive, PayslipRecord } from '../hooks/usePayslipArchive';
 import { matchesCompanyFilter } from '../hooks/useWorkers';
 import { getProfiloBadgeLabel } from '../utils/formatters';
+import { useIsReadOnly } from '../lib/readonly';
 
 interface ArchivePageProps {
   workers: Worker[];
@@ -92,6 +93,7 @@ const YEAR_OPTIONS = Array.from({ length: CURRENT_YEAR - 1999 }, (_, i) => CURRE
 const MONTH_ABBR = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC'];
 
 const ArchivePage: React.FC<ArchivePageProps> = ({ workers, onBack, initialWorkerId }) => {
+  const isReadOnly = useIsReadOnly();
   const { getPayslipsByWorker, getSignedUrl, addPayslip } = usePayslipArchive();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -752,7 +754,9 @@ const ArchivePage: React.FC<ArchivePageProps> = ({ workers, onBack, initialWorke
                     {currentPayslipIdx + 1} / {orderedPayslips.length}
                   </span>
                 )}
-                {pdfUrl && (
+                {/* Download busta — nascosto al viewer (sola lettura): può consultare
+                    la busta a video ma non scaricarla. */}
+                {pdfUrl && !isReadOnly && (
                   <a
                     href={pdfUrl}
                     download={selectedPayslip?.filename}

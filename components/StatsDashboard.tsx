@@ -24,6 +24,7 @@ import { groupThousandsIT } from '../utils/formatters';
 import { SYSTEM_PROFILES, getCustomColorIndex, getCompanyHex, getCompanyLogo } from '../config/profiles';
 import { CompanyLogo } from './ui/CompanyLogo';
 import { computeHolidayIndemnity } from '../utils/calculationEngine';
+import { useIsReadOnly } from '../lib/readonly';
 
 // --- COMPONENTE NUMERO ANIMATO (TICKING) ---
 const AnimatedCounter = ({ value, currency = false }: { value: number, currency?: boolean }) => {
@@ -199,6 +200,7 @@ interface StatsDashboardProps {
 }
 
 const StatsDashboard: React.FC<StatsDashboardProps> = ({ workers = [], onBack }) => {
+    const isReadOnly = useIsReadOnly();
 
     // --- LOGICA DI CALCOLO UNIFICATA E CORRETTA (FILTRO ANNI + OPZIONI) ---
     // Questa versione usa la logica "Anno per Anno" con reset del tetto ferie
@@ -357,6 +359,8 @@ const StatsDashboard: React.FC<StatsDashboardProps> = ({ workers = [], onBack })
                         </div>
                     </div>
 
+                    {/* Stampa report — nascosto al viewer (sola lettura): è un export PDF. */}
+                    {!isReadOnly && (
                     <motion.button
                         whileHover={{ scale: 1.02 }}
                         whileTap={{ scale: 0.98 }}
@@ -370,6 +374,7 @@ const StatsDashboard: React.FC<StatsDashboardProps> = ({ workers = [], onBack })
                             <Download className="w-3 h-3 opacity-50 group-hover:opacity-100 group-hover:translate-y-0.5 transition-all" />
                         </div>
                     </motion.button>
+                    )}
                 </div>
             </div>
 

@@ -1507,12 +1507,15 @@ const DynamicIsland = ({ workers = [] }: { workers?: { id: string | number; nome
                                 </motion.button>
                                 )}
 
-                                {/* Export Backup — Cloud bounce y + freccia in giù che pulsa */}
+                                {/* Export Backup — Cloud bounce y + freccia in giù che pulsa.
+                                    Nascosto al viewer (sola lettura): è un download del JSON completo. */}
+                                {!isReadOnly && (
                                 <motion.button variants={{ hidden: { scale: 0, opacity: 0 }, show: { scale: 1, opacity: 1 } }} onClick={(e) => { e.stopPropagation(); window.dispatchEvent(new CustomEvent('island-export')); setMode('idle'); }} className="group/btn relative p-2.5 bg-slate-200 dark:bg-slate-800 hover:bg-purple-100 dark:hover:bg-purple-900/50 rounded-xl transition-[transform,background-color,box-shadow] duration-300 hover:scale-110 text-purple-600 dark:text-purple-400 hover:shadow-[0_0_12px_rgba(168,85,247,0.5)]" title="Esporta JSON (copia locale)">
                                     <DownloadCloud className="w-4 h-4 group-hover/btn:translate-y-[1px] group-hover/btn:scale-110 transition-transform duration-300 drop-shadow-[0_0_3px_currentColor] group-hover/btn:drop-shadow-[0_0_5px_currentColor]" />
                                     {/* Mini-particles che cadono dalla cloud al hover */}
                                     <span className="absolute left-1/2 top-[60%] -translate-x-1/2 w-[2px] h-[2px] bg-current rounded-full opacity-0 group-hover/btn:opacity-100 group-hover/btn:translate-y-[5px] transition-all duration-500" />
                                 </motion.button>
+                                )}
 
                                 {/* Archivio — Lid box che si solleva */}
                                 <motion.button variants={{ hidden: { scale: 0, opacity: 0 }, show: { scale: 1, opacity: 1 } }} onClick={() => { window.dispatchEvent(new Event('island-archive')); setMode('idle'); }} className="group/btn p-2.5 bg-slate-200 dark:bg-slate-800 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 rounded-xl transition-[transform,background-color,box-shadow] duration-300 hover:scale-110 text-indigo-600 dark:text-indigo-400 hover:shadow-[0_0_12px_rgba(99,102,241,0.5)]" title="Archivio Buste Paga">

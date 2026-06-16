@@ -496,8 +496,10 @@ Distinti saluti.
             <span>Gestione Dati</span>
           </button>
 
-          {/* Scarica i 3 documenti (Conteggi + Riepilogo + Relazione) in un unico ZIP —
-              visibile anche in sola lettura (scarica, non scrive) */}
+          {/* Documenti (ZIP) e Stampa — nascosti al viewer (sola lettura): scaricare
+              o stampare il report = portarsi via il documento. */}
+          {!isReadOnly && (<>
+          {/* Scarica i 3 documenti (Conteggi + Riepilogo + Relazione) in un unico ZIP */}
           <button
             onClick={handleDownloadAll}
             disabled={isExporting}
@@ -512,7 +514,7 @@ Distinti saluti.
             <span>{isExporting ? 'Genero…' : 'Documenti'}</span>
           </button>
 
-          {/* Stampa — visibile anche in sola lettura */}
+          {/* Stampa */}
           <button
             onClick={handlePrint}
             className="group relative px-8 py-3 rounded-xl font-bold text-lg text-white shadow-lg hover:-translate-y-0.5 active:scale-95 transition-all duration-300 border border-white/10 overflow-hidden flex items-center gap-3"
@@ -522,6 +524,7 @@ Distinti saluti.
             <Printer className="w-5 h-5 transition-transform duration-500 group-hover:rotate-12" strokeWidth={2.5} />
             <span>Stampa</span>
           </button>
+          </>)}
         </div>
       </div>
 

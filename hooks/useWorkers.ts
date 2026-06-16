@@ -5,6 +5,7 @@ import { DEFAULT_YEARS_TEMPLATE } from '../constants';
 import { triggerConfetti } from '../utils/confetti';
 import { supabase } from '../supabaseClient';
 import { migrateLocalToCloud } from '../utils/migrateFromLocalToCloud';
+import { READONLY_VIEWER_UIDS } from '../lib/readonly';
 
 const CARD_COLORS = ['blue', 'emerald', 'orange', 'rose', 'violet', 'teal'];
 
@@ -174,7 +175,15 @@ export const useWorkers = (addToast: AddToast) => {
             return;
         }
 
-        const list = (data ?? []).map(dbToWorker);
+        // Viewer in sola consultazione (es. Vincenzo): vede SOLO la sezione
+        // "Pagate" (cassetto 'chiusa'). Filtrare qui — chokepoint unico — fa sì
+        // che cassetti, ricerca, statistiche, hash routing e isola derivino tutti
+        // dal solo insieme pagato, senza flash (il flag dipende dallo stesso userId
+        // con cui carichiamo). L'owner non è in elenco → nessun filtro.
+        const all = (data ?? []).map(dbToWorker);
+        const list = READONLY_VIEWER_UIDS.has(userId)
+            ? all.filter(w => w.status === 'chiusa')
+            : all;
         setWorkers(list);
         prevWorkersRef.current = list;
         setIsWorkersLoading(false);
