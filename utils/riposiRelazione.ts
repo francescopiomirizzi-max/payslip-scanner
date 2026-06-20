@@ -15,7 +15,7 @@ import {
     Document, Packer, Paragraph, Table, TableCell, TableRow,
     TextRun, HeadingLevel, AlignmentType, WidthType, BorderStyle, ShadingType,
 } from 'docx';
-import { causaleSintetica, computeSerieFonte, formatHm, type RestResult } from './restEngine';
+import { causaleSintetica, computeSerieFonte, formatHm, type RestResult, type Violazione } from './restEngine';
 import { groupThousandsIT } from './formatters';
 import type { PraticaRiposi } from '../hooks/usePraticheRiposi';
 
@@ -90,6 +90,9 @@ export function buildRelazioneRiposiDoc(pratica: PraticaRiposi, result: RestResu
     for (const [y, ind] of Object.entries(fonte.perAnno)) riga(y).indFonte = ind;
     const anni = Object.keys(perAnno).sort();
 
+    // Esempio didattico: la violazione con più ore mancanti (mirror della modale in-app).
+    const esempio = violazioni.reduce<Violazione | null>((best, v) => (!best || v.oreMancanti > best.oreMancanti ? v : best), null);
+
     const children: (Paragraph | Table)[] = [
         new Paragraph({
             alignment: AlignmentType.CENTER,
@@ -137,6 +140,18 @@ export function buildRelazioneRiposiDoc(pratica: PraticaRiposi, result: RestResu
             'I riposi giornalieri ridotti leciti (', b(intIT(result.nRidottiGiornalieriLeciti)), ' nel periodo) non sono conteggiati come violazioni. ',
             'Le righe non interpretabili o anomale sono segnalate, mai stimate.',
         ]),
+
+        ...(esempio ? [
+            para([b('Esempio di calcolo')], { after: 60 }),
+            para('A titolo illustrativo, il riposo con la maggiore riduzione rilevata nel periodo; lo stesso procedimento è applicato a ogni riposo non conforme e sommato per anno:'),
+            bordered([
+                new TableRow({ children: [dataCell('Riposo'), dataCell(`${esempio.tipo === 'riposo_giornaliero' ? 'Giornaliero' : 'Settimanale'} del ${new Date(esempio.inizio).toLocaleDateString('it-IT')}`, { bold: true })] }),
+                new TableRow({ children: [dataCell('Soglia di legge'), dataCell(`${esempio.soglia} ore`)] }),
+                new TableRow({ children: [dataCell('Riposo fruito'), dataCell(formatHm(esempio.ore))] }),
+                new TableRow({ children: [dataCell('Ore mancanti'), dataCell(`${esempio.soglia} h − ${formatHm(esempio.ore)} = ${formatHm(esempio.oreMancanti)}`)] }),
+                new TableRow({ children: [dataCell('Indennità'), dataCell(`${formatHm(esempio.oreMancanti)} × ${euro(pratica.tariffaOraria)}/h = ${euro(esempio.indennita)}`, { bold: true })] }),
+            ]),
+        ] : []),
 
         heading('4. Risultanze — le due serie a confronto'),
         para([

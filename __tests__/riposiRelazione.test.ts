@@ -58,6 +58,13 @@ describe('buildRelazioneRiposiDoc (docx vero, ispezionato via unzip)', () => {
         expect(xml).toContain('quadrano al centesimo');
     });
 
+    it('esempio di calcolo con la formula indennità (mirror della modale)', () => {
+        expect(xml).toContain('Esempio di calcolo');
+        expect(xml).toContain('Soglia di legge');
+        expect(xml).toContain('Ore mancanti');
+        expect(xml).toContain('× € 10,03/h =');   // ore mancanti × tariffa = indennità
+    });
+
     it('due serie affiancate, non sommabili', () => {
         expect(xml).toContain('non si sommano');
         expect(xml).toContain('€ 25,50');                       // serie A (fonte)

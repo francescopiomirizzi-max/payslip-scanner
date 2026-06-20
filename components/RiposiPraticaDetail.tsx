@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowLeft, AlertTriangle, Moon, CalendarClock, Euro, CheckCircle2, Search, CalendarDays, ListChecks, FileText, FileSpreadsheet, Scale, ChevronLeft, ChevronRight, X, Printer } from 'lucide-react';
-import { computeRestViolations, computeSerieFonte, formatHm, hasCEEDays, type Violazione, type GiornataInput } from '../utils/restEngine';
+import { ArrowLeft, AlertTriangle, Moon, CalendarClock, Euro, CheckCircle2, Search, CalendarDays, ListChecks, FileText, FileSpreadsheet, Scale, ChevronLeft, ChevronRight, X, Printer, Calculator } from 'lucide-react';
+import { computeRestViolations, computeSerieFonte, formatHm, hasCEEDays, type Violazione, type GiornataInput, type RestResult } from '../utils/restEngine';
 import { printConteggiRiposi } from '../utils/riposiPrint';
 import { AnimatedCounter } from './ui/AnimatedCounter';
 import { STATO_META, type PraticaRiposi, type PraticaRiposiUpdate, type StatoPratica } from '../hooks/usePraticheRiposi';
@@ -39,6 +39,7 @@ const TONE: Record<Tone, { icon: string; glow: string; hover: string }> = {
 const RiposiPraticaDetail: React.FC<Props> = ({ pratica, onBack, onUpdate }) => {
     const [tab, setTab] = useState<'violazioni' | 'prospetto'>('violazioni');
     const [isExportingDocx, setIsExportingDocx] = useState(false);
+    const [isRelazioneOpen, setIsRelazioneOpen] = useState(false);
     const isReadOnly = useIsReadOnly();
     const canManage = Boolean(onUpdate) && !isReadOnly;
 
@@ -169,7 +170,7 @@ const RiposiPraticaDetail: React.FC<Props> = ({ pratica, onBack, onUpdate }) => 
                         <h1 className="text-2xl font-black text-slate-800 dark:text-slate-100 leading-tight">{pratica.cognome} {pratica.nome}</h1>
                         <p className="text-sm text-slate-500 dark:text-slate-400">{pratica.mansione} · {pratica.periodoStart} – {pratica.periodoEnd} · {pratica.giornate.length} giornate</p>
                     </div>
-                    <div className="ml-auto flex items-center gap-2">
+                    <div className="ml-auto">
                         {canManage ? (
                             <label className={`relative inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold cursor-pointer ${STATO_META[pratica.stato].chip}`} title="Stato della pratica: cambiarlo scrive da sé la data di chiusura/pagamento">
                                 <span className={`w-2 h-2 rounded-full ${STATO_META[pratica.stato].dot}`} />
@@ -189,39 +190,40 @@ const RiposiPraticaDetail: React.FC<Props> = ({ pratica, onBack, onUpdate }) => 
                                 <span className={`w-2 h-2 rounded-full ${STATO_META[pratica.stato].dot}`} />{STATO_META[pratica.stato].label}
                             </span>
                         )}
-                        {/* Export/Stampa — nascosti al viewer (sola lettura): Excel,
-                            relazione .docx e stampa conteggi sono modi per portarsi via
-                            il documento. */}
-                        {!isReadOnly && (<>
+                    </div>
+                </div>
+
+                {/* Riga azioni dedicata — nascosta al viewer (sola lettura): Excel,
+                    Relazione e Stampa conteggi sono modi per portarsi via il documento. */}
+                {!isReadOnly && (
+                    <div className="flex flex-wrap items-center gap-3">
                         <button
                             type="button"
                             onClick={handleExcel}
                             disabled={isExportingXlsx}
                             title="Scarica l'Excel pulito: numeri veri, formule vive (la tariffa nel Riepilogo ricalcola tutto), un foglio per anno"
-                            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-600 dark:text-slate-300 hover:text-emerald-600 dark:hover:text-emerald-400 hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-wait"
+                            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-600 dark:text-slate-300 hover:text-emerald-600 dark:hover:text-emerald-400 hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-wait whitespace-nowrap"
                         >
                             <FileSpreadsheet className="w-4 h-4" /> Excel
                         </button>
                         <button
                             type="button"
-                            onClick={handleRelazioneDocx}
-                            disabled={isExportingDocx}
-                            title="Scarica la relazione tecnica in Word (.docx vero): quadro normativo, metodo, due serie, elenco violazioni, riserve"
-                            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-wait"
+                            onClick={() => setIsRelazioneOpen(true)}
+                            title="Apri la relazione: spiegazione del metodo, esempio numerico sui tuoi dati, le due serie, e download .docx / stampa"
+                            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 hover:-translate-y-0.5 transition-all whitespace-nowrap"
                         >
-                            <FileText className="w-4 h-4" /> Relazione .docx
+                            <FileText className="w-4 h-4" /> Relazione
                         </button>
                         <button
                             type="button"
                             onClick={() => printConteggiRiposi(pratica, result)}
                             title="Apre il documento dei conteggi (due serie, riepilogo per anno, elenco violazioni) nella finestra di stampa: da lì si salva in PDF"
-                            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-bold shadow-lg shadow-indigo-500/30 hover:bg-indigo-700 hover:-translate-y-0.5 transition-all"
+                            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-bold shadow-lg shadow-indigo-500/30 hover:bg-indigo-700 hover:-translate-y-0.5 transition-all whitespace-nowrap"
                         >
                             <Printer className="w-4 h-4" /> Stampa conteggi
                         </button>
-                        </>)}
                     </div>
-                </div>
+                )}
 
                 {/* Gestione pratica: date utili + importo riconosciuto */}
                 {pratica.stato !== 'in_corso' && (
@@ -430,7 +432,136 @@ const RiposiPraticaDetail: React.FC<Props> = ({ pratica, onBack, onUpdate }) => 
                     />
                 )}
             </div>
+
+            {!isReadOnly && (
+                <RelazioneRiposiModal
+                    isOpen={isRelazioneOpen}
+                    onClose={() => setIsRelazioneOpen(false)}
+                    pratica={pratica}
+                    result={result}
+                    fonte={fonte}
+                    onScarica={handleRelazioneDocx}
+                    isExporting={isExportingDocx}
+                    onStampa={() => printConteggiRiposi(pratica, result)}
+                />
+            )}
         </motion.div>
+    );
+};
+
+// Modale "Relazione / come si calcola" — gemella in-app del report indennità:
+// spiega il metodo, mostra un esempio numerico REALE preso dalle violazioni della
+// pratica, i totali e le riserve; da qui si scarica il .docx o si stampa.
+interface RelazioneRiposiModalProps {
+    isOpen: boolean;
+    onClose: () => void;
+    pratica: PraticaRiposi;
+    result: RestResult;
+    fonte: { gg: number; ore: number; ind: number };
+    onScarica: () => void;
+    isExporting: boolean;
+    onStampa: () => void;
+}
+
+const RelazioneRiposiModal: React.FC<RelazioneRiposiModalProps> = ({ isOpen, onClose, pratica, result, fonte, onScarica, isExporting, onStampa }) => {
+    // Esempio didattico: la violazione con più ore mancanti (la più rappresentativa).
+    const esempio = useMemo<Violazione | null>(
+        () => result.violazioni.reduce<Violazione | null>((best, v) => (!best || v.oreMancanti > best.oreMancanti ? v : best), null),
+        [result]
+    );
+    if (!isOpen) return null;
+
+    const totViol = result.nViolazioniGiornaliere + result.nViolazioniSettimanali;
+    const tariffa = pratica.tariffaOraria;
+    const stat = (label: string, value: string, sub?: string) => (
+        <div className="rounded-2xl border border-slate-100 dark:border-slate-700/60 bg-slate-50/60 dark:bg-slate-800/40 p-3">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">{label}</p>
+            <p className="text-lg font-black tabular-nums text-slate-800 dark:text-slate-100 leading-tight">{value}</p>
+            {sub && <p className="text-[11px] text-slate-400 dark:text-slate-500">{sub}</p>}
+        </div>
+    );
+
+    return (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4" role="dialog" aria-modal="true">
+            <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
+            <motion.div
+                initial={{ opacity: 0, scale: 0.96, y: 12 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                transition={{ duration: 0.2 }}
+                className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-2xl"
+            >
+                <div className="sticky top-0 z-10 flex items-center gap-3 px-6 py-4 bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border-b border-slate-100 dark:border-slate-800">
+                    <div className="w-10 h-10 rounded-2xl bg-indigo-100 dark:bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
+                        <Calculator className="w-5 h-5" />
+                    </div>
+                    <div className="min-w-0">
+                        <h2 className="text-lg font-black text-slate-800 dark:text-slate-100 leading-tight">Relazione — come si calcola</h2>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{pratica.cognome} {pratica.nome} · metodo e numeri di questa pratica</p>
+                    </div>
+                    <button onClick={onClose} title="Chiudi" className="ml-auto shrink-0 w-9 h-9 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 flex items-center justify-center transition-colors">
+                        <X className="w-4 h-4" />
+                    </button>
+                </div>
+
+                <div className="px-6 py-5 space-y-5 text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+                    <section>
+                        <h3 className="font-bold text-slate-700 dark:text-slate-200 mb-2">Cosa misura</h3>
+                        <p className="mb-2">Sui soli orari di turno si verifica il rispetto dei riposi minimi del personale viaggiante previsti dal <b>Reg. (CE) 561/2006</b> (art. 8), attuato dal <b>D.Lgs. 234/2007</b>:</p>
+                        <ul className="space-y-1.5 pl-1">
+                            <li className="flex gap-2"><Moon className="w-4 h-4 mt-0.5 shrink-0 text-rose-400" /><span><b>Riposo giornaliero</b>: almeno <b>11 ore</b> consecutive ogni 24h (riducibile a 9h max 3 volte tra due riposi settimanali — queste riduzioni sono lecite e non contano).</span></li>
+                            <li className="flex gap-2"><CalendarClock className="w-4 h-4 mt-0.5 shrink-0 text-indigo-400" /><span><b>Riposo settimanale</b>: almeno <b>45 ore</b> consecutive (24h solo in alternanza con uno regolare).</span></li>
+                        </ul>
+                    </section>
+
+                    <section className="rounded-2xl border border-indigo-200 dark:border-indigo-500/30 bg-indigo-50/60 dark:bg-indigo-500/10 p-4">
+                        <h3 className="flex items-center gap-2 font-bold text-indigo-700 dark:text-indigo-300 mb-3"><Euro className="w-4 h-4" /> Esempio dai tuoi dati</h3>
+                        {esempio ? (
+                            <>
+                                <p className="mb-2">{esempio.tipo === 'riposo_giornaliero' ? 'Riposo giornaliero' : 'Riposo settimanale'} del <b>{dmy(esempio.inizio)}</b>:</p>
+                                <div className="space-y-1.5">
+                                    <div className="flex items-center justify-between"><span>Soglia di legge</span><span className="font-bold tabular-nums text-slate-800 dark:text-slate-100">{esempio.soglia} h</span></div>
+                                    <div className="flex items-center justify-between"><span>Riposo fruito</span><span className="font-bold tabular-nums text-slate-800 dark:text-slate-100">{formatHm(esempio.ore)}</span></div>
+                                    <div className="flex items-center justify-between border-t border-indigo-200/60 dark:border-indigo-500/20 pt-1.5"><span>Ore mancanti</span><span className="font-bold tabular-nums text-slate-800 dark:text-slate-100">{esempio.soglia} h − {formatHm(esempio.ore)} = {formatHm(esempio.oreMancanti)}</span></div>
+                                    <div className="flex items-center justify-between"><span className="font-semibold text-indigo-700 dark:text-indigo-300">Indennità</span><span className="font-black tabular-nums text-indigo-700 dark:text-indigo-300">{formatHm(esempio.oreMancanti)} × {euro(tariffa)}/h = {euro(esempio.indennita)}</span></div>
+                                </div>
+                                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-3">Lo stesso procedimento è applicato a ogni riposo non conforme del periodo e sommato per anno.</p>
+                            </>
+                        ) : (
+                            <p>Nessuna violazione rilevata nel periodo analizzato.</p>
+                        )}
+                    </section>
+
+                    <section>
+                        <h3 className="font-bold text-slate-700 dark:text-slate-200 mb-2">I numeri di questa pratica</h3>
+                        <div className="grid grid-cols-2 gap-2">
+                            {stat('Violazioni', String(totViol), `${result.nViolazioniGiornaliere} giorn. · ${result.nViolazioniSettimanali} sett.`)}
+                            {stat('Ore mancanti', formatHm(result.totOreMancanti))}
+                            {stat('Indennità (motore)', euro(result.totIndennita), `tariffa ${euro(tariffa)}/h`)}
+                            {fonte.gg > 0 && stat('Indennità (PDF)', euro(fonte.ind), `${fonte.gg} giornate · criteri della fonte`)}
+                        </div>
+                    </section>
+
+                    <section>
+                        <h3 className="font-bold text-slate-700 dark:text-slate-200 mb-2">Riserve</h3>
+                        <ul className="space-y-1.5 pl-1 text-[13px]">
+                            <li className="flex gap-2"><span className="text-amber-500">•</span><span><b>Tariffa</b>: {euro(tariffa)}/h è un <b>placeholder</b> da confermare con l'avvocato; alla conferma l'indennità del motore si ricalcola.</span></li>
+                            <li className="flex gap-2"><span className="text-amber-500">•</span><span><b>Due serie</b>: l'indennità «motore» (Reg. 561/2006) e quella «PDF» (criteri di chi ha prodotto il documento) si <b>affiancano, non si sommano</b>.</span></li>
+                            <li className="flex gap-2"><span className="text-amber-500">•</span><span><b>Pausa di guida (art. 7)</b>: richiede il cronotachigrafo, non presente nei turni → fuori perimetro.</span></li>
+                            <li className="flex gap-2"><span className="text-amber-500">•</span><span><b>Codici di servizio</b>: la legenda dei turni va richiesta all'azienda.</span></li>
+                        </ul>
+                    </section>
+                </div>
+
+                <div className="sticky bottom-0 flex items-center justify-end gap-2 px-6 py-4 bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border-t border-slate-100 dark:border-slate-800">
+                    <button type="button" onClick={onStampa} className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors whitespace-nowrap">
+                        <Printer className="w-4 h-4" /> Stampa conteggi
+                    </button>
+                    <button type="button" onClick={onScarica} disabled={isExporting} className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-bold shadow-lg shadow-indigo-500/30 hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-wait whitespace-nowrap">
+                        <FileText className="w-4 h-4" /> {isExporting ? 'Genero…' : 'Scarica .docx'}
+                    </button>
+                </div>
+            </motion.div>
+        </div>
     );
 };
 
