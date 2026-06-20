@@ -32,6 +32,7 @@ import { useAuth } from './hooks/useAuth';
 import { useDashboardStats } from './hooks/useDashboardStats';
 import { useHashRoute } from './hooks/useHashRoute';
 import { useViewerPaymentBlock } from './lib/readonly';
+import { IS_DEMO } from './config/demo';
 
 const App: React.FC = () => {
     const { isDarkMode, toggleTheme } = useTheme();
@@ -270,6 +271,11 @@ const App: React.FC = () => {
 
     return (
         <div className="min-h-screen font-sans selection:bg-indigo-100 dark:selection:bg-indigo-900/50 relative overflow-hidden transition-colors duration-500">
+            {IS_DEMO && (
+                <div className="fixed top-3 left-3 z-[60] px-3 py-1 rounded-full bg-amber-500 text-white text-[11px] font-bold tracking-wide shadow-lg pointer-events-none">
+                    DEMO · dati di esempio
+                </div>
+            )}
             <HiddenClasses />
             <DynamicIsland workers={workers} />
             <KeyboardShortcutsHint />

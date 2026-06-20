@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../supabaseClient';
+import { IS_DEMO } from '../config/demo';
 
 // Account autorizzati alla sola consultazione: vedono i dati di tutti gli owner
 // ma non devono modificare/creare/cancellare. Le RLS sul DB rifiutano comunque
@@ -24,6 +25,7 @@ export function useReadOnlyViewerName(): string | null {
   const [name, setName] = useState<string | null>(null);
 
   useEffect(() => {
+    if (IS_DEMO) return; // demo: nessun viewer, nessuna sessione Supabase
     const update = (uid: string | undefined) =>
       setName(uid ? READONLY_VIEWER_NAMES[uid] ?? null : null);
 
@@ -41,6 +43,7 @@ export function useIsReadOnly(): boolean {
   const [isReadOnly, setIsReadOnly] = useState(false);
 
   useEffect(() => {
+    if (IS_DEMO) return; // demo: mai readonly
     const update = (uid: string | undefined) =>
       setIsReadOnly(!!uid && READONLY_VIEWER_UIDS.has(uid));
 
@@ -72,10 +75,11 @@ export interface ViewerPaymentBlockState {
  */
 export function useViewerPaymentBlock(): ViewerPaymentBlockState {
   const [state, setState] = useState<ViewerPaymentBlockState>({
-    loading: true, blocked: false, amount: 750,
+    loading: !IS_DEMO, blocked: false, amount: 750,
   });
 
   useEffect(() => {
+    if (IS_DEMO) return; // demo: nessun blocco pagamento, niente Supabase
     let alive = true;
     (async () => {
       const { data: { session } } = await supabase.auth.getSession();

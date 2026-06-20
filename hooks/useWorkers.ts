@@ -6,6 +6,8 @@ import { triggerConfetti } from '../utils/confetti';
 import { supabase } from '../supabaseClient';
 import { migrateLocalToCloud } from '../utils/migrateFromLocalToCloud';
 import { READONLY_VIEWER_UIDS } from '../lib/readonly';
+import { IS_DEMO } from '../config/demo';
+import { DEMO_WORKERS } from '../fixtures/demoWorkers';
 
 const CARD_COLORS = ['blue', 'emerald', 'orange', 'rose', 'violet', 'teal'];
 
@@ -126,6 +128,18 @@ export const useWorkers = (addToast: AddToast) => {
 
     // --- OSSERVA AUTH ---
     useEffect(() => {
+        // Demo: carica i lavoratori finti in memoria e NON osserva Supabase.
+        // authUser resta null → l'auto-sync e tutte le scritture/cancellazioni
+        // (già protette da `if (!authUser) return`) restano no-op: nessuna
+        // chiamata al DB reale parte da qui.
+        if (IS_DEMO) {
+            setWorkers(DEMO_WORKERS);
+            prevWorkersRef.current = DEMO_WORKERS;
+            setIsWorkersLoading(false);
+            setAuthInitialized(true);
+            return;
+        }
+
         supabase.auth.getUser().then(({ data: { user } }) => {
             setAuthUser(user);
             setAuthInitialized(true);

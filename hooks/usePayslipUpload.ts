@@ -3,6 +3,8 @@ import { useIsland } from '../IslandContext';
 import { Worker, AnnoDati, getColumnsByProfile, MONTH_NAMES } from '../types';
 import { isSystemProfile } from '../config/profiles';
 import { parseLocalFloat } from '../utils/formatters';
+import { IS_DEMO } from '../config/demo';
+import { buildDemoExtraction } from '../fixtures/demoScan';
 
 interface UsePayslipUploadOptions {
   worker: Worker;
@@ -366,7 +368,16 @@ export function usePayslipUpload({
         let aiResult: any = null;
         let success = false;
 
-        for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+        // Demo: estrazione SIMULATA (nessuna chiamata a Gemini). Finta latenza
+        // per mostrare l'animazione "sto analizzando…", poi un risultato di esempio
+        // nello stesso formato della pipeline reale.
+        if (IS_DEMO) {
+          await new Promise(r => setTimeout(r, 1400));
+          aiResult = buildDemoExtraction(worker);
+          success = true;
+        }
+
+        for (let attempt = 1; !IS_DEMO && attempt <= MAX_ATTEMPTS; attempt++) {
           response = await fetch('/.netlify/functions/scan-payslip', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -568,8 +579,9 @@ export function usePayslipUpload({
         currentAnni[rowIndex] = row;
         successCount++;
 
-        // Archivia il PDF in background — non blocca il loop
-        if (onArchive) {
+        // Archivia il PDF in background — non blocca il loop.
+        // In demo NON si archivia (nessuno storage Supabase reale).
+        if (onArchive && !IS_DEMO) {
           void onArchive(file, targetYear, MONTH_NAMES[targetMonthIndex], targetMonthIndex, aiResult);
         }
       } catch (error) {

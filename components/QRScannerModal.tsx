@@ -5,6 +5,7 @@ import QRCode from 'react-qr-code';
 import { v4 as uuidv4 } from 'uuid';
 import { supabase } from '../supabaseClient';
 import { useIsland } from '../IslandContext';
+import { IS_DEMO } from '../config/demo';
 
 // ✨ MEMORIA GLOBALE INDISTRUTTIBILE
 let globalSessionId = '';
@@ -115,7 +116,7 @@ const QRScannerModal: React.FC<QRScannerModalProps> = ({
         if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
         if (watchdogTimer.current) clearTimeout(watchdogTimer.current);
 
-        if (globalSessionId) await supabase.from('scan_sessions').delete().eq('id', globalSessionId);
+        if (globalSessionId && !IS_DEMO) await supabase.from('scan_sessions').delete().eq('id', globalSessionId);
 
         setIsPoweringOff(true);
         setTimeout(() => {
@@ -379,7 +380,9 @@ const QRScannerModal: React.FC<QRScannerModalProps> = ({
         };
         watchdogTimer.current = setTimeout(checkWatchdog, 5000);
 
-        initSession();
+        // Demo: mostra solo il QR (per spiegare la funzione PC↔telefono), senza
+        // toccare Supabase. Il collegamento live resta disattivato.
+        if (!IS_DEMO) initSession();
 
         return () => {
             isActive = false;
@@ -566,6 +569,9 @@ const QRScannerModal: React.FC<QRScannerModalProps> = ({
                                 {scannedCount === 0 ? (
                                     <motion.div key="testo" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, filter: 'blur(5px)' }} transition={{ duration: 0.3 }} className="flex flex-col items-center text-center absolute inset-0 px-4">
                                         <p className="text-[#8e8e93] text-[15px] leading-snug font-medium">Inquadra il codice QR con la fotocamera del tuo smartphone.</p>
+                                        {IS_DEMO && (
+                                            <p className="text-amber-400/80 text-[11px] leading-snug font-medium mt-3">Anteprima demo — il collegamento live col telefono è disattivato.</p>
+                                        )}
                                     </motion.div>
                                 ) : (
                                     <motion.div key="azioni" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={appleTransition} className="flex flex-col items-center w-full gap-5 absolute inset-0">

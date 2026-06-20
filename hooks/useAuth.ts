@@ -2,10 +2,12 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useIsland } from '../IslandContext';
 import { getFormattedDate, getFormattedTime } from '../utils/formatters';
 import { supabase } from '../supabaseClient';
+import { IS_DEMO } from '../config/demo';
 
 export const useAuth = (setViewMode: (mode: 'home' | 'simple' | 'complex' | 'stats') => void) => {
-    const [isAuthenticated, setIsAuthenticated] = useState(false);
-    const [isLoading, setIsLoading] = useState(true);
+    // In demo: "autenticato" subito, senza Supabase (vedi config/demo.ts).
+    const [isAuthenticated, setIsAuthenticated] = useState(IS_DEMO);
+    const [isLoading, setIsLoading] = useState(!IS_DEMO);
     const [loginEmail, setLoginEmail] = useState('');
     const [loginPassword, setLoginPassword] = useState('');
     const [loginError, setLoginError] = useState(false);
@@ -17,6 +19,9 @@ export const useAuth = (setViewMode: (mode: 'home' | 'simple' | 'complex' | 'sta
     const wasAuthenticatedRef = useRef(false);
 
     useEffect(() => {
+        // Demo: nessuna sessione Supabase da osservare.
+        if (IS_DEMO) return;
+
         supabase.auth.getSession().then(({ data: { session } }) => {
             wasAuthenticatedRef.current = !!session;
             setIsAuthenticated(!!session);
