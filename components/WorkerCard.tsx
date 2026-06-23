@@ -6,6 +6,7 @@ import { CompanyLogo } from './ui/CompanyLogo';
 import { parseLocalFloat, getProfiloBadgeLabel, groupThousandsIT } from '../utils/formatters';
 import { computeHolidayIndemnity } from '../utils/calculationEngine';
 import { getYearCoverage } from '../utils/workerStatus';
+import { FixBadge } from './ui/FixBadge';
 import { useIsReadOnly } from '../lib/readonly';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -614,6 +615,7 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
                   </div>
 
                   <div className="flex-1 min-h-0 space-y-4">
+                    <div className="flex flex-wrap items-center gap-2">
                     <div className="relative">
                       {isReadOnly ? (
                         /* Sola lettura: badge stato statico, non cliccabile (le RLS bloccano comunque la scrittura) */
@@ -667,6 +669,8 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
                         </div>,
                         document.body
                       )}
+                    </div>
+                    <FixBadge worker={worker} size="sm" />
                     </div>
                     <div className="flex items-center gap-2 mt-3 min-w-0">
                       <span className="flex-1 min-w-0 truncate px-3 py-1.5 rounded-xl bg-white/50 dark:bg-slate-900/60 border border-slate-200/60 dark:border-slate-700/50 text-[10px] font-bold text-slate-500 dark:text-slate-400 capitalize shadow-sm backdrop-blur-sm transition-colors">{worker.ruolo || 'N.D.'}</span>

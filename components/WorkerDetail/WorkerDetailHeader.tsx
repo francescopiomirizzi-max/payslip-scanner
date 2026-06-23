@@ -15,6 +15,8 @@ import { useIsReadOnly } from '../../lib/readonly';
 import { FRAMER_PHYSICS } from '../../framerConfig';
 import { useWorkerDetail } from './WorkerDetailContext';
 
+const MESE_ABBR = ['Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic'];
+
 // Sezione HEADER GLASSMORPHISM estratta da WorkerDetailLayout. Possiede lo stato
 // locale del menu Azioni (dropdown + click-outside). Legge tutto dal context.
 const WorkerDetailHeader: React.FC = () => {
@@ -145,6 +147,40 @@ const WorkerDetailHeader: React.FC = () => {
                   <Briefcase className="w-4 h-4" />
                   <span>{worker.ruolo}</span>
                 </div>
+
+                {/* Buste da sistemare: chip rosso per mese, con "✓ sistemato" che rimuove l'avviso */}
+                {(worker.fixTargets ?? []).length > 0 && (
+                  <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                    {[...(worker.fixTargets ?? [])]
+                      .sort((a, b) => a.year - b.year || a.monthIndex - b.monthIndex)
+                      .map(t => (
+                        <span
+                          key={`${t.year}-${t.monthIndex}`}
+                          title="Busta paga da sistemare (mese col file di un altro periodo)"
+                          className="inline-flex items-center gap-1 pl-2.5 pr-1 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide border bg-red-100 text-red-700 border-red-300 dark:bg-red-900/40 dark:text-red-300 dark:border-red-700/60 shadow-sm"
+                        >
+                          <AlertCircle className="w-3 h-3" />
+                          manca {MESE_ABBR[t.monthIndex]} {t.year}
+                          {!isReadOnly && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                onUpdateWorkerFields({
+                                  fixTargets: (worker.fixTargets ?? []).filter(
+                                    x => !(x.year === t.year && x.monthIndex === t.monthIndex)
+                                  ),
+                                })
+                              }
+                              title="Segna come sistemato (rimuove l'avviso)"
+                              className="ml-0.5 p-0.5 rounded-full hover:bg-red-200 dark:hover:bg-red-800/60 transition-colors"
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </span>
+                      ))}
+                  </div>
+                )}
                 <div className="flex items-center gap-2 text-xs font-bold text-slate-400 dark:text-slate-400 mt-1.5">
                   <CalendarPlus className="w-3.5 h-3.5 shrink-0" strokeWidth={2.5} />
                   {editingAssunzione && !isReadOnly ? (

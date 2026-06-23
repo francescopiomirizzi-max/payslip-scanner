@@ -8,6 +8,7 @@ import { DevBadge } from '../components/ui/DevBadge';
 import { matchesCompanyFilter } from '../hooks/useWorkers';
 import { getCassettoByStatus } from '../config/cassetti';
 import WorkerDestinationModal from '../components/WorkerDestinationModal';
+import { FixBadge } from '../components/ui/FixBadge';
 
 interface CompanyPageProps {
     /** Chiave azienda di sistema (incl. 'ELIOR_MAGAZZINO'). */
@@ -236,6 +237,7 @@ const CompanyPage: React.FC<CompanyPageProps> = ({ companyKey, workers, onBack, 
                                         <span className="min-w-0 flex-1 font-bold text-slate-800 dark:text-white truncate">
                                             {w.cognome} {w.nome}
                                         </span>
+                                        <FixBadge worker={w} size="sm" />
                                         <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400 shrink-0">
                                             <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: cassetto.accentHex }} />
                                             {cassetto.label}

@@ -644,20 +644,30 @@ const ArchivePage: React.FC<ArchivePageProps> = ({ workers, onBack, initialWorke
                               {months.map(({ monthIndex, monthName, hasData, payslip }) => {
                                 const isSelectedPayslip = !!payslip && selectedPayslip?.id === payslip.id;
                                 const meseLabel = monthName.charAt(0) + monthName.slice(1).toLowerCase();
+                                // Mese segnalato come "da sistemare" (file di un altro periodo): cornice rossa + pallino
+                                const isFix = (selectedWorker?.fixTargets ?? []).some(
+                                  t => t.year === year && t.monthIndex === monthIndex
+                                );
+                                const fixTitle = isFix ? ' · ⚠ DA SISTEMARE (è di un altro periodo)' : '';
+                                const fixDot = isFix ? (
+                                  <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-red-500 ring-2 ring-white dark:ring-slate-900 animate-pulse" />
+                                ) : null;
                                 if (payslip) {
                                   return (
                                     <button
                                       key={monthIndex}
                                       onClick={() => handleSelectPayslip(payslip)}
-                                      title={`${meseLabel} ${year} — apri PDF`}
-                                      className={`h-9 rounded-lg flex items-center justify-center text-[10px] font-black tracking-wide text-white shadow-sm transition-all duration-150 hover:scale-[1.06] hover:shadow-md ${
-                                        isSelectedPayslip ? 'ring-2 ring-offset-2 ring-offset-white dark:ring-offset-slate-900' : ''
+                                      title={`${meseLabel} ${year} — apri PDF${fixTitle}`}
+                                      className={`relative h-9 rounded-lg flex items-center justify-center text-[10px] font-black tracking-wide text-white shadow-sm transition-all duration-150 hover:scale-[1.06] hover:shadow-md ${
+                                        isFix ? 'ring-2 ring-red-500 ring-offset-2 ring-offset-white dark:ring-offset-slate-900'
+                                        : isSelectedPayslip ? 'ring-2 ring-offset-2 ring-offset-white dark:ring-offset-slate-900' : ''
                                       }`}
                                       style={{
                                         background: `linear-gradient(135deg, ${gradStart}, ${gradEnd})`,
-                                        ...(isSelectedPayslip ? { ['--tw-ring-color' as any]: companyHex } : {}),
+                                        ...(isSelectedPayslip && !isFix ? { ['--tw-ring-color' as any]: companyHex } : {}),
                                       }}
                                     >
+                                      {fixDot}
                                       {MONTH_ABBR[monthIndex]}
                                     </button>
                                   );
@@ -666,10 +676,13 @@ const ArchivePage: React.FC<ArchivePageProps> = ({ workers, onBack, initialWorke
                                   return (
                                     <div
                                       key={monthIndex}
-                                      title={`${meseLabel} ${year} — dati inseriti, PDF non caricato`}
-                                      className="h-9 rounded-lg flex items-center justify-center text-[10px] font-black tracking-wide border"
-                                      style={{ color: companyHex, borderColor: `${companyHex}55`, backgroundColor: `${companyHex}0F` }}
+                                      title={`${meseLabel} ${year} — dati inseriti, PDF non caricato${fixTitle}`}
+                                      className={`relative h-9 rounded-lg flex items-center justify-center text-[10px] font-black tracking-wide border ${isFix ? 'ring-2 ring-red-500' : ''}`}
+                                      style={isFix
+                                        ? { color: '#dc2626', borderColor: '#ef4444', backgroundColor: '#fef2f2' }
+                                        : { color: companyHex, borderColor: `${companyHex}55`, backgroundColor: `${companyHex}0F` }}
                                     >
+                                      {fixDot}
                                       {MONTH_ABBR[monthIndex]}
                                     </div>
                                   );
@@ -677,9 +690,14 @@ const ArchivePage: React.FC<ArchivePageProps> = ({ workers, onBack, initialWorke
                                 return (
                                   <div
                                     key={monthIndex}
-                                    title={`${meseLabel} ${year} — mancante`}
-                                    className="h-9 rounded-lg flex items-center justify-center text-[10px] font-bold tracking-wide border border-dashed border-slate-200 dark:border-slate-700/60 text-slate-300 dark:text-slate-600"
+                                    title={`${meseLabel} ${year} — mancante${fixTitle}`}
+                                    className={`relative h-9 rounded-lg flex items-center justify-center text-[10px] font-bold tracking-wide border ${
+                                      isFix
+                                        ? 'border-red-400 dark:border-red-600 text-red-500 dark:text-red-400 ring-2 ring-red-500/40 bg-red-50 dark:bg-red-950/30'
+                                        : 'border-dashed border-slate-200 dark:border-slate-700/60 text-slate-300 dark:text-slate-600'
+                                    }`}
                                   >
+                                    {fixDot}
                                     {MONTH_ABBR[monthIndex]}
                                   </div>
                                 );

@@ -32,6 +32,7 @@ function dbToWorker(row: any): Worker {
         includePaidLeave: row.include_paid_leave ?? undefined,
         reportShowPercepito: row.report_show_percepito ?? undefined,
         dataAssunzione: row.data_assunzione ?? undefined,
+        fixTargets: row.fix_targets ?? undefined,
         anni: row.anni ?? [],
         created_at: row.created_at ?? undefined,
     };
@@ -59,6 +60,7 @@ function workerToDb(worker: Worker, ownerId: string): object {
         include_paid_leave: worker.includePaidLeave ?? null,
         report_show_percepito: worker.reportShowPercepito ?? null,
         data_assunzione: worker.dataAssunzione ?? null,
+        fix_targets: worker.fixTargets ?? null,
         anni: worker.anni,
     };
 }

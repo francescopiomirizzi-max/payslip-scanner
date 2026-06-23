@@ -48,6 +48,13 @@ export interface AnnoDati {
   [key: string]: any;
 }
 
+// Busta paga da sistemare: un mese archiviato col file di un altro periodo
+// (vedi audit mese/anno). Mostrato come badge rosso; si svuota quando sistemato.
+export interface FixTarget {
+  year: number;
+  monthIndex: number; // 0-11
+}
+
 export interface Worker {
   id: string;
   nome: string;
@@ -65,6 +72,9 @@ export interface Worker {
 
   eliorType?: 'viaggiante' | 'magazzino';
   notes?: string;
+
+  // Buste paga da sistemare (mese col file sbagliato): badge rosso in UI.
+  fixTargets?: FixTarget[];
 
   profiloProfessionale?: string;
 

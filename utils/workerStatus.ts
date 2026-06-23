@@ -1,6 +1,17 @@
 import type { Worker } from '../types';
 import { parseLocalFloat } from './formatters';
 
+const MESI_ABBR_FIX = ['Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic'];
+
+/** Etichetta compatta dei mesi da sistemare, es. "Nov 2008 · Set 2009". Vuota se nessuno. */
+export const formatFixTargets = (targets?: { year: number; monthIndex: number }[] | null): string => {
+  if (!targets || targets.length === 0) return '';
+  return [...targets]
+    .sort((a, b) => a.year - b.year || a.monthIndex - b.monthIndex)
+    .map(t => `${MESI_ABBR_FIX[t.monthIndex] ?? '?'} ${t.year}`)
+    .join(' · ');
+};
+
 /**
  * Un mese è "compilato" se almeno un campo NON strutturale ha un valore numerico > 0.
  * Necessario perché ogni profilo aziendale popola colonne diverse:
