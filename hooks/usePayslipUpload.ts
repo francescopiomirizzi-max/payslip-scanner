@@ -6,6 +6,25 @@ import { parseLocalFloat } from '../utils/formatters';
 import { IS_DEMO } from '../config/demo';
 import { buildDemoExtraction } from '../fixtures/demoScan';
 
+// Mappa il mese letto dall'AI (testo "Dicembre" / "12" / "dic"…) a un indice 0-11,
+// oppure -1 se non riconosciuto. Stessa logica del fallback nel parsing della data,
+// isolata qui per riusarla nella guardia mese/anno.
+const aiMonthToIndex = (rawMonth: any): number => {
+  if (rawMonth === undefined || rawMonth === null) return -1;
+  const mesiStr = ['gen', 'feb', 'mar', 'apr', 'mag', 'giu', 'lug', 'ago', 'set', 'ott', 'nov', 'dic'];
+  const monthRaw = String(rawMonth).toLowerCase().trim();
+  let idx = mesiStr.findIndex(m => monthRaw.includes(m));
+  if (idx === -1) {
+    const numMatch = monthRaw.match(/\b(0?[1-9]|1[0-2])\b/);
+    if (numMatch) idx = parseInt(numMatch[1]) - 1;
+    else if (monthRaw.length >= 5) {
+      const firstTwo = parseInt(monthRaw.substring(0, 2));
+      if (firstTwo >= 1 && firstTwo <= 12) idx = firstTwo - 1;
+    }
+  }
+  return idx >= 0 && idx <= 11 ? idx : -1;
+};
+
 interface UsePayslipUploadOptions {
   worker: Worker;
   monthlyInputs: AnnoDati[];
@@ -304,6 +323,7 @@ export function usePayslipUpload({
     let errorCount = 0;
     let lastDetectedYear = null;
     const failedFiles: string[] = []; // feedback per-file: quali buste paga non sono passate
+    const mismatchFiles: string[] = []; // buste col periodo della testata (AI) diverso dal nome file → da verificare
 
     const expectedColumns = getColumnsByProfile(worker.profilo, worker.eliorType) || [];
 
@@ -520,6 +540,30 @@ export function usePayslipUpload({
           row.note = row.note
             ? `${row.note}${sep}[⚠️ AI: ${aiResult.aiWarning}]`
             : `[⚠️ AI: ${aiResult.aiWarning}]`;
+
+        // GUARDIA MESE/ANNO (permanente): la busta viene archiviata sotto il mese/anno
+        // del NOME FILE. Se la testata letta dall'AI indica un periodo diverso, NON
+        // blocchiamo l'import (l'AI può leggere male la data — es. i cedolini RFI di
+        // gennaio citano dicembre dell'anno prima) ma lo segnaliamo per verifica umana:
+        // nota "Mese da verificare" sul mese + riepilogo a fine caricamento. CUD escluso
+        // (il mese=12 è una convenzione, non un mese reale).
+        if (!IS_DEMO && !isCUD) {
+          const aiMonthIndex = aiMonthToIndex(aiResult.month);
+          const aiYearRaw = parseInt(String(aiResult.year || '').replace(/[^\d]/g, ''));
+          const aiYear = !isNaN(aiYearRaw) && aiYearRaw >= 2000 ? aiYearRaw : NaN;
+          const meseDiverso =
+            foundMonthUiIndex !== -1 && aiMonthIndex !== -1 && aiMonthIndex !== targetMonthIndex;
+          const annoDiverso = !!yearMatchUI && !isNaN(aiYear) && aiYear !== targetYear;
+          if (meseDiverso || annoDiverso) {
+            const archiviato = `${monthNames[targetMonthIndex]} ${targetYear}`;
+            const testata = `${aiMonthIndex !== -1 ? monthNames[aiMonthIndex] : '?'} ${!isNaN(aiYear) ? aiYear : '?'}`;
+            mismatchFiles.push(`${label}: archiviato ${archiviato}, ma il cedolino sembra ${testata}`);
+            if (!row.note?.includes('Mese da verificare')) {
+              const nota = `[⚠️ Mese da verificare: archiviato ${archiviato}, il cedolino sembra ${testata}]`;
+              row.note = row.note ? `${row.note}${sep}${nota}` : nota;
+            }
+          }
+        }
         // MERCITALIA isola i ticket nella nota con dicitura esatta; gli altri usano il tag generico
         if (worker.profilo === 'MERCITALIA') {
           const ticketCount = parseLocalFloat(aiResult.count);
@@ -630,22 +674,34 @@ export function usePayslipUpload({
 
     finishUpload(successCount, errorCount, uploadType);
 
-    // Feedback per-file: su un batch con errori elenca QUALI buste paga riprovare,
-    // così l'utente non deve indovinare quale ricaricare.
+    // Feedback per-file a fine caricamento: errori (quali buste riprovare) e mismatch
+    // mese/anno (quali buste verificare). I mismatch si mostrano anche sull'upload
+    // singolo: un singolo file mal-nominato è proprio il caso tipico (vedi Mottola).
+    const MAX_LISTED = 6;
+    const formatList = (arr: string[]) => {
+      const listed = arr.slice(0, MAX_LISTED).map(name => `•  ${name}`).join('\n');
+      const extra = arr.length > MAX_LISTED ? `\n•  …e altri ${arr.length - MAX_LISTED}` : '';
+      return `${listed}${extra}`;
+    };
+
+    const segments: string[] = [];
+    let notifType: 'success' | 'warning' | 'error' = 'warning';
+
     if (!isSingle && errorCount > 0) {
-      const MAX_LISTED = 6;
-      const listed = failedFiles
-        .slice(0, MAX_LISTED)
-        .map(name => `•  ${name}`)
-        .join('\n');
-      const extra =
-        failedFiles.length > MAX_LISTED
-          ? `\n•  …e altri ${failedFiles.length - MAX_LISTED}`
-          : '';
-      setBatchNotification({
-        type: successCount > 0 ? 'warning' : 'error',
-        msg: `${successCount} buste paga importate, ${errorCount} non riuscite.\nRiprova questi file:\n${listed}${extra}`,
-      });
+      notifType = successCount > 0 ? 'warning' : 'error';
+      segments.push(
+        `${successCount} buste paga importate, ${errorCount} non riuscite.\nRiprova questi file:\n${formatList(failedFiles)}`
+      );
+    }
+
+    if (mismatchFiles.length > 0) {
+      segments.push(
+        `⚠️ ${mismatchFiles.length} busta/e da verificare: archiviata col mese/anno del nome file, ma il cedolino sembra di un altro periodo:\n${formatList(mismatchFiles)}`
+      );
+    }
+
+    if (segments.length > 0) {
+      setBatchNotification({ type: notifType, msg: segments.join('\n\n') });
     }
   };
 
