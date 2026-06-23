@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowLeft, AlertTriangle, Moon, CalendarClock, Euro, CheckCircle2, Search, CalendarDays, ListChecks, FileText, FileSpreadsheet, Scale, ChevronLeft, ChevronRight, X, Printer, Calculator } from 'lucide-react';
-import { computeRestViolations, computeSerieFonte, formatHm, hasCEEDays, type Violazione, type GiornataInput, type RestResult } from '../utils/restEngine';
+import { ArrowLeft, AlertTriangle, Moon, CalendarClock, Euro, CheckCircle2, Search, CalendarDays, ListChecks, FileText, FileSpreadsheet, Scale, GitCompare, ChevronLeft, ChevronRight, X, Printer, Calculator } from 'lucide-react';
+import { computeRestViolations, computeSerieFonte, resolveTariffePerAnno, buildConfronto, tariffaRange, formatHm, hasCEEDays, type Violazione, type GiornataInput, type RestResult, type ConfrontoResult, type ConfrontoStato } from '../utils/restEngine';
 import { printConteggiRiposi } from '../utils/riposiPrint';
 import { AnimatedCounter } from './ui/AnimatedCounter';
 import { STATO_META, type PraticaRiposi, type PraticaRiposiUpdate, type StatoPratica } from '../hooks/usePraticheRiposi';
@@ -9,6 +9,13 @@ import { useIsReadOnly } from '../lib/readonly';
 import { groupThousandsIT } from '../utils/formatters';
 
 const euro = (n: number) => '€ ' + groupThousandsIT(n.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+/** Etichetta tariffa: valore singolo se piatta, range "€min → €max" se cresce per anno. */
+const tariffaLabel = (rates: Record<string, number>): string => {
+    const { min, max, uniform } = tariffaRange(rates);
+    return uniform ? `${euro(min)}/h` : `${euro(min)} → ${euro(max)}/h`;
+};
+/** Suffisso coefficiente danno (es. " × 20%") quando attivo; vuoto se valore pieno. */
+const coeffSuffix = (coeff: number): string => (coeff !== 1 ? ` × ${Math.round(coeff * 100)}%` : '');
 const dmy = (iso: string) => new Date(iso).toLocaleDateString('it-IT');
 const GIORNI = ['Dom', 'Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab'];
 const weekday = (data: string) => { const [d, m, y] = data.split('/').map(Number); return GIORNI[new Date(y, m - 1, d).getDay()]; };
@@ -37,7 +44,7 @@ const TONE: Record<Tone, { icon: string; glow: string; hover: string }> = {
 };
 
 const RiposiPraticaDetail: React.FC<Props> = ({ pratica, onBack, onUpdate }) => {
-    const [tab, setTab] = useState<'violazioni' | 'prospetto'>('violazioni');
+    const [tab, setTab] = useState<'violazioni' | 'prospetto' | 'confronto'>('violazioni');
     const [isExportingDocx, setIsExportingDocx] = useState(false);
     const [isRelazioneOpen, setIsRelazioneOpen] = useState(false);
     const isReadOnly = useIsReadOnly();
@@ -53,10 +60,22 @@ const RiposiPraticaDetail: React.FC<Props> = ({ pratica, onBack, onUpdate }) => 
         onUpdate(fields);
     };
 
-    const result = useMemo(
-        () => computeRestViolations(pratica.giornate, { tariffaOraria: pratica.tariffaOraria, fonteTariffa: pratica.fonteTariffa, soloCEE: hasCEEDays(pratica.giornate) }),
+    // Tariffa per anno passata al motore: override della pratica se presente,
+    // altrimenti ricavata dalla fonte (cresce per anzianità). Valore orario pieno.
+    const tariffePerAnno = useMemo(
+        () => resolveTariffePerAnno(pratica.giornate, pratica.tariffePerAnno),
         [pratica]
     );
+    // Coefficiente danno (default 1 = valore pieno; metodo avvocato «20%» → 0.20).
+    const coeff = pratica.coefficiente ?? 1;
+
+    const result = useMemo(
+        () => computeRestViolations(pratica.giornate, { tariffaOraria: pratica.tariffaOraria, fonteTariffa: pratica.fonteTariffa, tariffePerAnno, coefficiente: pratica.coefficiente, soloCEE: hasCEEDays(pratica.giornate) }),
+        [pratica, tariffePerAnno]
+    );
+
+    // Tariffa piena applicata per anno (dal motore, esatta), per il display.
+    const rates = result.tariffePerAnnoApplicate;
 
     // Import dinamico: docx resta fuori dal bundle principale.
     const handleRelazioneDocx = async () => {
@@ -98,11 +117,14 @@ const RiposiPraticaDetail: React.FC<Props> = ({ pratica, onBack, onUpdate }) => 
      *  chi l'ha prodotto), da affiancare — non sommare — alla serie del motore. */
     const fonte = useMemo(() => computeSerieFonte(pratica.giornate), [pratica]);
 
+    /** Confronto giorno-per-giorno PDF ↔ nostro metodo (per il tab Confronto). */
+    const confronto = useMemo(() => buildConfronto(pratica.giornate, result), [pratica, result]);
+
     const perAnnoRows = useMemo(() => {
         const m = new Map(perAnno.map((a) => [a.y, a]));
         const ys = Array.from(new Set([...perAnno.map((a) => a.y), ...Object.keys(fonte.perAnno)])).sort();
-        return ys.map((y) => ({ y, g: m.get(y)?.g ?? 0, s: m.get(y)?.s ?? 0, ind: m.get(y)?.ind ?? 0, indFonte: fonte.perAnno[y] ?? 0 }));
-    }, [perAnno, fonte]);
+        return ys.map((y) => ({ y, g: m.get(y)?.g ?? 0, s: m.get(y)?.s ?? 0, ind: m.get(y)?.ind ?? 0, indFonte: fonte.perAnno[y] ?? 0, rate: rates[y] }));
+    }, [perAnno, fonte, rates]);
 
     const maxAnno = useMemo(() => Math.max(1, ...perAnno.map((a) => a.tot)), [perAnno]);
     const violazioniOrdinate = useMemo(() => [...result.violazioni].sort((a, b) => a.inizio.localeCompare(b.inizio)), [result]);
@@ -111,13 +133,14 @@ const RiposiPraticaDetail: React.FC<Props> = ({ pratica, onBack, onUpdate }) => 
     const [year, setYear] = useState<string>(() => years[years.length - 1] ?? '');
     const giornateAnno = useMemo(() => pratica.giornate.filter((g) => yearOf(g.data) === year), [pratica, year]);
     const byDataAnno = useMemo(() => { const m = new Map<string, GiornataInput>(); for (const g of giornateAnno) m.set(g.data, g); return m; }, [giornateAnno]);
-    const violDaysAnno = useMemo(() => { const s = new Set<string>(); for (const v of result.violazioni) { const k = isoToKey(v.inizio); if (k.endsWith('/' + year)) s.add(k); } return s; }, [result, year]);
+    const violDaysAnno = useMemo(() => { const s = new Set<string>(); for (const v of result.violazioni) { const k = v.dataTurno ?? isoToKey(v.inizio); if (k.endsWith('/' + year)) s.add(k); } return s; }, [result, year]);
     const [meseAperto, setMeseAperto] = useState<number | null>(null);
 
-    // Cross-link: dall'elenco violazioni al mese nel Prospetto (v.inizio è ISO).
-    const openMeseProspetto = (iso: string) => {
-        setYear(iso.slice(0, 4));
-        setMeseAperto(Number(iso.slice(5, 7)) - 1);
+    // Cross-link: dall'elenco violazioni al mese nel Prospetto (giorno = dataTurno 'DD/MM/YYYY').
+    const openMeseProspetto = (day: string) => {
+        const [, mm, yyyy] = day.split('/');
+        setYear(yyyy);
+        setMeseAperto(Number(mm) - 1);
         setTab('prospetto');
     };
 
@@ -145,7 +168,7 @@ const RiposiPraticaDetail: React.FC<Props> = ({ pratica, onBack, onUpdate }) => 
     const STAT: { tone: Tone; icon: React.ComponentType<{ className?: string }>; label: string; sub: string; node: React.ReactNode }[] = [
         { tone: 'rose',    icon: AlertTriangle, label: 'Violazioni totali', sub: `${result.nViolazioniGiornaliere} giorn. · ${result.nViolazioniSettimanali} sett.`, node: <AnimatedCounter value={totViol} /> },
         { tone: 'amber',   icon: CalendarClock, label: 'Ore mancanti',      sub: 'rispetto alle soglie',           node: <><AnimatedCounter value={Math.round(result.totOreMancanti)} /> <span className="text-base font-bold">h</span></> },
-        { tone: 'indigo',  icon: Euro,          label: 'Indennità stimata', sub: `tariffa ${euro(pratica.tariffaOraria)}/h`, node: <AnimatedCounter value={result.totIndennita} isCurrency /> },
+        { tone: 'indigo',  icon: Euro,          label: 'Indennità stimata', sub: `tariffa ${tariffaLabel(rates)}${coeffSuffix(coeff)}`, node: <AnimatedCounter value={result.totIndennita} isCurrency /> },
         { tone: 'emerald', icon: CheckCircle2,  label: 'Ridotti leciti',    sub: 'non conteggiati (≤3/sett)',      node: <AnimatedCounter value={result.nRidottiGiornalieriLeciti} /> },
         { tone: 'slate',   icon: Search,        label: 'Da verificare',     sub: 'righe non interpretabili',       node: <AnimatedCounter value={result.warnings.length} /> },
     ];
@@ -153,6 +176,7 @@ const RiposiPraticaDetail: React.FC<Props> = ({ pratica, onBack, onUpdate }) => 
     const TABS = [
         { id: 'violazioni' as const, label: 'Violazioni', icon: ListChecks },
         { id: 'prospetto' as const, label: 'Prospetto turni', icon: CalendarDays },
+        { id: 'confronto' as const, label: 'Confronto PDF', icon: GitCompare },
     ];
 
     return (
@@ -263,7 +287,7 @@ const RiposiPraticaDetail: React.FC<Props> = ({ pratica, onBack, onUpdate }) => 
                 {/* Banner onestà dati */}
                 <div className="flex items-start gap-2 rounded-2xl bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 px-4 py-3 text-sm text-amber-800 dark:text-amber-200">
                     <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
-                    <span>Giornate dal <strong>PDF sorgente</strong> («Mancati riposi»), parsato in modo deterministico e quadrato al centesimo coi totali del documento. La tariffa del motore è un <strong>placeholder</strong> da confermare con l'avvocato.</span>
+                    <span>Giornate dal <strong>PDF sorgente</strong> («Mancati riposi»), parsato in modo deterministico e quadrato al centesimo coi totali del documento. La tariffa è <strong>ricavata anno per anno</strong> dal documento sorgente ({tariffaLabel(rates)}, cresce per anzianità di servizio); la fonte CCNL è confermabile con l'avvocato.{coeff !== 1 && <> L'indennità è calcolata come <strong>danno = {Math.round(coeff * 100)}% del valore</strong> del riposo perso.</>}</span>
                 </div>
 
                 {/* Tabs */}
@@ -297,7 +321,7 @@ const RiposiPraticaDetail: React.FC<Props> = ({ pratica, onBack, onUpdate }) => 
                                             <span className="text-[11px] font-bold uppercase tracking-wide">Indennità secondo il motore (Reg. 561/2006)</span>
                                         </div>
                                         <p className="text-2xl font-black tabular-nums text-slate-800 dark:text-slate-100"><AnimatedCounter value={result.totIndennita} isCurrency /></p>
-                                        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">{totViol} violazioni · {groupThousandsIT(Math.round(result.totOreMancanti).toLocaleString('it-IT'))} h mancanti · tariffa placeholder {euro(pratica.tariffaOraria)}/h</p>
+                                        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">{totViol} violazioni · {groupThousandsIT(Math.round(result.totOreMancanti).toLocaleString('it-IT'))} h mancanti · tariffa per anno {tariffaLabel(rates)}{coeffSuffix(coeff)}</p>
                                     </div>
                                 </div>
                                 <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-3 leading-relaxed">Criteri di calcolo diversi: la fonte applica le proprie regole, il motore le soglie del Reg. (CE) 561/2006 sui soli orari di turno. Le due serie si affiancano, non si sommano — confronto neutro per l'avvocato.</p>
@@ -359,12 +383,13 @@ const RiposiPraticaDetail: React.FC<Props> = ({ pratica, onBack, onUpdate }) => 
                             <section className="lg:col-span-2 rounded-3xl bg-white/60 dark:bg-slate-800/60 backdrop-blur-2xl border border-white/60 dark:border-slate-700/60 p-5">
                                 <h3 className="font-bold text-slate-700 dark:text-slate-200 mb-3">Dettaglio per anno</h3>
                                 <div className="space-y-1">
-                                    <div className="grid grid-cols-5 text-[11px] font-bold uppercase text-slate-400 dark:text-slate-500 px-2">
-                                        <span>Anno</span><span className="text-right">G.</span><span className="text-right">S.</span><span className="text-right">€ mot.</span><span className="text-right">€ PDF</span>
+                                    <div className="grid grid-cols-6 text-[11px] font-bold uppercase text-slate-400 dark:text-slate-500 px-2">
+                                        <span>Anno</span><span className="text-right">€/h</span><span className="text-right">G.</span><span className="text-right">S.</span><span className="text-right">€ mot.</span><span className="text-right">€ PDF</span>
                                     </div>
-                                    {perAnnoRows.map(({ y, g, s, ind, indFonte }) => (
-                                        <div key={y} className="grid grid-cols-5 text-sm px-2 py-1.5 rounded-lg odd:bg-slate-50 dark:odd:bg-slate-800/40">
+                                    {perAnnoRows.map(({ y, g, s, ind, indFonte, rate }) => (
+                                        <div key={y} className="grid grid-cols-6 text-sm px-2 py-1.5 rounded-lg odd:bg-slate-50 dark:odd:bg-slate-800/40">
                                             <span className="font-semibold text-slate-700 dark:text-slate-200">{y}</span>
+                                            <span className="text-right tabular-nums text-indigo-600 dark:text-indigo-400" title="Tariffa €/h applicata a quest'anno (cresce per anzianità)">{rate != null ? rate.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}</span>
                                             <span className="text-right tabular-nums text-rose-500">{g}</span>
                                             <span className="text-right tabular-nums text-indigo-500">{s}</span>
                                             <span className="text-right tabular-nums text-slate-500 dark:text-slate-400">{groupThousandsIT(Math.round(ind).toLocaleString('it-IT'))}</span>
@@ -391,10 +416,12 @@ const RiposiPraticaDetail: React.FC<Props> = ({ pratica, onBack, onUpdate }) => 
                                 )}
                             </div>
                             <div className="max-h-[30rem] overflow-y-auto pr-1 space-y-1.5">
-                                {violazioniVisibili.map((v, i) => <ViolazioneRow key={i} v={v} onOpenMese={() => openMeseProspetto(v.inizio)} />)}
+                                {violazioniVisibili.map((v, i) => <ViolazioneRow key={i} v={v} onOpenMese={() => openMeseProspetto(v.dataTurno ?? isoToKey(v.inizio))} />)}
                             </div>
                         </section>
                     </>
+                ) : tab === 'confronto' ? (
+                    <ConfrontoView giornate={pratica.giornate} confronto={confronto} fonte={fonte} result={result} />
                 ) : meseAperto === null ? (
                     /* PROSPETTO — vista anno (griglia 12 mesi) */
                     <section className="rounded-3xl bg-white/60 dark:bg-slate-800/60 backdrop-blur-2xl border border-white/60 dark:border-slate-700/60 p-6">
@@ -472,7 +499,10 @@ const RelazioneRiposiModal: React.FC<RelazioneRiposiModalProps> = ({ isOpen, onC
     if (!isOpen) return null;
 
     const totViol = result.nViolazioniGiornaliere + result.nViolazioniSettimanali;
-    const tariffa = pratica.tariffaOraria;
+    const coeff = pratica.coefficiente ?? 1;
+    const rates = result.tariffePerAnnoApplicate;
+    // Tariffa oraria PIENA dell'anno dell'esempio (il coefficiente è un fattore a parte).
+    const rateEsempio = esempio ? (rates[esempio.inizio.slice(0, 4)] ?? pratica.tariffaOraria) : pratica.tariffaOraria;
     const stat = (label: string, value: string, sub?: string) => (
         <div className="rounded-2xl border border-slate-100 dark:border-slate-700/60 bg-slate-50/60 dark:bg-slate-800/40 p-3">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">{label}</p>
@@ -522,9 +552,9 @@ const RelazioneRiposiModal: React.FC<RelazioneRiposiModalProps> = ({ isOpen, onC
                                     <div className="flex items-center justify-between"><span>Soglia di legge</span><span className="font-bold tabular-nums text-slate-800 dark:text-slate-100">{esempio.soglia} h</span></div>
                                     <div className="flex items-center justify-between"><span>Riposo fruito</span><span className="font-bold tabular-nums text-slate-800 dark:text-slate-100">{formatHm(esempio.ore)}</span></div>
                                     <div className="flex items-center justify-between border-t border-indigo-200/60 dark:border-indigo-500/20 pt-1.5"><span>Ore mancanti</span><span className="font-bold tabular-nums text-slate-800 dark:text-slate-100">{esempio.soglia} h − {formatHm(esempio.ore)} = {formatHm(esempio.oreMancanti)}</span></div>
-                                    <div className="flex items-center justify-between"><span className="font-semibold text-indigo-700 dark:text-indigo-300">Indennità</span><span className="font-black tabular-nums text-indigo-700 dark:text-indigo-300">{formatHm(esempio.oreMancanti)} × {euro(tariffa)}/h = {euro(esempio.indennita)}</span></div>
+                                    <div className="flex items-center justify-between"><span className="font-semibold text-indigo-700 dark:text-indigo-300">Indennità</span><span className="font-black tabular-nums text-indigo-700 dark:text-indigo-300">{formatHm(esempio.oreMancanti)} × {euro(rateEsempio)}/h{coeffSuffix(coeff)} = {euro(esempio.indennita)}</span></div>
                                 </div>
-                                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-3">Lo stesso procedimento è applicato a ogni riposo non conforme del periodo e sommato per anno.</p>
+                                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-3">La tariffa è quella del {esempio.inizio.slice(0, 4)} ({euro(rateEsempio)}/h): cresce per anzianità di servizio, quindi ogni anno è valorizzato alla sua.{coeff !== 1 && ` Sul valore si applica il ${Math.round(coeff * 100)}% (danno).`} Lo stesso procedimento è applicato a ogni riposo non conforme e sommato per anno.</p>
                             </>
                         ) : (
                             <p>Nessuna violazione rilevata nel periodo analizzato.</p>
@@ -536,7 +566,7 @@ const RelazioneRiposiModal: React.FC<RelazioneRiposiModalProps> = ({ isOpen, onC
                         <div className="grid grid-cols-2 gap-2">
                             {stat('Violazioni', String(totViol), `${result.nViolazioniGiornaliere} giorn. · ${result.nViolazioniSettimanali} sett.`)}
                             {stat('Ore mancanti', formatHm(result.totOreMancanti))}
-                            {stat('Indennità (motore)', euro(result.totIndennita), `tariffa ${euro(tariffa)}/h`)}
+                            {stat('Indennità (motore)', euro(result.totIndennita), `tariffa per anno ${tariffaLabel(rates)}${coeffSuffix(coeff)}`)}
                             {fonte.gg > 0 && stat('Indennità (PDF)', euro(fonte.ind), `${fonte.gg} giornate · criteri della fonte`)}
                         </div>
                     </section>
@@ -544,7 +574,8 @@ const RelazioneRiposiModal: React.FC<RelazioneRiposiModalProps> = ({ isOpen, onC
                     <section>
                         <h3 className="font-bold text-slate-700 dark:text-slate-200 mb-2">Riserve</h3>
                         <ul className="space-y-1.5 pl-1 text-[13px]">
-                            <li className="flex gap-2"><span className="text-amber-500">•</span><span><b>Tariffa</b>: {euro(tariffa)}/h è un <b>placeholder</b> da confermare con l'avvocato; alla conferma l'indennità del motore si ricalcola.</span></li>
+                            <li className="flex gap-2"><span className="text-amber-500">•</span><span><b>Tariffa</b>: ricavata <b>anno per anno</b> dal documento sorgente ({tariffaLabel(rates)}, cresce per anzianità di servizio); la fonte CCNL (tabellare o con maggiorazione) è confermabile con l'avvocato e, alla conferma, l'indennità si ricalcola.</span></li>
+                            <li className="flex gap-2"><span className="text-amber-500">•</span><span><b>Coefficiente danno</b>: {coeff !== 1 ? <>l'indennità è il <b>{Math.round(coeff * 100)}% del valore</b> del riposo perso (metodo dell'avvocato).</> : <>è applicato il <b>valore pieno</b> (100%); l'eventuale «danno = 20% del valore» va confermato dall'avvocato e si attiva senza ricalcoli manuali.</>}</span></li>
                             <li className="flex gap-2"><span className="text-amber-500">•</span><span><b>Due serie</b>: l'indennità «motore» (Reg. 561/2006) e quella «PDF» (criteri di chi ha prodotto il documento) si <b>affiancano, non si sommano</b>.</span></li>
                             <li className="flex gap-2"><span className="text-amber-500">•</span><span><b>Pausa di guida (art. 7)</b>: richiede il cronotachigrafo, non presente nei turni → fuori perimetro.</span></li>
                             <li className="flex gap-2"><span className="text-amber-500">•</span><span><b>Codici di servizio</b>: la legenda dei turni va richiesta all'azienda.</span></li>
@@ -565,13 +596,21 @@ const RelazioneRiposiModal: React.FC<RelazioneRiposiModalProps> = ({ isOpen, onC
     );
 };
 
-const MeseCalendario: React.FC<{ year: number; month: number; byData: Map<string, GiornataInput>; violDays: Set<string>; active: boolean; onSelect: () => void }> = ({ year, month, byData, violDays, active, onSelect }) => {
+const NO_VIOL_DAYS = new Set<string>(); // placeholder per MeseCalendario in modo confronto (violDays non usato)
+
+const CONFRONTO_CELL: Record<ConfrontoStato, string> = {
+    entrambi: 'bg-emerald-400 text-white dark:bg-emerald-500',
+    pdf: 'bg-amber-300 text-amber-900 dark:bg-amber-400/80 dark:text-amber-950',
+    nostra: 'bg-white dark:bg-slate-800 text-indigo-700 dark:text-indigo-300 ring-2 ring-indigo-500',
+};
+
+const MeseCalendario: React.FC<{ year: number; month: number; byData: Map<string, GiornataInput>; violDays: Set<string>; active: boolean; onSelect?: () => void; marks?: Record<string, ConfrontoStato> }> = ({ year, month, byData, violDays, active, onSelect, marks }) => {
     const lead = (new Date(year, month, 1).getDay() + 6) % 7; // settimana che parte da lunedì
     const numDays = new Date(year, month + 1, 0).getDate();
     const cells: (number | null)[] = [...Array(lead).fill(null), ...Array.from({ length: numDays }, (_, i) => i + 1)];
     const key = (d: number) => `${String(d).padStart(2, '0')}/${String(month + 1).padStart(2, '0')}/${year}`;
-    return (
-        <button type="button" onClick={onSelect} className={`text-left rounded-2xl border bg-white/40 dark:bg-slate-800/40 p-3 transition-all hover:-translate-y-0.5 hover:shadow-md ${active ? 'border-indigo-300 dark:border-indigo-500/50 ring-2 ring-indigo-400/60' : 'border-slate-100 dark:border-slate-700/60'}`}>
+    const inner = (
+        <>
             <p className="text-xs font-bold text-slate-600 dark:text-slate-300 mb-2">{MESI[month]}</p>
             <div className="grid grid-cols-7 gap-1">
                 {WEEK.map((w, i) => <span key={`w${i}`} className="text-[9px] text-center text-slate-300 dark:text-slate-600 font-bold">{w}</span>)}
@@ -580,6 +619,22 @@ const MeseCalendario: React.FC<{ year: number; month: number; byData: Map<string
                     const k = key(d);
                     const g = byData.get(k);
                     const riposo = !g || isRiposo(g);
+                    // Modo CONFRONTO: colora per sovrapposizione PDF/nostra/entrambi; i giorni
+                    // non marcati restano tenui per far risaltare le differenze.
+                    if (marks) {
+                        const mark = marks[k];
+                        const tip = mark === 'entrambi' ? `${weekday(k)} ${k} · PDF + nostra violazione (concordi)`
+                            : mark === 'pdf' ? `${weekday(k)} ${k} · solo PDF (noi non la conteggiamo)`
+                            : mark === 'nostra' ? `${weekday(k)} ${k} · solo nostra violazione (561/2006)`
+                            : g ? `${weekday(k)} ${k} · ${riposo ? 'riposo' : 'turno'}` : k;
+                        return (
+                            <span key={i} title={tip} className={`aspect-square rounded-md flex items-center justify-center text-[9px] font-semibold tabular-nums ${
+                                mark ? CONFRONTO_CELL[mark]
+                                : !g ? 'text-slate-300 dark:text-slate-700'
+                                : 'bg-slate-50 dark:bg-slate-800/40 text-slate-300 dark:text-slate-600'
+                            }`}>{d}</span>
+                        );
+                    }
                     const viol = violDays.has(k);
                     const tip = g
                         ? (isRiposo(g) ? `${weekday(k)} ${k} · riposo${g.servizio ? ` (${g.servizio})` : ''}` : `${weekday(k)} ${k} · ${g.servizio ?? 'turno'} · ${g.inizio}–${g.termine}`)
@@ -599,7 +654,71 @@ const MeseCalendario: React.FC<{ year: number; month: number; byData: Map<string
                     );
                 })}
             </div>
-        </button>
+        </>
+    );
+    return onSelect
+        ? <button type="button" onClick={onSelect} className={`text-left rounded-2xl border bg-white/40 dark:bg-slate-800/40 p-3 transition-all hover:-translate-y-0.5 hover:shadow-md ${active ? 'border-indigo-300 dark:border-indigo-500/50 ring-2 ring-indigo-400/60' : 'border-slate-100 dark:border-slate-700/60'}`}>{inner}</button>
+        : <div className="rounded-2xl border bg-white/40 dark:bg-slate-800/40 p-3 border-slate-100 dark:border-slate-700/60">{inner}</div>;
+};
+
+// Tab "Confronto": sovrappone i giorni segnati dal PDF e le nostre violazioni 561/2006,
+// con riconciliazione conteggi/€ e nota onesta sul settimanale (granularità diversa).
+const ConfrontoView: React.FC<{ giornate: GiornataInput[]; confronto: ConfrontoResult; fonte: { gg: number; ind: number }; result: RestResult }> = ({ giornate, confronto, fonte, result }) => {
+    const years = useMemo(() => Array.from(new Set(giornate.map((g) => yearOf(g.data)).filter(Boolean))).sort(), [giornate]);
+    const [year, setYear] = useState<string>(() => years[years.length - 1] ?? '');
+    const byData = useMemo(() => { const m = new Map<string, GiornataInput>(); for (const g of giornate) if (yearOf(g.data) === year) m.set(g.data, g); return m; }, [giornate, year]);
+    const totViol = result.nViolazioniGiornaliere + result.nViolazioniSettimanali;
+    const pct = fonte.ind > 0 ? Math.round((1 - result.totIndennita / fonte.ind) * 100) : 0;
+
+    return (
+        <section className="rounded-3xl bg-white/60 dark:bg-slate-800/60 backdrop-blur-2xl border border-white/60 dark:border-slate-700/60 p-6 space-y-5">
+            {/* Banda riconciliazione: PDF vs nostro metodo */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="rounded-2xl border border-amber-200 dark:border-amber-500/30 bg-amber-50/60 dark:bg-amber-500/10 p-4">
+                    <div className="flex items-center gap-2 mb-1 text-amber-700 dark:text-amber-300"><FileText className="w-4 h-4" /><span className="text-[11px] font-bold uppercase tracking-wide">Documento sorgente (PDF)</span></div>
+                    <p className="text-2xl font-black tabular-nums text-slate-800 dark:text-slate-100">{euro(fonte.ind)}</p>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">{groupThousandsIT(confronto.pdfGiorni.toLocaleString('it-IT'))} giorni indennizzati · criteri del documento</p>
+                </div>
+                <div className="rounded-2xl border border-indigo-200 dark:border-indigo-500/30 bg-indigo-50/60 dark:bg-indigo-500/10 p-4">
+                    <div className="flex items-center gap-2 mb-1 text-indigo-700 dark:text-indigo-300"><Scale className="w-4 h-4" /><span className="text-[11px] font-bold uppercase tracking-wide">Nostro metodo (Reg. 561/2006)</span></div>
+                    <p className="text-2xl font-black tabular-nums text-slate-800 dark:text-slate-100">{euro(result.totIndennita)} {pct > 0 && <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400">−{pct}%</span>}</p>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">{totViol} violazioni · {confronto.nostreGiorn} giorn. · {confronto.nostreSett} sett.</p>
+                </div>
+            </div>
+
+            {/* Ragioni del divario */}
+            <div className="flex flex-wrap items-center gap-2 text-[11px]">
+                <span className="font-semibold text-slate-600 dark:text-slate-300">Perché il nostro è più basso:</span>
+                {['solo giornate CEE', 'ridotti giornalieri leciti', 'alternanza settimanale (no doppio ridotto)'].map((r) => (
+                    <span key={r} className="px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-700/60 text-slate-600 dark:text-slate-300">{r}</span>
+                ))}
+            </div>
+
+            {/* Legenda + selettore anno */}
+            <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-3 text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                    <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded bg-emerald-400" /> concordi (entrambi)</span>
+                    <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded bg-amber-300" /> solo PDF</span>
+                    <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded ring-2 ring-indigo-500" /> solo nostro</span>
+                </div>
+                <div className="flex flex-wrap gap-1">
+                    {years.map((y) => (
+                        <button key={y} onClick={() => setYear(y)} className={`px-2.5 py-1 rounded-lg text-xs font-bold tabular-nums transition-colors ${year === y ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-500/30' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:text-indigo-600'}`}>{y}</button>
+                    ))}
+                </div>
+            </div>
+
+            {/* Griglia 12 mesi con sovrapposizione PDF/nostro */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                {MESI.map((_, m) => <MeseCalendario key={m} year={Number(year)} month={m} byData={byData} violDays={NO_VIOL_DAYS} active={false} marks={confronto.perGiorno} />)}
+            </div>
+
+            {/* Nota onesta sul settimanale */}
+            <div className="flex items-start gap-2 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/60 px-4 py-3 text-[12px] text-slate-600 dark:text-slate-400">
+                <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+                <span>I riposi <strong>giornalieri</strong> si allineano bene ({confronto.concordiGiorn} su {confronto.nostreGiorn} nostre cadono su un giorno indennizzato dal PDF). I <strong>settimanali</strong> no: il PDF li conta giorno-per-giorno (a scorrimento), noi una volta per evento → per il settimanale conta il confronto su <strong>numero e importo</strong>, non sul singolo giorno del calendario.</span>
+            </div>
+        </section>
     );
 };
 

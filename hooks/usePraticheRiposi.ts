@@ -24,6 +24,14 @@ export interface PraticaRiposi {
     periodoEnd?: string;
     tariffaOraria: number;
     fonteTariffa?: string;
+    /** Override tariffa €/h per anno ('YYYY'→€/h). Se assente, i consumatori la
+     *  ricavano dalla fonte con `deriveTariffePerAnno`. Non ancora persistito su DB
+     *  (follow-up: colonna `tariffe_per_anno` + editor quando arriva la tabella CCNL). */
+    tariffePerAnno?: Record<string, number>;
+    /** Coefficiente danno sul valore del riposo perso (default 1 = valore pieno).
+     *  Metodo avvocato «danno = 20% del valore» → 0.20. Non ancora persistito su DB
+     *  (follow-up con `tariffe_per_anno`). Vedi `RestParams.coefficiente`. */
+    coefficiente?: number;
     giornate: GiornataInput[];
     // Gestione pratica (fase 3)
     stato: StatoPratica;
@@ -37,7 +45,7 @@ export interface PraticaRiposi {
 
 /** Campi di gestione aggiornabili dal dettaglio. */
 export type PraticaRiposiUpdate = Partial<Pick<PraticaRiposi,
-    'stato' | 'dataApertura' | 'dataChiusura' | 'dataPagamento' | 'importoRiconosciuto' | 'tariffaOraria' | 'fonteTariffa'
+    'stato' | 'dataApertura' | 'dataChiusura' | 'dataPagamento' | 'importoRiconosciuto' | 'tariffaOraria' | 'fonteTariffa' | 'coefficiente' | 'tariffePerAnno'
 >>;
 
 // ─── Mappers (esportati per i test) ──────────────────────────────────────────
@@ -64,6 +72,8 @@ export function dbToPratica(row: any): PraticaRiposi {
         periodoEnd: isoToDmy(row.periodo_end),
         tariffaOraria: Number(row.tariffa_oraria ?? 0),
         fonteTariffa: row.fonte_tariffa ?? undefined,
+        tariffePerAnno: row.tariffe_per_anno ?? undefined,
+        coefficiente: row.coefficiente != null ? Number(row.coefficiente) : undefined,
         giornate: row.giornate ?? [],
         stato: row.stato ?? 'in_corso',
         dataApertura: row.data_apertura ?? undefined,
@@ -84,6 +94,8 @@ export function praticaToDb(p: PraticaRiposi): Record<string, unknown> {
         periodo_end: dmyToIso(p.periodoEnd),
         tariffa_oraria: p.tariffaOraria,
         fonte_tariffa: p.fonteTariffa ?? null,
+        tariffe_per_anno: p.tariffePerAnno ?? null,
+        coefficiente: p.coefficiente ?? null,
         giornate: p.giornate,
         stato: p.stato,
         data_apertura: p.dataApertura ?? null,
@@ -102,6 +114,8 @@ const updateToDb = (u: PraticaRiposiUpdate): Record<string, unknown> => {
     if ('importoRiconosciuto' in u) out.importo_riconosciuto = u.importoRiconosciuto ?? null;
     if ('tariffaOraria' in u) out.tariffa_oraria = u.tariffaOraria;
     if ('fonteTariffa' in u) out.fonte_tariffa = u.fonteTariffa ?? null;
+    if ('coefficiente' in u) out.coefficiente = u.coefficiente ?? null;
+    if ('tariffePerAnno' in u) out.tariffe_per_anno = u.tariffePerAnno ?? null;
     return out;
 };
 
@@ -121,7 +135,8 @@ async function loadSeed(): Promise<PraticaRiposi[]> {
             periodoStart: date[0],
             periodoEnd: date[date.length - 1],
             tariffaOraria: 10.03,
-            fonteTariffa: 'placeholder — da confermare con l\'avvocato',
+            fonteTariffa: 'ricavata per anno dal documento sorgente (cresce per anzianità di servizio)',
+            coefficiente: 0.2, // danno = 20% del valore (metodo confermato dall'avvocato)
             giornate,
             stato: 'in_corso',
             isSeed: true,

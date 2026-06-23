@@ -12,6 +12,8 @@ const row = {
     periodo_end: '2024-09-30',
     tariffa_oraria: '10.03', // numeric di Postgres arriva come stringa
     fonte_tariffa: 'placeholder',
+    coefficiente: '0.20',    // numeric → numero vero
+    tariffe_per_anno: { '2024': 13.13 },
     giornate: [{ data: '01/01/2011', servizio: 'R' }],
     stato: 'pagata',
     data_apertura: '2026-06-01',
@@ -32,6 +34,15 @@ describe('dbToPratica', () => {
     it('numerici di Postgres convertiti in numeri veri', () => {
         expect(p.tariffaOraria).toBe(10.03);
         expect(p.importoRiconosciuto).toBe(1500.5);
+    });
+
+    it('coefficiente e tariffe_per_anno (override) letti dal DB', () => {
+        expect(p.coefficiente).toBe(0.2);
+        expect(p.tariffePerAnno).toEqual({ '2024': 13.13 });
+        // assenti → undefined (motore: coeff 1 = valore pieno, tariffa derivata)
+        const senza = dbToPratica({ id: 'x', giornate: [] });
+        expect(senza.coefficiente).toBeUndefined();
+        expect(senza.tariffePerAnno).toBeUndefined();
     });
 
     it('stato e date di gestione', () => {
@@ -57,6 +68,7 @@ describe('praticaToDb', () => {
         periodoStart: '01/01/2011',
         periodoEnd: '30/09/2024',
         tariffaOraria: 10.03,
+        coefficiente: 0.2,
         giornate: [{ data: '01/01/2011', servizio: 'R' }],
         stato: 'in_corso',
         isSeed: true,
@@ -79,6 +91,7 @@ describe('praticaToDb', () => {
         expect(back.periodoStart).toBe(pratica.periodoStart);
         expect(back.periodoEnd).toBe(pratica.periodoEnd);
         expect(back.tariffaOraria).toBe(pratica.tariffaOraria);
+        expect(back.coefficiente).toBe(0.2);
         expect(back.giornate).toEqual(pratica.giornate);
         expect(back.stato).toBe('in_corso');
         expect(back.isSeed).toBeUndefined();

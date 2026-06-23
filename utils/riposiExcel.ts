@@ -2,8 +2,9 @@
 // FILE: utils/riposiExcel.ts
 // Export Excel PULITO dell'area Turni & Riposi (exceljs) — l'anti-Excel-di-ChatGPT:
 // numeri VERI (date Excel, orari come orari, importi numerici), FORMULE VIVE
-// (tariffa in un'unica cella sul Riepilogo: cambiarla ricalcola indennità,
-// riepilogo annuo e totali), un foglio per anno + Riepilogo + Violazioni.
+// (tariffa €/h PER ANNO sul Riepilogo — cresce per anzianità: ogni violazione la
+// pesca via VLOOKUP, cambiarne una ricalcola indennità, riepilogo annuo e totali),
+// un foglio per anno + Riepilogo + Violazioni.
 //
 // buildRiposiWorkbook è puro (testabile via writeBuffer → xlsx.load);
 // generateExcelRiposi scarica il file. Import del modulo DINAMICO dal
@@ -19,9 +20,6 @@ const ORE_FMT = '0.00';
 const DATA_FMT = 'dd/mm/yyyy';
 const DATAORA_FMT = 'dd/mm/yyyy hh:mm';
 const ORARIO_FMT = 'hh:mm';
-
-/** Cella della tariffa sul Riepilogo: l'unico punto da cui dipendono le formule. */
-const TARIFFA_CELL = 'Riepilogo!$B$7';
 
 /** exceljs serializza le date via UTC: una mezzanotte locale diventerebbe il
  *  giorno prima. Si costruisce la data con gli stessi componenti ma in UTC. */
@@ -62,6 +60,10 @@ export function buildRiposiWorkbook(pratica: PraticaRiposi, result: RestResult):
         ...pratica.giornate.map((g) => g.data.split('/')[2]).filter(Boolean),
         ...violazioni.map((v) => v.inizio.slice(0, 4)),
     ])).sort();
+    // Tariffa €/h piena per anno (cresce per anzianità) + coefficiente danno (× sul valore).
+    const coeff = pratica.coefficiente ?? 1;
+    const rates = result.tariffePerAnnoApplicate;
+    const tariffeAnni = Object.keys(rates).sort();
 
     // ── Foglio RIEPILOGO (creato per primo: deve essere il primo tab) ──────────
     const rie = wb.addWorksheet('Riepilogo');
@@ -78,19 +80,45 @@ export function buildRiposiWorkbook(pratica: PraticaRiposi, result: RestResult):
     rie.getCell('B5').value = `${pratica.periodoStart ?? '—'} – ${pratica.periodoEnd ?? '—'}`;
     rie.getCell('A6').value = 'Giornate nel prospetto turni';
     rie.getCell('B6').value = pratica.giornate.length;
-    rie.getCell('A7').value = 'Tariffa oraria (€/h) — MODIFICABILE';
+    rie.getCell('A7').value = 'Tariffa oraria €/h per anno — MODIFICABILE';
     rie.getCell('A7').font = { bold: true };
-    const tariffa = rie.getCell('B7');
-    tariffa.value = pratica.tariffaOraria;
-    tariffa.numFmt = EURO_FMT;
-    tariffa.font = { bold: true };
-    tariffa.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF3C4' } };
-    rie.getCell('C7').value = pratica.fonteTariffa ?? '';
-    rie.getCell('C7').font = { italic: true, size: 9 };
-    rie.getCell('A8').value = 'Cambiando la tariffa si ricalcolano da sole le indennità del motore (serie B), il riepilogo e i totali.';
+    if (pratica.fonteTariffa) { rie.getCell('C7').value = pratica.fonteTariffa; rie.getCell('C7').font = { italic: true, size: 9 }; }
+    rie.getCell('A8').value = 'La retribuzione cresce per anzianità: ogni anno ha la sua tariffa. Cambiando una €/h si ricalcolano da sole le indennità di quell\'anno (serie B), il riepilogo e i totali.';
     rie.getCell('A8').font = { italic: true, size: 9 };
 
-    // ── Foglio VIOLAZIONI (serie B; l'indennità è una FORMULA: mancante × tariffa) ──
+    // ── Blocco TARIFFA €/h per anno (celle ambra modificabili: da qui le formule) ──
+    const TAR_HDR = 9;
+    rie.getCell(`A${TAR_HDR}`).value = 'Anno';
+    rie.getCell(`B${TAR_HDR}`).value = '€/h';
+    styleHeaderRow(rie.getRow(TAR_HDR));
+    tariffeAnni.forEach((y, i) => {
+        const r = TAR_HDR + 1 + i;
+        rie.getCell(`A${r}`).value = Number(y);
+        const c = rie.getCell(`B${r}`);
+        c.value = rates[y];
+        c.numFmt = EURO_FMT;
+        c.font = { bold: true };
+        c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF3C4' } };
+    });
+    const TAR_FIRST = TAR_HDR + 1;
+    const TAR_LAST = TAR_HDR + Math.max(1, tariffeAnni.length);
+    // Range assoluto per i VLOOKUP delle indennità (anno→€/h).
+    const TARIFFA_BLOCK = `Riepilogo!$A$${TAR_FIRST}:$B$${TAR_LAST}`;
+
+    // ── Cella COEFFICIENTE danno (× sul valore): da qui le indennità si scalano ──
+    const COEFF_ROW = TAR_LAST + 2;
+    rie.getCell(`A${COEFF_ROW}`).value = 'Coefficiente danno (× sul valore) — MODIFICABILE';
+    rie.getCell(`A${COEFF_ROW}`).font = { bold: true };
+    const coeffCell = rie.getCell(`B${COEFF_ROW}`);
+    coeffCell.value = coeff;
+    coeffCell.numFmt = '0%';
+    coeffCell.font = { bold: true };
+    coeffCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF3C4' } };
+    rie.getCell(`C${COEFF_ROW}`).value = 'es. 20% = danno (criterio avvocato) · 100% = valore pieno';
+    rie.getCell(`C${COEFF_ROW}`).font = { italic: true, size: 9 };
+    const COEFF_CELL = `Riepilogo!$B$${COEFF_ROW}`;
+
+    // ── Foglio VIOLAZIONI (serie B; indennità = mancante × tariffa €/h dell'anno) ──
     const vio = wb.addWorksheet('Violazioni');
     vio.columns = [
         { header: 'Anno', width: 8 },
@@ -99,6 +127,7 @@ export function buildRiposiWorkbook(pratica: PraticaRiposi, result: RestResult):
         { header: 'Tipo', width: 12 },
         { header: 'Fruito (ore)', width: 12 },
         { header: 'Mancante (ore)', width: 14 },
+        { header: 'Tariffa €/h', width: 11 },
         { header: 'Indennità (€)', width: 13 },
         { header: 'Gravità', width: 9 },
         { header: 'Causale', width: 44 },
@@ -117,11 +146,15 @@ export function buildRiposiWorkbook(pratica: PraticaRiposi, result: RestResult):
         row.getCell(5).numFmt = ORE_FMT;
         row.getCell(6).value = v.oreMancanti;
         row.getCell(6).numFmt = ORE_FMT;
-        row.getCell(7).value = { formula: `F${r}*${TARIFFA_CELL}`, result: v.indennita };
+        // Tariffa €/h dell'anno: VLOOKUP nel blocco tariffe (la si modifica da lì).
+        row.getCell(7).value = { formula: `VLOOKUP(A${r},${TARIFFA_BLOCK},2,FALSE)`, result: rates[v.inizio.slice(0, 4)] };
         row.getCell(7).numFmt = EURO_FMT;
-        row.getCell(8).value = v.gravita;
-        if (v.gravita === 'grave') row.getCell(8).font = { bold: true };
-        row.getCell(9).value = causaleSintetica(v);
+        // Indennità = ore mancanti × tariffa dell'anno × coefficiente danno.
+        row.getCell(8).value = { formula: `F${r}*G${r}*${COEFF_CELL}`, result: v.indennita };
+        row.getCell(8).numFmt = EURO_FMT;
+        row.getCell(9).value = v.gravita;
+        if (v.gravita === 'grave') row.getCell(9).font = { bold: true };
+        row.getCell(10).value = causaleSintetica(v);
     });
     const lastVioRow = violazioni.length + 1;
 
@@ -168,7 +201,7 @@ export function buildRiposiWorkbook(pratica: PraticaRiposi, result: RestResult):
     vio.views = [{ state: 'frozen', ySplit: 1 }];
 
     // ── Riepilogo per anno (formule vive su Violazioni e sui fogli-anno) ───────
-    const start = 11;
+    const start = COEFF_ROW + 3; // header dopo il blocco tariffe + coefficiente
     rie.getCell(`A${start - 1}`).value = 'Riepilogo per anno';
     rie.getCell(`A${start - 1}`).font = { bold: true, size: 12 };
     const head = rie.getRow(start);
@@ -185,7 +218,8 @@ export function buildRiposiWorkbook(pratica: PraticaRiposi, result: RestResult):
         row.getCell(3).value = { formula: `COUNTIFS(${vRange('A')},A${r},${vRange('D')},"Settimanale")` };
         row.getCell(4).value = { formula: `SUMIFS(${vRange('F')},${vRange('A')},A${r})` };
         row.getCell(4).numFmt = ORE_FMT;
-        row.getCell(5).value = { formula: `D${r}*${TARIFFA_CELL}` };
+        // € motore = somma delle indennità (col H) delle violazioni di quell'anno.
+        row.getCell(5).value = { formula: `SUMIFS(${vRange('H')},${vRange('A')},A${r})` };
         row.getCell(5).numFmt = EURO_FMT;
         row.getCell(6).value = { formula: `SUM('${anno}'!$I$2:$I$10000)` };
         row.getCell(6).numFmt = EURO_FMT;

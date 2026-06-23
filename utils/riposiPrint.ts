@@ -9,13 +9,20 @@
 // mai sommate: confronto neutro, la scelta della base spetta all'avvocato.
 // ==========================================
 
-import { causaleSintetica, computeSerieFonte, formatHm, type RestResult, type Violazione } from './restEngine';
+import { causaleSintetica, computeSerieFonte, tariffaRange, formatHm, type RestResult, type Violazione } from './restEngine';
 
 import { groupThousandsIT } from './formatters';
 import type { PraticaRiposi } from '../hooks/usePraticheRiposi';
 
 const euro = (n: number) => '€ ' + groupThousandsIT(n.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
 const intIT = (n: number) => groupThousandsIT(Math.round(n).toLocaleString('it-IT'));
+/** Etichetta tariffa: valore singolo se piatta, range "€min → €max" se per-anno. */
+const tariffaLabel = (rates: Record<string, number>): string => {
+    const { min, max, uniform } = tariffaRange(rates);
+    return uniform ? `${euro(min)}/h` : `${euro(min)} → ${euro(max)}/h`;
+};
+/** Suffisso coefficiente danno (es. " × 20%") quando attivo; vuoto se valore pieno. */
+const coeffSuffix = (coeff: number): string => (coeff !== 1 ? ` × ${Math.round(coeff * 100)}%` : '');
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const dmyhm = (iso: string) => {
     const d = new Date(iso);
@@ -23,15 +30,16 @@ const dmyhm = (iso: string) => {
 };
 
 /** Riga del riepilogo annuale: motore e fonte affiancate. */
-interface RigaAnno { y: string; g: number; s: number; oreMancanti: number; ind: number; indFonte: number }
+interface RigaAnno { y: string; g: number; s: number; oreMancanti: number; vp: number; ind: number; indFonte: number }
 
 function righePerAnno(violazioni: Violazione[], perAnnoFonte: Record<string, number>): RigaAnno[] {
     const m: Record<string, RigaAnno> = {};
-    const riga = (y: string) => (m[y] ??= { y, g: 0, s: 0, oreMancanti: 0, ind: 0, indFonte: 0 });
+    const riga = (y: string) => (m[y] ??= { y, g: 0, s: 0, oreMancanti: 0, vp: 0, ind: 0, indFonte: 0 });
     for (const v of violazioni) {
         const r = riga(v.inizio.slice(0, 4));
         if (v.tipo === 'riposo_giornaliero') r.g++; else r.s++;
         r.oreMancanti += v.oreMancanti;
+        r.vp += v.valorePieno;
         r.ind += v.indennita;
     }
     for (const [y, ind] of Object.entries(perAnnoFonte)) riga(y).indFonte = ind;
@@ -40,14 +48,17 @@ function righePerAnno(violazioni: Violazione[], perAnnoFonte: Record<string, num
 
 export function buildConteggiRiposiHtml(pratica: PraticaRiposi, result: RestResult): string {
     const fonte = computeSerieFonte(pratica.giornate);
+    const coeff = pratica.coefficiente ?? 1;
+    const pct = Math.round(coeff * 100);
+    const rates = result.tariffePerAnnoApplicate;
     const righe = righePerAnno(result.violazioni, fonte.perAnno);
     const violazioni = [...result.violazioni].sort((a, b) => a.inizio.localeCompare(b.inizio));
     const totViol = result.nViolazioniGiornaliere + result.nViolazioniSettimanali;
     const oggi = new Date().toLocaleDateString('it-IT');
 
     const totali = righe.reduce(
-        (t, r) => ({ g: t.g + r.g, s: t.s + r.s, ore: t.ore + r.oreMancanti, ind: t.ind + r.ind, indFonte: t.indFonte + r.indFonte }),
-        { g: 0, s: 0, ore: 0, ind: 0, indFonte: 0 }
+        (t, r) => ({ g: t.g + r.g, s: t.s + r.s, ore: t.ore + r.oreMancanti, vp: t.vp + r.vp, ind: t.ind + r.ind, indFonte: t.indFonte + r.indFonte }),
+        { g: 0, s: 0, ore: 0, vp: 0, ind: 0, indFonte: 0 }
     );
 
     // Elenco violazioni raggruppato per anno (subheader), thead ripetuto per pagina dal browser.
@@ -58,7 +69,7 @@ export function buildConteggiRiposiHtml(pratica: PraticaRiposi, result: RestResu
         if (y !== annoCorrente) {
             annoCorrente = y;
             const n = violazioni.filter((x) => x.inizio.slice(0, 4) === y).length;
-            elencoRows += `<tr class="anno"><td colspan="8">${y} — ${n} violazioni</td></tr>`;
+            elencoRows += `<tr class="anno"><td colspan="${coeff !== 1 ? 10 : 9}">${y} — ${n} violazioni</td></tr>`;
         }
         const tipo = v.tipo === 'riposo_giornaliero' ? 'Giornaliero&#185;' : 'Settimanale&#178;';
         elencoRows += `<tr>
@@ -67,6 +78,8 @@ export function buildConteggiRiposiHtml(pratica: PraticaRiposi, result: RestResu
             <td>${tipo}</td>
             <td class="num">${formatHm(v.ore)}</td>
             <td class="num">${formatHm(v.oreMancanti)}</td>
+            <td class="num">${euro(rates[y] ?? pratica.tariffaOraria)}</td>
+            ${coeff !== 1 ? `<td class="num">${euro(v.valorePieno)}</td>` : ''}
             <td class="num">${euro(v.indennita)}</td>
             <td class="${v.gravita === 'grave' ? 'grave' : ''}">${v.gravita}</td>
             <td class="motivo">${esc(causaleSintetica(v))}</td>
@@ -129,7 +142,8 @@ export function buildConteggiRiposiHtml(pratica: PraticaRiposi, result: RestResu
         ${pratica.azienda ? `<tr><td>Azienda</td><td>${esc(pratica.azienda)}</td></tr>` : ''}
         <tr><td>Periodo analizzato</td><td>${esc(pratica.periodoStart ?? '—')} – ${esc(pratica.periodoEnd ?? '—')}</td></tr>
         <tr><td>Giornate nel prospetto turni</td><td>${intIT(pratica.giornate.length)}</td></tr>
-        <tr><td>Tariffa oraria applicata dal motore</td><td>${euro(pratica.tariffaOraria)}/h${pratica.fonteTariffa ? ` (${esc(pratica.fonteTariffa)})` : ''}</td></tr>
+        <tr><td>Tariffa oraria applicata dal motore</td><td>${tariffaLabel(rates)}${tariffaRange(rates).uniform ? '' : ' — per anno, cresce per anzianità di servizio'}${pratica.fonteTariffa ? ` (${esc(pratica.fonteTariffa)})` : ''}</td></tr>
+        ${coeff !== 1 ? `<tr><td>Coefficiente danno</td><td>${Math.round(coeff * 100)}% del valore del riposo perso (indennità = ore mancanti × tariffa dell'anno × ${Math.round(coeff * 100)}%)</td></tr>` : ''}
         <tr><td>Documento generato il</td><td>${oggi}</td></tr>
     </table>
 
@@ -143,23 +157,24 @@ export function buildConteggiRiposiHtml(pratica: PraticaRiposi, result: RestResu
         <div>
             <h3>B — Indennità secondo il motore (Reg. 561/2006)</h3>
             <p class="valore">${euro(result.totIndennita)}</p>
-            <p>${intIT(totViol)} violazioni (${result.nViolazioniGiornaliere} giornaliere, ${result.nViolazioniSettimanali} settimanali) · ${intIT(result.totOreMancanti)} ore mancanti · tariffa ${euro(pratica.tariffaOraria)}/h</p>
+            <p>${intIT(totViol)} violazioni (${result.nViolazioniGiornaliere} giornaliere, ${result.nViolazioniSettimanali} settimanali) · ${intIT(result.totOreMancanti)} ore mancanti · tariffa per anno ${tariffaLabel(rates)}${coeffSuffix(coeff)}</p>
         </div>
     </div>
     <p class="avvertenza"><strong>Le due serie NON si sommano:</strong> quantificano lo stesso pregiudizio (i medesimi riposi non fruiti) con criteri diversi. La scelta della base di quantificazione, e la verifica che le indennità della serie A non risultino già corrisposte in busta paga, spettano al legale incaricato.</p>
 
     <h2>2. Riepilogo per anno</h2>
     <table>
-        <thead><tr><th>Anno</th><th class="num">Viol. giornaliere</th><th class="num">Viol. settimanali</th><th class="num">Ore mancanti</th><th class="num">€ motore (B)</th><th class="num">€ fonte (A)</th></tr></thead>
+        <thead><tr><th>Anno</th><th class="num">Tariffa €/h</th><th class="num">Viol. giornaliere</th><th class="num">Viol. settimanali</th><th class="num">Ore mancanti</th>${coeff !== 1 ? '<th class="num">Valore pieno</th>' : ''}<th class="num">${coeff !== 1 ? `Indennità (×${pct}%)` : '€ motore (B)'}</th><th class="num">€ fonte (A)</th></tr></thead>
         <tbody>
-            ${righe.map((r) => `<tr><td>${r.y}</td><td class="num">${r.g}</td><td class="num">${r.s}</td><td class="num">${formatHm(r.oreMancanti)}</td><td class="num">${euro(r.ind)}</td><td class="num">${r.indFonte ? euro(r.indFonte) : '—'}</td></tr>`).join('')}
-            <tr class="totale"><td>Totale</td><td class="num">${totali.g}</td><td class="num">${totali.s}</td><td class="num">${formatHm(totali.ore)}</td><td class="num">${euro(totali.ind)}</td><td class="num">${totali.indFonte ? euro(totali.indFonte) : '—'}</td></tr>
+            ${righe.map((r) => `<tr><td>${r.y}</td><td class="num">${rates[r.y] != null ? euro(rates[r.y]) : '—'}</td><td class="num">${r.g}</td><td class="num">${r.s}</td><td class="num">${formatHm(r.oreMancanti)}</td>${coeff !== 1 ? `<td class="num">${euro(r.vp)}</td>` : ''}<td class="num">${euro(r.ind)}</td><td class="num">${r.indFonte ? euro(r.indFonte) : '—'}</td></tr>`).join('')}
+            <tr class="totale"><td>Totale</td><td class="num">—</td><td class="num">${totali.g}</td><td class="num">${totali.s}</td><td class="num">${formatHm(totali.ore)}</td>${coeff !== 1 ? `<td class="num">${euro(totali.vp)}</td>` : ''}<td class="num">${euro(totali.ind)}</td><td class="num">${totali.indFonte ? euro(totali.indFonte) : '—'}</td></tr>
         </tbody>
     </table>
+    ${coeff !== 1 ? `<p class="nota"><strong>Come si arriva al totale:</strong> il valore pieno (ore mancanti × tariffa €/h dell'anno) è ${euro(totali.vp)}; su ciascuna violazione si applica il ${pct}% e si arrotonda al centesimo, quindi si somma → indennità complessiva <strong>${euro(totali.ind)}</strong>. Ogni colonna quadra per somma.</p>` : ''}
 
     <h2>3. Elenco delle violazioni rilevate dal motore (${intIT(totViol)})</h2>
     <table>
-        <thead><tr><th>Riposo dal</th><th>al</th><th>Tipo</th><th class="num">Fruito</th><th class="num">Mancante</th><th class="num">Indennità</th><th>Gravità</th><th>Causale</th></tr></thead>
+        <thead><tr><th>Riposo dal</th><th>al</th><th>Tipo</th><th class="num">Fruito</th><th class="num">Mancante</th><th class="num">Tariffa €/h</th>${coeff !== 1 ? '<th class="num">Valore pieno</th>' : ''}<th class="num">Indennità</th><th>Gravità</th><th>Causale</th></tr></thead>
         <tbody>${elencoRows}</tbody>
     </table>
     <p class="legenda">&#185; Riposo giornaliero: Reg. (CE) n. 561/2006, art. 8 §§2,4; art. 4 lett. g — minimo 11h, riducibile a 9h al massimo 3 volte tra due riposi settimanali.<br>
@@ -169,8 +184,8 @@ export function buildConteggiRiposiHtml(pratica: PraticaRiposi, result: RestResu
     <h2>4. Nota metodologica</h2>
     <ol class="metodo">
         <li><strong>Fonte dei dati:</strong> prospetto turni giornaliero estratto dal documento sorgente con parser deterministico (nessuna interpretazione AI/OCR); i totali estratti quadrano al centesimo con quelli stampati nel documento.</li>
-        <li><strong>Motore di calcolo:</strong> ricostruzione dei riposi tra turni consecutivi dai soli orari di inizio/termine; soglie del Reg. (CE) n. 561/2006 (riposo giornaliero 11h, ridotto 9h max 3 volte; riposo settimanale 45h, ridotto 24h con alternanza ex art. 8 §6). I riposi ridotti leciti (${intIT(result.nRidottiGiornalieriLeciti)} nel periodo) non sono conteggiati come violazioni.</li>
-        <li><strong>Indennità (serie B):</strong> ore mancanti rispetto alla soglia × tariffa oraria. La tariffa applicata è ${euro(pratica.tariffaOraria)}/h${pratica.fonteTariffa ? ` (${esc(pratica.fonteTariffa)})` : ''}.</li>
+        <li><strong>Perimetro e motore:</strong> calcolo sulle sole giornate in regime <strong>CEE</strong> (servizio di linea ex Reg. (CE) n. 561/2006); ricostruzione dei riposi tra turni consecutivi dai soli orari di inizio/termine; soglie del Reg. 561/2006 (giornaliero 11h, ridotto 9h max 3 volte; settimanale 45h, ridotto 24h con alternanza ex art. 8 §6). I riposi ridotti leciti (${intIT(result.nRidottiGiornalieriLeciti)} nel periodo) non sono conteggiati come violazioni.</li>
+        <li><strong>Indennità (serie B) — la catena di calcolo:</strong> per ogni violazione, <em>ore mancanti</em> (soglia − fruito) × <em>tariffa oraria dell'anno</em> = <strong>valore pieno</strong>. La tariffa è ricavata anno per anno dal documento sorgente (${tariffaLabel(rates)}) e cresce per anzianità di servizio${pratica.fonteTariffa ? ` — ${esc(pratica.fonteTariffa)}` : ''}.${coeff !== 1 ? ` Sul valore pieno si applica il <strong>${pct}%</strong> (danno, criterio dell'avvocato) = indennità. Formula: <strong>Indennità = Σ (ore mancanti × tariffa €/h dell'anno) × ${pct}%</strong>. Gli importi sono arrotondati al centesimo per singola violazione e poi sommati: ogni colonna delle tabelle quadra per somma.` : ''}</li>
         <li><strong>Perimetro:</strong> il calcolo copre il riposo giornaliero e settimanale. La pausa di guida ex art. 7 richiede i dati del cronotachigrafo, non presenti nel prospetto, ed è esclusa da questa elaborazione.</li>
         <li><strong>Limiti:</strong> i codici di servizio (linea/turno) non sono decodificabili senza la legenda aziendale; le righe segnalate in coda sono escluse dal calcolo e vanno verificate sui documenti originali.</li>
     </ol>

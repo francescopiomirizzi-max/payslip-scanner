@@ -8,6 +8,10 @@ import {
   applyTwoWeekRule,
   computeRestViolations,
   hasCEEDays,
+  deriveTariffePerAnno,
+  resolveTariffePerAnno,
+  buildConfronto,
+  tariffaRange,
   formatHm,
   type Riposo,
   type RestParams,
@@ -110,6 +114,15 @@ describe('applyTwoWeekRule', () => {
     ];
     expect(applyTwoWeekRule(riposi, P)).toHaveLength(0);
   });
+
+  it('propaga dataTurno (giorno del turno che precede il riposo) sulla violazione', () => {
+    const riposi = [
+      { ...riposoSettimanale('03/06/2023', '15.50', '05/06/2023', '05.40'), dataTurno: '03/06/2023' },
+      { ...riposoSettimanale('10/06/2023', '14.25', '12/06/2023', '05.20'), dataTurno: '10/06/2023' },
+    ];
+    const v = applyTwoWeekRule(riposi, P);
+    expect(v[0].dataTurno).toBe('10/06/2023'); // il 2° ridotto consecutivo è la violazione
+  });
 });
 
 // ─── Orchestratore su roster sintetico ────────────────────────────────────────
@@ -156,6 +169,17 @@ describe('computeRestViolations (roster end-to-end)', () => {
     expect(r.warnings.length).toBeGreaterThan(0);
     expect(r.violazioni).toHaveLength(0);
   });
+
+  it('dataTurno = giorno del turno anche per turni a cavallo di mezzanotte', () => {
+    const giornate: GiornataInput[] = [
+      { data: '05/01/2024', inizio: '20.00', termine: '4.00' }, // turno 20:00→04:00 del 06/01
+      { data: '06/01/2024', inizio: '8.00', termine: '16.00' }, // riposo 04:00→08:00 = 4h → violazione
+    ];
+    const r = computeRestViolations(giornate, P);
+    expect(r.violazioni).toHaveLength(1);
+    expect(r.violazioni[0].tipo).toBe('riposo_giornaliero');
+    expect(r.violazioni[0].dataTurno).toBe('05/01/2024'); // giorno del turno, non 06/01 (fine riposo)
+  });
 });
 
 // ─── Filtro "solo CEE" (Reg. 561/2006 art. 3; conferma avvocato Viterbo) ───────
@@ -185,5 +209,118 @@ describe('soloCEE', () => {
   it('hasCEEDays rileva la presenza di giornate CEE', () => {
     expect(hasCEEDays(giornate)).toBe(true);
     expect(hasCEEDays([{ data: '01/01/2024', inizio: '6.00', termine: '14.00' }])).toBe(false);
+  });
+});
+
+// ─── Tariffa per anno (cresce per anzianità di servizio) ──────────────────────
+
+describe('tariffePerAnno applicata dal motore', () => {
+  // Roster con un'unica violazione giornaliera (riposo 6h) nel 2024, manc. 5h.
+  const giornate: GiornataInput[] = [
+    { data: '05/01/2024', inizio: '6.00', termine: '14.00' },
+    { data: '06/01/2024', inizio: '6.00', termine: '22.00' },
+    { data: '07/01/2024', inizio: '4.00', termine: '12.00' }, // riposo 22:00→04:00 = 6h → violazione
+  ];
+
+  it('valorizza la violazione alla tariffa del SUO anno, non alla piatta', () => {
+    const r = computeRestViolations(giornate, { tariffaOraria: 10, tariffePerAnno: { '2024': 12.5 } });
+    expect(r.violazioni).toHaveLength(1);
+    expect(r.violazioni[0].oreMancanti).toBe(5);
+    expect(r.violazioni[0].indennita).toBe(62.5); // 5h × €12,50 (2024), non × €10
+  });
+
+  it('ricade su tariffaOraria per gli anni non presenti nella mappa', () => {
+    const r = computeRestViolations(giornate, { tariffaOraria: 10, tariffePerAnno: { '2099': 99 } });
+    expect(r.violazioni[0].indennita).toBe(50); // 5h × €10 (fallback)
+  });
+
+  it('senza mappa resta piatto (retrocompatibile)', () => {
+    const r = computeRestViolations(giornate, { tariffaOraria: 10 });
+    expect(r.violazioni[0].indennita).toBe(50);
+  });
+
+  it('applica il coefficiente danno (×20%) sul valore', () => {
+    // valore pieno 5h × 12,50 = 62,50 → × 0,20 = 12,50
+    const r = computeRestViolations(giornate, { tariffaOraria: 10, tariffePerAnno: { '2024': 12.5 }, coefficiente: 0.2 });
+    expect(r.violazioni[0].valorePieno).toBe(62.5);
+    expect(r.violazioni[0].indennita).toBe(12.5);
+    expect(r.totValorePieno).toBe(62.5);
+    expect(r.totIndennita).toBe(12.5);
+  });
+
+  it('coefficiente assente o 1 = valore pieno', () => {
+    const pieno = computeRestViolations(giornate, { tariffaOraria: 10, coefficiente: 1 });
+    expect(pieno.violazioni[0].indennita).toBe(50);
+  });
+});
+
+describe('deriveTariffePerAnno (dalla serie fonte del PDF)', () => {
+  it('ricava la €/h per anno = Σ indennità fonte / Σ ore mancanti fonte', () => {
+    const giornate: GiornataInput[] = [
+      { data: '07/01/2011', mancatoRipGiorn: '1.45', indennitaFonte: 17.55 }, // 1h45=1,75h → 10,03
+      { data: '02/01/2024', mancatoRipGiorn: '2.30', indennitaFonte: 32.83 }, // 2h30=2,5h  → 13,13
+    ];
+    const t = deriveTariffePerAnno(giornate);
+    expect(t['2011']).toBeCloseTo(10.03, 2);
+    expect(t['2024']).toBeCloseTo(13.13, 2);
+  });
+
+  it('omette gli anni senza ore-fonte (niente da cui dedurre la tariffa)', () => {
+    expect(deriveTariffePerAnno([{ data: '01/01/2020', indennitaFonte: 10 }])['2020']).toBeUndefined();
+  });
+});
+
+describe('resolveTariffePerAnno (tariffa piena per il display)', () => {
+  const giornate: GiornataInput[] = [
+    { data: '07/01/2011', mancatoRipGiorn: '1.45', indennitaFonte: 17.55 },
+    { data: '02/01/2024', mancatoRipGiorn: '2.30', indennitaFonte: 32.83 },
+  ];
+
+  it('usa l\'override se presente, altrimenti deriva dalla fonte', () => {
+    expect(resolveTariffePerAnno(giornate)['2011']).toBeCloseTo(10.03, 2);  // derivata
+    const override = { '2011': 11.5, '2024': 14 };
+    expect(resolveTariffePerAnno(giornate, override)).toBe(override);        // override pieno
+  });
+
+  it('tariffaRange distingue curva piatta e crescente', () => {
+    expect(tariffaRange({ '2011': 10, '2012': 10 }).uniform).toBe(true);
+    expect(tariffaRange({ '2011': 10, '2024': 13 })).toMatchObject({ min: 10, max: 13, uniform: false });
+  });
+
+  it('tariffePerAnnoApplicate: il motore espone la tariffa PIENA (coefficiente escluso)', () => {
+    const giornate: GiornataInput[] = [
+      { data: '05/01/2024', inizio: '6.00', termine: '14.00' },
+      { data: '06/01/2024', inizio: '6.00', termine: '22.00' },
+      { data: '07/01/2024', inizio: '4.00', termine: '12.00' }, // violazione 2024
+    ];
+    // indennità = 5h × 12,50 × 0,20 = 12,50, ma il display deve vedere 12,50/h (pieno)
+    const r = computeRestViolations(giornate, { tariffaOraria: 10, tariffePerAnno: { '2024': 12.5 }, coefficiente: 0.2 });
+    expect(r.tariffePerAnnoApplicate['2024']).toBe(12.5);   // esatta, non recuperata da importi arrotondati
+    // anno con violazione ma senza voce in mappa → fallback tariffaOraria, sempre esposto
+    const r2 = computeRestViolations(giornate, { tariffaOraria: 10, tariffePerAnno: { '2099': 9 } });
+    expect(r2.tariffePerAnnoApplicate['2024']).toBe(10);
+  });
+});
+
+// ─── Confronto PDF ↔ nostro metodo ────────────────────────────────────────────
+
+describe('buildConfronto', () => {
+  it('classifica i giorni in entrambi / solo PDF / solo nostro', () => {
+    const giornate: GiornataInput[] = [
+      // turno a cavallo: nostra violazione giornaliera (dataTurno 05/01) E indennità PDF sullo stesso giorno
+      { data: '05/01/2024', inizio: '20.00', termine: '4.00', mancatoRipGiorn: '5.00', indennitaFonte: 50 },
+      { data: '06/01/2024', inizio: '8.00', termine: '16.00' },
+      // giorno indennizzato dal PDF ma senza nostra violazione → solo PDF
+      { data: '10/01/2024', inizio: '6.00', termine: '14.00', mancatoRipGiorn: '2.00', indennitaFonte: 20 },
+    ];
+    const r = computeRestViolations(giornate, { tariffaOraria: 10 });
+    const c = buildConfronto(giornate, r);
+    expect(c.perGiorno['05/01/2024']).toBe('entrambi');
+    expect(c.perGiorno['10/01/2024']).toBe('pdf');
+    expect(c.pdfGiorni).toBe(2);
+    expect(c.nostreGiorn).toBe(1);
+    expect(c.concordiGiorn).toBe(1);
+    expect(c.soloPdf).toBe(1);
+    expect(c.soloNostro).toBe(0);
   });
 });
