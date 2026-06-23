@@ -35,3 +35,6 @@ knowledge/fonti/*
 # Area "Turni & Riposi": seed locale di demo (dati personali del lavoratore).
 # La persistenza vera è su Supabase (pratiche_riposi), non nel repo.
 public/viterbo-seed.json
+
+# Config locale di Claude Code (permessi macchina-specifici, non condivisibili)
+.claude/settings.local.json
