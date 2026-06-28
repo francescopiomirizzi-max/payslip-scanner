@@ -8,7 +8,7 @@ import type { Worker } from '../types';
 import { resolveIncludePaidLeave } from '../types';
 import {
   isConcluded, isMissingPayslips,
-  formatInsertedRange, formatMissingMonths, isPaid,
+  formatInsertedRange, formatMissingMonths, formatFixTargets, isPaid,
 } from './workerStatus';
 import { SYSTEM_PROFILES, SYSTEM_PROFILE_KEYS } from '../config/profiles';
 import { computeHolidayIndemnity } from './calculationEngine';
@@ -36,21 +36,19 @@ const headerCell = (text: string): TableCell =>
 const dataCell = (text: string): TableCell =>
   new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: text || '—' })] })] });
 
-const buildMissingTable = (workers: Worker[]): Table => {
+/** Tabella a due colonne "Nominativo | <header2>", con valore calcolato per lavoratore. */
+const buildNameValueTable = (workers: Worker[], header2: string, valueFn: (w: Worker) => string): Table => {
   const rows: TableRow[] = [
     new TableRow({
       tableHeader: true,
-      children: [headerCell('Nominativo'), headerCell('Buste Paga Mancanti')],
+      children: [headerCell('Nominativo'), headerCell(header2)],
     }),
-    ...workers.map(w => {
-      const missing = formatMissingMonths(w);
-      return new TableRow({
-        children: [
-          dataCell(fullName(w)),
-          dataCell(missing || '—'),
-        ],
-      });
-    }),
+    ...workers.map(w => new TableRow({
+      children: [
+        dataCell(fullName(w)),
+        dataCell(valueFn(w) || '—'),
+      ],
+    })),
   ];
 
   return new Table({
@@ -127,8 +125,25 @@ export const generateReport = async (workers: Worker[]): Promise<void> => {
       children.push(sectionHeading(`${idx + 1}. AREA ${profileLabel(profilo)}`, HeadingLevel.HEADING_2));
       children.push(new Paragraph({ children: [new TextRun({ text: summary, italics: true })] }));
       children.push(new Paragraph({ children: [new TextRun({ text: '' })] }));
-      children.push(buildMissingTable(list));
+      children.push(buildNameValueTable(list, 'Buste Paga Mancanti', formatMissingMonths));
     });
+  }
+
+  // ── Sezione disguido nominativi (controllo Margherita) ──
+  // Buste MISFILED (worker_profiles.fix_targets): archiviate sotto nominativi errati.
+  // Diverse dai mesi "mancanti" qui sopra (il mese risulta pieno, ma con la busta sbagliata),
+  // quindi vanno elencate a parte. Indipendente dallo status: incluse anche le pratiche pagate.
+  const disguido = workers.filter(w => (w.fixTargets?.length ?? 0) > 0).slice().sort(sortByCognome);
+  if (disguido.length > 0) {
+    children.push(sectionHeading('Buste paga da ricontrollare — disguido nominativi', HeadingLevel.HEADING_1));
+    children.push(new Paragraph({
+      spacing: { after: 120 },
+      children: [new TextRun({
+        text: 'Dal controllo effettuato con Margherita (studio legale avv. Celentano) sono emerse buste paga archiviate con nominativi errati (file scaricati dai lavoratori con il nome sbagliato). Vanno ricontrollate e riacquisite correttamente:',
+        italics: true,
+      })],
+    }));
+    children.push(buildNameValueTable(disguido, 'Buste da ricontrollare', w => formatFixTargets(w.fixTargets)));
   }
 
   const doc = new Document({

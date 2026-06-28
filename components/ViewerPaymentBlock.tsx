@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Wrench, LogOut } from 'lucide-react';
 import { supabase } from '../supabaseClient';
+import { isPaid } from '../utils/workerStatus';
 
 const MESI = ['Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno', 'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'];
 
@@ -29,16 +30,20 @@ const ViewerPaymentBlock: React.FC<Props> = ({ amount, onLogout }) => {
 
   // Elenco buste paga mancanti (fonte: worker_profiles.fix_targets), raggruppato
   // per periodo. Live: quando una busta viene sistemata, sparisce da qui.
+  // Solo le pratiche PAGATE (status 'chiusa'): sono quelle nello scope della
+  // posizione da regolarizzare. Chi non è pagato (es. i Cataneo, in trattativa o
+  // con buste ancora mancanti) non è urgente qui e resta fuori dall'elenco.
   const [missing, setMissing] = useState<MissingPeriod[]>([]);
   useEffect(() => {
     let alive = true;
     (async () => {
       const { data } = await supabase
         .from('worker_profiles')
-        .select('cognome, nome, profilo, fix_targets');
+        .select('cognome, nome, profilo, status, fix_targets');
       if (!alive || !data) return;
       const byPeriod = new Map<string, { sortKey: number; persone: string[] }>();
       for (const r of data as any[]) {
+        if (!isPaid({ status: r.status })) continue;
         const ft = r.fix_targets;
         if (!Array.isArray(ft) || ft.length === 0) continue;
         for (const t of ft) {

@@ -1,3 +1,30 @@
+# Piano — Vista Vincenzo: messaggio (solo pagati) + Word disguido Margherita (2026-06-28)
+
+> Prima della manutenzione: due ritocchi sulle "buste paga mancanti".
+> Fonti distinte nel codice: `fix_targets`/`fixTargets` = misfiled (disguido Margherita,
+> mesi presenti ma "pieni" di busta sbagliata → invisibili a `formatMissingMonths`);
+> `status==='inviata'` = buste genuinamente mancanti (base del Word).
+> DB: 6 lavoratori con fix_targets → 4 pagati (Avella, Gentile, Mottola, Tozzi) + 2 Cataneo non pagati.
+
+- [x] 1. `components/ViewerPaymentBlock.tsx` — elenco buste mancanti del messaggio solo per i PAGATI
+      (select +`status`, filtro `isPaid`) → spariscono i 2 Cataneo, restano i 4.
+- [x] 2. `utils/reportGenerator.ts` (`generateReport`) — nuova sezione dedicata "disguido nominativi"
+      con tutti e 6 i lavoratori con `fixTargets` (`formatFixTargets`), in coda ai mesi-mancanti reali.
+      Refactor: `buildMissingTable` → `buildNameValueTable(workers, header2, valueFn)` riusato 2 volte.
+- verifica: `tsc --noEmit`=0 ✓; 229 test verdi ✓; Word generato realmente (test usa-e-getta
+  con file-saver mockato → XML del .docx contiene sezione disguido + tutti i fixTargets + sezione mancanti) ✓.
+
+### Review
+- **Intervento 1**: messaggio di Vincenzo ora elenca solo i 4 pagati, raggruppati per periodo
+  (verificato via SQL = stessa logica del componente): *Novembre 2008* → Mottola, Tozzi;
+  *Settembre 2009* → Avella (Foggia), Gentile, Tozzi. I 2 Cataneo (inviata/trattativa) esclusi.
+- **Intervento 2**: il Word ha ora 2 blocchi — (a) mesi realmente mancanti dei 7 'inviata' (invariato);
+  (b) sezione "Buste paga da ricontrollare — disguido nominativi" con tutti e 6 i lavoratori misfiled
+  (anche i pagati), nota controllo Margherita/studio Celentano, mesi formattati con `formatFixTargets`.
+- Nessuna migration (sola lettura). Modifiche locali NON deployate (batch col deploy di manutenzione).
+
+---
+
 # Piano — Viewer Vincenzo post-sblocco: "vede tutto, scarica le Pagate" + buste mancanti (2026-06-28)
 
 > Cambio di policy rispetto al lockdown del 16/06. Oggi il viewer vede SOLO le Pagate
