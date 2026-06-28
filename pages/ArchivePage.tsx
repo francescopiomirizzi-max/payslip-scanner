@@ -10,7 +10,7 @@ import { CompanyLogo } from '../components/ui/CompanyLogo';
 import { usePayslipArchive, PayslipRecord } from '../hooks/usePayslipArchive';
 import { matchesCompanyFilter } from '../hooks/useWorkers';
 import { getProfiloBadgeLabel } from '../utils/formatters';
-import { useIsReadOnly } from '../lib/readonly';
+import { useIsReadOnly, canExportForViewer } from '../lib/readonly';
 
 interface ArchivePageProps {
   workers: Worker[];
@@ -772,9 +772,9 @@ const ArchivePage: React.FC<ArchivePageProps> = ({ workers, onBack, initialWorke
                     {currentPayslipIdx + 1} / {orderedPayslips.length}
                   </span>
                 )}
-                {/* Download busta — nascosto al viewer (sola lettura): può consultare
-                    la busta a video ma non scaricarla. */}
-                {pdfUrl && !isReadOnly && (
+                {/* Download busta — per il viewer solo se la pratica è "pagata"
+                    (status 'chiusa'); altrimenti consulta a video ma non scarica. */}
+                {pdfUrl && canExportForViewer(isReadOnly, selectedWorker?.status === 'chiusa') && (
                   <a
                     href={pdfUrl}
                     download={selectedPayslip?.filename}

@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../supabaseClient';
 import type { GiornataInput } from '../utils/restEngine';
-import { READONLY_VIEWER_UIDS } from '../lib/readonly';
 
 export type StatoPratica = 'in_corso' | 'conclusa' | 'pagata';
 
@@ -161,10 +160,6 @@ export function usePraticheRiposi() {
     useEffect(() => {
         let alive = true;
         (async () => {
-            // Viewer in sola consultazione: vede SOLO le pratiche "Pagate".
-            const { data: { user } } = await supabase.auth.getUser();
-            const readOnly = !!user && READONLY_VIEWER_UIDS.has(user.id);
-
             const { data, error } = await supabase
                 .from('pratiche_riposi')
                 .select('*')
@@ -175,7 +170,7 @@ export function usePraticheRiposi() {
                 // archivio vuoto (o non raggiungibile) → seed locale come fallback
                 : await loadSeed();
             if (!alive) return;
-            setPratiche(readOnly ? list.filter((p) => p.stato === 'pagata') : list);
+            setPratiche(list);
             setIsLoading(false);
         })();
         return () => { alive = false; };

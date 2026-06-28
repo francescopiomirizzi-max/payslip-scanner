@@ -6,7 +6,7 @@ import { EXCLUDED_INDEMNITY_COLS } from '../utils/calculationEngine';
 import { computeRiepilogoData } from '../utils/riepilogoReport';
 // exportSingleWorkerZip / captureReportPdfBlob sono import DINAMICI (vedi handleDownloadAll):
 // così zip, docx e html-to-image restano fuori dal bundle principale e si caricano solo al click.
-import { useIsReadOnly } from '../lib/readonly';
+import { useIsReadOnly, canExportForViewer } from '../lib/readonly';
 import {
   Printer,
   ArrowLeft,
@@ -46,6 +46,8 @@ interface TableComponentProps {
 // --- COMPONENTE PRINCIPALE ---
 const TableComponent: React.FC<TableComponentProps> = ({ worker, monthlyInputs, onBack, onEdit, startClaimYear, onUpdateWorkerFields, addToast }) => {
   const isReadOnly = useIsReadOnly();
+  // Il viewer scarica/stampa solo le pratiche "pagate" (status 'chiusa'); l'owner sempre.
+  const canExport = canExportForViewer(isReadOnly, worker.status === 'chiusa');
 
   // ✨ BISTURI 1: QUICK ACTIONS CONTESTUALI (Radar Intelligente)
   const { setQuickActions } = useIsland();
@@ -496,9 +498,9 @@ Distinti saluti.
             <span>Gestione Dati</span>
           </button>
 
-          {/* Documenti (ZIP) e Stampa — nascosti al viewer (sola lettura): scaricare
-              o stampare il report = portarsi via il documento. */}
-          {!isReadOnly && (<>
+          {/* Documenti (ZIP) e Stampa — per il viewer solo sulle pratiche "pagate"
+              (status 'chiusa'); l'owner sempre. */}
+          {canExport && (<>
           {/* Scarica i 3 documenti (Conteggi + Riepilogo + Relazione) in un unico ZIP */}
           <button
             onClick={handleDownloadAll}
@@ -688,6 +690,7 @@ Distinti saluti.
         <RelazioneModal
           isOpen={isRelazioneOpen}
           onClose={() => setIsRelazioneOpen(false)}
+          canExport={canExport}
           worker={worker}
           includeExFest={includeExFest}
           includeTickets={includeTickets}

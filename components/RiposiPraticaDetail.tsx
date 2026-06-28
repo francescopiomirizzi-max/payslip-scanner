@@ -5,7 +5,7 @@ import { computeRestViolations, computeSerieFonte, resolveTariffePerAnno, buildC
 import { printConteggiRiposi } from '../utils/riposiPrint';
 import { AnimatedCounter } from './ui/AnimatedCounter';
 import { STATO_META, type PraticaRiposi, type PraticaRiposiUpdate, type StatoPratica } from '../hooks/usePraticheRiposi';
-import { useIsReadOnly } from '../lib/readonly';
+import { useIsReadOnly, canExportForViewer } from '../lib/readonly';
 import { groupThousandsIT } from '../utils/formatters';
 
 const euro = (n: number) => '€ ' + groupThousandsIT(n.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
@@ -49,6 +49,8 @@ const RiposiPraticaDetail: React.FC<Props> = ({ pratica, onBack, onUpdate }) => 
     const [isRelazioneOpen, setIsRelazioneOpen] = useState(false);
     const isReadOnly = useIsReadOnly();
     const canManage = Boolean(onUpdate) && !isReadOnly;
+    // Il viewer scarica/stampa solo le pratiche "pagata"; l'owner sempre.
+    const canExport = canExportForViewer(isReadOnly, pratica.stato === 'pagata');
 
     // Cambio stato: scrive da sé la data utile corrispondente (se mancante).
     const handleStato = (stato: StatoPratica) => {
@@ -217,9 +219,9 @@ const RiposiPraticaDetail: React.FC<Props> = ({ pratica, onBack, onUpdate }) => 
                     </div>
                 </div>
 
-                {/* Riga azioni dedicata — nascosta al viewer (sola lettura): Excel,
-                    Relazione e Stampa conteggi sono modi per portarsi via il documento. */}
-                {!isReadOnly && (
+                {/* Riga azioni (Excel, Relazione, Stampa conteggi) — per il viewer
+                    solo sulle pratiche "pagata"; l'owner sempre. */}
+                {canExport && (
                     <div className="flex flex-wrap items-center gap-3">
                         <button
                             type="button"
@@ -460,7 +462,7 @@ const RiposiPraticaDetail: React.FC<Props> = ({ pratica, onBack, onUpdate }) => 
                 )}
             </div>
 
-            {!isReadOnly && (
+            {canExport && (
                 <RelazioneRiposiModal
                     isOpen={isRelazioneOpen}
                     onClose={() => setIsRelazioneOpen(false)}

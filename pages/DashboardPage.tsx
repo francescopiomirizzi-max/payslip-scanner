@@ -33,6 +33,7 @@ import {
     Eye,
     CalendarDays,
     Mail,
+    AlertCircle,
 } from 'lucide-react';
 import WorkerCard from '../components/WorkerCard';
 import MessagesInbox from '../components/MessagesInbox';
@@ -518,6 +519,13 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
     };
 
     const searchActive = searchQuery.trim().length > 0;
+    // Filtro trasversale "Urgenze": lavoratori con buste paga da sistemare (fixTargets),
+    // raccolti da TUTTI i cassetti. Vista flat come la ricerca.
+    const [urgentOnly, setUrgentOnly] = useState(false);
+    const urgentWorkers = useMemo(() => workers.filter(w => (w.fixTargets?.length ?? 0) > 0), [workers]);
+    const flatActive = searchActive || urgentOnly;
+    const flatWorkers = urgentOnly ? urgentWorkers : sortedWorkers;
+    const visibleCount = flatActive ? flatWorkers.length : filteredWorkers.length;
 
     // --- HANDLER TICKET RAPIDO ---
     const allTicketsOn = sortedWorkers.length > 0 && sortedWorkers.every(w => w.includeTickets !== false);
@@ -1228,6 +1236,23 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                         </div>
                     </LayoutGroup>
 
+                    {/* Urgenze — buste paga da sistemare (badge rosso), raccolte da TUTTI i cassetti */}
+                    {urgentWorkers.length > 0 && (
+                    <button
+                        onClick={() => setUrgentOnly(v => !v)}
+                        title="Mostra solo i lavoratori con buste paga da sistemare (urgenze)"
+                        className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-[11px] font-black uppercase tracking-wide transition-all duration-200 shrink-0 ${
+                            urgentOnly
+                                ? 'bg-red-600 text-white shadow-md shadow-red-500/30'
+                                : 'bg-red-100/90 dark:bg-red-900/40 text-red-600 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-900/60'
+                        }`}
+                    >
+                        <AlertCircle className="w-3.5 h-3.5" />
+                        Urgenze
+                        <span className={`text-[10px] tabular-nums ${urgentOnly ? 'text-white/80' : 'text-red-500/80 dark:text-red-300/80'}`}>{urgentWorkers.length}</span>
+                    </button>
+                    )}
+
                     {/* Ticket — stessa famiglia: superficie neutra da spento, ambra acceso; "Ticket ON/OFF" nella pillola */}
                     <button
                         onClick={() => setIsTicketConfirmOpen(true)}
@@ -1260,11 +1285,11 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
 
                     {/* Conteggio — tipografia pulita: numero in evidenza, "pratiche" smorzato */}
                     <span className="ml-auto shrink-0 text-xs font-semibold text-slate-400 dark:text-slate-500">
-                        <span className="font-black text-slate-600 dark:text-slate-300 tabular-nums">{filteredWorkers.length}</span> {filteredWorkers.length === 1 ? 'pratica' : 'pratiche'}
+                        <span className="font-black text-slate-600 dark:text-slate-300 tabular-nums">{visibleCount}</span> {visibleCount === 1 ? 'pratica' : 'pratiche'}
                     </span>
                 </div>
 
-                {searchActive ? (
+                {flatActive ? (
                     /* RICERCA ATTIVA: grid piatto con tutti i risultati visibili
                        senza dover aprire cassetti — l'obiettivo è "trovo subito". */
                     <motion.div
@@ -1274,7 +1299,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                         animate="show"
                     >
                         <AnimatePresence mode="popLayout">
-                            {sortedWorkers.map(w => renderWorkerCard(w))}
+                            {flatWorkers.map(w => renderWorkerCard(w))}
                         </AnimatePresence>
                     </motion.div>
                 ) : (

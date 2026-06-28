@@ -93,7 +93,7 @@ Luogo e Data: ${oggi}
 `;
 };
 
-export const RelazioneModal = ({ isOpen, onClose, worker, totals, includeExFest = false }: any) => {
+export const RelazioneModal = ({ isOpen, onClose, worker, totals, includeExFest = false, canExport = true }: any) => {
     const [copiato, setCopiato] = useState(false);
 
     // Se non deve essere aperto o mancano i dati, non renderizzare nulla
@@ -173,6 +173,9 @@ export const RelazioneModal = ({ isOpen, onClose, worker, totals, includeExFest 
                     </div>
                 </div>
 
+                {/* Export (Copia/Stampa) — per il viewer solo sulle pratiche "pagate";
+                    a video la relazione resta sempre consultabile. */}
+                {canExport && (
                 <div className="p-5 border-t border-slate-800 flex gap-3 justify-end bg-[#020617]">
                     <button
                         onClick={handleCopia}
@@ -189,6 +192,7 @@ export const RelazioneModal = ({ isOpen, onClose, worker, totals, includeExFest 
                         <Printer className="w-4 h-4" /> Stampa Ufficiale
                     </button>
                 </div>
+                )}
             </motion.div>
         </div>
     );

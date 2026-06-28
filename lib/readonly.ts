@@ -57,6 +57,15 @@ export function useIsReadOnly(): boolean {
   return isReadOnly;
 }
 
+/**
+ * Il viewer in sola consultazione può esportare/stampare SOLTANTO le pratiche
+ * già "pagate" (buste: status 'chiusa'; riposi: stato 'pagata'). L'owner sempre.
+ * Usato per gateare i bottoni di download/stampa per-pratica: vede tutto, scarica
+ * solo il pagato.
+ */
+export const canExportForViewer = (isReadOnly: boolean, isPaid: boolean): boolean =>
+  !isReadOnly || isPaid;
+
 export interface ViewerPaymentBlockState {
   loading: boolean;
   blocked: boolean;
