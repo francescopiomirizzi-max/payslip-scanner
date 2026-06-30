@@ -1,3 +1,127 @@
+# Recupero busta misfiled #5 — Gentile Celestino (Settembre 2009) — 2026-06-30 pom.
+
+> 5° dei 7 recuperi. Playbook = memoria `project-audit-mese-archivio-vs-testata` + lezione 30/06.
+> ⚠️ **DIVERGE da Tozzi/Cataneo:** lo slot di destinazione Set2008 è **VUOTO**, e nello slot Set2009
+>   ci sono **dati 2008 reali** → rischio di perdere Settembre 2008 se si sovrascrive e basta.
+
+## Stato DB (verificato 30/06)
+- Gentile Celestino `68782a50-cff0-4796-b6c0-13d0fdd83f8b`, RFI, status **CHIUSA**, fix_targets=[{2009, Settembre}], 228 buste.
+- Slot **Set2009** (file 85,4KB): `extracted_data` con `year:2008, month:9` (presenze 18, ferie 6, riposi 7, voci RFI reali, fondo_pregresso 32.354,68) → contenuto = busta **SETTEMBRE 2008**.
+- Slot **Set2008** (file 76,4KB): `extracted_data` **VUOTO** (mai scansionato). File DIVERSO (dimensione) da quello del 2009.
+
+## Verificato su buste reali + griglia (30/06) → CASO A (no rischio perdite)
+- [x] File Set2008 (76,4KB): testata "Stipendio di Settembre 2008", val. 25.09.2008 → è la vera Set2008.
+- [x] File Set2009 (85,4KB): testata "Stipendio di Settembre 2008", val. 25.09.2008 → **doppione del 2008**.
+- [x] Griglia `2008-8` (Settembre 2008): presente e corretta (0152:296,32 / pres.18 / ferie 6 / arretrati 220,53).
+- [x] Griglia `2009-8` (Settembre 2009): contiene gli STESSI numeri 2008 → da sostituire con la vera Set2009.
+      (residui da tenere d'occhio post-scan, tipo Tozzi: `fondo_pregresso_31_12`=32354,68, `imponibile_tfr_mensile`=0)
+- [ ] Busta NUOVA (mail Gentile): confermare testata = **Settembre 2009** prima di caricarla (NON un altro 2008).
+
+## Sequenza (Caso A — come Tozzi)
+- [x] [APP, utente] caricato la vera **Settembre 2009** (l'utente ha fatto cancella+ricarica, non upsert).
+      Risultato OK: payslip_metadata Set2009 `year:2009`, presenze 10, UNA riga, no doppione; Set2008 intatto.
+- [x] [SQL io] verificato griglia `2009-8` = numeri 2009 reali (0152 296,32→193,34; 3B01 1.615,76→1.685,21; gg 18→10);
+      **azzerato `fix_targets` → []**. Residuo MERGE: griglia `arretrati`=220,53 (reale 0) → COSMETICO (colonna "(Esclusi)",
+      fuori da TOTALE/credito/%/documenti; cfr. `EXCLUDED_INDEMNITY_COLS`). Lasciato (come residui Tozzi).
+- [ ] [APP, utente] **HARD-REFRESH** (anti-clobber: rende stabile il flag azzerato).
+- [ ] [DOC, utente] rigenerare documenti Gentile (chiusa → il 2009 cambia: prima Settembre contava i numeri 2008)
+      e inviarli allo Studio Celentano con la busta recuperata.
+- [opz.] [APP] azzerare "Arretrati / Altro" di Sett 2009 nella griglia (solo estetica, non cambia nulla).
+
+### Review (2026-06-30 pom.)
+Recupero #5 (Gentile Set2009) completato. Caso A confermato su buste reali (entrambi i file Settembre = "Set 2008"):
+Set2008 era già coperto (file proprio + griglia corretta), lo slot 2009 aveva un doppione del 2008 → sostituito.
+Nessuna perdita. Verifica solida; unico residuo cosmetico (arretrati, escluso da tutto). **Recuperi 5/7**, restano
+**Avella (Set2009)** + **Cataneo Pasquale (Nov2008)**.
+
+---
+
+# Anteprima PDF prospetto Gagliano per Vincenzo (WhatsApp) — 2026-06-30
+
+> Vincenzo (call 30/06) vuole un'anteprima di Gagliano: la sua vista viewer è bloccata
+> (manutenzione + pagamento). Gli giriamo via WhatsApp **solo il prospetto + % incidenza**
+> (la pagina report finale, nodo `#riepilogo-card`). Sorgente = **locale (dev)**, formato = **PDF**.
+> NB: Gagliano è **incompleta** (mancano buste in recupero) → anteprima PROVVISORIA, da etichettare.
+
+## Vincoli / decisioni
+- NON sbloccare l'account viewer di Vincenzo: il `viewer_payment_block` resta `true` (leva 750 €).
+  L'anteprima è un artefatto piatto (PDF), non accesso alla piattaforma.
+- Vista **owner** (mio account, non l'UID di Vincenzo) → si vede Gagliano e si esporta sempre.
+
+## Passi (verifica per passo)
+- [x] 1. [ENV] `npm run dev` su (5173 occupata → 5174). Server fermato a fine task.
+- [x] 2. [BROWSER] Tab su localhost:5174; login owner fatto dall'utente.
+- [x] 3. [NAV] Ricerca "Gagliano" → scheda Gagliano Dario (Mercitalia Rail) → tasto REPORT → pagina incidenza.
+- [x] 4. [PDF] Generato PDF di `#riepilogo-card` via captureReportPdfBlob → ma conteneva SOLO il prospetto
+      (la tabella % è una card SEPARATA fuori da #riepilogo-card). PDF su Desktop = parziale → superato.
+- [x] 5. [CONSEGNA] L'utente ha fatto a mano uno **screenshot** della pagina (prospetto + % insieme):
+      `~/Desktop/Screenshot 2026-06-30 alle 11.45.02.png` (545 KB, 2390×1764). Verificato: completo e leggibile.
+
+### Review (2026-06-30)
+- Anteprima Gagliano consegnata come **screenshot PNG** (non PDF): include sia il prospetto (TOTALE DOVUTO
+  €2.212,51) sia la % incidenza (MEDIA PERIODO 17,09% < soglia 20%). Pronto per WhatsApp.
+- Lezione tecnica: `captureReportPdfBlob(#riepilogo-card)` cattura SOLO il prospetto; la tabella % incidenza
+  (IndemnityPivotTable) è un nodo sibling fuori dalla card → per un PDF unico servirebbe catturare l'antenato
+  comune o un multi-pagina. Per un'anteprima veloce lo screenshot di pagina è la via più semplice.
+- Caveat comunicati: pratica parziale (5/7 anni, 96%) → numeri provvisori; viewer di Vincenzo resta bloccato.
+- Cleanup: dev server :5174 fermato (il :5173 dell'utente non toccato). PDF parziale su Desktop = da rimuovere.
+
+---
+
+# Recupero buste misfiled #2-#4 — Tozzi (Nov2008 + Set2009) + Cataneo V (Set2009) (2026-06-30)
+
+> Secondo blocco di recuperi dopo Mottola (#1). Playbook = memoria `project-audit-mese-archivio-vs-testata`.
+> **Differenza-chiave da Mottola:** i mesi di destinazione (Tozzi Dic2008 e Set2008; Cataneo V Set2008)
+> ESISTONO GIÀ con i dati in `payslip_metadata` e nella griglia `anni` → **NIENTE salvataggio-dati SQL**.
+
+## Fatti verificati (PDF + DB, 30/06)
+- File veri localizzati e confermati dal contenuto (testata):
+  - Tozzi Novembre 2008 → `~/Downloads/Novembre 2008.PDF` (presenze 22, retr. 1.670,27, minimo 1.395,91)
+  - Tozzi Settembre 2009 → `~/Downloads/CEDOLINO (24).PDF` (presenze 14, retr. 1.730,27, minimo 1.455,91)
+  - Cataneo V Settembre 2009 → `.../CATANEO VINCENZO/2009/Settembre 2009.PDF` (presenze 15, minimo 1.455,91)
+- Slot misfiled confermati in `payslip_metadata`: Tozzi Nov2008=ed_month 12 (Dic); Tozzi Set2009=ed_year 2008; Cataneo V Set2009=ed_year 2008.
+- Griglia `anni` tiene il contenuto sbagliato: Tozzi Nov2008→dati Dic (TFR mens 28.329,81); Tozzi/CataneoV Set2009→dati Set2008 (minimo 1.395,91, gg 13/17).
+
+## Passi (verifica per passo)
+- [x] 1. [APP] Carica+scansiona i 3 file veri nei slot corretti (fatto dall'utente 30/06).
+      Rinominato `CEDOLINO (24).PDF`→`Settembre 2009.PDF` → auto-parse + sovrascrittura in-place.
+- [x] 2. [APP] Doppione: NON serve — i nomi file allineati hanno fatto sovrascrivere in-place lo stesso storage_path. 1 sola riga per slot, zero "(1)".
+- [x] 3. [SQL] `fix_targets`→`[]` per Tozzi (764fef08…) e Cataneo V (b90f6e89…). HARD-REFRESH app pendente lato utente.
+- [x] 4. [VERIFICA] Archivio: ed_month/ed_year corretti (Tozzi Nov 12→11, Tozzi/CataneoV Set 2008→2009). Griglia: gg+minimo+voci reali; residuo TFR Tozzi Nov2008 (28.329,81) cosmetico (max anno=28.329,81 con/senza nov → 0 impatto).
+- [ ] 5. [DOC] Rigenerare documenti pratiche toccate (utente, nell'app): Tozzi (chiusa, 2008+2009 cambiati) + Cataneo V (trattativa, 2009).
+- [x] 6. Memoria aggiornata. Restano 3 recuperi: Avella-Foggia Set2009, Cataneo Pasquale Nov2008, Gentile Set2009.
+
+### Review (2026-06-30)
+Recuperi #2-#4 completati. Divisione: utente = carica+scansiona in-app; io = verifica DB + SQL flag.
+- **Archivio**: 3 slot corretti in-place (nessun doppione, niente cancellazioni). Mesi destinazione (Dic2008/Set2008) intatti.
+- **Griglia `anni`**: Tozzi Set2009 (14gg/1.455,91) e Cataneo V Set2009 (15gg/1.455,91) pienamente corretti; Tozzi Nov2008 voci=novembre reale (0152/0470/0496/0932/0933 ok), unico residuo `imponibile_tfr_mensile` cosmetico (verificato non-total-mover).
+- **Niente salvataggio-dati SQL** (a differenza di Mottola: i mesi di destinazione avevano già i dati).
+- **Flag**: fix_targets azzerati per i due → spariranno dal badge "da sistemare", dal filtro Urgenze (6→4) e dalla lista buste-mancanti del viewer dopo l'hard-refresh/deploy.
+- **Da fare lato utente**: hard-refresh app (anti-clobber); rigenerare i documenti di Tozzi (pratica chiusa: il 2008 prima contava 2× dicembre e zero novembre) e Cataneo V se già prodotti.
+
+---
+
+# Manutenzione sito — deploy + advisor Supabase (2026-06-28) ✅
+
+Scope concordato: **A (deploy) + B (advisor quick win)**. C (refactor codice) escluso.
+
+## A. Deploy degli 8 commit (50aa8b9 → 7bf0a20)
+- [x] Gate pre-deploy: `npx tsc --noEmit`=0, `npm test`=229/229 verdi, `npm run build`=ok (exit 0).
+- [x] `git push origin main` (96af9b8..7bf0a20). Netlify auto-deploy `railflow-2`.
+- [x] Verifica live: deploy `ready/current`; l'entry servito `assets/index-CeFE0ynh.js` combacia con l'hash del build locale → il nuovo bundle è online.
+- [x] Blocco viewer: `app_settings.viewer_payment_block=true`, `payment_amount_eur=750` (invariato) → Vincenzo al login trova il blocco "manutenzione" con importo. Importo TENUTO (saldo legato al recupero buste mancanti).
+
+## B. Advisor Supabase (migration MCP `pin_function_search_path_and_index_messages_author`)
+- [x] `function_search_path_mutable` ×4 risolto: `search_path=''` sui 3 trigger (handle_updated_at, update_updated_at_column, scan_sessions_block_immutable_changes); `search_path=public` su `match_legal_chunks` (referenzia tabelle + operatore `<=>` del vector in public → '' lo romperebbe).
+- [x] `unindexed_foreign_keys` su `messages.author_id` → `idx_messages_author_id`.
+- [x] Advisor ri-controllato: i 5 lint chiusi. Restano per scelta (bassa priorità): RLS `USING(true)` ×6 (RAG legal_*), security-definer QR ×4, `extension_in_public` (vector), leaked-password (Pro-only won't-fix).
+
+## Aperti (outward-facing, NON eseguiti senza OK)
+- [ ] Annuncio bacheca "buste paga mancanti" (`messages` via MCP): testo pronto, **in attesa OK** prima di pubblicare.
+- [ ] Spegnere il blocco 750€ quando Vincenzo paga: `UPDATE public.app_settings SET viewer_payment_block=false, updated_at=now() WHERE id=1;`
+
+---
+
 # Piano — Vista Vincenzo: messaggio (solo pagati) + Word disguido Margherita (2026-06-28)
 
 > Prima della manutenzione: due ritocchi sulle "buste paga mancanti".

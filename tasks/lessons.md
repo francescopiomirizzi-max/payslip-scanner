@@ -3,6 +3,44 @@
 > Pattern e errori da evitare nelle prossime sessioni.
 > Aggiornato dopo ogni correzione utente.
 
+## 2026-06-30 — Due "Avella Antonio" NON sono un doppione: omonimi (Foggia vs Termoli)
+
+**Contesto:** audit visivo dell'archivio. Visti due "Avella Antonio" sotto RFI, stesso ruolo, **entrambi
+228 buste** → ho concluso "doppione / re-import". **Sbagliato.** Sono due **persone diverse**: uno di
+**Foggia**, uno di **Termoli** (lo si legge nella testata delle buste). I dati lo confermano: 0 storage_path
+condivisi, 228 file distinti ciascuno in cartelle worker separate. Il 228 = 19 anni pieni, coincidenza.
+
+**Lezione:**
+1. **Stesso nome + stesso conteggio buste ≠ doppione.** In RFI ci sono omonimi su sedi diverse. Prima di
+   chiamarlo doppione, **leggi la SEDE nella testata della busta** (e confronta gli `storage_path`: se sono
+   in cartelle `worker_id` diverse e non si sovrappongono, sono archivi distinti → persone distinte).
+2. Non proporre MAI merge/dedupe di worker su base nome. Vedi memoria `project-avella-antonio-omonimi`.
+3. Il vero problema non è "doppione" ma **UI ambigua**: lista archivio e chip dashboard mostrano solo
+   "Avella Antonio" → confondono due persone. Fix = esporre la sede/ruolo distintivo in quei punti compatti.
+
+## 2026-06-30 — Recupero buste misfiled: lo scan aggiorna la griglia `anni` con un MERGE che lascia residui
+
+**Contesto:** primo dei 7 recuperi delle buste col nominativo/mese sbagliato (Mottola, Novembre
+2008 — vedi memoria `project-audit-mese-archivio-vs-testata`). Caricata e ri-scansionata la
+busta vera, ho verificato i dati e ho trovato che la riga di **griglia** (`worker_profiles.anni`)
+di novembre aveva sì le voci nuove corrette, ma si portava dietro `imponibile_tfr_mensile` e
+`fondo_pregresso_31_12` (più la nota "[⚠️ Conguaglio mese prec.]") del **vecchio** contenuto
+(dicembre), mentre la riga di dicembre ne era priva.
+
+**Lezione (vale per i 5 recuperi rimasti — Cataneo Pasquale, Tozzi ×2, Avella, Cataneo V, Gentile):**
+1. Lo **scan di una busta aggiorna SIA `payslip_metadata` SIA la griglia `anni`**, ma con un MERGE
+   che **non azzera** i campi non presenti nel nuovo scan. Ri-scansionando un mese prima misfiled,
+   restano residui del vecchio contenuto. Sono due store separati: copiare `extracted_data` via SQL
+   NON tocca la griglia, e viceversa.
+2. **Prima di chiamarlo "bug del totale", verifica se il campo residuo entra in un calcolo.** Qui no:
+   `imponibile_tfr_mensile` → `utils/tfrCalculator.ts:58-63` prende il `Math.max` dell'**anno**
+   (mese irrilevante); `fondo_pregresso_31_12` → solo scritto (`usePayslipUpload.ts`), mai letto; le
+   differenze usano le voci, ora corrette. → residuo **cosmetico**, lasciato lì (non vale il rischio
+   `feedback-anni-clobber-stale-browser` di un edit SQL su `anni`). Se in un caso il residuo fosse un
+   total-mover, correggere DALL'APP (griglia mensile) + hard-refresh, non via SQL.
+3. **Inserire la busta in archivio ≠ riempire la griglia che fa i conti.** "Caricata e scansionata"
+   non basta a dire che i totali sono giusti: controllare sempre la riga `anni` del mese recuperato.
+
 ## 2026-06-13 — Split buste Elior cartacee (Ghiro/Mastropasqua): 2 trappole
 
 ### Lezione A — Box "PERIODO DI PAGA" NON è a quota fissa: scansioni con margine variabile
