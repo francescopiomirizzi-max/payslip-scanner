@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { useIsland } from '../IslandContext'; // 👈 ECCOLA QUI!
 import { Worker, AnnoDati, getColumnsByProfile } from '../types';
-import { parseLocalFloat, formatCurrency, formatNumber, formatLongDate, getProfiloBadgeLabel } from '../utils/formatters';
+import { parseLocalFloat, formatCurrency, formatNumber, getProfiloBadgeLabel } from '../utils/formatters';
 import { EXCLUDED_INDEMNITY_COLS } from '../utils/calculationEngine';
 import { computeRiepilogoData } from '../utils/riepilogoReport';
 // exportSingleWorkerZip / captureReportPdfBlob sono import DINAMICI (vedi handleDownloadAll):
@@ -15,7 +15,6 @@ import {
   FileSpreadsheet,
   LayoutGrid,
   FileText,
-  Gavel,
   CalendarPlus,
   AlertCircle,
   Info,
@@ -27,8 +26,6 @@ import {
 } from 'lucide-react';
 import { RelazioneModal } from '../RelazioneModal';
 import { motion, AnimatePresence } from 'framer-motion';
-// LIBRERIE PDF NATIVE
-import jsPDF from 'jspdf';
 
 interface TableComponentProps {
   worker: Worker;
@@ -152,92 +149,6 @@ const TableComponent: React.FC<TableComponentProps> = ({ worker, monthlyInputs, 
     setTimeout(() => {
       document.title = originalTitle;
     }, 500);
-  };
-
-  const handlePrintDiffida = () => {
-    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-    const today = formatLongDate(new Date());
-
-    doc.setFont("times", "roman");
-    doc.setTextColor(0, 0, 0);
-
-    doc.setFontSize(14);
-    doc.setFont("times", "bold");
-    doc.text("UFFICIO VERTENZE E LEGALE", 20, 20);
-    doc.setFontSize(10);
-    doc.setFont("times", "normal");
-    doc.text("SEDE TERRITORIALE", 20, 25);
-
-    doc.setFontSize(11);
-    doc.text(`Luogo, lì ${today}`, 140, 40);
-
-    doc.setFont("times", "bold");
-    doc.text("Spett.le Azienda", 120, 55);
-    doc.text("Direzione Risorse Umane", 120, 60);
-    doc.text("(c.a. Responsabile p.t.)", 120, 65);
-    doc.text("SEDE", 120, 70);
-
-    doc.setFont("times", "bold");
-    doc.text(`OGGETTO: Diffida ad adempiere e costituzione in mora - Ricalcolo Retribuzione Feriale.`, 20, 90);
-    doc.text(`Lavoratore: ${worker.cognome} ${worker.nome} - Profilo: ${worker.ruolo}`, 20, 95);
-
-    doc.setFont("times", "normal");
-
-    const indennityCols = getColumnsByProfile(worker.profilo, worker.eliorType)
-      .filter(c => !EXCLUDED_INDEMNITY_COLS.includes(c.id));
-    const codiciBullets = indennityCols.map(c => `  • (${c.id}) ${c.label}`).join('\n');
-    const testoCodici = `L'analisi ha evidenziato la mancata inclusione delle seguenti voci retributive variabili ricorrenti:\n\n${codiciBullets}`;
-
-    const bodyText = `
-Scrivo in nome e per conto del Sig. ${worker.nome} ${worker.cognome}, vostro dipendente, il quale mi ha conferito espresso mandato per la tutela dei suoi diritti patrimoniali.
-
-Dall'esame della documentazione retributiva relativa al periodo ${startYear} - ${endYear}, è emerso che la Vostra Società non ha correttamente incluso le voci retributive accessorie e variabili nella base di calcolo della retribuzione feriale, in violazione dell'Art. 36 della Costituzione, della Direttiva 2003/88/CE e dei principi di diritto consolidati dalla Corte di Cassazione (Sent. n. 20216 del 23/06/2022).
-
-Nello specifico, il ricalcolo è stato effettuato applicando il "principio di onnicomprensività" della retribuzione feriale, utilizzando come divisore le giornate lavorative effettive e come moltiplicatore i giorni di ferie fruiti (entro il limite del periodo minimo protetto di ${includeExFest ? "32" : "28"} giorni annui).
-
-${testoCodici}
-
-Tutto ciò premesso, con la presente
-
-VI INVITO E DIFFIDO
-
-a corrispondere al mio assistito, entro e non oltre 10 giorni dal ricevimento della presente, la somma complessiva di:
-
-EURO ${formatCurrency(totals.totaleDaPercepire)} (Netto differenze ricalcolate)
-
-Tale somma è comprensiva delle differenze retributive maturate e del valore dei buoni pasto non riconosciuti, oltre agli interessi legali e alla rivalutazione monetaria maturati dal dovuto al saldo effettivo.
-
-In difetto di riscontro entro il termine assegnato, sarò costretto ad adire l'Autorità Giudiziaria competente per il recupero coattivo del credito e delle spese legali, senza ulteriore avviso.
-
-Distinti saluti.
-    `;
-
-    const splitText = doc.splitTextToSize(bodyText.trim(), 170);
-    let currentY = 110;
-
-    if (splitText.length > 30) {
-      doc.addPage();
-      currentY = 20;
-    }
-
-    doc.text(splitText, 20, currentY);
-
-    const signY = currentY + (splitText.length * 5) + 20;
-
-    if (signY > 250) {
-      doc.addPage();
-      doc.text("Firme:", 20, 20);
-    }
-
-    doc.setFont("times", "bold");
-    doc.text("Il Lavoratore (per ratifica)", 30, signY > 250 ? 40 : signY);
-    doc.text("L'Ufficio Vertenze / Legale", 120, signY > 250 ? 40 : signY);
-
-    doc.setLineWidth(0.1);
-    doc.line(30, (signY > 250 ? 40 : signY) + 15, 90, (signY > 250 ? 40 : signY) + 15);
-    doc.line(120, (signY > 250 ? 40 : signY) + 15, 180, (signY > 250 ? 40 : signY) + 15);
-
-    doc.save(`Diffida_${worker.cognome}_${worker.nome}.pdf`);
   };
 
   // Scarica in UN unico zip i 3 documenti del lavoratore (Conteggi + Riepilogo + Relazione),
@@ -464,18 +375,6 @@ Distinti saluti.
               )}
             </AnimatePresence>
           </div>
-
-          {!isReadOnly && (
-          <button
-            onClick={handlePrintDiffida}
-            className="group relative px-6 py-3 rounded-xl font-bold text-lg text-white shadow-lg hover:-translate-y-0.5 active:scale-95 transition-all duration-300 border border-white/10 overflow-hidden flex items-center gap-3"
-            style={{ background: 'linear-gradient(90deg, #7c3aed 0%, #9333ea 100%)' }}
-          >
-            <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500 rotate-12"></div>
-            <Gavel className="w-5 h-5 transition-transform duration-500 group-hover:rotate-12" strokeWidth={2.5} />
-            <span>Diffida</span>
-          </button>
-          )}
 
           {/* Relazione (.docx) — visibile anche in sola lettura (scarica, non scrive) */}
           <button

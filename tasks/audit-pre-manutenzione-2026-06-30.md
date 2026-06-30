@@ -132,9 +132,10 @@ dashboard devono essere tap-to-open o sono solo etichette. (Bassa confidenza: po
 
 **Finding azionabile:**
 - ⚠️ **Toolbar del Report tagliata a destra** a larghezze laptop/strette (~960px, la finestra reale dell'utente):
-  i tasti **Diffida / Relazione / Gestione Dati / Documenti / Stampa** finiscono fuori schermo, senza wrap né
+  i tasti **Relazione / Gestione Dati / Documenti / Stampa** finiscono fuori schermo, senza wrap né
   scroll orizzontale → a finestra non massimizzata non si raggiungono. Fix: far andare a capo la toolbar o
   renderla scrollabile sotto una certa larghezza. **Candidato manutenzione (P2/P3).**
+  (NB: il tasto "Diffida" è stato **rimosso** il 30/06 su richiesta utente — feature non usata.)
 
 **Risolto in questo giro:**
 - ✅ **Omonimi anche nella scheda azienda** (`CompanyPage`): mostrava due "Avella Antonio" identici → aggiunto
