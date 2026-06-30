@@ -1,3 +1,51 @@
+# MISSIONE 30/06 pom. — Arricchire la Relazione Riposi con la metodologia del perito (doc Vincenzo)
+
+> Fonti: cartella `~/Desktop/Pratiche_differenze_ retributive_ indennità/mancati riposi/`
+> (2 .docx perito + Excel + CSV). Analisi: `tasks/analisi-doc-vincenzo-riposi-2026-06-30.md`.
+
+## Scope confermato dalla verifica (IMPORTANTE)
+- ❌ **Il motore di calcolo NON si tocca.** Verificato sui CSV: la nostra tariffa (`deriveTariffePerAnno`)
+  = tariffa effettiva del PDF (10,04→13,13 = colonna `tariffa_oraria_mediana_eur`); il coefficiente 20% è
+  scelta dell'avvocato già confermata; le due serie sono già a confronto. Tutto corretto.
+- ✅ Il valore dei doc è la **base giuridica della valorizzazione**, che la nostra Relazione NON cita.
+
+## P1 (la missione) — `utils/riposiRelazione.ts`: sezione "Base contrattuale della valorizzazione"
+- [ ] Aggiungere ai riferimenti di legge: **L. 138/1958**, **D.Lgs. 66/2003** (oltre 561/2006 + 234/2007).
+- [ ] Nuova sezione con la catena **CCNL Autoferrotranvieri**: 1976 (art. 6 retrib. normale, art. 15 retrib.
+      oraria), 1980 (art. 11 straord./fest./nott.), 1982 (raddoppio notturne dal 1984), **1997 (art. 14:
+      riposo periodico = festivo)**.
+- [ ] Principio art. 14/1997: prestazione nel giorno fissato per il riposo = **lavoro festivo**.
+- [ ] **Divisore 195** (39h/6gg = 6,5h/gg) + composizione retribuzione normale (tabellare + contingenza +
+      scatti + mensa + TDR + assegni ad personam).
+- [ ] Schema **maggiorazioni** (straord. 110%, festivo 120%, notturno +20%, combos 130/150%).
+- [ ] **Esclusioni prudenziali**: notturno e integrazione 50% NON applicate → "importi minimi".
+- [ ] Aggancio al ns. impianto: "valore pieno" (serie fonte) = valorizzazione festiva del perito; la serie B
+      applica su quel valore il **coefficiente di danno** (criterio del legale). Coerenza, niente conflitto.
+
+## P2 (se c'è tempo) — etichette/banner in-app `RiposiPraticaDetail`
+- [ ] Banner metodologico + etichette serie: citare la base contrattuale (561/2006 + valorizzazione CCNL festiva).
+
+## P3 (opzionale, gated avvocato) — coefficiente selezionabile in UI (0.20 ↔ 1.0). Rimandabile.
+
+## Verifica — FATTO
+- [x] `vitest` 229/229 verde + tsc OK + build OK (motore invariato).
+- [x] Relazione .docx di Viterbo generata dall'app → textutil → confermate tutte le nuove sezioni
+      (art. 14 CCNL, divisore 195, "festivo a tutti gli effetti", L.138/1958, D.Lgs.66/2003, prudenziale, valore pieno).
+- [x] P3 selettore: round-trip DB verificato (0,20 → 1 → 0,20). **Viterbo ripristinato a 0.2** (lawyer-confirmed).
+- [ ] Commit dedicato (P1+P2+P3). NON deployare (batch).
+
+### Review (2026-06-30 pom.) — MISSIONE COMPLETA
+- **Colpo di scena verificato sui CSV**: il motore era GIÀ corretto (tariffa = effettiva del PDF 10,04→13,13;
+  coefficiente 20% = scelta avvocato). Niente da correggere nel calcolo → ipotesi iniziale "tariffa sbagliata" smentita.
+- **P1** `riposiRelazione.ts`: aggiunta la base contrattuale (catena CCNL + art.14/1997 festivo + divisore 195 +
+  maggiorazioni + esclusioni prudenziali) dentro la sez. "2. Quadro normativo". Solo testo, zero calcolo.
+- **P2** `RiposiPraticaDetail.tsx`: banner + sottotitolo card PDF citano la valorizzazione contrattuale.
+- **P3** `RiposiPraticaDetail.tsx`: selettore "Valorizzazione serie B" (Valore pieno 100% ↔ Danno 20%) che espone
+  il campo `coefficiente` già esistente (default e motore invariati). Visibile solo per owner su pratica gestibile.
+- File su Desktop: `~/Desktop/Pratiche_differenze_ retributive_ indennità/mancati riposi/` (2 docx + Excel + CSV).
+
+---
+
 # Recupero busta misfiled #5 — Gentile Celestino (Settembre 2009) — 2026-06-30 pom.
 
 > 5° dei 7 recuperi. Playbook = memoria `project-audit-mese-archivio-vs-testata` + lezione 30/06.
