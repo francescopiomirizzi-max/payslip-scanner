@@ -82,6 +82,16 @@ export const formatLongDate = (date: Date = new Date()) => {
   return date.toLocaleDateString('it-IT', { year: 'numeric', month: 'long', day: 'numeric' });
 };
 
+// Estrae il marcatore di sede tra parentesi in coda al ruolo (es.
+// "Operatore Specializzato Manutenzione (Termoli)" → "Termoli"). Serve a distinguere
+// a colpo d'occhio gli OMONIMI (es. i due "Avella Antonio", Foggia vs Termoli) nelle liste
+// compatte — lista archivio e chip dashboard — dove si vede solo "Cognome Nome".
+// null se il ruolo non porta una sede tra parentesi.
+export const sedeFromRuolo = (ruolo: string | undefined | null): string | null => {
+  const m = (ruolo ?? '').match(/\(([^)]+)\)\s*$/);
+  return m ? m[1].trim() : null;
+};
+
 export const getProfiloBadgeLabel = (profilo: string | undefined, eliorType?: 'viaggiante' | 'magazzino', short = false): string => {
   if (!profilo) return '';
   if (profilo === 'ELIOR') {

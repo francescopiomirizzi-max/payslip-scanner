@@ -9,7 +9,7 @@ import { SYSTEM_PROFILES, SYSTEM_PROFILE_KEYS, getCompanyGradient, getCompanyHex
 import { CompanyLogo } from '../components/ui/CompanyLogo';
 import { usePayslipArchive, PayslipRecord } from '../hooks/usePayslipArchive';
 import { matchesCompanyFilter } from '../hooks/useWorkers';
-import { getProfiloBadgeLabel } from '../utils/formatters';
+import { getProfiloBadgeLabel, sedeFromRuolo } from '../utils/formatters';
 import { useIsReadOnly, canExportForViewer } from '../lib/readonly';
 
 interface ArchivePageProps {
@@ -504,6 +504,7 @@ const ArchivePage: React.FC<ArchivePageProps> = ({ workers, onBack, initialWorke
                 const isLoading = loadingWorker === worker.id;
                 const count = payslipCountMap[worker.id];
                 const dataMonths = (worker.anni ?? []).length;
+                const sede = sedeFromRuolo(worker.ruolo);
                 const wHex = getCompanyHex(worker.profilo);
                 const [wGradS, wGradE] = getCompanyGradient(worker.profilo);
 
@@ -539,6 +540,15 @@ const ArchivePage: React.FC<ArchivePageProps> = ({ workers, onBack, initialWorke
                           <span className="text-[9px] font-bold tabular-nums text-slate-400">{count} PDF</span>
                         ) : (
                           <span className="text-[9px] tabular-nums text-slate-400">{dataMonths} mesi</span>
+                        )}
+                        {/* Tag sede: distingue gli OMONIMI (es. Avella Antonio Foggia vs Termoli) */}
+                        {sede && (
+                          <span
+                            className="text-[9px] font-black uppercase tracking-wide px-1.5 py-px rounded-md text-white shrink-0"
+                            style={{ background: wHex }}
+                          >
+                            {sede}
+                          </span>
                         )}
                       </div>
                     </div>

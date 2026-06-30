@@ -38,7 +38,7 @@ import {
 import WorkerCard from '../components/WorkerCard';
 import MessagesInbox from '../components/MessagesInbox';
 import { useUnreadMessages } from '../hooks/useMessages';
-import { groupThousandsIT } from '../utils/formatters';
+import { groupThousandsIT, sedeFromRuolo } from '../utils/formatters';
 import { AnimatedCounter } from '../components/ui/AnimatedCounter';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { useIsReadOnly, useReadOnlyViewerName } from '../lib/readonly';
@@ -77,11 +77,14 @@ const CASSETTO_ITEM_VARIANTS = {
 const Cassetto: React.FC<{
     config: CassettoConfig;
     workers: Worker[];
+    // Cognomi (lowercase) condivisi da ≥2 lavoratori in TUTTA l'anagrafica: per questi il
+    // chip (che di norma mostra solo il cognome) aggiunge il nome → distingue i fratelli/omonimi.
+    ambiguousCognomi: Set<string>;
     isOpen: boolean;
     onToggle: () => void;
     onOpenWorker: (id: string) => void;
     children: React.ReactNode;
-}> = ({ config, workers, isOpen, onToggle, onOpenWorker, children }) => {
+}> = ({ config, workers, ambiguousCognomi, isOpen, onToggle, onOpenWorker, children }) => {
     const Icon = config.icon;
     const count = workers.length;
     // Il tooltip del badge deve dire dove si atterra davvero (report per il viewer).
@@ -157,6 +160,9 @@ const Cassetto: React.FC<{
                                         const wrapCls = profilo?.footer.wrap ?? 'bg-slate-100 dark:bg-slate-700/40 border-slate-200 dark:border-slate-600/50';
                                         const dotCls  = profilo?.footer.dot  ?? 'bg-slate-400';
                                         const nameCls = profilo?.footer.name ?? 'text-slate-700 dark:text-slate-300';
+                                        const sede = sedeFromRuolo(w.ruolo);
+                                        // Cognome condiviso (es. fratelli Circello) → mostra anche il nome.
+                                        const ambiguo = ambiguousCognomi.has(w.cognome.toLowerCase());
                                         return (
                                             <button
                                                 key={w.id}
@@ -165,7 +171,9 @@ const Cassetto: React.FC<{
                                                 className={`shrink-0 flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold border shadow-sm transition-all duration-150 hover:scale-[1.06] hover:-translate-y-px hover:shadow-md ${wrapCls}`}
                                             >
                                                 <span className={`w-2 h-2 rounded-full ${dotCls}`} />
-                                                <span className={`tracking-tight ${nameCls}`}>{w.cognome}</span>
+                                                <span className={`tracking-tight ${nameCls}`}>{w.cognome}{ambiguo ? ` ${w.nome}` : ''}</span>
+                                                {/* Sede: distingue gli omonimi PIENI (stesso cognome+nome, es. Avella Antonio Foggia vs Termoli) */}
+                                                {sede && <span className={`tracking-tight font-semibold opacity-60 ${nameCls}`}>· {sede}</span>}
                                             </button>
                                         );
                                     })}
@@ -517,6 +525,18 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
             </motion.div>
         );
     };
+
+    // Cognomi condivisi da ≥2 lavoratori (lowercase): per questi i chip dei cassetti
+    // aggiungono il nome, così i fratelli/omonimi (es. Circello Francesco vs Marco) si
+    // distinguono anche dove di norma si vede solo il cognome.
+    const ambiguousCognomi = useMemo(() => {
+        const counts = new Map<string, number>();
+        for (const w of workers) {
+            const k = w.cognome.toLowerCase();
+            counts.set(k, (counts.get(k) ?? 0) + 1);
+        }
+        return new Set(Array.from(counts.entries()).filter(([, n]) => n > 1).map(([k]) => k));
+    }, [workers]);
 
     const searchActive = searchQuery.trim().length > 0;
     // Filtro trasversale "Urgenze": lavoratori con buste paga da sistemare (fixTargets),
@@ -1317,6 +1337,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                                     key={config.id}
                                     config={config}
                                     workers={workersInCassetto}
+                                    ambiguousCognomi={ambiguousCognomi}
                                     isOpen={isOpen}
                                     onToggle={() => toggleCassetto(config.id)}
                                     // Per il viewer readonly il nome porta al Report (la sua

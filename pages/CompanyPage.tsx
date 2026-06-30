@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, Users, FileText, Mail, ChevronRight, UserX } from 'lucide-react';
 import { Worker } from '../types';
+import { sedeFromRuolo } from '../utils/formatters';
 import { SYSTEM_PROFILES, getCompanyLogo } from '../config/profiles';
 import { CompanyLogo } from '../components/ui/CompanyLogo';
 import { DevBadge } from '../components/ui/DevBadge';
@@ -221,6 +222,7 @@ const CompanyPage: React.FC<CompanyPageProps> = ({ companyKey, workers, onBack, 
                             {list.map(w => {
                                 const cassetto = getCassettoByStatus(w.status);
                                 const initial = (w.cognome || w.nome || '?').charAt(0).toUpperCase();
+                                const sede = sedeFromRuolo(w.ruolo); // distingue gli omonimi pieni (es. Avella Antonio Foggia/Termoli)
                                 return (
                                     <button
                                         key={w.id}
@@ -236,6 +238,7 @@ const CompanyPage: React.FC<CompanyPageProps> = ({ companyKey, workers, onBack, 
                                         </span>
                                         <span className="min-w-0 flex-1 font-bold text-slate-800 dark:text-white truncate">
                                             {w.cognome} {w.nome}
+                                            {sede && <span className="ml-1.5 font-semibold text-slate-400 dark:text-slate-500">· {sede}</span>}
                                         </span>
                                         <FixBadge worker={w} size="sm" />
                                         <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400 shrink-0">
