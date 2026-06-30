@@ -48,8 +48,9 @@ non deployato / chi ha deciso cosa oggi" → memory. Se è "ho sbagliato X, evit
 - [`ccnl-e-normativa.md`](ccnl-e-normativa.md) — CCNL Mobilità/AF (RFI, Trenitalia), Multiservizi (Clean Service), Elior, Mercitalia
 - [`codici-voce.md`](codici-voce.md) — legenda codici voce per profilo + note OCR
 - [`metodologia-calcolo.md`](metodologia-calcolo.md) — come si calcola il credito ferie e la % di incidenza
+- [`metodologia-mancati-riposi.md`](metodologia-mancati-riposi.md) — mancati riposi (Reg. CE 561/2006 + valorizzazione CCNL): soglie, tariffa effettiva, coefficiente danno, due serie
 - [`strategia-a-vs-b.md`](strategia-a-vs-b.md) — il divisore della media: giornate effettive (A) vs assenze incluse (B)
 - [`verifica-pratica.md`](verifica-pratica.md) — checklist per considerare "chiusa" una pratica
 - [`avvocato-decisioni.md`](avvocato-decisioni.md) — set voci confermato e decisioni chiuse/aperte
 
-_Ultimo aggiornamento: 2026-06-05._
+_Ultimo aggiornamento: 2026-06-30._
