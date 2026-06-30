@@ -52,5 +52,6 @@ non deployato / chi ha deciso cosa oggi" → memory. Se è "ho sbagliato X, evit
 - [`strategia-a-vs-b.md`](strategia-a-vs-b.md) — il divisore della media: giornate effettive (A) vs assenze incluse (B)
 - [`verifica-pratica.md`](verifica-pratica.md) — checklist per considerare "chiusa" una pratica
 - [`avvocato-decisioni.md`](avvocato-decisioni.md) — set voci confermato e decisioni chiuse/aperte
+- [`indennita-assenza-residenza-elior.md`](indennita-assenza-residenza-elior.md) — vertenza Elior ristorazione: indennità assenza residenza (CCNL 2016 vs accordo aziendale), voci 4300/4305
 
 _Ultimo aggiornamento: 2026-06-30._
