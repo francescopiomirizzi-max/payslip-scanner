@@ -8,9 +8,15 @@ Nuova lavorazione: calcolare le **differenze retributive sull'indennità di asse
 lavoratori **Elior viaggiante** (periodo nov 2017 – lug 2023), generare **prospetto analitico + relazione**,
 pronta da allegare al ricorso.
 
-## Perché è fattibile con poco (la buona notizia)
-- I dati **ci sono già**: voci **`4300`** (No RS) e **`4305`** (RS) sono colonne estratte sull'archivio Elior viaggiante.
-- Calcolo **deterministico e semplice**: delta di tariffa × importo già pagato (nessun OCR nuovo).
+## ⚠️ PREREQUISITO BLOCCANTE (dati viaggiante incompleti)
+Verificato sul DB il 30/06: le buste Elior **viaggiante NON sono in archivio** (analizzate dal vecchio
+gestionale, prima che l'archivio esistesse → solo in tabella `anni`); i codici `4300/4305` sono estratti in
+**pochissimi mesi** (es. Boriglione 3/228); mancano le **voci fisse**. → **Prima** della vertenza serve:
+**acquisire le buste viaggiante → caricarle in archivio → ri-scansionarle con tutte le voci** (nov2017–lug2023).
+(Elior **magazzino** è completo — Ghiro/Mastropasqua, ~98 buste — ma non ha 4300/4305: non c'entra con questa vertenza.)
+
+## Perché poi è fattibile con poco (una volta sistemati i dati)
+- Calcolo **deterministico e semplice**: delta di tariffa × importo già pagato (nessun metodo nuovo).
 - Molto **riusabile**: archivio + struttura per-anno + rivalutazione ISTAT/interessi + generatori relazione/Excel.
 
 ## Calcolo (nucleo)
@@ -39,6 +45,8 @@ Per ogni mese nel periodo [nov 2017 → lug 2023]:
 - Scope con l'avvocato: un lavoratore **pilota** vs batch.
 
 ## Primo passo concreto (prossima sessione)
-1. Aprire 1-2 buste Elior viaggiante reali (es. un mese 2018 e uno 2022) → leggere `4300/4305` e confermare le tariffe pagate.
-2. Stimare a mano (Excel) il credito di **un lavoratore pilota** → validare il metodo PRIMA di scrivere codice.
-3. Decidere con l'avvocato se procede come lavorazione di prodotto.
+1. **Sbloccare i dati viaggiante** (prerequisito): reperire le buste Elior viaggiante, caricarle in archivio e
+   ri-scansionarle con tutte le voci per nov2017–lug2023. Senza questo non c'è il dato `4300/4305` su cui calcolare.
+2. Su 1-2 buste reali confermare che `4300/4305 ÷ ore = 0,75 / 1,00` (misura ridotta effettivamente pagata).
+3. Stimare a mano (Excel) il credito di **un lavoratore pilota** → validare il metodo PRIMA di scrivere codice.
+4. Decidere con l'avvocato lo scope (pilota vs batch).

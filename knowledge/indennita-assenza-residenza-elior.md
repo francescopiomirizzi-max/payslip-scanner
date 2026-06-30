@@ -20,12 +20,21 @@ residenza di lavoro. Due misure: **servizi SENZA riposo fuori residenza** e **se
   fino a luglio 2023**; da **agosto 2023** paga la misura piena.
 - **Credito** = differenze sul periodo **novembre 2017 – luglio 2023**.
 
-## Dove sta il dato in busta (RailFlow) — già estratto
-Voci Elior **viaggiante** (`INDENNITA_ELIOR` in `types.ts`):
+## Dove sta il dato in busta (RailFlow) — ⚠️ DATI VIAGGIANTE INCOMPLETI
+Le voci sono **definite** (`INDENNITA_ELIOR` in `types.ts`):
 - **`4300` — "Ass. Res. No RS"** = assenza residenza **senza** riposo (pagata €0,75, dovuta €1,30).
 - **`4305` — "Ass. Res. RS"** = assenza residenza **con** riposo (pagata €1,00, dovuta €2,20).
 
-→ Gli importi pagati (misura ridotta) sono **già nell'archivio** Elior viaggiante (`extracted_data.codes`).
+**MA i dati Elior viaggiante NON sono pronti** (verificato sul DB il 30/06):
+- Le buste viaggiante **non sono in archivio** (`payslip_metadata`): analizzate dal **vecchio gestionale**,
+  *prima* che l'archivio esistesse → presenti solo nella **tabella** (griglia `anni`).
+- Anche in tabella i codici `4300/4305` compaiono in **pochissimi mesi** (es. Boriglione 3/228, altri 0–2):
+  l'indennità residenza **non è estratta** per la quasi totalità del periodo.
+- Mancano anche le **voci fisse** Elior viaggiante.
+- → **Prerequisito alla vertenza:** acquisire le buste viaggiante, caricarle in archivio e **ri-scansionarle
+  con tutte le voci** (4300/4305 inclusi) per il periodo nov 2017 – lug 2023.
+- (Elior **magazzino** — Ghiro/Mastropasqua, ~98 buste ciascuno in archivio — è completo, ma il magazzino
+  **NON ha** l'indennità residenza: non è oggetto di questa vertenza.)
 
 ## Calcolo della differenza (per mese, nel periodo nov2017–lug2023)
 - Da `4300`: differenza = importo₄₃₀₀ × (1,30/0,75 − 1) = importo × **0,7333** (≡ ore × €0,55, con ore = importo/0,75).
