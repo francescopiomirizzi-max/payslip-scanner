@@ -1,3 +1,94 @@
+# PIANO — Nuova area "Indennità" (vertenza-voce) · banco di prova Elior magazzino (2026-06-30)
+
+> Disegno completo: [feature-indennita-residenza-elior.md](feature-indennita-residenza-elior.md).
+> **NON implementare finché non approvato.** Stato: piano in attesa di OK.
+> **Bacino = tutti gli Elior viaggiante** (già presenti + futuri): la sezione si auto-popola dai worker
+> `profilo==='ELIOR' && eliorType==='viaggiante'` (sono esattamente i destinatari di questa vertenza).
+> I dati 4300/4305 reali del viaggiante sono ancora incompleti (no `extracted_data`/OCR) → per validare i
+> **numeri** del confronto si usa un **seed/mock** su un viaggiante finché non si sblocca l'OCR.
+> Obiettivo di QUESTA fase: **scheletro feature + UI navigabile + motore parametrico**, con la lista già
+> popolata dai viaggiante reali. La vertenza VERA (numeri 4300/4305 reali) = dopo lo sblocco dati — fuori scope qui.
+
+> **STATO — giro 1 (30/06):** Fasi 0-4 ✅ scheletro navigabile (tsc=0 · 236 test · build ok).
+> Restano: **Fase 4b** (cross-link da Incidenza), **Fase 5** (generatori .docx/Excel/stampa + aggancio ISTAT),
+> **Fase 6** verifica navigazione manuale (serve login owner). Tutto locale, non deployato.
+
+## Principi
+- **Gemello *differenziato* dei Riposi**: stesso pattern, identità propria (rame/ambra + icona MapPin/Home),
+  cuore detail = **confronto Pagato↔Dovuto**, **timeline prescrizione** esclusiva.
+- **Modulo parametrico sulla voce**: niente hard-code 4300/4305 (config: voci+tariffe, periodo, prescrizione).
+- **Additivo**: zero impatto su Incidenza e Riposi (nuova `AppArea`, nuove rotte, nuovi file).
+
+## Fase 0 — Dato & tipi
+- [ ] `types.ts`: tipo `PraticaVertenza` { id, workerNome, profilo/eliorType, voci:[{codice,label,tariffaPagata,tariffaDovuta}],
+      periodo{da,a}, prescrizione{interruzioni[],cutoff}, coefficiente?, stato:'bozza'|'in_corso'|'pagata' }.
+- [ ] Migration Supabase `pratiche_vertenze` (clone leggero di `pratiche_riposi`) + RLS owner/viewer identiche. **Non applicare finché il piano non è approvato.**
+- [ ] **Lista derivata dai viaggiante reali**: la lista = tutti i worker `ELIOR/viaggiante` (one-pratica-per-worker,
+      creata on-demand). `pratiche_vertenze` persiste stato/parametri/override; i worker senza pratica compaiono
+      come «da impostare». Accoglie automaticamente i futuri viaggiante.
+- [ ] Seed/mock dei **numeri** su 1 viaggiante (tariffe + importi finti realistici) per validare il confronto Pagato↔Dovuto finché manca l'OCR.
+
+## Fase 1 — Motore parametrico
+- [ ] `utils/vertenzaEngine.ts`: per mese×voce `ore = importo/tariffaPagata` · `Δ = ore×(dovuta−pagata)`;
+      somma per anno; + rivalutazione ISTAT FOI (`istatService`) + interessi legali; `coefficiente` opzionale.
+- [ ] Test `vitest`: 1 voce · 2 voci · prescrizione che taglia mesi · coefficiente ≠ 1.
+
+## Fase 2 — Area & navigazione
+- [ ] `AreaSwitch`: terza voce `'indennita'` (rame/ambra, icona MapPin/Home); estendere `AppArea`.
+- [ ] Routing hash + persistenza area come per Incidenza/Riposi.
+
+## Fase 3 — Lista pratiche (`VertenzeArea`, calco di `RiposiArea`)
+- [ ] **Auto-popolata dai worker `ELIOR/viaggiante`** (filtro su `useWorkers`), non da seed: ogni viaggiante = una riga.
+      Oggi sono **≈10** → **lista lineare** ordinabile per stato/credito; niente raggruppamenti per azienda né ricerca pesante.
+- [ ] Card per-lavoratore: **header con `CompanyLogo` Elior** (già meglio dei Riposi attuali); stato/credito/periodo o «da impostare».
+- [ ] Stati vuoto/loading.
+
+## Fase 4 — Detail (`VertenzaDetail`) — il cuore differenziato
+- [ ] Header pratica **con `CompanyLogo` Elior** (i Riposi oggi NON mostrano il logo — qui sì).
+- [ ] **Timeline prescrizione** (striscia nov2017→lug2023 + marcatori interruzioni OO.SS. + cutoff); statica in v1.
+- [ ] **Tabella confronto Pagato↔Dovuto** per voce (4300/4305) con colonna Δ + riga GAP+ISTAT+interessi = credito.
+- [ ] Banner metodologico (CCNL Multiservizi/Ristorazione 2012/2016 art. 77; misura ridotta vs CCNL).
+- [ ] Selettore coefficiente (riuso pattern Riposi), gated owner.
+
+## Fase 4b — Richiamo da Incidenza (cross-link)
+- [ ] Nella scheda Incidenza di un worker `ELIOR/viaggiante` (`WorkerCard` / `WorkerDetailHeader`): badge/bottone
+      **«Indennità residenza»** → `setArea('indennita')` (esposto da `App.tsx:106`) + deep-link al worker (hash `#indennita/<id>`).
+- [ ] Visibile **solo** per i viaggiante (no RFI/magazzino/altri profili). Owner + viewer (sola navigazione, nessun export).
+
+## Fase 5 — Generatori (calco `riposi*`)
+- [ ] `vertenzaRelazione.ts` (.docx vero, libreria docx) · `vertenzaExcel.ts` · `vertenzaPrint.ts`.
+- [ ] Gate viewer via `canExportForViewer` (export solo su pratiche `pagata`).
+
+## Fase 6 — Verifica
+- [ ] `npx tsc --noEmit` = 0 · `vitest` verde · `npm run build` ok.
+- [ ] Navigazione manuale: area visibile → lista → detail → timeline → confronto → azioni; Incidenza/Riposi invariati.
+- [ ] Rilettura diff: tutto additivo, nessuna regressione sulle aree esistenti.
+
+## Fuori scope (questa fase)
+- Sblocco dati **viaggiante** (acquisire+caricare+ri-scansionare buste reali nov2017–lug2023) → prerequisito della vertenza VERA, sessione dedicata.
+- Estrazione OCR reale di 4300/4305.
+
+## Side-note (segnalato 30/06) — logo azienda mancante in Turni & Riposi (Viterbo)
+Due cause combinate (verificate nel codice):
+- (a) `RiposiPraticaDetail` **non rende** affatto `CompanyLogo` nell'header (l'area Incidenza sì, via `WorkerCard`/`WorkerDetailHeader`).
+- (b) L'azienda di Viterbo è **custom** (`pratica.azienda` = stringa libera), non un profilo di sistema → `getCompanyLogo` = null
+      (loghi solo per RFI/Trenitalia/Elior/Mercitalia/Clean Service, `config/profiles.ts`).
+- **Fix (task separato)**: aggiungere il blocco logo nell'header Riposi **+** registrare un logo per l'azienda viterbese
+      (file in `public/logos/` + mappatura custom). Da decidere: ora o backlog.
+
+### Review — giro 1 (2026-06-30)
+Scheletro navigabile completo, additivo (Incidenza/Riposi invariati). tsc=0 · 236 test (7 nuovi sul motore) · build ok.
+File nuovi: `utils/vertenzaEngine.ts` (motore parametrico) · `__tests__/vertenzaEngine.test.ts` · `hooks/usePraticheVertenze.ts`
+(lista auto-derivata dai worker ELIOR/viaggiante + seed didattico) · `components/VertenzeArea.tsx` (lista, identità rame) ·
+`components/VertenzaDetail.tsx` (confronto Pagato↔Dovuto + timeline prescrizione + selettore coefficiente) ·
+`public/elior-residenza-seed.json` · `supabase/migrations/021_pratiche_vertenze.sql` (**creata, NON applicata**).
+File toccati: `AreaSwitch.tsx` (3ª voce rame/MapPin) · `App.tsx` (render + titolo) · `useHashRoute.ts` (`#/indennita`).
+Decisioni chiuse in autonomia: seed = "Boriglione" demo; logo Viterbo → backlog.
+Rimandato al giro 2: cross-link da Incidenza, generatori, aggancio ISTAT/interessi (ora a 0), persistenza DB.
+Da fare lato utente: verifica navigazione manuale (login owner) — la lista mostrerà i 10 viaggiante reali + la card demo.
+
+---
+
 # MISSIONE 30/06 pom. — Arricchire la Relazione Riposi con la metodologia del perito (doc Vincenzo)
 
 > Fonti: cartella `~/Desktop/Pratiche_differenze_ retributive_ indennità/mancati riposi/`

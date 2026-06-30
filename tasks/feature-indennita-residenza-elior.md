@@ -31,6 +31,33 @@ Per ogni mese nel periodo [nov 2017 → lug 2023]:
 3. **Prospetto analitico differenze** (per mese/anno) + **Excel** allegabile.
 4. **Selezione lavoratori**: solo Elior **viaggiante**; gestione prescrizione + periodo per-lavoratore.
 
+## Disegno visivo (deciso 30/06) — gemello *differenziato* dei Riposi
+La feature riusa il modello dell'area Riposi, ma con identità propria: NON è una copia fotostatica,
+perché il problema è diverso (delta di tariffa su una voce già pagata, non conteggio di eventi).
+- **Collocazione**: terza voce nell'`AreaSwitch` (oggi Incidenza=smeraldo / Riposi=indaco) → "Indennità".
+- **Identità propria**: colore **rame/ambra** + icona **MapPin/Home** (residenza), non l'orologio dei riposi.
+- **Cuore del detail = confronto "Pagato ↔ Dovuto"** (scelto su 3 varianti, 30/06): asse sulle VOCI
+  (4300/4305), due colonne contrapposte *pagato* vs *dovuto* + colonna **Δ** evidenziata; riga finale
+  GAP + ISTAT + interessi = credito. Visualizza la tesi giuridica "preso meno del dovuto".
+- **Timeline di prescrizione** (elemento *esclusivo*, i riposi non ce l'hanno): striscia orizzontale
+  nov2017→lug2023 con marcatori delle interruzioni (OO.SS. 12/02/2018, 19/04/2023) + cutoff data
+  deposito → a colpo d'occhio cosa è recuperabile vs prescritto.
+- **Lista pratiche** (`VertenzeArea`, calco di `RiposiArea`): card per-lavoratore con stato/credito/periodo.
+- **Azioni**: Relazione .docx / Excel / Stampa (calco `riposi*`), gated viewer via `canExportForViewer`.
+
+## Modulo parametrico (NON hard-coded sulla residenza)
+Per non vedere solo zeri sul banco di prova e per riusarlo su future vertenze-voce:
+`config = { voci:[{codice, tariffaPagata, tariffaDovuta}], periodo, prescrizione:{dateInterruzione[]}, coefficiente? }`.
+Motore invariato: `ore = importo/tariffaPagata` · `Δ = ore × (dovuta − pagata)` → somma anno → ISTAT → interessi.
+Il **viaggiante reale** entra domani cambiando solo la config, zero riscrittura.
+
+## Banco di prova UI = Elior magazzino (deciso 30/06)
+Si costruisce **prima l'infrastruttura + UI** usando il magazzino (buste già in archivio).
+⚠️ Il magazzino **non** ha 4300/4305 (sono solo del viaggiante, `types.ts:173-174` / `getColumnsByProfile` :315)
+e l'archivio magazzino ha `extracted_data` vuoto → per popolare la UI si usa una **pratica seed/demo**
+(come fu Viterbo all'inizio), non dati reali. La vertenza **vera** resta condizionata allo sblocco dei
+dati viaggiante (prerequisito bloccante qui sopra, invariato).
+
 ## Riuso da RailFlow (mappa)
 - Archivio/estrazione Elior: già presente (`4300/4305` in `INDENNITA_ELIOR`, `types.ts`).
 - Rivalutazione ISTAT FOI + interessi: già presente (`istatService` / dashboard ISTAT).

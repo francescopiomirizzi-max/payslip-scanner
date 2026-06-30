@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 
 type ViewMode = 'home' | 'simple' | 'complex' | 'stats' | 'archive' | 'company';
-type AppArea = 'incidenza' | 'riposi';
+type AppArea = 'incidenza' | 'riposi' | 'indennita';
 
 interface HashRouteDeps {
     /** true quando auth + workers sono caricati: solo allora un deep link è applicabile */
@@ -51,6 +51,9 @@ export const useHashRoute = (deps: HashRouteDeps) => {
             case 'riposi':
                 d.setArea('riposi');
                 return;
+            case 'indennita':
+                d.setArea('indennita');
+                return;
             case 'stats':
                 d.setArea('incidenza');
                 d.setViewMode('stats');
@@ -88,6 +91,7 @@ export const useHashRoute = (deps: HashRouteDeps) => {
     const routeFromState = (): string => {
         const d = depsRef.current;
         if (d.area === 'riposi') return '#/riposi';
+        if (d.area === 'indennita') return '#/indennita';
         switch (d.viewMode) {
             case 'stats':   return '#/stats';
             case 'company': return d.selectedCompany ? `#/azienda/${d.selectedCompany}` : '#/';

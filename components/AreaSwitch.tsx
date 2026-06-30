@@ -1,8 +1,8 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Wallet, Clock } from 'lucide-react';
+import { Wallet, Clock, MapPin } from 'lucide-react';
 
-export type AppArea = 'incidenza' | 'riposi';
+export type AppArea = 'incidenza' | 'riposi' | 'indennita';
 
 interface AreaSwitchProps {
     area: AppArea;
@@ -10,7 +10,8 @@ interface AreaSwitchProps {
 }
 
 // Ogni area ha il suo colore, così la pillola segnala "dove sei":
-//   Incidenza (buste/€) = smeraldo · Turni & Riposi (561/2006) = indaco.
+//   Incidenza (buste/€) = smeraldo · Turni & Riposi (561/2006) = indaco ·
+//   Indennità (vertenza assenza residenza Elior) = rame/ambra.
 const META: Record<AppArea, { label: string; icon: React.ComponentType<{ className?: string }>; activeBg: string; hoverText: string }> = {
     incidenza: {
         label: 'Incidenza',
@@ -24,9 +25,15 @@ const META: Record<AppArea, { label: string; icon: React.ComponentType<{ classNa
         activeBg: 'bg-gradient-to-r from-indigo-500 to-violet-500 shadow-indigo-500/40',
         hoverText: 'hover:text-indigo-600 dark:hover:text-indigo-400',
     },
+    indennita: {
+        label: 'Indennità',
+        icon: MapPin,
+        activeBg: 'bg-gradient-to-r from-amber-500 to-orange-600 shadow-amber-500/40',
+        hoverText: 'hover:text-amber-600 dark:hover:text-amber-400',
+    },
 };
 
-const ORDER: AppArea[] = ['incidenza', 'riposi'];
+const ORDER: AppArea[] = ['incidenza', 'riposi', 'indennita'];
 
 /**
  * Switch globale tra le due aree dell'app. Compatto, fisso in basso a sinistra,

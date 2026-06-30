@@ -1,0 +1,49 @@
+[
+  {
+    "nome": "Mario",
+    "cognome": "Boriglione",
+    "periodoStart": "01/11/2017",
+    "periodoEnd": "31/07/2023",
+    "coefficiente": 1,
+    "prescrizione": {
+      "anni": 5,
+      "cutoff": "01/03/2024",
+      "interruzioni": [
+        { "data": "12/02/2018", "nota": "Comunicazione OO.SS." },
+        { "data": "19/04/2023", "nota": "Comunicazione OO.SS." }
+      ]
+    },
+    "voci": [
+      {
+        "codice": "4300",
+        "label": "Ass. Res. No RS",
+        "tariffaPagata": 0.75,
+        "tariffaDovuta": 1.30,
+        "righe": [
+          { "anno": "2017", "importoPagato": 60 },
+          { "anno": "2018", "importoPagato": 360 },
+          { "anno": "2019", "importoPagato": 372 },
+          { "anno": "2020", "importoPagato": 360 },
+          { "anno": "2021", "importoPagato": 384 },
+          { "anno": "2022", "importoPagato": 372 },
+          { "anno": "2023", "importoPagato": 210 }
+        ]
+      },
+      {
+        "codice": "4305",
+        "label": "Ass. Res. RS",
+        "tariffaPagata": 1.00,
+        "tariffaDovuta": 2.20,
+        "righe": [
+          { "anno": "2017", "importoPagato": 50 },
+          { "anno": "2018", "importoPagato": 300 },
+          { "anno": "2019", "importoPagato": 312 },
+          { "anno": "2020", "importoPagato": 300 },
+          { "anno": "2021", "importoPagato": 324 },
+          { "anno": "2022", "importoPagato": 312 },
+          { "anno": "2023", "importoPagato": 175 }
+        ]
+      }
+    ]
+  }
+]

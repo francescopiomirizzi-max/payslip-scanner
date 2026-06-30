@@ -11,6 +11,7 @@ import Background from './components/Background';
 import AppRouter from './components/AppRouter';
 import AreaSwitch, { type AppArea } from './components/AreaSwitch';
 import RiposiArea from './components/RiposiArea';
+import VertenzeArea from './components/VertenzeArea';
 import ViewerPaymentBlock from './components/ViewerPaymentBlock';
 import HiddenClasses from './HiddenClasses';
 
@@ -125,6 +126,7 @@ const App: React.FC = () => {
         const base = 'RailFlow';
         let title = `${base} — Gestionale Ferrovieri`;
         if (area === 'riposi') title = `Turni & Riposi · ${base}`;
+        else if (area === 'indennita') title = `Indennità residenza · ${base}`;
         else if (viewMode === 'stats') title = `Statistiche · ${base}`;
         else if (viewMode === 'company' && selectedCompany)
             title = `${(SYSTEM_PROFILES[selectedCompany === 'ELIOR_MAGAZZINO' ? 'ELIOR' : selectedCompany]?.detailLabel) ?? 'Azienda'} · ${base}`;
@@ -328,6 +330,8 @@ const App: React.FC = () => {
             />}
 
             {area === 'riposi' && <RiposiArea />}
+
+            {area === 'indennita' && <VertenzeArea workers={workers} />}
 
             <AreaSwitch area={area} onChange={setArea} />
 
