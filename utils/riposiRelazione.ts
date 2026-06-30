@@ -141,6 +141,20 @@ export function buildRelazioneRiposiDoc(pratica: PraticaRiposi, result: RestResu
         bullet([b('Riposo giornaliero'), ' (art. 8 §§2,4; art. 4 lett. g): almeno ', b('11 ore consecutive'), ' nell\'arco delle 24 ore dal termine del precedente riposo; riducibile a ', b('9 ore'), ' al massimo ', b('3 volte'), ' tra due riposi settimanali.']),
         bullet([b('Riposo settimanale'), ' (art. 8 §6; art. 4 lett. h): almeno ', b('45 ore consecutive'), '; riducibile a ', b('24 ore'), ' solo in alternanza con un riposo regolare (mai due ridotti consecutivi).']),
         bullet([b('Gravità'), ': la riduzione superiore al 10% della soglia è classificata «grave» secondo i criteri del ', b('Reg. (UE) 2016/403'), '; è un criterio di classificazione, non il presupposto dell\'illecito.']),
+        para([
+            'Per la ', b('quantificazione economica'), ' del riposo non fruito si fa riferimento alla disciplina ',
+            b('contrattuale collettiva'), ' di settore — CCNL Autoferrotranvieri e successive integrazioni (',
+            b('23/07/1976'), ' artt. 6 e 15; ', b('12/03/1980'), ' art. 11; ', b('12/06/1982'), '; ',
+            b('25/07/1997'), ' art. 14) — letta insieme alla ', b('L. n. 138/1958'), ' e al ', b('D.Lgs. n. 66/2003'), '. In sintesi:',
+        ]),
+        bullet([b('Natura festiva del riposo perso'), ' (art. 14 CCNL 25/07/1997): per chi lavora di domenica e riposa in altro giorno, il giorno fissato per il riposo periodico è considerato ', b('festivo a tutti gli effetti'), '; ogni prestazione resa in tale giorno va trattata, in via principale, come ', b('lavoro festivo'), '.']),
+        bullet([b('Retribuzione oraria'), ' (art. 15 CCNL 1976): la «retribuzione normale» (tabellare/minimo, contingenza, scatti, mensa, T.D.R., assegni ad personam) è rapportata al ', b('divisore 195'), ' (39 ore settimanali su 6 giorni = 6,5 h/giorno; 6,5 × 30 = 195).']),
+        bullet([b('Maggiorazioni'), ' (cumulabili, sommate): straordinario ', b('+10%'), ', festivo ', b('+20%'), ', notturno ', b('+20%'), ' (combinazioni: straordinario festivo o notturno 130%, straordinario festivo notturno 150%).']),
+        bullet([b('Impostazione prudenziale'), ': sono assunti importi ', b('minimi'), ' — non si applicano né la maggiorazione notturna (fascia 22:00–05:00) né l\'integrazione del 50% prevista per il servizio reso nel giorno di riposo in misura inferiore all\'orario giornaliero; resta ferma ogni maggiore valutazione del Giudicante.']),
+        para([
+            'Coerentemente, il ', b('valore pieno'), ' del riposo perso recepisce la valorizzazione contrattuale qui richiamata (la tariffa oraria per anno è ricavata dalle indennità della fonte, che già la incorpora); su tale valore pieno la ',
+            b('serie B'), ' applica il coefficiente di danno secondo il criterio del legale (v. sezione «Metodo di calcolo»).',
+        ]),
 
         heading('3. Metodo di calcolo'),
         para([

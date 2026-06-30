@@ -289,8 +289,29 @@ const RiposiPraticaDetail: React.FC<Props> = ({ pratica, onBack, onUpdate }) => 
                 {/* Banner onestà dati */}
                 <div className="flex items-start gap-2 rounded-2xl bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 px-4 py-3 text-sm text-amber-800 dark:text-amber-200">
                     <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
-                    <span>Giornate dal <strong>PDF sorgente</strong> («Mancati riposi»), parsato in modo deterministico e quadrato al centesimo coi totali del documento. La tariffa è <strong>ricavata anno per anno</strong> dal documento sorgente ({tariffaLabel(rates)}, cresce per anzianità di servizio); la fonte CCNL è confermabile con l'avvocato.{coeff !== 1 && <> L'indennità è calcolata come <strong>danno = {Math.round(coeff * 100)}% del valore</strong> del riposo perso.</>}</span>
+                    <span>Giornate dal <strong>PDF sorgente</strong> («Mancati riposi»), parsato in modo deterministico e quadrato al centesimo coi totali del documento. La tariffa è <strong>ricavata anno per anno</strong> dal documento sorgente ({tariffaLabel(rates)}, cresce per anzianità di servizio); la valorizzazione segue la disciplina contrattuale (riposo periodico trattato come festivo, art. 14 CCNL 25/07/1997), confermabile con l'avvocato.{coeff !== 1 && <> L'indennità è calcolata come <strong>danno = {Math.round(coeff * 100)}% del valore</strong> del riposo perso.</>}</span>
                 </div>
+
+                {/* Selettore valorizzazione serie B (coefficiente danno) — solo owner su pratica gestibile.
+                    Espone il campo `coefficiente` già esistente: non cambia il default né il motore. */}
+                {canManage && (
+                    <div className="flex flex-wrap items-center gap-2 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 px-4 py-3 text-sm">
+                        <span className="font-semibold text-slate-600 dark:text-slate-300">Valorizzazione serie B:</span>
+                        {([{ v: 1, label: 'Valore pieno · 100%' }, { v: 0.20, label: 'Danno · 20%' }]).map(({ v, label }) => {
+                            const active = Math.abs((pratica.coefficiente ?? 1) - v) < 1e-9;
+                            return (
+                                <button
+                                    key={label}
+                                    onClick={() => { if (!active) onUpdate?.({ coefficiente: v }); }}
+                                    className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-colors ${active ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-indigo-400'}`}
+                                >
+                                    {label}
+                                </button>
+                            );
+                        })}
+                        <span className="text-[11px] text-slate-400 dark:text-slate-500">Scelta del legale · ricalcola tutto, nessun dato perso</span>
+                    </div>
+                )}
 
                 {/* Tabs */}
                 <div className="inline-flex gap-1 p-1 rounded-2xl bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60">
@@ -315,7 +336,7 @@ const RiposiPraticaDetail: React.FC<Props> = ({ pratica, onBack, onUpdate }) => 
                                             <span className="text-[11px] font-bold uppercase tracking-wide">Indennità secondo il PDF</span>
                                         </div>
                                         <p className="text-2xl font-black tabular-nums text-slate-800 dark:text-slate-100"><AnimatedCounter value={fonte.ind} isCurrency /></p>
-                                        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">{groupThousandsIT(fonte.gg.toLocaleString('it-IT'))} giornate indennizzate · {groupThousandsIT(Math.round(fonte.ore).toLocaleString('it-IT'))} h mancanti · tariffe e criteri di chi ha prodotto il documento</p>
+                                        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">{groupThousandsIT(fonte.gg.toLocaleString('it-IT'))} giornate indennizzate · {groupThousandsIT(Math.round(fonte.ore).toLocaleString('it-IT'))} h mancanti · criteri del documento sorgente (valorizzazione contrattuale: riposo periodico = festivo)</p>
                                     </div>
                                     <div className="rounded-2xl border border-indigo-200 dark:border-indigo-500/30 bg-indigo-50/60 dark:bg-indigo-500/10 p-4">
                                         <div className="flex items-center gap-2 mb-2 text-indigo-700 dark:text-indigo-300">
