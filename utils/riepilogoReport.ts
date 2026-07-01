@@ -94,7 +94,12 @@ export function computeRiepilogoData(
 
   // Stessa selezione del tab "Calcolo Annuale" (AnnualCalculationTable): anni con
   // Quadro B compilato; la media di periodo è sui soli anni non di riferimento.
-  const incidenzaRows = results.filter(r => r.hasIncidence && r.sumQuadroFisse > 0);
+  // Tra gli anni pre-ricorso teniamo SOLO il vero N-1 (l'unica fonte della media):
+  // se lo start è stato spostato avanti (es. Borriello 2020→2021), gli anni-mozzicone
+  // ancora più indietro (2019, 0 giorni) non vanno mostrati come un secondo "(Rif.)".
+  const incidenzaRows = results.filter(r =>
+    r.hasIncidence && r.sumQuadroFisse > 0 &&
+    (!r.isReferenceYear || r.year === startClaimYear - 1));
   const incidenza: RiepilogoIncidenza | null = incidenzaRows.length === 0 ? null : {
     rows: incidenzaRows.map(r => ({
       anno: r.year,

@@ -56,6 +56,25 @@ describe('computeRiepilogoData — incidenza %', () => {
     expect(incidenza).toBeNull();
   });
 
+  it('start spostato avanti: solo il vero N-1 è marcato "(Rif.)", non i mozziconi (caso Borriello)', () => {
+    // 2022 = anno-mozzicone: una busta con sola voce fissa, 0 giorni lavorati
+    // (come il 2019 di Borriello). 2023 = N-1 pieno. 2024 = primo anno di ricorso.
+    const stub2022: AnnoDati[] = [
+      { year: 2022, monthIndex: 0, daysWorked: 0, daysVacation: 0, ticket: 0, '3B01': 300 } as AnnoDati,
+    ];
+    const worker = makeWorker('RFI', [...stub2022, ...fullYear(2023, true), ...fullYear(2024, true)]);
+    const { tableData, incidenza } = computeRiepilogoData(worker, undefined, 2024, false, false);
+
+    expect(incidenza).not.toBeNull();
+    // Il mozzicone 2022 NON compare: tra i riferimenti resta solo il vero N-1 (2023).
+    expect(incidenza!.rows.map(r => r.anno)).toEqual([2023, 2024]);
+    const refRows = incidenza!.rows.filter(r => r.isReferenceYear);
+    expect(refRows.map(r => r.anno)).toEqual([2023]);
+    // Credito e media di periodo restano intatti (invariati dalla modifica cosmetica).
+    expect(tableData.map(r => r.anno)).toEqual([2024]);
+    expect(incidenza!.period.pctVariabile).toBeCloseTo(25, 5);
+  });
+
   it("l'incidenza non altera i totali del prospetto", () => {
     const conFisse = computeRiepilogoData(makeWorker('RFI', [...fullYear(2023, true), ...fullYear(2024, true)]), undefined, 2024, false, false);
     const senzaFisse = computeRiepilogoData(makeWorker('RFI', [...fullYear(2023, false), ...fullYear(2024, false)]), undefined, 2024, false, false);

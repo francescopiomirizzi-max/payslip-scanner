@@ -185,11 +185,15 @@ const AnnualCalculationTable: React.FC<AnnualCalculationTableProps> = ({
   // --- INCIDENZA % (specchietto a schermo, come nel PDF) ---
   // La % media delle voci variabili è decisiva per il ricorso (soglia indicativa 20%).
   const incidenza = useMemo(() => {
-    const rows = annualRows.filter(r => r.hasIncidence && r.sumQuadroFisse > 0);
+    // Tra gli anni di riferimento teniamo SOLO il vero N-1 (unica fonte della media):
+    // niente secondo "(Rif.)" per gli anni-mozzicone quando lo start è spostato avanti.
+    const rows = annualRows.filter(r =>
+      r.hasIncidence && r.sumQuadroFisse > 0 &&
+      (!r.isReferenceYear || r.year === startClaimYear - 1));
     if (rows.length === 0) return null;
     const period = computePeriodIncidence(annualRows.filter(r => !r.isReferenceYear));
     return { rows, period };
-  }, [annualRows]);
+  }, [annualRows, startClaimYear]);
   // Soglia % editabile (default 20%, come esempio): media variabili ≥ soglia = ammissibile.
   const [sogliaInput, setSogliaInput] = useState('20');
   const SOGLIA_VARIABILI = parseLocalFloat(sogliaInput) || 0;
