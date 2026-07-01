@@ -441,3 +441,15 @@ Spegnere quando paga (via MCP):
 
 NON deployato: live inerte finché non pubblichi (~18/06). Testo avviso in
 `ViewerPaymentBlock.tsx`, modificabile prima del deploy.
+
+---
+
+## Fix collaterale (2026-07-01) — doppio "(Rif.)" nella tabella incidenza
+
+**Segnalazione:** Borriello mostrava DUE anni "(Rif.)" nella tabella % incidenza del report.
+**Causa:** `isReferenceYear = year < startClaimYear` marca TUTTI i pre-ricorso; con lo start spostato
+2020→2021, sia il 2019 (mozzicone: 0 giorni, 1.229 € di fisse) sia il 2020 (N-1 vero) risultavano "(Rif.)".
+Nessun impatto su credito/Media periodo (entrambi escludono gli anni di riferimento) — solo display.
+**Fix:** tra gli anni di riferimento la tabella incidenza tiene solo il vero N-1 (`year === startClaimYear-1`).
+Applicato in [utils/riepilogoReport.ts](utils/riepilogoReport.ts) + [components/WorkerTables/AnnualCalculationTable.tsx](../components/WorkerTables/AnnualCalculationTable.tsx).
+Test di regressione in [__tests__/riepilogoReport.test.ts](../__tests__/riepilogoReport.test.ts). tsc=0 · 237 test verdi. Locale, non deployato.
