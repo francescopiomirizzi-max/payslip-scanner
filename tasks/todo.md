@@ -1,3 +1,181 @@
+# PIANO — Restyling UI area "Turni & Riposi" → livello Incidenza (2026-07-02)
+
+> **STATO: piano in attesa di OK. NON implementare finché non approvato.**
+> Direzione scelta dall'utente: **"restyling elegante mirato"** (NO flip-3D). Portare landing + card + header
+> del dettaglio al livello di accuratezza dell'area Incidenza (`WorkerCard`). **Additivo**: zero cambi a
+> motore di calcolo, DB, generatori (.docx/Excel/stampa). Solo componenti UI.
+
+## Diagnosi (verificata sul codice)
+Il *dettaglio* Riposi è già ricco (stat cards, tabs, banner, gestione stato, editor tariffe). La "piattezza" è:
+- **Header area**: icona-orologio indigo generica (vs testata con identità di Incidenza).
+- **`PraticaCard`**: riga piatta (iniziali + nome + 3 chip + chevron) vs `WorkerCard` (testata brand, tacca-stato
+  glow, avatar+icona ruolo, `YearTimeline`, `Sparkline`, hover tilt+spotlight).
+- **Header dettaglio**: sobrio, senza hero/identità.
+
+## Identità visiva
+Tema dell'area = gradiente **indigo→violet** ("tempo/turni") + glow coerente (l'area è già indigo). Le pratiche
+riposi non hanno azienda (Viterbo `azienda=null`) → nessun colore-azienda; se un domani `pratica.azienda` è
+valorizzato si potrà agganciare il logo/colore (fuori scope ora, coerente con la memoria "logo in pausa").
+
+## Fase 0 — Helper condivisi (piccoli, puri)
+- [ ] `utils/restEngine.ts`: `violazioniPerAnno(violazioni)` → `{ 'YYYY': { n, indennita } }` (raggruppa per
+      `dataTurno` con fallback `inizio`). Puro + test. Serve alla mini-timeline della card.
+- [ ] `components/riposi/riposiTheme.ts`: **un** tema condiviso (gradiente/glow + icona ruolo `BusFront`) usato da
+      landing, card e detail — niente hexMap gigante, un'unica fonte.
+
+## Fase 1 — Header area (`RiposiArea`)
+- [ ] Hero: fascia gradiente tematico + icona + titolo/sottotitolo + **hero numerico aggregato** (totale violazioni
+      + credito totale sulle pratiche visibili). `DevBadge` mantenuto.
+
+## Fase 2 — Card pratica (`PraticaCard`)
+- [ ] Testata con fascia gradiente + avatar icona ruolo (`BusFront`) + **tacca-stato laterale con glow** (da `STATO_META`).
+- [ ] Nome (cognome uppercase + nome), `mansione · periodo`.
+- [ ] **Mini-timeline violazioni per anno** (barre, altezza ∝ n° violazioni, tooltip «anno · n · €») — gemello di `YearTimeline`.
+- [ ] Stat **Credito** / **Violazioni** con respiro; chip stato; badge seed.
+- [ ] Hover: tilt leggero + spotlight radiale (pattern `WorkerCard`, versione sobria).
+
+## Fase 3 — Header dettaglio (`RiposiPraticaDetail`)
+- [ ] Hero header con identità: fascia gradiente + icona + nome pratica grande + chip stato + `mansione · periodo`.
+      Bottoni export invariati (riallineati nell'hero). Nessun tocco a tabs/stat/banner/editor già presenti.
+
+## Fase 4 — Verifica
+- [x] `tsc`=0 · `vitest` = **253 verdi** (+4 `violazioniPerAnno`) · `build` ok.
+- [x] Verifica visiva via **demo mode** (`npm run dev:demo`, login bypassato): landing + card + dettaglio OK,
+      screenshot catturati. Card VITERBO con testata gradiente, avatar bus, tacca-stato, mini-timeline
+      2011→2024, stat credito/violazioni; hero area 143 · 2.324 €; header dettaglio con numeri chiave.
+- [x] Rilettura diff: additivo, calcolo/motore/DB/generatori invariati; area Incidenza intatta.
+
+## Note
+- Zero migration, zero motore, zero generatori. Solo UI. Locale, non deployato (batch).
+
+### Review (2026-07-02)
+Restyling completato in autonomia (direzione "elegante mirato", no flip-3D). File:
+- **Nuovi**: `components/riposi/riposiTheme.ts` (tema condiviso indigo→violet + fascia + STATO_HEX),
+  `__tests__/violazioniPerAnno.test.ts`.
+- **Motore**: `utils/restEngine.ts` +`violazioniPerAnno()` (puro, aggrega per anno di attribuzione). Nessun cambio al calcolo.
+- **`RiposiArea`**: header hero (gradiente + hero numerico aggregato); `PraticaCard` ricostruita (testata gradiente,
+  avatar `BusFront`, tacca-stato con glow, mini-timeline violazioni/anno, stat Credito/Violazioni, tilt+spotlight).
+  Motore sollevato a livello area (`statsByPratica`, useMemo) → calcolato una volta, condiviso da hero + card (no doppio compute).
+- **`RiposiPraticaDetail`**: header elevato a hero (fascia gradiente + avatar bus + nome grande + numeri chiave + stato). Resto invariato.
+- Verifica visiva su demo confermata (screenshot landing + dettaglio). tsc/test/build verdi. Locale, non deployato.
+
+#### Rifinitura estetica (2026-07-02, su feedback utente)
+- **Dettaglio**: i due pannelli slate piatti a tutta larghezza (Valorizzazione serie B + Tariffa €/h) **unificati** in
+  un solo blocco glass **"Parametri di calcolo"** (coerente col resto del dettaglio, divider interno, gerarchia migliore).
+  `SlidersHorizontal` → `Calculator`; rimosso l'import orfano.
+- **Card**: alzato contrasto/dimensione dei testi deboli — mansione·periodo (`text-[11px] slate-400` → `text-xs slate-600/300`),
+  label "Violazioni per anno" e anni del grafico (slate-400 → slate-500/600, +1px).
+- Verificato a schermo su demo (pannello unificato + editor "Personalizza" aperto — via onUpdate no-op temporaneo sul seed,
+  poi ripristinato: il pannello è owner-only e il seed non è gestibile). tsc/253 test/build verdi.
+
+#### Giro colore/polish (2026-07-02, su mockup utente)
+- **Card** (`RiposiArea`): avatar con alone iridescente (fucsia→indigo→ciano) su vetro chiaro + bus indaco; chip stato con
+  glow colorato (STATO_HEX); grafico "Violazioni per anno" con **griglia orizzontale** + barre a **gradiente verticale**;
+  stat **Credito → emerald** (coerente con le buste) / Violazioni rose, bordi più definiti; tinta lavanda diffusa sulla card.
+- **Dettaglio** (`RiposiPraticaDetail`): **tab** attivo colorato a gradiente tema (era grigio); **bottoni** Excel/Relazione con
+  icona in badge colorato + hover lift, "Stampa conteggi" a gradiente con shine; hero credito emerald allineato.
+- **Sfondo sezione**: overlay radiale indigo/violet tenue su landing + dettaglio → distingue l'area dal resto del sito.
+- Verifica visiva su demo (landing zoom + dettaglio). tsc/253 test/build verdi. Locale, non deployato.
+
+#### Giro colore/polish #2 (2026-07-02, mockup utente + no verifica a video)
+- **Sfondo di sezione** spostato dove va: `components/Background.tsx` accetta `area` e applica un velo indaco tenue
+  SOLO per `riposi` (App.tsx passa `area`); rimosso l'overlay radiale dai wrapper delle pagine. La tinta della card resta.
+- **Stat cards del dettaglio** (le 5 sotto la scheda) da bianche → **colorate per tipo** (rose/amber/indigo/emerald/slate):
+  `TONE` esteso con `card` (bg+bordo tinta) e `text` (numero colorato); rimosso il glow overlay ridondante.
+- **Mini-stat dell'header** (Violazioni/Credito) colorati (rose/emerald).
+- **Card "Le due serie a confronto"**: icona in badge, numero `text-3xl` colorato (sky PDF / indigo motore).
+- **Grafico "Andamento per anno"**: barre a **gradiente** (rose / indigo-violet) + griglia di riferimento, come la mini-timeline.
+- Deciso di NON seguire lo skeuomorfismo del mockup (pergamena/sigillo/oro): stona con lo stile glass di RailFlow → preso solo il colore.
+- **NON verificato a video** (nuova regola utente: la prova a schermo la fa lui). Gate: tsc · 253 test · build verdi. Da tarare col suo riscontro: intensità velo sfondo.
+
+#### Giro colore/polish #3 (2026-07-02) — sezioni informative della landing
+- Portate allo stile **glass** (bg-white/60 + backdrop-blur + border-white/60 + shadow) le 5 sezioni che erano bianche
+  opache: "Cosa fa quest'area", "Come funziona", "Quadro normativo", "Violazioni che il motore rileva", "Fonti di prova".
+- Accenti di colore: **header con icona in badge** (Cosa fa/Come funziona = indigo, Quadro = sky, Violazioni = rose);
+  icone degli step "Come funziona" ora a **gradiente tema** (bianco su indigo→violet); chip "Fonti di prova" in glass.
+- Gate: tsc · 253 test · build verdi. Locale, non deployato. Prova a schermo lasciata all'utente.
+
+#### Fix UX (2026-07-02) — salto in cima al cambio tab
+- **Sintomo:** a metà pagina, cliccando un tab (Prospetto turni / Confronto PDF) la finestra saltava in cima.
+- **Causa:** il pill dei tab usa `motion.span layoutId="riposi-tab"` (framer shared-layout). Su pagina scrollata,
+  la rimisura di layout al cambio fa scattare la finestra su — comportamento noto di framer.
+- **Fix:** `changeTab()` salva `window.scrollY`, un `useLayoutEffect([tab])` lo ripristina prima del paint
+  (gira dopo il layout effect del pill) + rete `requestAnimationFrame` per un eventuale riscroll async. Il
+  cross-link `openMeseProspetto` (setTab senza pendingScroll) resta invariato. Animazione del pill mantenuta.
+- Gate: tsc · build verdi. Prova a schermo lasciata all'utente.
+
+---
+
+# PIANO — Editor tariffe €/h per anno (override CCNL) · area Turni & Riposi (2026-07-02)
+
+> **STATO: piano in attesa di OK. NON implementare finché non approvato.**
+> Follow-up scoped della memoria `viterbo-marcatore-cee-e-tariffa` ("override CCNL persistito:
+> migration + mappers + editor"). Migration 014 (`tariffe_per_anno jsonb`) **già applicata**,
+> mapper DB↔pratica (`hooks/usePraticheRiposi.ts`) e persistenza (`updatePratica` → `tariffe_per_anno`)
+> **già esistenti**. **Manca solo l'editor UI.** Zero migration, zero cambi al motore.
+
+## Contesto verificato (02/07)
+- Oggi `pratica.tariffePerAnno` è `null` → `resolveTariffePerAnno(giornate, undefined)` **deriva** la curva
+  dalla fonte (10,08→13,13, cresce per anzianità). È il comportamento di default e resta tale.
+- `RiposiPraticaDetail.tsx:67-77` passa già `tariffePerAnno` (risolto) + `coefficiente` al motore; i 3
+  generatori (relazione/stampa/Excel) leggono la stessa curva → **erediteranno l'override senza modifiche**.
+- ⚠️ **Vincolo di sicurezza** (`restEngine.ts:366-369`, `rateFor`): un anno **assente** dall'override
+  cade sul fallback flat `tariffaOraria` (10,03), NON sulla curva derivata. → L'editor deve salvare un
+  override **completo** su tutti gli anni con violazioni (precompilati), altrimenti alcuni anni si
+  azzererebbero al valore sbagliato.
+
+## Scope
+- **MVP = editor manuale** dell'override €/h per anno (owner). Preset "tabella CCNL ufficiale" **fuori scope**
+  finché non abbiamo i valori ufficiali per anno (oggi non disponibili). Additivo, chirurgico.
+
+## Fase 1 — Editor UI (`components/RiposiPraticaDetail.tsx`)
+- [x] Helper puri `utils/tariffeDraft.ts` (parse virgola/punto, `>0`, draft↔curva, dirty).
+- [x] Pannello collassabile sotto il selettore coefficiente (gate `canManage`, come il selettore serie B),
+      default **chiuso**. Header = riepilogo "Tariffa €/h per anno: {range} · {derivata dalla fonte | personalizzata}"
+      + chevron "Personalizza".
+- [ ] Aperto: griglia di input €/h, uno **per ogni anno con violazioni** (chiavi di `result.tariffePerAnnoApplicate`,
+      ordinate), **precompilati** con i valori correnti (`rates`).
+- [ ] Stato locale `draft` + dirty tracking. Azioni:
+      - **Salva tariffe** → parse (virgola→punto, `>0`), `onUpdate({ tariffePerAnno: parsed })` (oggetto COMPLETO). Disabilitato se non-dirty o input non validi.
+      - **Annulla** → reset `draft` a `rates`.
+      - **Ripristina curva derivata** → `onUpdate({ tariffePerAnno: undefined })` (→ `null` sul DB → deriva). Visibile solo se override attivo (`pratica.tariffePerAnno != null`).
+- [ ] Badge "Personalizzata" quando `pratica.tariffePerAnno != null`.
+- [ ] Micro-testo: "sovrascrive la curva derivata dalla fonte · ricalcola tutto, nessun dato perso".
+
+## Fase 2 — Nessun altro codice
+- [x] Verificato: NESSUN tocco a motore/generatori/mapper (già passano `tariffePerAnno` risolto).
+- [x] `resolveTariffePerAnno` invariato: override presente → usato; assente → derivato.
+
+## Fase 3 — Test
+- [x] `praticheRiposiMappers.test.ts`: round-trip `tariffe_per_anno` (DB↔pratica) → **già coperto** (righe 39-45, 94).
+- [x] `restEngine.test.ts`: override applicato + fallback anni mancanti → **già coperto** (righe 217-234, 290-301).
+- [x] `tariffeDraft.test.ts` **nuovo**: parse virgola/punto (fix bug punto-decimale), validazione `>0`, draft↔curva, dirty (12 test).
+
+## Fase 4 — Verifica
+- [x] `npx tsc --noEmit` = 0 · `vitest` = **249 verdi** (+12) · `npm run build` ok (warning bundle preesistente = P2).
+- [ ] Verifica visiva (login owner): apri Viterbo → Personalizza → cambia 1 anno → Salva → il numero/curva si aggiorna
+      in cruscotto e nei 3 export; Ripristina → torna €2.324,13 (curva derivata). Viewer: editor non visibile.  ← richiede login owner
+- [x] Rilettura diff: additivo, owner-gated (`canManage`), Incidenza/altre pratiche invariate.
+
+## Note
+- Nessuna migration (colonna+mapper esistono). Locale, non deployato (batch con gli 11 commit pendenti).
+- [x] Documentale allineato: roadmap del vault (`_roadmap.md`, Viterbo ×20% → fatto + log 02/07) e memoria
+  `viterbo-marcatore-cee-e-tariffa` (×20% GIÀ completo+verificato €2.324,13 + editor costruito).
+
+### Review (2026-07-02)
+Scoperta iniziale: **Viterbo ×20% era già completo** (roadmap stale). Verificato sul DB (1 riga, `coefficiente=0.2`,
+migration 014 applicata) + riverificato il numero end-to-end (€2.324,13, serie B piena €11.620,48 × 20%, 143 viol. CEE).
+Il vero residuo era solo l'**editor override tariffe CCNL**, ora costruito:
+- **Chirurgico**: 1 componente toccato (`RiposiPraticaDetail`, +81 righe, gate `canManage`) + 1 helper puro nuovo
+  (`utils/tariffeDraft.ts`). Zero migration, zero motore/generatori/mapper (già passavano `tariffePerAnno` risolto).
+- **Sicurezza**: l'override si salva SEMPRE completo (tutti gli anni con violazioni precompilati); il salvataggio è
+  bloccato se un campo è invalido → nessun anno finisce sul fallback flat `tariffaOraria`. "Ripristina" → `null` → curva derivata.
+- **Bug intercettato in review**: il parse iniziale trattava il punto come migliaia ("10.08"→1008); reso robusto
+  (ultimo separatore = decimale). Coperto da test.
+- **Verde**: tsc=0, 249 test (+12), build ok. Manca solo la verifica visiva UI (login owner).
+
+---
+
 # PIANO — Nuova area "Indennità" (vertenza-voce) · banco di prova Elior magazzino (2026-06-30)
 
 > Disegno completo: [feature-indennita-residenza-elior.md](feature-indennita-residenza-elior.md).

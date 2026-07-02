@@ -504,6 +504,22 @@ export function resolveTariffePerAnno(giornate: GiornataInput[], override?: Reco
   return override ?? deriveTariffePerAnno(giornate);
 }
 
+/**
+ * Aggrega le violazioni per anno di attribuzione (giorno-turno `dataTurno`, fallback `inizio`).
+ * Per la mini-timeline della card lista: { 'YYYY': { n, indennita } }. Puro, nessun effetto.
+ */
+export function violazioniPerAnno(violazioni: Violazione[]): Record<string, { n: number; indennita: number }> {
+  const out: Record<string, { n: number; indennita: number }> = {};
+  for (const v of violazioni) {
+    const y = v.dataTurno ? (v.dataTurno.split('/')[2] ?? '') : String(new Date(v.inizio).getFullYear());
+    if (!y || y === 'NaN') continue;
+    (out[y] ??= { n: 0, indennita: 0 }).n += 1;
+    out[y].indennita += v.indennita;
+  }
+  for (const y of Object.keys(out)) out[y].indennita = round2(out[y].indennita);
+  return out;
+}
+
 /** Min/max di una curva di tariffe per il display; `uniform` se è di fatto piatta. */
 export function tariffaRange(rates: Record<string, number>): { min: number; max: number; uniform: boolean } {
   const vals = Object.values(rates);

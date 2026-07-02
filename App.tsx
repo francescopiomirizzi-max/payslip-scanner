@@ -281,7 +281,7 @@ const App: React.FC = () => {
             <HiddenClasses />
             <DynamicIsland workers={workers} />
             <KeyboardShortcutsHint />
-            <Background />
+            <Background area={area} />
 
             {area === 'incidenza' && <AppRouter
                 viewMode={viewMode}

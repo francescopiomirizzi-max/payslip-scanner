@@ -1,6 +1,7 @@
 import React from 'react';
 
-const Background: React.FC = () => {
+/** L'area attiva permette di variare lo sfondo per sezione (es. Turni & Riposi = leggermente più scuro/tinto). */
+const Background: React.FC<{ area?: string }> = ({ area }) => {
     return (
         <div className="fixed inset-0 -z-10 overflow-hidden bg-slate-50 dark:bg-[#020617] transition-colors duration-500">
             {/* Definizione Animazione Custom "Wide Move" per garantire il movimento visibile */}
@@ -31,6 +32,13 @@ const Background: React.FC = () => {
 
             {/* 3. VIGNETTATURA (Scurisce i bordi per concentrare la vista al centro) */}
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,rgba(0,0,0,0.03)_100%)]"></div>
+
+            {/* Velo di sezione: solo per "Turni & Riposi" lo sfondo è leggermente più scuro e tinto (indaco),
+                così l'area si distingue dal resto del sito. Transizione morbida al cambio area. */}
+            <div
+                className="absolute inset-0 transition-opacity duration-500 bg-gradient-to-b from-indigo-900/[0.10] via-indigo-950/[0.12] to-slate-950/[0.14] dark:from-indigo-500/[0.06] dark:via-indigo-700/[0.06] dark:to-black/25"
+                style={{ opacity: area === 'riposi' ? 1 : 0 }}
+            />
         </div>
     );
 };

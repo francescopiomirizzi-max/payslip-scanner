@@ -716,3 +716,17 @@ aggiunte estetiche/aggregati che non sono dato operativo.
   filtri andavano lasciati identici, dovevamo sistemare solo la barra sotto"). Quando l'utente
   indica UN elemento, toccare solo quello; le incoerenze percepite da me sui vicini NON sono un
   invito a rifattorizzarli. Se penso valga la pena, lo PROPONGO a parte, non lo eseguo d'ufficio.
+
+## 2026-07-02 — Verifica visiva: la fa l'utente, io NON avvio browser/screenshot
+
+**Contesto:** durante il restyling dell'area Turni & Riposi ho avviato più volte `npm run dev:demo`
++ Claude-in-Chrome per fare screenshot e validare il look a video. L'utente mi ha fermato:
+«non verificare a video perché ci sono io per questo».
+
+**Lezione:** per i cambiamenti UI il gate che DEVO fare è quello **non-visivo** — `npx tsc --noEmit`,
+`vitest`, `npm run build`, rilettura del diff. La **verifica a schermo la fa l'utente** nel suo
+ambiente (owner, dati reali). NON avviare dev server né browser per screenshot di validazione, a
+meno che non me lo chieda esplicitamente. Consegno le modifiche verdi, descrivo cosa aspettarsi e —
+se serve tarare un valore estetico (es. intensità di un colore) — do i valori esatti e attendo il
+suo riscontro invece di iterare a video da solo. Risparmia tempo/cache e non duplica il suo lavoro.
+Cfr. memoria `feedback-verifica-video-utente`.

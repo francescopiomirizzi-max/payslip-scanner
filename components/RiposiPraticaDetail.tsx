@@ -1,12 +1,14 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useRef, useLayoutEffect } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowLeft, AlertTriangle, Moon, CalendarClock, Euro, CheckCircle2, Search, CalendarDays, ListChecks, FileText, FileSpreadsheet, Scale, GitCompare, ChevronLeft, ChevronRight, X, Printer, Calculator } from 'lucide-react';
+import { ArrowLeft, AlertTriangle, Moon, CalendarClock, Euro, CheckCircle2, Search, CalendarDays, ListChecks, FileText, FileSpreadsheet, Scale, GitCompare, ChevronLeft, ChevronRight, ChevronDown, X, Printer, Calculator, RotateCcw, BusFront } from 'lucide-react';
+import { RIPOSI_THEME, riposiHeaderBand } from './riposi/riposiTheme';
 import { computeRestViolations, computeSerieFonte, resolveTariffePerAnno, buildConfronto, tariffaRange, formatHm, hasCEEDays, type Violazione, type GiornataInput, type RestResult, type ConfrontoResult, type ConfrontoStato } from '../utils/restEngine';
 import { printConteggiRiposi } from '../utils/riposiPrint';
 import { AnimatedCounter } from './ui/AnimatedCounter';
 import { STATO_META, type PraticaRiposi, type PraticaRiposiUpdate, type StatoPratica } from '../hooks/usePraticheRiposi';
 import { useIsReadOnly, canExportForViewer } from '../lib/readonly';
 import { groupThousandsIT } from '../utils/formatters';
+import { parseTariffaInput, parseTariffeDraft, tariffeToDraft, draftIsDirty } from '../utils/tariffeDraft';
 
 const euro = (n: number) => '€ ' + groupThousandsIT(n.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
 /** Etichetta tariffa: valore singolo se piatta, range "€min → €max" se cresce per anno. */
@@ -35,18 +37,36 @@ interface Props {
 }
 
 type Tone = 'rose' | 'amber' | 'indigo' | 'emerald' | 'slate';
-const TONE: Record<Tone, { icon: string; glow: string; hover: string }> = {
-    rose:    { icon: 'bg-rose-100 dark:bg-rose-500/15 text-rose-600 dark:text-rose-400',         glow: 'from-rose-500/[0.08]',    hover: 'hover:shadow-[0_20px_50px_-22px_rgba(244,63,94,0.55)]' },
-    amber:   { icon: 'bg-amber-100 dark:bg-amber-500/15 text-amber-600 dark:text-amber-400',     glow: 'from-amber-500/[0.08]',   hover: 'hover:shadow-[0_20px_50px_-22px_rgba(245,158,11,0.55)]' },
-    indigo:  { icon: 'bg-indigo-100 dark:bg-indigo-500/15 text-indigo-600 dark:text-indigo-400', glow: 'from-indigo-500/[0.08]',  hover: 'hover:shadow-[0_20px_50px_-22px_rgba(99,102,241,0.55)]' },
-    emerald: { icon: 'bg-emerald-100 dark:bg-emerald-500/15 text-emerald-600 dark:text-emerald-400', glow: 'from-emerald-500/[0.08]', hover: 'hover:shadow-[0_20px_50px_-22px_rgba(16,185,129,0.55)]' },
-    slate:   { icon: 'bg-slate-100 dark:bg-slate-700/50 text-slate-500 dark:text-slate-300',     glow: 'from-slate-500/[0.06]',   hover: 'hover:shadow-[0_20px_50px_-22px_rgba(100,116,139,0.5)]' },
+const TONE: Record<Tone, { icon: string; card: string; text: string; hover: string }> = {
+    rose:    { icon: 'bg-rose-100 dark:bg-rose-500/20 text-rose-600 dark:text-rose-400',         card: 'bg-rose-50/80 dark:bg-rose-900/20 border-rose-200/80 dark:border-rose-700/40',          text: 'text-rose-700 dark:text-rose-300',       hover: 'hover:shadow-[0_20px_50px_-22px_rgba(244,63,94,0.55)]' },
+    amber:   { icon: 'bg-amber-100 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400',     card: 'bg-amber-50/80 dark:bg-amber-900/20 border-amber-200/80 dark:border-amber-700/40',       text: 'text-amber-700 dark:text-amber-300',     hover: 'hover:shadow-[0_20px_50px_-22px_rgba(245,158,11,0.55)]' },
+    indigo:  { icon: 'bg-indigo-100 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400', card: 'bg-indigo-50/80 dark:bg-indigo-900/20 border-indigo-200/80 dark:border-indigo-700/40',    text: 'text-indigo-700 dark:text-indigo-300',   hover: 'hover:shadow-[0_20px_50px_-22px_rgba(99,102,241,0.55)]' },
+    emerald: { icon: 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400', card: 'bg-emerald-50/80 dark:bg-emerald-900/20 border-emerald-200/80 dark:border-emerald-700/40', text: 'text-emerald-700 dark:text-emerald-300', hover: 'hover:shadow-[0_20px_50px_-22px_rgba(16,185,129,0.55)]' },
+    slate:   { icon: 'bg-slate-100 dark:bg-slate-700/50 text-slate-500 dark:text-slate-300',     card: 'bg-slate-100/80 dark:bg-slate-800/50 border-slate-200/80 dark:border-slate-700/50',     text: 'text-slate-700 dark:text-slate-200',     hover: 'hover:shadow-[0_20px_50px_-22px_rgba(100,116,139,0.5)]' },
 };
 
 const RiposiPraticaDetail: React.FC<Props> = ({ pratica, onBack, onUpdate }) => {
     const [tab, setTab] = useState<'violazioni' | 'prospetto' | 'confronto'>('violazioni');
     const [isExportingDocx, setIsExportingDocx] = useState(false);
     const [isRelazioneOpen, setIsRelazioneOpen] = useState(false);
+    // Editor tariffe €/h per anno (override CCNL): draft = testo dei campi; null = editor chiuso.
+    const [tariffeOpen, setTariffeOpen] = useState(false);
+    const [tariffeDraft, setTariffeDraft] = useState<Record<string, string> | null>(null);
+
+    // Cambio tab senza far saltare la pagina in cima: la layout-animation del pill (framer `layoutId`)
+    // rimisura le posizioni al cambio e la finestra scatta su. Salviamo lo scroll e lo ripristiniamo
+    // prima del paint (useLayoutEffect gira dopo il layout effect del pill → vince sul jump).
+    const pendingScrollY = useRef<number | null>(null);
+    const changeTab = (id: typeof tab) => { pendingScrollY.current = window.scrollY; setTab(id); };
+    useLayoutEffect(() => {
+        if (pendingScrollY.current == null) return;
+        const y = pendingScrollY.current;
+        pendingScrollY.current = null;
+        window.scrollTo(0, y);
+        // Rete: se framer riscrolla in modo async subito dopo, ripristiniamo al frame (no-op se già a posto).
+        const raf = requestAnimationFrame(() => window.scrollTo(0, y));
+        return () => cancelAnimationFrame(raf);
+    }, [tab]);
     const isReadOnly = useIsReadOnly();
     const canManage = Boolean(onUpdate) && !isReadOnly;
     // Il viewer scarica/stampa solo le pratiche "pagata"; l'owner sempre.
@@ -78,6 +98,11 @@ const RiposiPraticaDetail: React.FC<Props> = ({ pratica, onBack, onUpdate }) => 
 
     // Tariffa piena applicata per anno (dal motore, esatta), per il display.
     const rates = result.tariffePerAnnoApplicate;
+
+    // Stato dell'editor tariffe: override attivo? draft valido e modificato?
+    const hasTariffeOverride = pratica.tariffePerAnno != null;
+    const tariffeParsed = tariffeDraft ? parseTariffeDraft(tariffeDraft) : null;
+    const tariffeDirty = tariffeDraft ? draftIsDirty(tariffeDraft, rates) : false;
 
     // Import dinamico: docx resta fuori dal bundle principale.
     const handleRelazioneDocx = async () => {
@@ -184,17 +209,33 @@ const RiposiPraticaDetail: React.FC<Props> = ({ pratica, onBack, onUpdate }) => 
     return (
         <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} className="min-h-screen px-6 py-10">
             <div className="max-w-5xl mx-auto space-y-6">
-                {/* Header */}
-                <div className="flex items-center gap-4">
-                    <button onClick={onBack} className="w-10 h-10 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-500 hover:text-indigo-600 hover:-translate-x-0.5 transition-all">
+                {/* Header hero — identità pratica + numeri chiave a colpo d'occhio */}
+                <div className="relative overflow-hidden rounded-[2rem] border border-white/60 dark:border-slate-700/60 bg-white/70 dark:bg-slate-800/70 backdrop-blur-2xl p-6 shadow-xl">
+                    <div className="absolute inset-x-0 top-0 h-36 pointer-events-none" style={{ background: riposiHeaderBand }} />
+                    <div className="relative flex items-center gap-4">
+                    <button onClick={onBack} className="w-10 h-10 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-500 hover:text-indigo-600 hover:-translate-x-0.5 transition-all shrink-0">
                         <ArrowLeft className="w-5 h-5" />
                     </button>
-                    <div className="w-12 h-12 rounded-2xl bg-indigo-600 flex items-center justify-center text-white font-black shadow-lg shadow-indigo-500/30">
-                        {pratica.cognome.charAt(0)}{pratica.nome.charAt(0)}
+                    <div
+                        className="w-14 h-14 rounded-2xl flex items-center justify-center text-white shadow-lg shrink-0"
+                        style={{ background: RIPOSI_THEME.gradient, boxShadow: `0 8px 24px -8px ${RIPOSI_THEME.glow}` }}
+                    >
+                        <BusFront className="w-7 h-7" strokeWidth={1.5} />
                     </div>
-                    <div>
-                        <h1 className="text-2xl font-black text-slate-800 dark:text-slate-100 leading-tight">{pratica.cognome} {pratica.nome}</h1>
-                        <p className="text-sm text-slate-500 dark:text-slate-400">{pratica.mansione} · {pratica.periodoStart} – {pratica.periodoEnd} · {pratica.giornate.length} giornate</p>
+                    <div className="min-w-0">
+                        <h1 className="text-2xl font-black text-slate-800 dark:text-slate-100 leading-tight tracking-tight truncate"><span className="uppercase">{pratica.cognome}</span> {pratica.nome}</h1>
+                        <p className="text-sm text-slate-500 dark:text-slate-400 truncate">{pratica.mansione} · {pratica.periodoStart} – {pratica.periodoEnd} · {pratica.giornate.length} giornate</p>
+                    </div>
+                    {/* Numeri chiave (colorati per tipo) */}
+                    <div className="hidden sm:flex items-stretch gap-2.5 ml-2">
+                        <div className="rounded-xl bg-rose-50/80 dark:bg-rose-900/20 border border-rose-200/80 dark:border-rose-700/40 px-3.5 py-2 text-center backdrop-blur-sm">
+                            <p className="text-[9px] font-black uppercase tracking-widest text-rose-600/80 dark:text-rose-400/70">Violazioni</p>
+                            <p className="text-lg font-black tabular-nums text-rose-700 dark:text-rose-300 leading-tight">{totViol}</p>
+                        </div>
+                        <div className="rounded-xl bg-emerald-50/80 dark:bg-emerald-900/20 border border-emerald-200/80 dark:border-emerald-700/40 px-3.5 py-2 text-center backdrop-blur-sm">
+                            <p className="text-[9px] font-black uppercase tracking-widest text-emerald-600/80 dark:text-emerald-400/70">Credito</p>
+                            <p className="text-lg font-black tabular-nums text-emerald-700 dark:text-emerald-300 leading-tight">{euro(result.totIndennita)}</p>
+                        </div>
                     </div>
                     <div className="ml-auto">
                         {canManage ? (
@@ -217,6 +258,7 @@ const RiposiPraticaDetail: React.FC<Props> = ({ pratica, onBack, onUpdate }) => 
                             </span>
                         )}
                     </div>
+                    </div>
                 </div>
 
                 {/* Riga azioni (Excel, Relazione, Stampa conteggi) — per il viewer
@@ -228,25 +270,30 @@ const RiposiPraticaDetail: React.FC<Props> = ({ pratica, onBack, onUpdate }) => 
                             onClick={handleExcel}
                             disabled={isExportingXlsx}
                             title="Scarica l'Excel pulito: numeri veri, formule vive (la tariffa nel Riepilogo ricalcola tutto), un foglio per anno"
-                            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-600 dark:text-slate-300 hover:text-emerald-600 dark:hover:text-emerald-400 hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-wait whitespace-nowrap"
+                            className="group inline-flex items-center gap-2.5 pl-2.5 pr-4 py-2 rounded-2xl bg-white/80 dark:bg-slate-800/80 backdrop-blur border border-white/70 dark:border-slate-700/70 text-sm font-bold text-slate-700 dark:text-slate-200 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-wait whitespace-nowrap"
                         >
-                            <FileSpreadsheet className="w-4 h-4" /> Excel
+                            <span className="w-8 h-8 rounded-xl bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center transition-transform group-hover:scale-110"><FileSpreadsheet className="w-4 h-4" /></span>
+                            Excel
                         </button>
                         <button
                             type="button"
                             onClick={() => setIsRelazioneOpen(true)}
                             title="Apri la relazione: spiegazione del metodo, esempio numerico sui tuoi dati, le due serie, e download .docx / stampa"
-                            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 hover:-translate-y-0.5 transition-all whitespace-nowrap"
+                            className="group inline-flex items-center gap-2.5 pl-2.5 pr-4 py-2 rounded-2xl bg-white/80 dark:bg-slate-800/80 backdrop-blur border border-white/70 dark:border-slate-700/70 text-sm font-bold text-slate-700 dark:text-slate-200 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all whitespace-nowrap"
                         >
-                            <FileText className="w-4 h-4" /> Relazione
+                            <span className="w-8 h-8 rounded-xl bg-indigo-100 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 flex items-center justify-center transition-transform group-hover:scale-110"><FileText className="w-4 h-4" /></span>
+                            Relazione
                         </button>
                         <button
                             type="button"
                             onClick={() => printConteggiRiposi(pratica, result)}
                             title="Apre il documento dei conteggi (due serie, riepilogo per anno, elenco violazioni) nella finestra di stampa: da lì si salva in PDF"
-                            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-bold shadow-lg shadow-indigo-500/30 hover:bg-indigo-700 hover:-translate-y-0.5 transition-all whitespace-nowrap"
+                            className="group relative overflow-hidden inline-flex items-center gap-2.5 pl-2.5 pr-4 py-2 rounded-2xl text-white text-sm font-bold shadow-lg hover:-translate-y-0.5 transition-all whitespace-nowrap"
+                            style={{ background: RIPOSI_THEME.gradient, boxShadow: `0 10px 24px -8px ${RIPOSI_THEME.glow}` }}
                         >
-                            <Printer className="w-4 h-4" /> Stampa conteggi
+                            <span className="absolute inset-0 bg-white/25 -translate-x-full group-hover:translate-x-full transition-transform duration-700 skew-x-12 pointer-events-none" />
+                            <span className="relative w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center"><Printer className="w-4 h-4" /></span>
+                            <span className="relative">Stampa conteggi</span>
                         </button>
                     </div>
                 )}
@@ -292,32 +339,109 @@ const RiposiPraticaDetail: React.FC<Props> = ({ pratica, onBack, onUpdate }) => 
                     <span>Giornate dal <strong>PDF sorgente</strong> («Mancati riposi»), parsato in modo deterministico e quadrato al centesimo coi totali del documento. La tariffa è <strong>ricavata anno per anno</strong> dal documento sorgente ({tariffaLabel(rates)}, cresce per anzianità di servizio); la valorizzazione segue la disciplina contrattuale (riposo periodico trattato come festivo, art. 14 CCNL 25/07/1997), confermabile con l'avvocato.{coeff !== 1 && <> L'indennità è calcolata come <strong>danno = {Math.round(coeff * 100)}% del valore</strong> del riposo perso.</>}</span>
                 </div>
 
-                {/* Selettore valorizzazione serie B (coefficiente danno) — solo owner su pratica gestibile.
-                    Espone il campo `coefficiente` già esistente: non cambia il default né il motore. */}
+                {/* Parametri di calcolo — owner: valorizzazione serie B + tariffa €/h per anno in un unico
+                    pannello coerente (stile glass come il resto del dettaglio). Persistono `coefficiente` e
+                    `tariffePerAnno`; l'override tariffe è COMPLETO (rateFor fa cadere gli anni mancanti sul flat). */}
                 {canManage && (
-                    <div className="flex flex-wrap items-center gap-2 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 px-4 py-3 text-sm">
-                        <span className="font-semibold text-slate-600 dark:text-slate-300">Valorizzazione serie B:</span>
-                        {([{ v: 1, label: 'Valore pieno · 100%' }, { v: 0.20, label: 'Danno · 20%' }]).map(({ v, label }) => {
-                            const active = Math.abs((pratica.coefficiente ?? 1) - v) < 1e-9;
-                            return (
-                                <button
-                                    key={label}
-                                    onClick={() => { if (!active) onUpdate?.({ coefficiente: v }); }}
-                                    className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-colors ${active ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-indigo-400'}`}
-                                >
-                                    {label}
-                                </button>
-                            );
-                        })}
-                        <span className="text-[11px] text-slate-400 dark:text-slate-500">Scelta del legale · ricalcola tutto, nessun dato perso</span>
+                    <div className="rounded-3xl bg-white/60 dark:bg-slate-800/60 backdrop-blur-2xl border border-white/60 dark:border-slate-700/60 p-5 space-y-4">
+                        <div className="flex items-center gap-2">
+                            <Calculator className="w-4 h-4 text-indigo-500 dark:text-indigo-400" />
+                            <h3 className="text-[11px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">Parametri di calcolo</h3>
+                        </div>
+
+                        {/* Valorizzazione serie B (coefficiente danno) */}
+                        <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-sm font-semibold text-slate-700 dark:text-slate-200 mr-1">Valorizzazione serie B</span>
+                            {([{ v: 1, label: 'Valore pieno · 100%' }, { v: 0.20, label: 'Danno · 20%' }]).map(({ v, label }) => {
+                                const active = Math.abs((pratica.coefficiente ?? 1) - v) < 1e-9;
+                                return (
+                                    <button
+                                        key={label}
+                                        onClick={() => { if (!active) onUpdate?.({ coefficiente: v }); }}
+                                        className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-colors ${active ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-indigo-400'}`}
+                                    >
+                                        {label}
+                                    </button>
+                                );
+                            })}
+                            <span className="text-[11px] text-slate-400 dark:text-slate-500 w-full sm:w-auto sm:ml-auto">Scelta del legale · ricalcola tutto, nessun dato perso</span>
+                        </div>
+
+                        {/* Tariffa €/h per anno (override CCNL) */}
+                        {Object.keys(rates).length > 0 && (
+                            <div className="pt-4 border-t border-slate-200/70 dark:border-slate-700/50">
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <span className="text-sm font-semibold text-slate-700 dark:text-slate-200 mr-1">Tariffa €/h per anno</span>
+                                    <span className="tabular-nums text-sm text-slate-600 dark:text-slate-300">{tariffaLabel(rates)}</span>
+                                    {hasTariffeOverride
+                                        ? <span className="px-2 py-0.5 rounded-lg text-[10px] font-bold uppercase tracking-wide bg-amber-100 dark:bg-amber-500/15 text-amber-700 dark:text-amber-300">Personalizzata</span>
+                                        : <span className="text-[11px] text-slate-400 dark:text-slate-500">derivata dalla fonte</span>}
+                                    <button
+                                        onClick={() => { if (tariffeOpen) { setTariffeOpen(false); setTariffeDraft(null); } else { setTariffeDraft(tariffeToDraft(rates)); setTariffeOpen(true); } }}
+                                        className="ml-auto inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold border bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-indigo-400 transition-colors"
+                                    >
+                                        {tariffeOpen ? 'Chiudi' : 'Personalizza'}
+                                        <ChevronDown className={`w-3.5 h-3.5 transition-transform ${tariffeOpen ? 'rotate-180' : ''}`} />
+                                    </button>
+                                </div>
+                                {tariffeOpen && tariffeDraft && (
+                                    <div className="mt-3">
+                                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
+                                            {Object.keys(tariffeDraft).sort().map((y) => {
+                                                const invalid = parseTariffaInput(tariffeDraft[y]) == null;
+                                                return (
+                                                    <label key={y} className="flex flex-col gap-1">
+                                                        <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">{y}</span>
+                                                        <div className={`flex items-center gap-1 rounded-lg border bg-white dark:bg-slate-900/60 px-2 py-1 ${invalid ? 'border-rose-400 dark:border-rose-500/60' : 'border-slate-200 dark:border-slate-700'}`}>
+                                                            <span className="text-[11px] text-slate-400">€</span>
+                                                            <input
+                                                                inputMode="decimal"
+                                                                value={tariffeDraft[y]}
+                                                                onChange={(e) => setTariffeDraft({ ...tariffeDraft, [y]: e.target.value })}
+                                                                className="w-full bg-transparent text-sm tabular-nums text-slate-800 dark:text-slate-100 outline-none"
+                                                            />
+                                                        </div>
+                                                    </label>
+                                                );
+                                            })}
+                                        </div>
+                                        <div className="flex flex-wrap items-center gap-2 mt-3">
+                                            <button
+                                                disabled={!tariffeParsed || !tariffeDirty}
+                                                onClick={() => { if (tariffeParsed) { onUpdate?.({ tariffePerAnno: tariffeParsed }); setTariffeOpen(false); setTariffeDraft(null); } }}
+                                                className="px-3 py-1.5 rounded-xl text-xs font-bold bg-indigo-600 text-white disabled:opacity-40 disabled:cursor-not-allowed hover:bg-indigo-500 transition-colors"
+                                            >
+                                                Salva tariffe
+                                            </button>
+                                            <button
+                                                onClick={() => setTariffeDraft(tariffeToDraft(rates))}
+                                                className="px-3 py-1.5 rounded-xl text-xs font-bold border bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-slate-400 transition-colors"
+                                            >
+                                                Annulla
+                                            </button>
+                                            {hasTariffeOverride && (
+                                                <button
+                                                    onClick={() => { onUpdate?.({ tariffePerAnno: undefined }); setTariffeOpen(false); setTariffeDraft(null); }}
+                                                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold border bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-rose-400 transition-colors"
+                                                >
+                                                    <RotateCcw className="w-3.5 h-3.5" /> Ripristina curva derivata
+                                                </button>
+                                            )}
+                                            {!tariffeParsed && <span className="text-[11px] text-rose-500">Ogni anno deve avere un importo €/h valido (&gt; 0).</span>}
+                                            <span className="ml-auto text-[11px] text-slate-400 dark:text-slate-500">Sovrascrive la curva derivata · ricalcola tutto, nessun dato perso</span>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </div>
                 )}
 
-                {/* Tabs */}
-                <div className="inline-flex gap-1 p-1 rounded-2xl bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60">
+                {/* Tabs — pill attivo colorato (gradiente tema) */}
+                <div className="inline-flex gap-1 p-1 rounded-2xl bg-white/60 dark:bg-slate-800/60 backdrop-blur border border-white/60 dark:border-slate-700/60 shadow-sm">
                     {TABS.map(({ id, label, icon: Icon }) => (
-                        <button key={id} onClick={() => setTab(id)} className={`relative flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-colors ${tab === id ? 'text-slate-800 dark:text-slate-100' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}>
-                            {tab === id && <motion.span layoutId="riposi-tab" className="absolute inset-0 rounded-xl bg-white dark:bg-slate-700 shadow-sm" transition={{ type: 'spring', stiffness: 380, damping: 30 }} />}
+                        <button key={id} onClick={() => changeTab(id)} className={`relative flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-colors ${tab === id ? 'text-white' : 'text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-300'}`}>
+                            {tab === id && <motion.span layoutId="riposi-tab" className="absolute inset-0 rounded-xl shadow-md" style={{ background: RIPOSI_THEME.gradient, boxShadow: `0 8px 20px -8px ${RIPOSI_THEME.glow}` }} transition={{ type: 'spring', stiffness: 380, damping: 30 }} />}
                             <Icon className="relative w-4 h-4" /><span className="relative">{label}</span>
                         </button>
                     ))}
@@ -330,20 +454,20 @@ const RiposiPraticaDetail: React.FC<Props> = ({ pratica, onBack, onUpdate }) => 
                             <section className="rounded-3xl bg-white/60 dark:bg-slate-800/60 backdrop-blur-2xl border border-white/60 dark:border-slate-700/60 p-6">
                                 <h3 className="font-bold text-slate-700 dark:text-slate-200 mb-4">Le due serie a confronto</h3>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                    <div className="rounded-2xl border border-sky-200 dark:border-sky-500/30 bg-sky-50/60 dark:bg-sky-500/10 p-4">
-                                        <div className="flex items-center gap-2 mb-2 text-sky-700 dark:text-sky-300">
-                                            <FileText className="w-4 h-4" />
-                                            <span className="text-[11px] font-bold uppercase tracking-wide">Indennità secondo il PDF</span>
+                                    <div className="rounded-2xl border border-sky-200 dark:border-sky-500/30 bg-sky-50/70 dark:bg-sky-500/10 p-4">
+                                        <div className="flex items-center gap-2 mb-2">
+                                            <span className="w-8 h-8 rounded-xl bg-sky-100 dark:bg-sky-500/20 text-sky-600 dark:text-sky-300 flex items-center justify-center shrink-0"><FileText className="w-4 h-4" /></span>
+                                            <span className="text-[11px] font-bold uppercase tracking-wide text-sky-700 dark:text-sky-300">Indennità secondo il PDF</span>
                                         </div>
-                                        <p className="text-2xl font-black tabular-nums text-slate-800 dark:text-slate-100"><AnimatedCounter value={fonte.ind} isCurrency /></p>
+                                        <p className="text-3xl font-black tabular-nums text-sky-700 dark:text-sky-300"><AnimatedCounter value={fonte.ind} isCurrency /></p>
                                         <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">{groupThousandsIT(fonte.gg.toLocaleString('it-IT'))} giornate indennizzate · {groupThousandsIT(Math.round(fonte.ore).toLocaleString('it-IT'))} h mancanti · criteri del documento sorgente (valorizzazione contrattuale: riposo periodico = festivo)</p>
                                     </div>
-                                    <div className="rounded-2xl border border-indigo-200 dark:border-indigo-500/30 bg-indigo-50/60 dark:bg-indigo-500/10 p-4">
-                                        <div className="flex items-center gap-2 mb-2 text-indigo-700 dark:text-indigo-300">
-                                            <Scale className="w-4 h-4" />
-                                            <span className="text-[11px] font-bold uppercase tracking-wide">Indennità secondo il motore (Reg. 561/2006)</span>
+                                    <div className="rounded-2xl border border-indigo-200 dark:border-indigo-500/30 bg-indigo-50/70 dark:bg-indigo-500/10 p-4">
+                                        <div className="flex items-center gap-2 mb-2">
+                                            <span className="w-8 h-8 rounded-xl bg-indigo-100 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-300 flex items-center justify-center shrink-0"><Scale className="w-4 h-4" /></span>
+                                            <span className="text-[11px] font-bold uppercase tracking-wide text-indigo-700 dark:text-indigo-300">Indennità secondo il motore (Reg. 561/2006)</span>
                                         </div>
-                                        <p className="text-2xl font-black tabular-nums text-slate-800 dark:text-slate-100"><AnimatedCounter value={result.totIndennita} isCurrency /></p>
+                                        <p className="text-3xl font-black tabular-nums text-indigo-700 dark:text-indigo-300"><AnimatedCounter value={result.totIndennita} isCurrency /></p>
                                         <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">{totViol} violazioni · {groupThousandsIT(Math.round(result.totOreMancanti).toLocaleString('it-IT'))} h mancanti · tariffa per anno {tariffaLabel(rates)}{coeffSuffix(coeff)}</p>
                                     </div>
                                 </div>
@@ -354,15 +478,14 @@ const RiposiPraticaDetail: React.FC<Props> = ({ pratica, onBack, onUpdate }) => 
                         {/* Stat cards */}
                         <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
                             {STAT.map(({ tone, icon: Icon, label, sub, node }) => (
-                                <div key={label} className={`group relative overflow-hidden rounded-[1.6rem] bg-white/60 dark:bg-slate-800/60 backdrop-blur-2xl border border-white/60 dark:border-slate-700/60 p-5 transition-all duration-300 hover:-translate-y-1 ${TONE[tone].hover}`}>
-                                    <div className={`absolute inset-0 bg-gradient-to-br ${TONE[tone].glow} to-transparent pointer-events-none`} />
+                                <div key={label} className={`group relative overflow-hidden rounded-[1.6rem] backdrop-blur-2xl border p-5 transition-all duration-300 hover:-translate-y-1 ${TONE[tone].card} ${TONE[tone].hover}`}>
                                     <div className="relative">
                                         <div className={`w-10 h-10 rounded-2xl flex items-center justify-center mb-3 transition-transform duration-300 group-hover:scale-110 group-hover:rotate-6 ${TONE[tone].icon}`}>
                                             <Icon className="w-5 h-5" />
                                         </div>
-                                        <p className="text-2xl font-black text-slate-800 dark:text-slate-100 leading-tight tabular-nums">{node}</p>
+                                        <p className={`text-2xl font-black leading-tight tabular-nums ${TONE[tone].text}`}>{node}</p>
                                         <p className="text-[11px] font-semibold text-slate-600 dark:text-slate-300 mt-1">{label}</p>
-                                        <p className="text-[11px] text-slate-400 dark:text-slate-500">{sub}</p>
+                                        <p className="text-[11px] text-slate-500 dark:text-slate-400">{sub}</p>
                                     </div>
                                 </div>
                             ))}
@@ -378,7 +501,11 @@ const RiposiPraticaDetail: React.FC<Props> = ({ pratica, onBack, onUpdate }) => 
                                         <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-rose-400" /> giornaliere</span>
                                     </div>
                                 </div>
-                                <div className="flex items-end gap-2 flex-1 min-h-[10rem]">
+                                <div className="relative flex items-end gap-2 flex-1 min-h-[10rem]">
+                                    {/* Griglia di riferimento */}
+                                    <div className="absolute inset-0 flex flex-col justify-between pointer-events-none">
+                                        {[0, 1, 2, 3].map((i) => <div key={i} className="h-px bg-slate-200/60 dark:bg-slate-700/40" />)}
+                                    </div>
                                     {perAnno.map(({ y, g, s, tot }) => {
                                         const attivo = annoFiltro === y;
                                         const spento = annoFiltro !== null && !attivo;
@@ -388,14 +515,14 @@ const RiposiPraticaDetail: React.FC<Props> = ({ pratica, onBack, onUpdate }) => 
                                                 type="button"
                                                 onClick={() => setAnnoFiltro(attivo ? null : y)}
                                                 title={attivo ? 'Mostra tutti gli anni' : `Filtra l'elenco violazioni sul ${y}`}
-                                                className={`group/bar flex-1 flex flex-col items-center justify-end h-full gap-1.5 transition-opacity duration-200 ${spento ? 'opacity-35 hover:opacity-70' : ''}`}
+                                                className={`group/bar relative flex-1 flex flex-col items-center justify-end h-full gap-1.5 transition-opacity duration-200 ${spento ? 'opacity-35 hover:opacity-70' : ''}`}
                                             >
                                                 <span className={`text-[11px] font-bold tabular-nums text-slate-600 dark:text-slate-300 transition-opacity ${attivo ? 'opacity-100' : 'opacity-0 group-hover/bar:opacity-100'}`}>{tot}</span>
-                                                <div className={`w-full flex flex-col justify-end h-full rounded-t-md ${attivo ? 'ring-2 ring-indigo-400/70 dark:ring-indigo-500/60' : ''}`}>
-                                                    <div className="w-full rounded-t-md bg-rose-400 transition-all duration-300 group-hover/bar:bg-rose-500" style={{ height: `${(g / maxAnno) * 100}%` }} title={`${g} giornaliere`} />
-                                                    <div className="w-full bg-indigo-500 transition-all duration-300 group-hover/bar:bg-indigo-600" style={{ height: `${(s / maxAnno) * 100}%` }} title={`${s} settimanali`} />
+                                                <div className={`w-full flex flex-col justify-end h-full rounded-t-md overflow-hidden transition-[filter] duration-300 group-hover/bar:brightness-110 ${attivo ? 'ring-2 ring-indigo-400/70 dark:ring-indigo-500/60' : ''}`}>
+                                                    <div className="w-full" style={{ height: `${(g / maxAnno) * 100}%`, background: 'linear-gradient(180deg, #fb7185 0%, #f43f5e 100%)' }} title={`${g} giornaliere`} />
+                                                    <div className="w-full" style={{ height: `${(s / maxAnno) * 100}%`, background: `linear-gradient(180deg, ${RIPOSI_THEME.end} 0%, ${RIPOSI_THEME.start} 100%)` }} title={`${s} settimanali`} />
                                                 </div>
-                                                <span className={`text-[10px] tabular-nums ${attivo ? 'font-bold text-indigo-600 dark:text-indigo-400' : 'text-slate-400 dark:text-slate-500'}`}>'{y.slice(2)}</span>
+                                                <span className={`text-[10px] tabular-nums ${attivo ? 'font-bold text-indigo-600 dark:text-indigo-400' : 'text-slate-500 dark:text-slate-400'}`}>'{y.slice(2)}</span>
                                             </button>
                                         );
                                     })}
