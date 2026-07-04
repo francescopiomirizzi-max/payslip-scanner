@@ -3,6 +3,24 @@
 > Pattern e errori da evitare nelle prossime sessioni.
 > Aggiornato dopo ogni correzione utente.
 
+## 2026-07-03 — Il logo va NUDO (trasparente), colore in light / bianco in dark: NON inventare badge/sfondi
+
+**Contesto:** rebrand Valora, adozione del simbolo nell'header/login. Il markup esistente mostrava il vecchio
+`logo.png` in un **cerchio** (`rounded-full overflow-hidden object-cover`) con glow/ring. Per farci stare il nuovo
+simbolo ho generato un **badge quadrato con gradiente teal→navy + simbolo VO bianco** (per riempire il cerchio).
+Reazione utente: **«perché il logo ha lo sfondo di quel colore ed è cerchiato? e perché non è a colori? voglio il
+logo senza sfondi sotto, colori originali in light mode e bianco in dark mode».**
+
+**Lezione:**
+1. Quando l'utente ha scelto un logo, si mostra **il simbolo NUDO su trasparente**, non lo si chiude in un badge/
+   cerchio/sfondo inventato. Se il contenitore esistente (cerchio `object-cover`) non va bene per la nuova forma,
+   **si adatta il contenitore al logo** (rimuovi cerchio/ring/glow, `object-contain`, `h-fixed w-auto`), non il logo al contenitore.
+2. **Colore in light, bianco in dark** = un solo file colore trasparente + CSS `dark:brightness-0 dark:invert`
+   (è già il pattern `CompanyLogo` del progetto). Su fondo SEMPRE scuro (es. LoginPage `bg-slate-900`) → `brightness-0 invert` fisso.
+   `brightness-0` porta a nero mantenendo l'alpha, `invert` lo rende bianco; i solchi interni (alpha 0) restano trasparenti → struttura preservata.
+3. Un badge con sfondo colorato ha senso SOLO se l'utente lo chiede o per un'app-icon che deve avere un fondo — MAI come default per il logo in-app.
+   Cfr. lezione 02/07 (non ridisegnare il logo scelto) e `feedback-verifica-video-utente`.
+
 ## 2026-06-30 — Due "Avella Antonio" NON sono un doppione: omonimi (Foggia vs Termoli)
 
 **Contesto:** audit visivo dell'archivio. Visti due "Avella Antonio" sotto RFI, stesso ruolo, **entrambi
@@ -730,3 +748,24 @@ meno che non me lo chieda esplicitamente. Consegno le modifiche verdi, descrivo 
 se serve tarare un valore estetico (es. intensità di un colore) — do i valori esatti e attendo il
 suo riscontro invece di iterare a video da solo. Risparmia tempo/cache e non duplica il suo lavoro.
 Cfr. memoria `feedback-verifica-video-utente`.
+
+## 2026-07-02 — Un logo SCELTO dall'utente NON si ridisegna a mano: si usa il file dato
+
+**Contesto:** rebrand Valora. L'utente aveva scelto un logo (monogramma VO generato su Google Flow,
+2 varianti quasi identiche). Io ho proposto di "ricostruirlo in SVG geometrico pulito" e ho consegnato
+un mio ridisegno a mano. Reazione: **«non ci siamo per niente, i loghi sono completamente diversi,
+devi prendere quelli che ti ho dato così fai prima».**
+
+**Lezione:**
+1. Quando l'utente ha già **scelto** un artefatto grafico (logo/immagine), il default è **usare quel file**,
+   non produrne una mia interpretazione. Un "ridisegno pulito" cambia la forma → è percepito come un logo
+   DIVERSO, e vanifica la sua scelta. La fedeltà batte la mia idea di "eleganza geometrica".
+2. Rendere utilizzabile un raster ≠ ridisegnarlo. La pipeline giusta e VELOCE ("così fai prima"):
+   **ritaglio + sfondo trasparente** (Pillow/numpy: alpha da min-channel, `alpha[alpha<45]=0` per uccidere
+   l'alone della vignettatura, autocrop al bbox) → PNG trasparente su qualunque fondo chiaro; favicon quadrata
+   centrando su canvas trasparente. Verifica tecnica del MIO output (non del gusto): comporre il simbolo su
+   bianco **e su navy** e guardarlo → smaschera aloni/box residui e parti mangiate.
+3. Se serve un **vettoriale**, si fa un **trace FEDELE** del file scelto (potrace/vtracer), non un ridisegno
+   a mano. Proporre il redraw solo se l'utente lo chiede esplicitamente.
+4. Regola generale: "ricostruire in SVG pulito" suona professionale ma è **scope che l'utente non ha chiesto**
+   e che ne ribalta una decisione già presa. Cfr. principio interventi chirurgici + [[feedback-verifica-video-utente]].

@@ -1,3 +1,152 @@
+# PIANO — Multi-Sindacato/CAF: dashboard di selezione + scoping pratiche per organizzazione (2026-07-04)
+
+> **STATO: SCHELETRO in attesa di OK + 3 decisioni (vedi in fondo). NON implementare finché non approvato.**
+> Richiesta utente: rendere il sito **generale**, non ristretto al Consaf di Vincenzo. L'owner apre il sito su una
+> **dashboard di selezione Sindacato/CAF**; scelto uno, entra nelle 3 aree (Incidenza/Riposi/Indennità) **filtrate
+> per quel sindacato**. Il **viewer Vincenzo** invece bypassa e apre direttamente le sue sezioni Consaf (com'è ora).
+
+## Modello mentale (verificato nel codice)
+- Oggi **nessun concetto di sindacato/CAF**: `Worker.profilo` = **azienda datrice** (RFI/Elior/Trenitalia/Mercitalia/Clean
+  Service), NON il sindacato. Tutte le pratiche sono implicitamente **FAST-CONFSAL** (Vincenzo).
+- **Azienda ≠ Sindacato**: un sindacato/CAF commissiona pratiche di lavoratori di più aziende. Nuovo livello SOPRA le aree.
+- Le aree oggi vivono in `App.tsx` (`area` = incidenza/riposi/indennita); il sindacato è un livello sopra `area`.
+
+## Fase 1 — Dato (migration)
+- [ ] Tabella `sindacati` (id, nome, tipo `sindacato|caf`, logo_url, colore/tema, owner_id, created_at).
+- [ ] `sindacato_id` FK su `worker_profiles`, `pratiche_riposi`, `pratiche_vertenze` (+ index).
+- [ ] Backfill: tutte le righe esistenti → sindacato **FAST-CONFSAL** (seed). Migration NON applicata finché non approvato.
+- [ ] RLS: owner vede i propri sindacati; viewer legato al suo (`READONLY_VIEWER_UIDS` → FAST-CONFSAL).
+
+## Fase 2 — Entry point owner: "Dashboard ValOra" (la base del sito) — 🟢 PROTOTIPO UI FATTO (04/07, dati client)
+- [x] `components/SindacatiDashboard.tsx`: header brand + **due macro-pannelli Sindacati / CAF** (da mockup utente),
+      ognuno con card organizzazione (logo) + slot "+ aggiungi"; **riepilogo pratiche recenti** con dati REALI (workers);
+      click organizzazione → **popup sezioni** (portal) → un click e si è dentro. Icone+gradiente (no illustrazioni AI).
+- [x] `App.tsx`: stato `sindacatoAttivo` SOPRA `area`; owner parte dalla dashboard, **viewer bypassa** (FAST-CONFSAL fisso);
+      `AreaSwitch` con pulsante "Cambia organizzazione" (owner). Dati client `ORGANIZZAZIONI` (solo FAST-CONFSAL sindacato).
+- **NOVITÀ dai mockup:** due TIPI di organizzazione — **sindacato** (vertenze: le 3 aree attuali) e **CAF** (fiscale:
+      730/ISEE/redditi = sezioni NUOVE, in arrivo). Il CAF conferma "aree diverse per organizzazione". La migration 022
+      ha già `tipo CHECK ('sindacato','caf')` → coerente.
+- [ ] Restano: hash routing del livello organizzazione; collegamento al DB (dopo apply migration); sezioni CAF (fiscale) future.
+
+## Fase 3 — Scoping delle aree
+- [ ] Scelto un sindacato, `useWorkers`/`usePraticheRiposi`/`usePraticheVertenze` filtrano per `sindacato_id`.
+- [ ] Aree senza pratiche di quel tipo → **[DECISIONE 2]** nascondi vs mostra-vuota.
+
+## Fase 4 — Viewer Vincenzo (bypass)
+- [ ] Il viewer salta la Dashboard Sindacati → `sindacatoId` fisso = FAST-CONFSAL; entra diretto sulle aree (com'è ora).
+      L'endorsement "Ufficio Vertenze + FAST-CONFSAL" già presente diventa coerente col sindacato attivo.
+
+## Fase 5 — Gestione sindacati — **[DECISIONE 1]**
+- [ ] Solo seed FAST-CONFSAL ora (gli altri li aggiungi tu quando arrivano) **oppure** UI crea/modifica (nome+logo+colore).
+
+## Fase 6 — Verifica
+- [ ] tsc/test/build; owner: scelta → area filtrata; viewer: bypass diretto; nessuna regressione.
+
+## DECISIONI da confermare prima di partire
+1. **Gestione sindacati**: seed solo FAST-CONFSAL ora, o UI di gestione già in questo giro?
+2. **Aree vuote** per un sindacato senza quel tipo di pratica: nascondere l'area o mostrarla vuota?
+3. **Granularità**: tutto in un colpo (DB+dashboard+scoping+bypass) o per gradi (prima DB+dashboard, poi scoping)?
+
+---
+
+# PIANO — Rebrand sito → Valora (logo Variante 1 + palette) + dicitura "Ufficio Vertenze FAST-CONFSAL" nella vista Vincenzo (2026-07-03)
+
+> **STATO: 🟢 IN ESECUZIONE (OK utente "procedi, lavoro fatto per bene", 03/07).**
+> Ripresa del rebrand. Nome **Valora** confermato (supera "Vertezze"; il sito mostra ancora "RailFlow").
+> Logo scelto: **Variante 1** (nuovo simbolo VO con figura umana) + **wordmark/lockup di ieri**.
+> L'utente sta producendo **mockup su Google Flow** in parallelo → possono orientare hero/lockup (fuori dal mio scope).
+
+## Preparazione già fatta (scratchpad, non-distruttiva)
+- **Simbolo ritagliato** dalla Variante 1 (`valora-simbolo.png`, sfondo trasparente, autocrop) — pulito su chiaro.
+- **Silhouette BIANCA** per il dark (`valora-simbolo-bianco.png`) — ✅ **verificata leggibile** su navy `#1E3A5F`
+  e su slate-900 `#0F172A` (i solchi interni tengono la struttura, nessun alone).
+- **favicon 512 quadrata** derivata.
+- **Palette dai PIXEL reali** (per copertura): petrol `#2C5765`, verde-salvia `#58A38D`, **navy `#223A5D`**,
+  teal `#399D8D`, verde-teal `#45755E`, **verde chiaro `#71C994`**, petrol chiaro `#347384`.
+
+## Decisioni prese (03/07)
+1. **Nome Valora CONFERMATO** (supera "Vertezze").
+2. Dicitura Vincenzo = **"Ufficio Vertenze"** + logo **FAST-CONFSAL** (il file `logofast`). Solo interfaccia.
+   Resta da confermare solo la **posizione** (oggi unico viewer = Vincenzo → vale la vista readonly).
+3. Rename RailFlow→Valora = **SOLO UI**. I **documenti generati restano invariati** (nessun logo, nessun rename).
+4. Versione dark = **silhouette bianca**, derivata da me dal file (✅ fatto).
+
+## Fase A — Asset logo (`public/`)
+- [ ] Simbolo trasparente (chiaro) [fatto in scratchpad] → `public/`.
+- [x] Versione **dark** = silhouette bianca [fatta in scratchpad, verificata su navy + slate-900].
+- [ ] `favicon-32`, `apple-touch-icon`(180), `icon-192`, `icon-512`, `railway-app-icon.svg` col nuovo simbolo.
+- [ ] `logo.png` (header/login) → **lockup Valora** (simbolo + wordmark di ieri).
+- [ ] `manifest.json`: `name`/`short_name`/`theme_color`.
+- Verifica: rendering su chiaro **e** su scuro (lo controllo su file); prova a schermo = utente.
+
+## Spunti dai mockup Flow (03/07) — cosa adottare / cosa NO
+La brand board dei mockup fissa 2 hex: **Emerald Teal `#00A388`** + **Navy `#1C355E`**, gradiente primario teal→navy.
+Coerente con la palette dai pixel (teal `#399D8D`/petrol `#2C5765`/navy `#223A5D`), solo con un teal-accento più vivo.
+- **Adottare:** (1) **chrome scuro navy + logo BIANCO** (header/sidebar/isola in navy `#1E3A5F` con la silhouette bianca);
+  (2) **accento teal** `#00A388`/`#2E9E96` al posto dell'indigo per bottoni/tab attivi/focus/link; verde `#71C994` = highlight;
+  (3) **gradienti brand** virati da indigo→violet a **teal→navy** (l'app ha già i gradienti, cambia solo l'hue).
+- **NON adottare:** NON è un redesign. I mockup inventano hero/illustrazioni/layout nuovi → si ignorano: il sito ha già
+  la sua architettura (aree Incidenza/Riposi/Indennità). Rebrand = **nome+logo+colore**, non ricostruire schermate.
+- **Conferma dal mockup "Cross-Company Worker Dashboard":** le card lavoratore restano coi **colori-azienda**
+  (Elior verde, RFI navy, Trenitalia teal, Mercitalia oro) → ribadisce: brand-app teal/navy, **temi azienda intatti**.
+- **Font:** teniamo **Plus Jakarta Sans** (Inter dei mockup è quasi identico, nessun bisogno di cambiare).
+- **Attenzione collisione:** il teal-brand e l'**emerald già usato per success/Credito** possono confondersi →
+  tenere distinti: **teal = brand/azione**, **emerald = success/denaro**.
+- **Doppia modalità logo (coerente col light/dark del sito):** header pubblico/landing **chiaro** con logo a **colori**;
+  **chrome dell'app scuro** (sidebar/topbar navy) con logo **bianco** — è già il pattern `CompanyLogo` (`dark:brightness-0 dark:invert`).
+- **Descrittore sotto il wordmark:** i mockup mettono una riga sotto "ValOra" ("Dispute Management…"). È lo **slot naturale**
+  per l'etichetta whitelabel: nella vista viewer di Vincenzo lì va **"Ufficio Vertenze" + FAST-CONFSAL** (collega Fase D).
+- **Status pill colorate** (verde=completed, rosso/rosa=flagged, azzurro=in progress): già coerenti con i nostri badge stato.
+
+## Fase B — Palette (colore BRAND-APP, non i temi aziendali)
+Token proposti (riconciliando pixel + brand board):
+- **Navy** `#1E3A5F` (chrome scuro, testo, header/sidebar/isola) · **Teal primario** `#00A388` (bottoni/tab/focus/link,
+  hover petrol `#2C5765`) · **Verde highlight** `#71C994` · **Gradiente brand** `#00A388 → #1E3A5F`.
+- [ ] Distinguere il **brand-app** (oggi indigo `#4f46e5`: isola/bottoni/login/`theme-color`/focus ring)
+      dai **temi per-azienda** (blue=RFI, emerald=Clean Service, orange=Elior, ecc.) = identità dei clienti → **NON si toccano**.
+- [ ] Sostituire l'indigo brand-app coi token sopra (idealmente via CSS var / palette Tailwind `brand-*` per non spargere hex).
+- [ ] Punti: `index.html` theme-color, `index.css` (focus ring indigo), `tailwind.config.js` safelist,
+      + **audit mirato** delle occorrenze `indigo-*` che sono brand-app (non aziendali).
+- Verifica: tsc/build; prova a schermo utente; zero regressioni sui temi aziendali.
+
+## Fase C — Nome RailFlow → Valora (SOLO UI)
+- [ ] UI: `index.html` title, `manifest.json`, `LoginPage`, `DashboardPage`, `RagAdminPanel`, `config/demo`, hooks.
+- [x] **DECISO:** i generatori (`RelazioneModal`, `riposiRelazione`, `riposiExcel`, `reportGenerator`) **NON si toccano**
+      — i documenti restano com'erano. `RailFlow` nei documenti resta (o si valuta a parte, fuori scope oggi).
+- Verifica: `grep "RailFlow"` = 0 nei **soli file UI** scelti; documenti/generatori invariati.
+
+## Fase D — Vista viewer Vincenzo: "Ufficio Vertenze" + logo FAST-CONFSAL
+- [ ] Header vista readonly (`isReadOnly`): dicitura **"Ufficio Vertenze"** + logo **FAST-CONFSAL**
+      (`logofast` → ottimizzato/ridimensionato in `public/logos/`; l'originale è 6249×4626, va rimpicciolito).
+- [ ] Posizione da confermare col riscontro dell'utente (accanto al brand Valora nell'header del viewer).
+- [ ] Gate: mostrato solo al viewer; owner invariato (pattern `...(isReadOnly ? [] : [])`).
+- Verifica: tsc/test; prova a schermo utente (login viewer).
+
+## Fase E — Verifica finale
+- [ ] `npx tsc --noEmit`=0 · `vitest` verde · `npm run build` ok · rilettura diff. Prova a schermo = utente.
+- [ ] Deploy in **batch** (non ora; si accoda ai commit pendenti).
+
+## Fuori scope oggi
+- Deploy; mockup Flow (li produce l'utente); redesign strutturale del sito (solo brand: nome+logo+colore).
+
+### Review — ESECUZIONE 03/07 (gate verde: tsc=0 · 253 test · build ok)
+- **Asset** (`public/`): `logo.png` = **simbolo colore NUDO trasparente** (no badge/cerchio); `favicon-32`/`apple-touch`/
+  `icon-192`/`icon-512` = simbolo colore trasparente; `logos/fast-confsal.png` (600×444). Rimosso il rif. a `railway-app-icon.svg`.
+- **Logo** (correzione utente): niente sfondo/cerchio. `dark:brightness-0 dark:invert` = colore in light, bianco in dark
+  (LoginPage sempre scuro → `brightness-0 invert` fisso). Markup cerchio `object-cover` sostituito con `<img>` nudo `object-contain h-16`.
+- **Nome** (solo UI): `index.html` title, `App.tsx` base+tagline, `manifest.json`, LoginPage (wordmark+footer), DashboardPage
+  (wordmark+menu Dati). Sottotitolo "ferrovieri" → "Ufficio vertenze". **Documenti/generatori invariati** (i 4 `creator:'RailFlow'` restano).
+- **Palette chrome**: theme-color `#1E3A5F`; wordmark "Rail/Flow" (cyan→indigo) → "Val/Ora" (emerald→teal); accenti login
+  cyan→teal (focus/ring/icone/bottone); `glass-input` focus ring indigo→teal. Bottoni header **emerald→cyan un gradino
+  più scuri del "Nuovo Lavoratore"** (`#10b981→#0891b2`, dopo feedback "troppo scuro" sui primi tentativi navy).
+- **Vincenzo** (Fase D): blocco "Ufficio Vertenze" + logo **FAST-CONFSAL** nell'header, **gated `isReadOnly`** (owner non lo vede).
+- **NON toccato** (scelte utente/prudenza): aree Turni&Riposi + Indennità (logo tematico per sezione **scartato** — "lasciamo
+  tutto come è"); `DynamicIsland` (cyan = scanner AI, sottosistema); temi per-azienda (RFI/Elior/…).
+- **Verifica visiva** = utente. Blocco FAST visibile solo con **login viewer** (Vincenzo). Non deployato (batch).
+- Nota favicon: simbolo colore trasparente → su tab con tema scuro il navy può vedersi meno (trade-off del "senza sfondo"; da valutare a schermo).
+
+---
+
 # PIANO — Restyling UI area "Turni & Riposi" → livello Incidenza (2026-07-02)
 
 > **STATO: piano in attesa di OK. NON implementare finché non approvato.**
