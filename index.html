@@ -3,16 +3,15 @@
 
 <head>
   <meta charset="UTF-8" />
-  <link rel="icon" type="image/svg+xml" href="/railway-app-icon.svg" />
-  <!-- Fallback PNG: Safari < 16 e browser senza favicon SVG -->
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
-  <!-- iOS "Aggiungi a Home" ignora gli SVG: serve il PNG dedicato -->
+  <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
+  <!-- iOS "Aggiungi a Home" -->
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   <link rel="manifest" href="/manifest.json" />
   <!-- Colore della UI del browser; lo script del tema lo allinea a chiaro/scuro -->
-  <meta name="theme-color" content="#4f46e5" />
+  <meta name="theme-color" content="#1E3A5F" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>RailFlow — Gestionale Ferrovieri</title>
+  <title>Valora — Ufficio Vertenze</title>
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -26,9 +25,9 @@
   } else {
     document.documentElement.classList.remove('dark');
   }
-  // theme-color della barra browser allineato al tema scelto (indigo / slate-900)
+  // theme-color della barra browser allineato al tema scelto (navy / slate-900)
   document.querySelector('meta[name="theme-color"]')
-    ?.setAttribute('content', document.documentElement.classList.contains('dark') ? '#0f172a' : '#4f46e5');
+    ?.setAttribute('content', document.documentElement.classList.contains('dark') ? '#0f172a' : '#1E3A5F');
 </script>
 
 <body>

@@ -568,9 +568,14 @@ const WorkerModal: React.FC<WorkerModalProps> = ({ isOpen, onClose, onConfirm, i
                                         </div>
 
                                         <div className="text-slate-800 dark:text-white transition-colors">
-                                            <h2 className="text-4xl font-black tracking-tight drop-shadow-sm leading-none">
-                                                {mode === 'create' ? 'Nuova Pratica' : 'Modifica Dati'}
-                                            </h2>
+                                            <div className="flex items-center gap-4">
+                                                <h2 className="text-4xl font-black tracking-tight drop-shadow-sm leading-none">
+                                                    {mode === 'create' ? 'Nuova Pratica' : 'Modifica Dati'}
+                                                </h2>
+                                                <div className="dark:bg-white dark:rounded-lg dark:p-2 dark:shadow-sm">
+                                                    <img src="/logos/fast-confsal.png" alt="FAST-CONFSAL" className="h-16 w-auto object-contain select-none" draggable={false} />
+                                                </div>
+                                            </div>
                                             <div className="flex items-center gap-2 mt-2">
                                                 <span className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest transition-colors">
                                                     {mode === 'create' ? 'Inserimento Lavoratore' : 'Modifica Lavoratore'}

@@ -46,6 +46,8 @@ import { Worker } from '../types';
 import { SYSTEM_PROFILES, SYSTEM_PROFILE_KEYS, getCompanyLogo } from '../config/profiles';
 import { CASSETTI, type CassettoId, type CassettoConfig } from '../config/cassetti';
 import { CompanyLogo } from '../components/ui/CompanyLogo';
+import { SindacatoTag } from '../components/ui/SindacatoTag';
+import { AnimatedLogo } from '../components/ui/AnimatedLogo';
 import { DashboardStats, WorkerStatItem, ModalConfig } from '../hooks/useDashboardStats';
 import { matchesCompanyFilter } from '../hooks/useWorkers';
 import { generateReport, generateRegistroPagate } from '../utils/reportGenerator';
@@ -613,56 +615,48 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
 
     return (
         <div className="relative max-w-screen-2xl mx-auto px-6 py-10" style={{ display: viewMode === 'home' ? 'block' : 'none' }}>
-            {/* HEADER — barra a tre corsie: brand a sinistra, corsia centrale
-                RISERVATA alla Dynamic Island (fissa al centro-alto), azioni a destra.
-                Così l'isola non può mai coprire i bottoni, e il brand resta presente
-                senza i 160px verticali della versione originale. */}
-            <div className="grid grid-cols-1 xl:grid-cols-[auto_minmax(260px,1fr)_auto] items-center gap-x-6 gap-y-5 mb-8">
+            {/* Riga alta: brand ValOra a sinistra, committente (Ufficio Vertenze + FAST-CONFSAL) a destra,
+                allineati in cima. Il centro resta libero per la Dynamic Island (fissa al centro-alto). */}
+            <div className="flex items-start justify-between gap-6 mb-6">
 
                 {/* SINISTRA: LOGO E TITOLO */}
-                <div className="flex items-center gap-5 justify-self-start">
-                    <div className="relative group w-20 h-20 flex-shrink-0">
-                        {/* Alone morbido dietro al logo: spento a riposo, si accende in hover */}
-                        <div className="absolute -inset-2 rounded-full bg-gradient-to-tr from-cyan-500/0 via-blue-500/0 to-indigo-500/0 group-hover:from-cyan-500/25 group-hover:via-blue-500/20 group-hover:to-indigo-500/25 blur-xl transition-all duration-700 pointer-events-none" />
-                        <div className="relative w-full h-full rounded-full overflow-hidden ring-1 ring-slate-900/10 dark:ring-white/15 shadow-xl shadow-blue-500/10 transform group-hover:scale-105 transition-transform duration-300">
-                            <img
-                                src="/logo.png"
-                                alt="Logo FS"
-                                className="w-full h-full object-cover"
-                            />
-                        </div>
-                    </div>
+                <div className="flex items-center gap-4">
+                    {/* Logo Valora nudo con neon di contorno teal (niente sfondo/cerchio): colore in light, bianco in dark.
+                        Si accende al montaggio e ogni tanto una luce lo attraversa (sheen). */}
+                    <AnimatedLogo
+                        imgClassName="neon-vo h-16 w-auto object-contain select-none transition-transform duration-300 hover:scale-105"
+                        className="flex-shrink-0"
+                        delay={0.1}
+                    />
 
                     <motion.div
                         className="group/brand cursor-default"
                         whileHover={{ scale: 1.02 }}
                         transition={{ type: "spring", stiffness: 400, damping: 25 }}
                     >
-                        <h1 className="text-4xl font-black tracking-tight select-none leading-none">
-                            <span className="text-slate-900 dark:text-white">Rail</span>
-                            <span className="bg-gradient-to-r from-cyan-500 via-blue-600 to-indigo-600 dark:from-cyan-400 dark:via-blue-400 dark:to-indigo-400 bg-clip-text text-transparent transition-all duration-500 group-hover/brand:drop-shadow-[0_0_12px_rgba(6,182,212,0.5)]">
-                                Flow
-                            </span>
+                        <h1 className="neon-text text-[2.7rem] font-black tracking-tight select-none leading-none bg-gradient-to-r from-slate-800 via-teal-700 to-emerald-500 dark:from-white dark:via-teal-200 dark:to-emerald-300 bg-clip-text text-transparent">
+                            ValOra
                         </h1>
-                        <p className="text-[11px] font-medium tracking-[0.25em] uppercase text-slate-400 dark:text-slate-500 mt-1.5 flex items-center gap-2 select-none">
-                            <Sparkles className="w-3.5 h-3.5 text-cyan-500/60 dark:text-cyan-400/40" />
-                            Pannello di controllo ferrovieri
+                        <p className="text-[10px] font-semibold tracking-[0.25em] uppercase text-slate-400 dark:text-slate-500 mt-2 flex items-center gap-2 select-none">
+                            <Sparkles className="w-3.5 h-3.5 text-teal-500/60 dark:text-teal-400/40" />
+                            Gestiamo · Creiamo · Tuteliamo
                         </p>
                     </motion.div>
                 </div>
 
-                {/* CENTRO: corsia dell'isola — vuota di proposito */}
-                <div className="hidden xl:block" aria-hidden="true" />
+                {/* DESTRA della riga alta: committente */}
+                <SindacatoTag />
+            </div>
 
-                {/* DESTRA: PULSANTI AZIONE */}
-                <div className="flex flex-wrap justify-center xl:justify-end gap-3 justify-self-center xl:justify-self-end">
+            {/* Riga bassa: pulsanti azione allineati a SINISTRA (il centro-alto resta all'isola fissa). */}
+            <div className="flex flex-wrap justify-start gap-3 mb-8">
 
                     {/* GRUPPO STRUMENTI */}
                     <div className="flex gap-3">
                         <button
                             onClick={() => setViewMode('archive')}
-                            className="group relative h-11 px-5 rounded-xl text-sm font-bold text-white whitespace-nowrap shadow-[0_10px_30px_-10px_rgba(99,102,241,0.5)] hover:shadow-[0_20px_40px_-10px_rgba(99,102,241,0.7)] hover:-translate-y-1 active:scale-95 transition-all duration-300 border border-white/20 overflow-hidden flex gap-2 items-center"
-                            style={{ backgroundImage: 'linear-gradient(to right, #6366f1, #8b5cf6)' }}
+                            className="group relative h-11 px-5 rounded-xl text-sm font-bold text-white whitespace-nowrap shadow-[0_10px_30px_-10px_rgba(16,185,129,0.5)] hover:shadow-[0_20px_40px_-10px_rgba(16,185,129,0.7)] hover:-translate-y-1 active:scale-95 transition-all duration-300 border border-white/20 overflow-hidden flex gap-2 items-center"
+                            style={{ backgroundImage: 'linear-gradient(to right, #10b981, #0891b2)' }}
                         >
                             <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500 rotate-12"></div>
                             <Archive className="w-4 h-4 transition-transform duration-500 group-hover:-rotate-6" strokeWidth={2.5} />
@@ -670,8 +664,8 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                         </button>
                         <button
                             onClick={() => setViewMode('stats')}
-                            className="group relative h-11 px-5 rounded-xl text-sm font-bold text-white whitespace-nowrap shadow-[0_10px_30px_-10px_rgba(79,70,229,0.5)] hover:shadow-[0_20px_40px_-10px_rgba(79,70,229,0.7)] hover:-translate-y-1 active:scale-95 transition-all duration-300 border border-white/20 overflow-hidden flex gap-2 items-center"
-                            style={{ backgroundImage: 'linear-gradient(to right, #4f46e5, #7c3aed)' }}
+                            className="group relative h-11 px-5 rounded-xl text-sm font-bold text-white whitespace-nowrap shadow-[0_10px_30px_-10px_rgba(16,185,129,0.5)] hover:shadow-[0_20px_40px_-10px_rgba(16,185,129,0.7)] hover:-translate-y-1 active:scale-95 transition-all duration-300 border border-white/20 overflow-hidden flex gap-2 items-center"
+                            style={{ backgroundImage: 'linear-gradient(to right, #10b981, #0891b2)' }}
                         >
                             <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500 rotate-12"></div>
                             <BarChart3 className="w-4 h-4 transition-transform duration-500 group-hover:rotate-12" strokeWidth={2.5} />
@@ -685,8 +679,8 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                     <div className="relative" ref={dataMenuRef}>
                         <button
                             onClick={() => setIsDataMenuOpen(v => !v)}
-                            className="group relative h-11 px-5 rounded-xl text-sm font-bold text-white whitespace-nowrap shadow-[0_10px_30px_-10px_rgba(168,85,247,0.5)] hover:shadow-[0_20px_40px_-10px_rgba(168,85,247,0.7)] hover:-translate-y-1 active:scale-95 transition-all duration-300 border border-white/20 overflow-hidden flex gap-2 items-center"
-                            style={{ backgroundImage: 'linear-gradient(to right, #8b5cf6, #d946ef)' }}
+                            className="group relative h-11 px-5 rounded-xl text-sm font-bold text-white whitespace-nowrap shadow-[0_10px_30px_-10px_rgba(16,185,129,0.5)] hover:shadow-[0_20px_40px_-10px_rgba(16,185,129,0.7)] hover:-translate-y-1 active:scale-95 transition-all duration-300 border border-white/20 overflow-hidden flex gap-2 items-center"
+                            style={{ backgroundImage: 'linear-gradient(to right, #10b981, #0891b2)' }}
                         >
                             <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500 rotate-12" />
                             <Database className="w-4 h-4" strokeWidth={2.5} />
@@ -707,7 +701,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                                     {/* Header */}
                                     <div className="px-4 pt-3.5 pb-2.5 border-b border-slate-100 dark:border-slate-800">
                                         <p className="text-[9px] font-black uppercase tracking-[0.15em] text-slate-400 dark:text-slate-500">Gestione dati</p>
-                                        <p className="text-[12px] font-black text-slate-700 dark:text-slate-200 mt-0.5">RailFlow</p>
+                                        <p className="text-[12px] font-black text-slate-700 dark:text-slate-200 mt-0.5">Valora</p>
                                     </div>
 
                                     {/* Voci */}
@@ -828,7 +822,6 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                         <span>Nuovo Lavoratore</span>
                     </button>
                     )}
-                </div>
             </div>
 
             {/* STATISTICHE HOME — compatte di default (striscia KPI + loghi azienda),

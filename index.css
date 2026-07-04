@@ -30,8 +30,67 @@
     @apply bg-white/50 hover:bg-white/80 dark:bg-slate-700/50 dark:hover:bg-slate-600/80 backdrop-blur-md border border-white/40 dark:border-slate-600/50 shadow-sm rounded-xl transition-all duration-300;
   }
   .glass-input {
-    @apply bg-white/30 dark:bg-slate-800/50 border border-slate-200/50 dark:border-slate-600/40 rounded-xl focus:ring-2 focus:ring-indigo-500/50 backdrop-blur-md transition-all duration-300;
+    @apply bg-white/30 dark:bg-slate-800/50 border border-slate-200/50 dark:border-slate-600/40 rounded-xl focus:ring-2 focus:ring-teal-500/50 backdrop-blur-md transition-all duration-300;
   }
+}
+
+/* --- NEON VALORA: luce di contorno teal sul simbolo VO e sul wordmark ---
+   drop-shadow (non blur diffuso) segue la forma → effetto neon. Il simbolo in dark
+   diventa bianco (brightness/invert) e il neon resta teal. */
+.neon-vo {
+  filter: drop-shadow(0 0 3px rgba(45,212,191,0.95)) drop-shadow(0 0 12px rgba(20,184,166,0.6));
+}
+.dark .neon-vo {
+  filter: brightness(0) invert(1) drop-shadow(0 0 3px rgba(45,212,191,0.95)) drop-shadow(0 0 12px rgba(20,184,166,0.6));
+}
+.neon-vo-white {
+  filter: brightness(0) invert(1) drop-shadow(0 0 3px rgba(45,212,191,0.95)) drop-shadow(0 0 12px rgba(20,184,166,0.6));
+}
+.neon-text {
+  filter: drop-shadow(0 0 4px rgba(20,184,166,0.55)) drop-shadow(0 0 12px rgba(0,163,136,0.35));
+}
+
+/* Parentesi decorative al neon (dashboard: cornice del logo sindacato).
+   Il glow pulsa lentamente; drop-shadow segue le linee del bordo. */
+@keyframes neonBracketPulse {
+  0%, 100% {
+    opacity: 0.9;
+    filter: drop-shadow(0 0 4px rgba(45,212,191,0.9)) drop-shadow(0 0 11px rgba(20,184,166,0.5));
+  }
+  50% {
+    opacity: 1;
+    filter: drop-shadow(0 0 7px rgba(45,212,191,1)) drop-shadow(0 0 20px rgba(20,184,166,0.75));
+  }
+}
+.neon-bracket {
+  border-color: rgba(45,212,191,0.95);
+  animation: neonBracketPulse 2.8s ease-in-out infinite;
+}
+.dark .neon-bracket {
+  border-color: rgba(94,234,212,0.9);
+}
+@media (prefers-reduced-motion: reduce) {
+  .neon-bracket { animation: none; }
+}
+
+/* Sheen del logo: una luce diagonale che lo attraversa ogni tanto (mascherata sulla forma).
+   Banda bianca al centro con fianchi teal → visibile sia sul logo a colori sia su quello bianco. */
+@keyframes logoSheen {
+  0%   { transform: translateX(-180%) skewX(-18deg); }
+  16%  { transform: translateX(180%) skewX(-18deg); }
+  100% { transform: translateX(180%) skewX(-18deg); }
+}
+.logo-sheen-band {
+  position: absolute;
+  top: -30%;
+  bottom: -30%;
+  left: 0;
+  width: 55%;
+  background: linear-gradient(90deg, transparent, rgba(94,234,212,0.55), rgba(255,255,255,0.9), rgba(94,234,212,0.55), transparent);
+  animation: logoSheen 7s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .logo-sheen-band { animation: none; opacity: 0; }
 }
 
 /* ========================================

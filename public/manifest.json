@@ -1,13 +1,7 @@
 {
-    "short_name": "RailFlow",
-    "name": "RailFlow — Gestionale Ferrovieri",
+    "short_name": "Valora",
+    "name": "Valora — Ufficio Vertenze",
     "icons": [
-        {
-            "src": "./railway-app-icon.svg",
-            "sizes": "any",
-            "type": "image/svg+xml",
-            "purpose": "any"
-        },
         {
             "src": "./icon-192.png",
             "sizes": "192x192",
@@ -23,6 +17,6 @@
     ],
     "start_url": "./",
     "display": "standalone",
-    "theme_color": "#4f46e5",
-    "background_color": "#f0f4ff"
+    "theme_color": "#1E3A5F",
+    "background_color": "#f0fdfa"
 }

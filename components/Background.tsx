@@ -33,11 +33,20 @@ const Background: React.FC<{ area?: string }> = ({ area }) => {
             {/* 3. VIGNETTATURA (Scurisce i bordi per concentrare la vista al centro) */}
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,rgba(0,0,0,0.03)_100%)]"></div>
 
-            {/* Velo di sezione: solo per "Turni & Riposi" lo sfondo è leggermente più scuro e tinto (indaco),
-                così l'area si distingue dal resto del sito. Transizione morbida al cambio area. */}
+            {/* Velo di sezione: tinge visibilmente lo sfondo del colore della sezione, così si distingue dal resto
+                (Incidenza = verde/teal · Turni & Riposi = indaco/violet · Indennità = rame/ambra). Transizione morbida al cambio area.
+                Tinte sature (400/500) percepibili su fondo chiaro; opacità ridotta in dark. */}
             <div
-                className="absolute inset-0 transition-opacity duration-500 bg-gradient-to-b from-indigo-900/[0.10] via-indigo-950/[0.12] to-slate-950/[0.14] dark:from-indigo-500/[0.06] dark:via-indigo-700/[0.06] dark:to-black/25"
+                className="absolute inset-0 transition-opacity duration-500 bg-gradient-to-br from-emerald-400/30 via-teal-500/20 to-transparent dark:from-emerald-500/[0.14] dark:via-teal-600/[0.10] dark:to-transparent"
+                style={{ opacity: area === 'incidenza' ? 1 : 0 }}
+            />
+            <div
+                className="absolute inset-0 transition-opacity duration-500 bg-gradient-to-br from-indigo-400/30 via-violet-500/20 to-transparent dark:from-indigo-500/[0.14] dark:via-violet-600/[0.10] dark:to-transparent"
                 style={{ opacity: area === 'riposi' ? 1 : 0 }}
+            />
+            <div
+                className="absolute inset-0 transition-opacity duration-500 bg-gradient-to-br from-amber-400/30 via-orange-500/20 to-transparent dark:from-amber-500/[0.14] dark:via-orange-600/[0.10] dark:to-transparent"
+                style={{ opacity: area === 'indennita' ? 1 : 0 }}
             />
         </div>
     );
