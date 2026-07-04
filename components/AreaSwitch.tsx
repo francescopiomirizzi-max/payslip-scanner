@@ -1,12 +1,13 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Wallet, Clock, MapPin } from 'lucide-react';
+import { Wallet, Clock, MapPin, Building2 } from 'lucide-react';
 
 export type AppArea = 'incidenza' | 'riposi' | 'indennita';
 
 interface AreaSwitchProps {
     area: AppArea;
     onChange: (area: AppArea) => void;
+    onHome?: () => void;   // torna alla scelta dell'organizzazione (owner); assente per il viewer
 }
 
 // Ogni area ha il suo colore, così la pillola segnala "dove sei":
@@ -39,10 +40,20 @@ const ORDER: AppArea[] = ['incidenza', 'riposi', 'indennita'];
  * Switch globale tra le due aree dell'app. Compatto, fisso in basso a sinistra,
  * con colore proprio per ciascuna sezione (smeraldo = Incidenza, indaco = Riposi).
  */
-const AreaSwitch: React.FC<AreaSwitchProps> = ({ area, onChange }) => {
+const AreaSwitch: React.FC<AreaSwitchProps> = ({ area, onChange, onHome }) => {
     return (
         <div className="fixed bottom-4 left-4 z-[60] print:hidden">
             <div className="flex items-center gap-1 p-1.5 rounded-full bg-white/75 dark:bg-slate-800/75 backdrop-blur-2xl border border-white/60 dark:border-slate-700/60 shadow-xl shadow-slate-900/10">
+                {onHome && (
+                    <button
+                        type="button"
+                        onClick={onHome}
+                        title="Cambia organizzazione"
+                        className="flex items-center justify-center w-9 h-9 rounded-full text-slate-500 dark:text-slate-400 hover:text-teal-600 dark:hover:text-teal-400 hover:bg-slate-100 dark:hover:bg-slate-700/60 transition-colors mr-0.5"
+                    >
+                        <Building2 className="w-4 h-4" />
+                    </button>
+                )}
                 {ORDER.map((id) => {
                     const { label, icon: Icon, activeBg, hoverText } = META[id];
                     const isActive = area === id;

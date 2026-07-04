@@ -12,6 +12,8 @@ import AppRouter from './components/AppRouter';
 import AreaSwitch, { type AppArea } from './components/AreaSwitch';
 import RiposiArea from './components/RiposiArea';
 import VertenzeArea from './components/VertenzeArea';
+import { SindacatiDashboard, type OrganizzazioneInfo } from './components/SindacatiDashboard';
+import { useIsReadOnly } from './lib/readonly';
 import ViewerPaymentBlock from './components/ViewerPaymentBlock';
 import HiddenClasses from './HiddenClasses';
 
@@ -34,6 +36,12 @@ import { useDashboardStats } from './hooks/useDashboardStats';
 import { useHashRoute } from './hooks/useHashRoute';
 import { useViewerPaymentBlock } from './lib/readonly';
 import { IS_DEMO } from './config/demo';
+
+// Organizzazioni committenti (Sindacati/CAF). Oggi solo FAST-CONFSAL (sindacato); i CAF (fiscale)
+// arriveranno. Col multi-sindacato verranno dalla tabella `sindacati`. Per ora dati lato client.
+const ORGANIZZAZIONI: OrganizzazioneInfo[] = [
+    { id: 'fast-confsal', nome: 'FAST-CONFSAL', tipo: 'sindacato', logo: '/logos/fast-confsal.png', sezioni: ['incidenza', 'riposi', 'indennita'] },
+];
 
 const App: React.FC = () => {
     const { isDarkMode, toggleTheme } = useTheme();
@@ -91,6 +99,11 @@ const App: React.FC = () => {
 
     // --- AREA GLOBALE: 'incidenza' (buste/RFI) vs 'riposi' (mancati riposi TPL) ---
     const [area, setArea] = useState<AppArea>('incidenza');
+    const isReadOnly = useIsReadOnly();
+    // Livello SOPRA le aree: organizzazione attiva. null = mostra la dashboard di scelta (owner).
+    // Il viewer (Vincenzo) bypassa ed entra diretto sul suo sindacato.
+    const [sindacatoAttivo, setSindacatoAttivo] = useState<string | null>(null);
+    useEffect(() => { if (isReadOnly) setSindacatoAttivo('fast-confsal'); }, [isReadOnly]);
 
     // --- URL SYNC (hash routing) ---
     // Back/Forward del browser, F5 e deep link (#/worker/:id, #/archive, ...)
@@ -123,8 +136,8 @@ const App: React.FC = () => {
     // --- TITOLO TAB DINAMICO ---
     // Con più tab aperte su pratiche diverse ci si orienta dalla barra del browser.
     useEffect(() => {
-        const base = 'RailFlow';
-        let title = `${base} — Gestionale Ferrovieri`;
+        const base = 'Valora';
+        let title = `${base} — Ufficio Vertenze`;
         if (area === 'riposi') title = `Turni & Riposi · ${base}`;
         else if (area === 'indennita') title = `Indennità residenza · ${base}`;
         else if (viewMode === 'stats') title = `Statistiche · ${base}`;
@@ -283,6 +296,11 @@ const App: React.FC = () => {
             <KeyboardShortcutsHint />
             <Background area={area} />
 
+            {sindacatoAttivo === null ? (
+                <SindacatiDashboard organizzazioni={ORGANIZZAZIONI} pratiche={workers} onSelect={(orgId, sez) => { setArea(sez); setSindacatoAttivo(orgId); }} />
+            ) : (
+              <>
+
             {area === 'incidenza' && <AppRouter
                 viewMode={viewMode}
                 workers={workers}
@@ -333,7 +351,9 @@ const App: React.FC = () => {
 
             {area === 'indennita' && <VertenzeArea workers={workers} />}
 
-            <AreaSwitch area={area} onChange={setArea} />
+            <AreaSwitch area={area} onChange={setArea} onHome={isReadOnly ? undefined : () => setSindacatoAttivo(null)} />
+              </>
+            )}
 
             {/* MODALS AND TOASTS */}
             {/* Toast in alto a destra: il basso-destra è dei bottoni fissi (scroll-top,
