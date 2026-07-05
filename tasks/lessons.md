@@ -803,3 +803,18 @@ brutta, dovevi solo rendere trasparente lo sfondo senza alterare l'immagine».
    elementi dell'artwork che toccano il bordo (bande, cornici) e un seme lì dentro li cancella in blocco.
 3. Verifica PRIMA di consegnare: composito su chiaro E su scuro + **confronto con l'originale** chiedendosi
    "cosa manca rispetto a prima?" — non solo "lo sfondo è sparito?".
+
+**Addendum 05/07 sera — la ricetta che ha funzionato (2° giro, dopo «residui/chiazze in dark»):**
+il 1° giro aveva lasciato polvere, aloni e pezzi di sfondo con bordi strappati, visibili SOLO sul backdrop
+scuro reale (gradiente traslucido su pannello dark ≈ grigio medio: lì ogni residuo chiaro spicca; su bianco
+si mimetizzava). Pipeline che ha retto (commit 1984d80, `caf-patronato-illustrazione.webp`):
+1. **RGB sempre dall'ORIGINALE** (recuperato da git: la 1ª versione committata dell'asset aveva lo sfondo
+   pieno) — mai dal cutout precedente, che ha frange contaminate.
+2. **Calibrare le soglie campionando** lum/sat delle zone: sfondo (era 234-240, sat≤15), bianchi artwork
+   (252+), ombre, contorni. Banda di scavo `[bg_riga−90, bg_riga+6]` con sat≤26: il +6 tiene fuori i bianchi
+   dei documenti, il −90 INCLUDE le ombre ma NON i contorni scuri (lum<145) → i contorni fanno da barriera
+   e proteggono gli interni bg-simili (la carta della stretta di mano era lum 239 = sfondo!).
+3. **Scavo geodetico** (crescita dalla zona già trasparente, solo dentro la banda) + despeckle geodetico
+   (erode r4 → reconstruct) + fill dei buchi chiusi + blur/soglia per lisciare il bordo.
+4. Verifica sul **backdrop REALE** (riprodurre il gradiente della card in dark, non un grigio a caso) +
+   zoom sulle zone che l'utente ha indicato + le zone a rischio (bianchi≈sfondo, elementi che toccano i bordi).
