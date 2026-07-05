@@ -7,6 +7,7 @@ import { supabase } from '../supabaseClient';
 import { migrateLocalToCloud } from '../utils/migrateFromLocalToCloud';
 import { IS_DEMO } from '../config/demo';
 import { DEMO_WORKERS } from '../fixtures/demoWorkers';
+import { matchesSindacato, sindacatoIdPerScrittura } from '../utils/sindacatoScope';
 
 const CARD_COLORS = ['blue', 'emerald', 'orange', 'rose', 'violet', 'teal'];
 
@@ -32,6 +33,7 @@ function dbToWorker(row: any): Worker {
         reportShowPercepito: row.report_show_percepito ?? undefined,
         dataAssunzione: row.data_assunzione ?? undefined,
         fixTargets: row.fix_targets ?? undefined,
+        sindacatoId: row.sindacato_id ?? undefined,
         anni: row.anni ?? [],
         created_at: row.created_at ?? undefined,
     };
@@ -60,6 +62,9 @@ function workerToDb(worker: Worker, ownerId: string): object {
         report_show_percepito: worker.reportShowPercepito ?? null,
         data_assunzione: worker.dataAssunzione ?? null,
         fix_targets: worker.fixTargets ?? null,
+        // Chiave scritta solo se presente sul client: un upsert da snapshot privo
+        // del campo non deve azzerare il collegamento fatto su DB (backfill 022).
+        ...(worker.sindacatoId !== undefined ? { sindacato_id: worker.sindacatoId } : {}),
         anni: worker.anni,
     };
 }
@@ -80,7 +85,7 @@ type AddToast = (
     options?: { action?: { label: string; onClick: () => void }; duration?: number }
 ) => number | void;
 
-export const useWorkers = (addToast: AddToast) => {
+export const useWorkers = (addToast: AddToast, sindacatoAttivo: string | null = null) => {
     // --- STATO PRINCIPALE ---
     const [workers, setWorkers] = useState<Worker[]>([]);
     const [isWorkersLoading, setIsWorkersLoading] = useState(true);
@@ -244,7 +249,12 @@ export const useWorkers = (addToast: AddToast) => {
         return status === filter;
     };
 
-    const filteredWorkers = workers.filter(w => {
+    // Vista scopata sull'organizzazione attiva (fail-open: legacy/demo/sentinella
+    // sempre visibili). Lo stato interno resta la lista completa (sync/delete/find);
+    // la dashboard di selezione (Recenti) e il deep-link usano `allWorkers`.
+    const workersVisibili = workers.filter(w => matchesSindacato(w.sindacatoId, sindacatoAttivo));
+
+    const filteredWorkers = workersVisibili.filter(w => {
         const query = searchQuery.toLowerCase().trim();
         const fullName = `${w.nome} ${w.cognome}`.toLowerCase();
         const reverseName = `${w.cognome} ${w.nome}`.toLowerCase();
@@ -328,6 +338,9 @@ export const useWorkers = (addToast: AddToast) => {
                 id: uuidv4(),
                 ...data,
                 accentColor: randomColor,
+                // Nuova pratica → organizzazione attiva (solo se reale: la sentinella
+                // fallback non si scrive su una colonna uuid).
+                sindacatoId: sindacatoIdPerScrittura(sindacatoAttivo),
                 anni: JSON.parse(JSON.stringify(DEFAULT_YEARS_TEMPLATE)),
                 // created_at locale provvisorio: serve a far apparire la card in cima
                 // quando il sort è per data; Supabase poi imposta il valore definitivo
@@ -581,6 +594,9 @@ export const useWorkers = (addToast: AddToast) => {
                 ...w,
                 id: uuidv4(),
                 anni: w.anni || [],
+                // Organizzazione corrente, MAI quella del file: un sindacato_id
+                // estraneo (backup di un altro account) violerebbe la FK.
+                sindacatoId: sindacatoIdPerScrittura(sindacatoAttivo),
             }));
             const { error } = await supabase
                 .from('worker_profiles')
@@ -606,7 +622,10 @@ export const useWorkers = (addToast: AddToast) => {
 
     return {
         // State
-        workers,
+        workers: workersVisibili,
+        // Lista completa, NON scopata: serve alla dashboard di selezione (Recenti)
+        // e alla risoluzione dei deep-link cross-organizzazione.
+        allWorkers: workers,
         isWorkersLoading,
         selectedWorker,
         setSelectedWorker,

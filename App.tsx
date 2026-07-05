@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { AnimatePresence } from 'framer-motion';
 
 // UI Components
@@ -62,9 +62,25 @@ const App: React.FC = () => {
         return id;
     };
 
+    // --- ORGANIZZAZIONE ATTIVA (livello SOPRA le aree) ---
+    // null = dashboard di scelta (owner). Dichiarata PRIMA di useWorkers, che scopa
+    // le pratiche sull'organizzazione attiva e la stampa sulle nuove.
+    const isReadOnly = useIsReadOnly();
+    const [sindacatoAttivo, setSindacatoAttivo] = useState<string | null>(null);
+    // Organizzazioni dalla tabella `sindacati` (migration 022); demo/errore → fallback client.
+    const { organizzazioni, isLoading: isSindacatiLoading } = useSindacati();
+    // Il viewer (Vincenzo) bypassa la dashboard: appena il fetch arriva entra
+    // sull'uuid REALE del suo sindacato; finché non arriva (o se fallisce) la
+    // sentinella 'fast-confsal' non filtra nulla (fail-open) → vede tutto come oggi.
+    useEffect(() => {
+        if (!isReadOnly) return;
+        const sind = organizzazioni.find((o) => o.tipo === 'sindacato');
+        setSindacatoAttivo(sind?.id ?? 'fast-confsal');
+    }, [isReadOnly, organizzazioni]);
+
     // --- HOOKS CORI ---
     const {
-        workers, isWorkersLoading, selectedWorker, viewMode, setViewMode,
+        workers, allWorkers, isWorkersLoading, selectedWorker, viewMode, setViewMode,
         filteredWorkers, refreshStats,
         searchQuery, setSearchQuery, activeFilter, setActiveFilter, activeStatusFilter, setActiveStatusFilter, customFilters,
         isModalOpen, setIsModalOpen, modalMode, currentWorker,
@@ -75,7 +91,7 @@ const App: React.FC = () => {
         selectedCompany, handleOpenCompany,
         fileInputRef, isImportModalOpen, setIsImportModalOpen, importPendingData, setImportPendingData,
         handleExportData, handleImportData, executeImport,
-    } = useWorkers(addToast);
+    } = useWorkers(addToast, sindacatoAttivo);
 
     const { isAuthenticated, isLoading, loginEmail, setLoginEmail, loginPassword, setLoginPassword, loginError, handleLogin, handleLogout } = useAuth(setViewMode);
     const { setQuickActions } = useIsland();
@@ -94,14 +110,6 @@ const App: React.FC = () => {
 
     // --- AREA GLOBALE: 'incidenza' (buste/RFI) vs 'riposi' (mancati riposi TPL) ---
     const [area, setArea] = useState<AppArea>('incidenza');
-    const isReadOnly = useIsReadOnly();
-    // Livello SOPRA le aree: organizzazione attiva. null = mostra la dashboard di scelta (owner).
-    // Il viewer (Vincenzo) bypassa ed entra diretto sul suo sindacato (sentinella: lo scoping
-    // per sindacato_id arriva col giro 2, al viewer basta saltare la dashboard).
-    const [sindacatoAttivo, setSindacatoAttivo] = useState<string | null>(null);
-    useEffect(() => { if (isReadOnly) setSindacatoAttivo('fast-confsal'); }, [isReadOnly]);
-    // Organizzazioni dalla tabella `sindacati` (migration 022); demo/errore → fallback client.
-    const { organizzazioni, isLoading: isSindacatiLoading } = useSindacati();
 
     // --- URL SYNC (hash routing) ---
     // Back/Forward del browser, F5 e deep link (#/worker/:id, #/archive, ...)
@@ -113,7 +121,7 @@ const App: React.FC = () => {
         selectedWorkerId: selectedWorker?.id ?? null,
         archiveWorkerId: archiveWorkerId ?? null,
         selectedCompany: selectedCompany ?? null,
-        workerExists: (id) => workers.some(w => w.id === id),
+        workerExists: (id) => allWorkers.some(w => w.id === id),
         companyKeyValid: (key) => key === 'ELIOR_MAGAZZINO' || key in SYSTEM_PROFILES,
         setArea,
         setViewMode,
@@ -123,6 +131,25 @@ const App: React.FC = () => {
         openCompany: handleOpenCompany,
         goHome: handleBack,
     });
+
+    // Deep link / F5 dell'owner: se l'URL punta già dentro l'app, si risolve
+    // l'organizzazione (quella del worker nell'hash, altrimenti l'unica organizzazione
+    // sindacato) e si entra, senza incagliarsi sulla dashboard di scelta.
+    // Una tantum all'avvio: la navigazione successiva resta manuale.
+    const deepLinkOrgResolved = useRef(false);
+    useEffect(() => {
+        if (deepLinkOrgResolved.current || !isAuthenticated || isWorkersLoading || isSindacatiLoading) return;
+        deepLinkOrgResolved.current = true;
+        if (isReadOnly || sindacatoAttivo !== null) return;
+        const hash = window.location.hash.replace(/^#\/?/, '');
+        if (!hash) return;
+        const [, id] = hash.split('/');
+        const target = id ? allWorkers.find((w) => w.id === id) : undefined;
+        const org = organizzazioni.find((o) => o.id === target?.sindacatoId)
+            ?? organizzazioni.find((o) => o.tipo === 'sindacato');
+        if (org) setSindacatoAttivo(org.id);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isAuthenticated, isWorkersLoading, isSindacatiLoading, isReadOnly, sindacatoAttivo, organizzazioni, allWorkers]);
 
     // --- SCROLL TO TOP ---
     useEffect(() => {
@@ -298,14 +325,17 @@ const App: React.FC = () => {
                 // Finché le organizzazioni caricano non si mostra la dashboard vuota (flash di pannelli senza logo).
                 !isSindacatiLoading && <SindacatiDashboard
                     organizzazioni={organizzazioni}
-                    pratiche={workers}
+                    pratiche={allWorkers}
                     onSelect={(orgId, sez) => { setArea(sez); setSindacatoAttivo(orgId); }}
                     onOpenPratica={(id) => {
-                        // Salto diretto dalla riga "Recenti": entra nel sindacato, area Incidenza, scheda aperta.
-                        const sind = organizzazioni.find((o) => o.tipo === 'sindacato');
-                        if (!sind) return;
+                        // Salto diretto dalla riga "Recenti": entra nell'organizzazione DEL
+                        // worker (fallback: prima org sindacato), area Incidenza, scheda aperta.
+                        const target = allWorkers.find((w) => w.id === id);
+                        const org = organizzazioni.find((o) => o.id === target?.sindacatoId)
+                            ?? organizzazioni.find((o) => o.tipo === 'sindacato');
+                        if (!org) return;
                         setArea('incidenza');
-                        setSindacatoAttivo(sind.id);
+                        setSindacatoAttivo(org.id);
                         handleOpenComplex(id);
                     }}
                 />
@@ -358,11 +388,13 @@ const App: React.FC = () => {
                 addToast={addToast}
             />}
 
-            {area === 'riposi' && <RiposiArea />}
+            {area === 'riposi' && <RiposiArea sindacatoId={sindacatoAttivo} />}
 
             {area === 'indennita' && <VertenzeArea workers={workers} />}
 
-            <AreaSwitch area={area} onChange={setArea} onHome={isReadOnly ? undefined : () => setSindacatoAttivo(null)} />
+            {/* "Cambia organizzazione": si esce pulendo anche area/vista, così l'hash
+                torna #/ e un F5 sulla dashboard non rientra nell'organizzazione. */}
+            <AreaSwitch area={area} onChange={setArea} onHome={isReadOnly ? undefined : () => { setSindacatoAttivo(null); setArea('incidenza'); handleBack(); }} />
               </>
             )}
 

@@ -91,6 +91,10 @@ export interface Worker {
   /** Data di assunzione (testo gg/mm/aaaa, inserita a mano dalla busta). */
   dataAssunzione?: string | null;
 
+  /** Organizzazione committente (`sindacati`, migration 022). Assente = legacy,
+   *  visibile in ogni organizzazione (fail-open, vedi utils/sindacatoScope). */
+  sindacatoId?: string;
+
   created_at?: string;
 }
 

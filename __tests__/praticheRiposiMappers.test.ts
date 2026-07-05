@@ -51,6 +51,13 @@ describe('dbToPratica', () => {
         expect(p.dataPagamento).toBe('2026-06-12');
     });
 
+    it('sindacato_id letto dal DB; assente/null → undefined (fail-open)', () => {
+        const FAST = 'b2dd2937-b2a1-49c0-9342-ddbd81093a5f';
+        expect(dbToPratica({ ...row, sindacato_id: FAST }).sindacatoId).toBe(FAST);
+        expect(dbToPratica({ ...row, sindacato_id: null }).sindacatoId).toBeUndefined();
+        expect(p.sindacatoId).toBeUndefined();
+    });
+
     it('default robusti', () => {
         const vuota = dbToPratica({ id: 'x', giornate: null });
         expect(vuota.stato).toBe('in_corso');
@@ -84,6 +91,12 @@ describe('praticaToDb', () => {
     it('date periodo in ISO per le colonne date', () => {
         expect(db.periodo_start).toBe('2011-01-01');
         expect(db.periodo_end).toBe('2024-09-30');
+    });
+
+    it('sindacatoId: scritto se presente, chiave OMESSA se assente (mai azzerare dal client)', () => {
+        const FAST = 'b2dd2937-b2a1-49c0-9342-ddbd81093a5f';
+        expect(praticaToDb({ ...pratica, sindacatoId: FAST }).sindacato_id).toBe(FAST);
+        expect(db).not.toHaveProperty('sindacato_id');
     });
 
     it('round-trip senza perdite sui campi di dominio', () => {

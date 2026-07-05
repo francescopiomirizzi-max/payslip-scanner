@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../supabaseClient';
 import type { GiornataInput } from '../utils/restEngine';
+import { matchesSindacato, sindacatoIdPerScrittura } from '../utils/sindacatoScope';
 
 export type StatoPratica = 'in_corso' | 'conclusa' | 'pagata';
 
@@ -32,6 +33,9 @@ export interface PraticaRiposi {
      *  (follow-up con `tariffe_per_anno`). Vedi `RestParams.coefficiente`. */
     coefficiente?: number;
     giornate: GiornataInput[];
+    /** Organizzazione committente (`sindacati`, migration 022). Assente = legacy,
+     *  visibile in ogni organizzazione (fail-open, vedi utils/sindacatoScope). */
+    sindacatoId?: string;
     // Gestione pratica (fase 3)
     stato: StatoPratica;
     dataApertura?: string;   // 'YYYY-MM-DD' (come arrivano dal DB)
@@ -74,6 +78,7 @@ export function dbToPratica(row: any): PraticaRiposi {
         tariffePerAnno: row.tariffe_per_anno ?? undefined,
         coefficiente: row.coefficiente != null ? Number(row.coefficiente) : undefined,
         giornate: row.giornate ?? [],
+        sindacatoId: row.sindacato_id ?? undefined,
         stato: row.stato ?? 'in_corso',
         dataApertura: row.data_apertura ?? undefined,
         dataChiusura: row.data_chiusura ?? undefined,
@@ -96,6 +101,9 @@ export function praticaToDb(p: PraticaRiposi): Record<string, unknown> {
         tariffe_per_anno: p.tariffePerAnno ?? null,
         coefficiente: p.coefficiente ?? null,
         giornate: p.giornate,
+        // Chiave scritta solo se presente (coerente con workerToDb: mai azzerare
+        // dal client un collegamento fatto su DB).
+        ...(p.sindacatoId !== undefined ? { sindacato_id: p.sindacatoId } : {}),
         stato: p.stato,
         data_apertura: p.dataApertura ?? null,
         data_chiusura: p.dataChiusura ?? null,
@@ -153,7 +161,7 @@ async function loadSeed(): Promise<PraticaRiposi[]> {
  * `salvaInArchivio` (mai auto-insert: un account viewer non deve clonarsi la
  * pratica al primo accesso).
  */
-export function usePraticheRiposi() {
+export function usePraticheRiposi(sindacatoAttivo: string | null = null) {
     const [pratiche, setPratiche] = useState<PraticaRiposi[]>([]);
     const [isLoading, setIsLoading] = useState(true);
 
@@ -180,7 +188,8 @@ export function usePraticheRiposi() {
     const salvaInArchivio = useCallback(async (pratica: PraticaRiposi): Promise<PraticaRiposi | null> => {
         const { data, error } = await supabase
             .from('pratiche_riposi')
-            .insert(praticaToDb(pratica))
+            // Nuova riga → organizzazione attiva (solo se reale, mai la sentinella).
+            .insert(praticaToDb({ ...pratica, sindacatoId: pratica.sindacatoId ?? sindacatoIdPerScrittura(sindacatoAttivo) }))
             .select()
             .single();
         if (error || !data) {
@@ -190,7 +199,7 @@ export function usePraticheRiposi() {
         const salvata = dbToPratica(data);
         setPratiche((prev) => prev.map((p) => (p.id === pratica.id ? salvata : p)));
         return salvata;
-    }, []);
+    }, [sindacatoAttivo]);
 
     /** Aggiorna i campi di gestione (stato, date, importo, tariffa). Ottimistico. */
     const updatePratica = useCallback(async (id: string, fields: PraticaRiposiUpdate): Promise<boolean> => {
@@ -203,5 +212,9 @@ export function usePraticheRiposi() {
         return !error;
     }, []);
 
-    return { pratiche, isLoading, salvaInArchivio, updatePratica };
+    // Vista scopata sull'organizzazione attiva (fail-open: seed e righe legacy
+    // senza sindacato_id restano visibili). Lo stato interno resta completo.
+    const visibili = pratiche.filter((p) => matchesSindacato(p.sindacatoId, sindacatoAttivo));
+
+    return { pratiche: visibili, isLoading, salvaInArchivio, updatePratica };
 }

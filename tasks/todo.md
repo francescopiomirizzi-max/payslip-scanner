@@ -1,3 +1,88 @@
+# PIANO — Multi-Sindacato GIRO 2: scoping per sindacato_id + bypass viewer reale + deep-link (2026-07-05)
+
+> **STATO: 🟢 IN ESECUZIONE (OK utente "prosegui in autonomia", 05/07).**
+> Chiude i residui del giro 1 (piano 04/07 qui sotto): scoping delle aree, bypass viewer con uuid vero,
+> client che scrive `sindacato_id` alla creazione, deep-link che non incaglia sulla dashboard.
+> **Pre-check DB live (05/07 sera): 39/39 worker + 1/1 pratica riposi già collegati, zero NULL** →
+> niente backfill urgente; FAST-CONFSAL = `b2dd2937-b2a1-49c0-9342-ddbd81093a5f`. Zero migration nuove.
+
+## Principio guida: fail-open
+Lo scoping non deve MAI svuotare una vista per un problema di dati: si filtra **solo se** l'organizzazione
+attiva è un **uuid reale** dal DB. Sentinella `'fast-confsal'` (fallback/demo), organizzazione non ancora
+scelta (`null`) o pratica legacy senza `sindacato_id` → sempre visibile. Con l'unica FAST-CONFSAL il
+comportamento visibile resta IDENTICO a oggi; il filtro diventa reale quando arriverà la seconda organizzazione.
+
+## Fase 0 — Helper puro `utils/sindacatoScope.ts` (+ test)
+- [x] `isUuid(s)` + `matchesSindacato(sid: string|null|undefined, attivo: string|null)` secondo il principio
+      fail-open sopra. Unico punto di verità del match, usato da workers e riposi.
+- [x] `__tests__/sindacatoScope.test.ts`: uuid match/mismatch, null, sentinella, attivo null.
+
+## Fase 1 — `hooks/useWorkers.ts`: scoping + stamp alla creazione
+- [x] `Worker.sindacatoId?: string|null` (types.ts) + mappers: `dbToWorker` legge `sindacato_id`;
+      `workerToDb` scrive la chiave **solo se definita** (upsert non tocca la colonna → anti-clobber
+      da snapshot vecchi, cfr. lezione anni-clobber).
+- [x] `useWorkers(addToast, sindacatoId)`: stato interno invariato (lista completa per sync/delete/find);
+      in USCITA `workers` = lista scopata (`matchesSindacato`) + `allWorkers` = completa;
+      `filteredWorkers` deriva dalla scopata.
+- [x] Creazione (`handleSaveWorker` create) e **import** (bulk insert): stamp `sindacatoId` = org attiva
+      se uuid reale, altrimenti null.
+- [x] In `App.tsx` spostare `isReadOnly` + `sindacatoAttivo` PRIMA della chiamata a `useWorkers`
+      (l'hook li riceve; attenti alla TDZ, cfr. lezione 2026-05-28).
+
+## Fase 2 — `hooks/usePraticheRiposi.ts` + `RiposiArea`
+- [x] `PraticaRiposi.sindacatoId?` + mappers round-trip (`dbToPratica`/`praticaToDb`).
+- [x] `usePraticheRiposi(sindacatoId?)`: filtro in lettura con `matchesSindacato`;
+      `salvaInArchivio` stampa `sindacato_id` (se uuid reale).
+- [x] `App.tsx`: `<RiposiArea sindacatoId={sindacatoAttivo} />` (prop nuova, default null).
+- [x] Vertenze (Indennità): **zero tocchi** — derivano dai `workers` già scopati passati da App.
+
+## Fase 3 — `App.tsx`: bypass viewer con uuid vero + consumer scopati
+- [x] Effetto bypass: `isReadOnly` → org = prima organizzazione `tipo==='sindacato'` da `useSindacati`
+      (uuid DB); se il fetch fallisce resta la sentinella `'fast-confsal'` (fail-open, vede tutto come oggi).
+- [x] Consumer: `AppRouter`/`useDashboardStats`/`DynamicIsland`/`VertenzeArea` ricevono i `workers` scopati;
+      `SindacatiDashboard` (Recenti) e `workerExists` del hash routing usano `allWorkers`.
+- [x] `onOpenPratica` (riga Recenti): entra nell'organizzazione **del worker** (`w.sindacatoId`),
+      fallback prima org sindacato.
+
+## Fase 4 — Deep-link/F5 senza incagliarsi sulla dashboard (routing MINIMO)
+- [x] **Decisione proposta:** NIENTE prefisso organizzazione negli URL finché esiste una sola organizzazione
+      (`#/s/:orgId/...` = rimandato a quando ci sarà la seconda; nota nel piano). Due fix chirurgici:
+- [x] (a) Auto-restore una-tantum all'init: se hash ≠ `#/`, owner, org attiva null → risolvi l'org
+      (dal `sindacatoId` del worker nell'hash se presente, altrimenti unica org sindacato) e entra.
+- [x] (b) "Cambia organizzazione" (onHome): oltre a `setSindacatoAttivo(null)`, reset area+`handleBack()`
+      → l'hash torna `#/` (oggi resta sporco, es. `#/riposi`, e al F5 riporta dentro).
+
+## Fase 5 — DB: re-run backfill di sicurezza (idempotente)
+- [x] A fine esecuzione: re-run degli UPDATE `WHERE sindacato_id IS NULL` della 022 via MCP
+      (oggi = no-op, verificato) + hard-refresh lato utente.
+
+## Fase 6 — Verifica
+- [x] `npx tsc --noEmit`=0 · `vitest` verde (+test scope e mappers) · `npm run build` ok · rilettura diff.
+- [ ] **Verifica visiva = utente** (comportamento atteso INVARIATO con una sola org): owner
+      dashboard→aree identiche; F5 su una scheda → riapre senza passare dalla dashboard; viewer: tutto
+      come prima. Al primo worker nuovo creato → check SQL `sindacato_id` valorizzato.
+
+### Review — GIRO 2 (2026-07-05) · gate: tsc=0 · 260 test (+7) · build ok
+- **Helper nuovo** `utils/sindacatoScope.ts` (isUuid/matchesSindacato/sindacatoIdPerScrittura) = unico punto
+  di verità del match, con test dedicati. Fail-open verificato: sentinella/demo/legacy → mai filtrati.
+- **useWorkers**: firma +`sindacatoAttivo`; ritorna `workers` scopati + `allWorkers` completi (Recenti +
+  deep-link); stamp su create e import (import: MAI il sindacato_id del file → violerebbe la FK);
+  mappers round-trip con chiave OMESSA se assente (un upsert da snapshot vecchio non azzera il backfill).
+- **usePraticheRiposi**: stesso pattern (filtro in uscita, stamp in `salvaInArchivio`, mapper); RiposiArea
+  riceve `sindacatoId` via prop. **Vertenze: zero tocchi** (derivano dai workers già scopati).
+- **App.tsx**: blocco organizzazione spostato PRIMA di useWorkers (TDZ-safe); bypass viewer ora sull'**uuid
+  reale** dal DB (fallback sentinella fail-open); deep-link/F5 owner risolve l'organizzazione una-tantum
+  (dal worker nell'hash, altrimenti unica org); "Cambia organizzazione" pulisce area/vista → hash `#/`;
+  Recenti entra nell'org DEL worker. Rimandato (fuori scope): prefisso org negli URL con 2+ organizzazioni.
+- **DB live**: re-run backfill idempotente = 0 righe toccate, 0 NULL residui (39/39 + 1/1 già collegati).
+- A schermo NULLA cambia con la sola FAST-CONFSAL: lo scoping morde dalla seconda organizzazione in poi.
+
+## Fuori scope
+- Prefisso organizzazione negli URL (attivo con 2+ organizzazioni) · sezioni CAF · UI crea/modifica
+  organizzazioni · migration 021 (resta non applicata; la sua colonna sindacato_id è già annotata).
+
+---
+
 # PIANO — Multi-Sindacato/CAF: dashboard di selezione + scoping pratiche per organizzazione (2026-07-04)
 
 > **STATO: 🟢 GIRO 1 ESEGUITO (05/07) — decisioni prese (vedi in fondo). Resta il GIRO 2 (scoping aree + bypass viewer + hash routing organizzazione).**

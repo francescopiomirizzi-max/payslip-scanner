@@ -41,8 +41,8 @@ const VIOLAZIONI: { n: string; titolo: string; rif: string; attiva: boolean; not
  * Scaffold: il motore (utils/restEngine.ts) è pronto e testato; estrazione PDF,
  * persistenza (pratiche_riposi) e UI di review arrivano in Fase 2.
  */
-const RiposiArea: React.FC = () => {
-    const { pratiche, isLoading, salvaInArchivio, updatePratica } = usePraticheRiposi();
+const RiposiArea: React.FC<{ sindacatoId?: string | null }> = ({ sindacatoId = null }) => {
+    const { pratiche, isLoading, salvaInArchivio, updatePratica } = usePraticheRiposi(sindacatoId);
     const isReadOnly = useIsReadOnly();
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [statoFiltro, setStatoFiltro] = useState<StatoPratica | null>(null);
