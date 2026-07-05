@@ -3,6 +3,22 @@
 > Pattern e errori da evitare nelle prossime sessioni.
 > Aggiornato dopo ogni correzione utente.
 
+## 2026-07-05 — Dropdown dentro un pannello con backdrop-blur: audit di TUTTI gli z-index fratelli, non solo del vicino
+
+**Contesto:** inglobando i pulsanti (incluso il menu a tendina "Dati") nell'header hero glass dell'Incidenza,
+il `backdrop-blur` del pannello crea uno stacking context → lo `z-50` del menu vale solo DENTRO il pannello.
+Avevo previsto il conflitto con la striscia statistiche (`z-10`) dando `z-20` al pannello, ma la sezione
+ricerca/filtri era ANCH'ESSA `z-20` e viene DOPO nel DOM → **a parità di z-index vince chi viene dopo** →
+menu sotto la barra di ricerca e i chip azienda (bug segnalato dall'utente con screenshot).
+
+**Lezione:**
+1. Quando un dropdown/absolute finisce dentro un contenitore che crea stacking context (`backdrop-filter`,
+   `transform`, `filter`…), il suo z-index NON compete più con l'esterno: conta lo z del **contenitore**.
+2. Prima di scegliere quel valore: `grep "z-"` su TUTTA la pagina e confrontare i **fratelli/sezioni successive**
+   (non solo l'elemento adiacente); superare il massimo dei concorrenti reali, ricordando che a parità vince
+   il successivo nel DOM. Gli z alti annidati in contesti bassi (es. z-40 dentro una sezione z-10) non competono.
+3. Per menu lunghi in mezzo a contenuti densi, il **portal** (cfr. Lezione 11) resta l'opzione più robusta.
+
 ## 2026-07-03 — Il logo va NUDO (trasparente), colore in light / bianco in dark: NON inventare badge/sfondi
 
 **Contesto:** rebrand Valora, adozione del simbolo nell'header/login. Il markup esistente mostrava il vecchio
@@ -769,3 +785,21 @@ devi prendere quelli che ti ho dato così fai prima».**
    a mano. Proporre il redraw solo se l'utente lo chiede esplicitamente.
 4. Regola generale: "ricostruire in SVG pulito" suona professionale ma è **scope che l'utente non ha chiesto**
    e che ne ribalta una decisione già presa. Cfr. principio interventi chirurgici + [[feedback-verifica-video-utente]].
+
+## 2026-07-05 — Scontorno di un'immagine scelta: SOLO sfondo→alpha, zero "migliorie" non chieste
+
+**Errore commesso (illustrazione CAF/Patronato):** dovevo solo rendere trasparente lo sfondo. Invece:
+(1) ho aggiunto una **dissolvenza orizzontale** ai lati (7%) che ha mangiato le estremità delle bande —
+un'alterazione dell'artwork che nessuno aveva chiesto; (2) i **semi del flood-fill piazzati lungo tutto il
+perimetro** cadevano DENTRO la banda verde pallida → la banda intera è stata scambiata per sfondo e rimossa;
+(3) ho consegnato senza confrontare il risultato con l'originale fianco a fianco. Risultato: «è veramente
+brutta, dovevi solo rendere trasparente lo sfondo senza alterare l'immagine».
+
+**Regole:**
+1. Su un artefatto grafico già scelto dall'utente, l'operazione richiesta è un **contratto letterale**:
+   sfondo→trasparente significa che ogni pixel NON di sfondo resta identico. Niente fade, crop, erosioni
+   o rifiniture estetiche a mia iniziativa (stessa famiglia della lezione "logo: usare il file dato").
+2. Flood-fill dai bordi: **filtrare i semi** (solo pixel chiari E non saturi) — il perimetro può attraversare
+   elementi dell'artwork che toccano il bordo (bande, cornici) e un seme lì dentro li cancella in blocco.
+3. Verifica PRIMA di consegnare: composito su chiaro E su scuro + **confronto con l'originale** chiedendosi
+   "cosa manca rispetto a prima?" — non solo "lo sfondo è sparito?".
