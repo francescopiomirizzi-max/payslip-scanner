@@ -71,6 +71,22 @@ const DecorCurves: React.FC = () => (
         <g fill="none" stroke="#10b981" strokeWidth="1.75" className="opacity-[0.24] dark:opacity-[0.16]">
             {[0, 1, 2, 3, 4].map((i) => <ellipse key={i} cx="1440" cy="450" rx={220 + i * 140} ry={320 + i * 150} />)}
         </g>
+        {/* Comete anche sulle ellissi (più lente e tenui delle onde) */}
+        <g fill="none" strokeWidth="2" strokeLinecap="round" className="motion-reduce:hidden opacity-50 dark:opacity-40" style={{ filter: 'drop-shadow(0 0 6px rgba(52,211,153,0.7))' }}>
+            {[0, 1, 2, 3, 4].map((i) => (
+                <ellipse
+                    key={i}
+                    cx="1440"
+                    cy="450"
+                    rx={220 + i * 140}
+                    ry={320 + i * 150}
+                    stroke="#34d399"
+                    strokeDasharray="90 2510"
+                    className="[animation:curve-comet_16s_linear_infinite]"
+                    style={{ animationDelay: `${i * 3.2}s` }}
+                />
+            ))}
+        </g>
     </svg>
 );
 
