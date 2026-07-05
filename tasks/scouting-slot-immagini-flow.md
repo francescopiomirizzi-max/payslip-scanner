@@ -1,5 +1,10 @@
 # Scouting slot immagini Google Flow (2026-07-05)
 
+> **STATO FINALE (05/07 sera): COMPLETATO.** Tutti gli slot riempiti o chiusi: illustrazioni "Cosa fa"
+> (2), empty state (4), card CAF e Patronato (illustrazione scontornata), sfondo login video, fasce hero
+> su TUTTE e 3 le aree (approvata su Indennità → estesa; stat/azioni spostate su riga propria sotto la
+> banda). 13 commit locali, gate sempre verde. Resta solo la verifica visiva d'insieme dell'utente + deploy batch.
+
 > Segue l'idea annotata in roadmap il 05/07: immagini Flow **solo su superfici di presentazione**
 > (ingresso / landing aree / login), MAI nelle viste operative. Prima si definiscono gli slot
 > (aspect ratio + stile), poi si genera. **Questo file è lo scouting: niente è implementato.**
@@ -31,7 +36,7 @@
 
 | # | Slot | Stato | Formato | Note |
 |---|------|-------|---------|------|
-| A1 | Illustrazione pannello CAF (`:260`) | **già occupato** — è il riferimento di stile | 1344×698 (~1,93:1) | ✅ 05/07 convertita: PNG 756 KB → **WebP 28 KB** (alpha preservato), PNG rimosso |
+| A1 | Illustrazione pannello CAF (`:260`) | **sostituita 05/07 pom.** | 1600×893 (1,79:1) | ✅ Card ridefinita **"CAF e Patronato · fiscale+previdenziale"**: nuova illustrazione Flow (cartelle CAF/PATRONATO/PENSIONI/SOSTEGNO/RED rosso voluto, `caf-patronato-illustrazione.webp` 57 KB), aspect fascia sindacato sincronizzato, testi card/sottotitolo/footer aggiornati. Scartate: 2 varianti con farfuglio/etichette 8px, 1 con "Pratiche Lavoro" tagliato. DB: `tipo='caf'` invariato |
 | A2 | Empty state "Recenti pratiche" (`:118`) | oggi solo testo | spot 1:1 (gen. 1024², resa ~140 px) | Cartellina/pratiche in attesa, teal. PNG trasparente |
 | A3 | Sfondo pagina | **escluso** | — | Curve SVG+aurore scelte apposta il 04/07 (video scartato per peso/tono) |
 | A4 | Popup sezioni (portal) | **escluso** | — | Funzionale, le icone gradiente bastano |
@@ -43,7 +48,7 @@ La fascia del pannello Sindacati (`aspect-[1344/698]`, `:241`) è **occupata dal
 
 | # | Slot | Stato | Formato | Note |
 |---|------|-------|---------|------|
-| B1 | Sfondo (`:30`, oggi `login.mp4`) | occupato, **re-skin opzionale** | video loop 8s 16:9 o still 2K 16:9 | Sta sotto overlay scuro (`opacity-50` + gradiente): serve scena scura navy/teal. Se still WebP → si risparmiano ~1,7 MB |
+| B1 | Sfondo (`:30`, `login.mp4`) | ✅ **re-skin FATTO 05/07** (commit 851c698) | video loop 13,4s 1920×1000 | Clip Flow/Veo "onde teal su navy + monogramma VO" scelto tra 2 (variante B, la soft); ping-pong senza stacco, fade iniziale tagliato, watermark Veo croppato, H.264 muto 2,3 MB. Il logo in-video resta in gran parte dietro la card = eco del brand |
 
 ### C — Landing delle 3 aree · **whitelabel: niente brand ValOra**, solo immagini tematiche
 
@@ -52,7 +57,7 @@ Indennità (`components/VertenzeArea.tsx:110`).
 
 | # | Slot | Stato | Formato | Note |
 |---|------|-------|---------|------|
-| C1 | Fascia hero (banda h-40 in cima al pannello) | **da valutare con mockup** | striscia ~1600×640 ritagliata, resa angolo dx ~400×160, dissolta nella fascia | Slot più visibile ma più rischioso: l'hero è già pieno (icona+titolo+stat/azioni). Solo se il mockup convince |
+| C1 | Fascia hero (banda h-40 in cima al pannello) | ✅ **FATTO su TUTTE e 3 le aree** (Indennità 2ad4c63 approvata dall'utente → estesa e2f8910) | `indennita-hero.webp` 45 KB · `riposi-hero.webp` 88 KB · `incidenza-hero.webp` 57 KB | Stile "linea continua" (Indennità: skyline+pin+valigia; Riposi: bus+orologio+tachigrafo, linea=strada; Incidenza: busta+calcolatrice+monete); img assoluta right h-40 opacity-70, mask CSS sulla coda, `hidden <sm`. **Prerequisito: stat/azioni su riga propria sotto la banda** (d388f58 + 0036f95) così la striscia resta libera. Incidenza: `rounded-tr` a mano (niente overflow-hidden per il menu Dati) |
 | C2 | Sezione "Cosa fa quest'area" (Riposi `:187`, Indennità `:181`) | **candidato principale** | 4:3 (gen. 1600×1200, resa ~280 px colonna dx su lg) | È letteralmente "cosa fanno le sezioni". Riposi = autista/tachigrafo/orologio; Indennità = casa/trasferta/mappa. Tecnica CAF o trasparente |
 | C3 | Empty state pratiche (Riposi `:175`, Indennità `:169`, Incidenza ricerca `~:1192`) | oggi solo testo | spot 1:1 (gen. 1024², resa ~160 px) | Diventa importante col multi-sindacato giro 2: le aree vuote **si mostrano** (decisione 05/07) → un nuovo sindacato vedrà subito questi slot |
 | C4 | Step "Come funziona" | **escluso** | — | Icone a gradiente già efficaci, spot lì = rumore |
