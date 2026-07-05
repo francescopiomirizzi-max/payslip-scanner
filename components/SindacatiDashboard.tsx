@@ -115,7 +115,10 @@ export const SindacatiDashboard: React.FC<{
                     <h3 className="text-sm font-black uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400 mb-3">Recenti pratiche</h3>
                     <div className="rounded-[1.5rem] bg-white/80 dark:bg-slate-800/70 backdrop-blur-2xl border border-white/70 dark:border-slate-700/60 shadow-xl overflow-hidden">
                         {recenti.length === 0 ? (
-                            <p className="px-6 py-8 text-sm text-slate-400 text-center">Nessuna pratica ancora.</p>
+                            <div className="flex flex-col items-center gap-3 px-6 py-10">
+                                <img src="/dashboard-empty.webp" alt="" loading="lazy" draggable={false} className="h-24 w-auto select-none" />
+                                <p className="text-sm text-slate-400 text-center">Nessuna pratica ancora.</p>
+                            </div>
                         ) : (
                             <div className="overflow-x-auto">
                                 <table className="w-full text-sm">

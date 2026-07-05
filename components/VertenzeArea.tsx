@@ -166,7 +166,10 @@ const VertenzeArea: React.FC<{ workers: WorkerLike[] }> = ({ workers }) => {
                     {isLoading ? (
                         <div className="h-20 rounded-2xl bg-slate-100 dark:bg-slate-800/60 animate-pulse" />
                     ) : pratiche.length === 0 ? (
-                        <p className="text-sm text-slate-500 dark:text-slate-400">Nessun lavoratore Elior viaggiante in archivio.</p>
+                        <div className="flex flex-col items-center gap-3 py-10 rounded-3xl border-2 border-dashed border-slate-200 dark:border-slate-700">
+                            <img src="/indennita-empty.webp" alt="" loading="lazy" draggable={false} className="h-28 w-auto select-none" />
+                            <p className="text-sm text-slate-500 dark:text-slate-400">Nessun lavoratore Elior viaggiante in archivio.</p>
+                        </div>
                     ) : visibili.length === 0 ? (
                         <p className="text-sm text-slate-500 dark:text-slate-400">Nessun lavoratore «{STATO_META_VERTENZA[statoFiltro!].label}». Togli il filtro.</p>
                     ) : (

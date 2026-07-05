@@ -31,7 +31,7 @@
 
 | # | Slot | Stato | Formato | Note |
 |---|------|-------|---------|------|
-| A1 | Illustrazione pannello CAF (`:260`) | **già occupato** — è il riferimento di stile | 1344×698 (~1,93:1) | Solo ottimizzazione: PNG 775 KB → WebP ~150 KB |
+| A1 | Illustrazione pannello CAF (`:260`) | **già occupato** — è il riferimento di stile | 1344×698 (~1,93:1) | ✅ 05/07 convertita: PNG 756 KB → **WebP 28 KB** (alpha preservato), PNG rimosso |
 | A2 | Empty state "Recenti pratiche" (`:118`) | oggi solo testo | spot 1:1 (gen. 1024², resa ~140 px) | Cartellina/pratiche in attesa, teal. PNG trasparente |
 | A3 | Sfondo pagina | **escluso** | — | Curve SVG+aurore scelte apposta il 04/07 (video scartato per peso/tono) |
 | A4 | Popup sezioni (portal) | **escluso** | — | Funzionale, le icone gradiente bastano |
@@ -95,6 +95,21 @@ secondo le priorità sotto.
   su mobile immagine sotto il testo), `loading="lazy"`, alt descrittivo, `rounded-2xl`. Nessun tocco a motori/generatori.
 - **Verifica visiva = utente** (light + dark; l'immagine è opaca chiara → in dark resta un riquadro chiaro come
   l'illustrazione CAF in dashboard: da confermare a schermo).
+
+### Review — EMPTY STATE (C3+A2) ESEGUITO (05/07 pom.) · gate: tsc=0 · 253 test · build ok
+- Generazione utente su Flow: 4 soggetti × 4 varianti in `~/Desktop/flow-cosa-fa/` (cartelle 1-4, rinominata senza `~:`).
+- **Scelte**: Riposi = cartellina+orologio «(3)» (tratto più corposo, meglio a 160px); Indennità = cartella+casa+pin «(2)»
+  (unica senza artefatti: la base-1120 aveva un frammento fluttuante, la (1) una pila tripla); Incidenza = schedario+busta
+  «base» (la più iconica); Dashboard = vassoio «(2)» (trattini-dettaglio coerenti col set).
+- **Pipeline scontorno** (nuova, in Python/Pillow+numpy): alpha dalla distanza dal bianco (min canale) + **un-blend**
+  `c = (obs − 255(1−α))/α` + autocrop bbox+30px + max 480px + WebP q85 con alpha. Risultato verificato a video (linee pulite).
+  Asset: `riposi-empty.webp` 21 KB · `indennita-empty.webp` 13 KB · `incidenza-empty.webp` 38 KB · `dashboard-empty.webp` 23 KB.
+- **Innesti** (4 file): empty state con spot in `RiposiArea` e `VertenzeArea` (blocco tratteggiato centrato);
+  `SindacatiDashboard` "Recenti pratiche" vuoto; `DashboardPage` **nuovo blocco "Nessun lavoratore in archivio"**
+  (`workers.length === 0 && !searchQuery` — prima non esisteva: griglia muta) + control bar della griglia nascosta ad
+  archivio vuoto. I vuoti "da filtro" (togli il filtro / Urgenze) restano solo testo, com'erano.
+- Visibili oggi solo ad archivio vuoto (39 worker) → diventeranno reali col giro 2 multi-sindacato (aree vuote mostrate).
+  **Verifica visiva = utente** (es. demo mode o account nuovo).
 
 ## Flusso operativo concordabile
 

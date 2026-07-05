@@ -1208,8 +1208,19 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                 )}
             </AnimatePresence>
 
+            {/* --- 3b. ARCHIVIO VUOTO (zero lavoratori, nessuna ricerca attiva) --- */}
+            {workers.length === 0 && !searchQuery && (
+                <div className="w-full max-w-2xl mx-auto mt-12 text-center">
+                    <div className="p-10 rounded-[3rem] bg-white/40 dark:bg-slate-900/40 backdrop-blur-xl border-2 border-dashed border-slate-300 dark:border-slate-700 flex flex-col items-center">
+                        <img src="/incidenza-empty.webp" alt="" loading="lazy" draggable={false} className="h-32 w-auto select-none mb-5" />
+                        <h3 className="text-2xl font-black text-slate-800 dark:text-white tracking-tight mb-2">Nessun lavoratore in archivio</h3>
+                        <p className="text-slate-500 dark:text-slate-400 font-medium max-w-md mx-auto leading-relaxed">Crea la prima pratica con <span className="text-emerald-600 dark:text-emerald-400 font-bold">«Nuovo Lavoratore»</span> qui in alto.</p>
+                    </div>
+                </div>
+            )}
+
             {/* --- 4. WORKERS GRID --- */}
-            {(!searchQuery || filteredWorkers.length > 0) && (
+            {workers.length > 0 && (!searchQuery || filteredWorkers.length > 0) && (
                 <>
                 {/* CONTROL BAR — ordina + ticket + selezione. Toolbar TRASPARENTE e slim
                     (niente vetro/bordo/rounded): non deve sembrare un cassetto. Separata dai
