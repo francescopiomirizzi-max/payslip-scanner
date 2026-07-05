@@ -257,7 +257,7 @@ const CategoriaPanel: React.FC<{ tipo: 'sindacato' | 'caf'; orgs: Organizzazione
             ) : tipo === 'caf' ? (
                 <>
                     <div className="mt-6 -mx-1 rounded-2xl overflow-hidden dark:bg-gradient-to-b dark:from-slate-100/90 dark:to-slate-200/70">
-                        <img src="/caf-illustrazione.png" alt="Assistenza fiscale · 730, ISEE, calcoli fiscali" className="w-full select-none" draggable={false} />
+                        <img src="/caf-illustrazione.webp" alt="Assistenza fiscale · 730, ISEE, calcoli fiscali" className="w-full select-none" draggable={false} />
                     </div>
                     <button disabled className="mt-6 mx-auto inline-flex items-center gap-2 px-6 py-3 rounded-2xl bg-slate-100 dark:bg-slate-700/50 text-slate-400 dark:text-slate-500 font-bold cursor-not-allowed">
                         Accedi alle pratiche <span className="text-[10px] font-black uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-slate-200 dark:bg-slate-600/60">in arrivo</span>
