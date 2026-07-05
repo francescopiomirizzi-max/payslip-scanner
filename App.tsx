@@ -160,10 +160,14 @@ const App: React.FC = () => {
 
     // --- TITOLO TAB DINAMICO ---
     // Con più tab aperte su pratiche diverse ci si orienta dalla barra del browser.
+    // Segue anche il livello organizzazione: dashboard di scelta → "Dashboard",
+    // dentro un'organizzazione la home mostra il suo nome (es. FAST-CONFSAL).
     useEffect(() => {
         const base = 'Valora';
-        let title = `${base} — Ufficio Vertenze`;
-        if (area === 'riposi') title = `Turni & Riposi · ${base}`;
+        const orgNome = organizzazioni.find((o) => o.id === sindacatoAttivo)?.nome;
+        let title = orgNome ? `${orgNome} · ${base}` : `${base} — Ufficio Vertenze`;
+        if (sindacatoAttivo === null) title = `Dashboard · ${base}`;
+        else if (area === 'riposi') title = `Turni & Riposi · ${base}`;
         else if (area === 'indennita') title = `Indennità residenza · ${base}`;
         else if (viewMode === 'stats') title = `Statistiche · ${base}`;
         else if (viewMode === 'company' && selectedCompany)
@@ -172,7 +176,7 @@ const App: React.FC = () => {
         else if ((viewMode === 'complex' || viewMode === 'simple') && selectedWorker)
             title = `${selectedWorker.cognome} ${selectedWorker.nome} · ${base}`;
         document.title = title;
-    }, [area, viewMode, selectedWorker, selectedCompany]);
+    }, [area, viewMode, selectedWorker, selectedCompany, sindacatoAttivo, organizzazioni]);
 
     const scrollToTop = () => window.scrollTo({ top: 0, behavior: 'smooth' });
 
