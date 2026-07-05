@@ -6,7 +6,7 @@ import type { AppArea } from './AreaSwitch';
 import { CompanyLogo } from './ui/CompanyLogo';
 import { AnimatedLogo } from './ui/AnimatedLogo';
 
-/** Un'organizzazione committente: sindacato (vertenze) o CAF (fiscale). Multi: se ne possono avere N. */
+/** Un'organizzazione committente: sindacato (vertenze) o CAF/Patronato (fiscale+previdenziale). Multi: se ne possono avere N. */
 export interface OrganizzazioneInfo {
     id: string;
     nome: string;
@@ -32,7 +32,7 @@ const SEZIONE_META: Record<AppArea, { label: string; sub: string; icon: React.Co
 
 const CATEGORIE = {
     sindacato: { titolo: 'Sindacati', desc: 'Vertenze e tutele: differenze retributive, mancati riposi, indennità.', icon: Users, gradient: 'from-[#1E3A5F] to-[#0d9488]' },
-    caf: { titolo: 'CAF · Assistenza Fiscale', desc: 'Dichiarazioni dei redditi, 730, ISEE, calcoli fiscali. Sezioni in arrivo.', icon: Calculator, gradient: 'from-[#0d9488] to-emerald-500' },
+    caf: { titolo: 'CAF e Patronato', desc: 'Assistenza fiscale e previdenziale: 730, ISEE, pensioni, NASPI, invalidità. Sezioni in arrivo.', icon: Calculator, gradient: 'from-[#0d9488] to-emerald-500' },
 } as const;
 
 /** Ingresso morbido (fade + salita) per gli elementi della dashboard. */
@@ -92,7 +92,7 @@ export const SindacatiDashboard: React.FC<{
             <div className="max-w-6xl mx-auto px-6 py-12">
                 <motion.div className="text-center mb-10" initial={{ opacity: 0, y: -16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: 'easeOut' }}>
                     <h1 className="text-4xl sm:text-5xl font-black tracking-tight text-slate-800 dark:text-slate-100">Benvenuto!</h1>
-                    <p className="mt-2 text-lg sm:text-xl font-bold text-slate-600 dark:text-slate-300">Gestisci le tue pratiche <span className="text-teal-600 dark:text-teal-400">sindacali</span> e <span className="text-emerald-600 dark:text-emerald-400">fiscali</span>.</p>
+                    <p className="mt-2 text-lg sm:text-xl font-bold text-slate-600 dark:text-slate-300">Gestisci le tue pratiche <span className="text-teal-600 dark:text-teal-400">sindacali</span>, <span className="text-emerald-600 dark:text-emerald-400">fiscali</span> e <span className="text-emerald-600 dark:text-emerald-400">previdenziali</span>.</p>
                 </motion.div>
 
                 {/* Due mondi, multi-organizzazione — ingresso a cascata */}
@@ -241,7 +241,7 @@ const CategoriaPanel: React.FC<{ tipo: 'sindacato' | 'caf'; orgs: Organizzazione
                     {/* Fascia speculare a quella CAF: stessa larghezza (bleed -mx-1) e stessa
                         altezza (aspect-ratio dell'illustrazione), ma TRASPARENTE — nessun fondo
                         né bordo: il logo si fonde con la card. Le parentesi sono l'unico elemento al neon. */}
-                    <div className="mt-6 -mx-1 aspect-[1344/698] relative flex items-center justify-center">
+                    <div className="mt-6 -mx-1 aspect-[1600/893] relative flex items-center justify-center">
                         <span className="neon-bracket absolute left-[8%] top-8 bottom-8 w-6 border-l-[3px] border-t-[3px] border-b-[3px] rounded-l-xl" />
                         <span className="neon-bracket absolute right-[8%] top-8 bottom-8 w-6 border-r-[3px] border-t-[3px] border-b-[3px] rounded-r-xl" />
                         <div className="relative">
@@ -260,7 +260,7 @@ const CategoriaPanel: React.FC<{ tipo: 'sindacato' | 'caf'; orgs: Organizzazione
             ) : tipo === 'caf' ? (
                 <>
                     <div className="mt-6 -mx-1 rounded-2xl overflow-hidden dark:bg-gradient-to-b dark:from-slate-100/90 dark:to-slate-200/70">
-                        <img src="/caf-illustrazione.webp" alt="Assistenza fiscale · 730, ISEE, calcoli fiscali" className="w-full select-none" draggable={false} />
+                        <img src="/caf-patronato-illustrazione.webp" alt="Assistenza fiscale e previdenziale · 730, ISEE, pensioni, NASPI" className="w-full select-none" draggable={false} />
                     </div>
                     <button disabled className="mt-6 mx-auto inline-flex items-center gap-2 px-6 py-3 rounded-2xl bg-slate-100 dark:bg-slate-700/50 text-slate-400 dark:text-slate-500 font-bold cursor-not-allowed">
                         Accedi alle pratiche <span className="text-[10px] font-black uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-slate-200 dark:bg-slate-600/60">in arrivo</span>
@@ -270,7 +270,7 @@ const CategoriaPanel: React.FC<{ tipo: 'sindacato' | 'caf'; orgs: Organizzazione
 
             {/* Spazio per aggiungere altre organizzazioni della categoria */}
             <div className="mt-auto pt-5 border-t border-slate-100 dark:border-slate-700/60">
-                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500 mb-3">{tipo === 'sindacato' ? 'Aggiungi altri sindacati' : 'I tuoi CAF'}</p>
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500 mb-3">{tipo === 'sindacato' ? 'Aggiungi altri sindacati' : 'I tuoi CAF e Patronati'}</p>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                     {altri.map((o) => <OrgCard key={o.id} org={o} onOpen={onOpen} />)}
                     <div title="Aggiunta organizzazioni · in arrivo" className="flex flex-col items-center justify-center gap-1 h-24 rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-700 text-slate-300 dark:text-slate-600 hover:border-teal-300 dark:hover:border-teal-500/40 hover:text-teal-400 transition-colors cursor-pointer">
