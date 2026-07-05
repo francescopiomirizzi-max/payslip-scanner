@@ -132,19 +132,20 @@ const VertenzeArea: React.FC<{ workers: WorkerLike[] }> = ({ workers }) => {
                                 <DevBadge label="Sezione nuova — in sviluppo, nuove funzioni in arrivo!" />
                             </div>
                         </div>
-                        {aggregato.nLavoratori > 0 && (
-                            <div className="flex items-stretch gap-3">
-                                <div className="rounded-2xl bg-white/60 dark:bg-slate-900/50 border border-white/60 dark:border-slate-700/60 px-5 py-3 text-center backdrop-blur-sm">
-                                    <div className="flex items-center justify-center gap-1 text-amber-500/90 dark:text-amber-400/70"><Users className="w-3 h-3" /><p className="text-[10px] font-black uppercase tracking-widest">Lavoratori</p></div>
-                                    <p className="text-2xl font-black tabular-nums text-slate-800 dark:text-slate-100 mt-0.5">{aggregato.nLavoratori}</p>
-                                </div>
-                                <div className="rounded-2xl bg-white/60 dark:bg-slate-900/50 border border-white/60 dark:border-slate-700/60 px-5 py-3 text-center backdrop-blur-sm">
-                                    <div className="flex items-center justify-center gap-1 text-emerald-500/90 dark:text-emerald-400/70"><Euro className="w-3 h-3" /><p className="text-[10px] font-black uppercase tracking-widest">Credito stimato</p></div>
-                                    <p className="text-2xl font-black tabular-nums text-slate-800 dark:text-slate-100 mt-0.5">{eur0(aggregato.credito)}</p>
-                                </div>
-                            </div>
-                        )}
                     </div>
+                    {/* Numeri aggregati su riga propria, sotto la banda: la skyline della fascia resta libera */}
+                    {aggregato.nLavoratori > 0 && (
+                        <div className="relative mt-5 flex flex-wrap items-stretch gap-3">
+                            <div className="rounded-2xl bg-white/60 dark:bg-slate-900/50 border border-white/60 dark:border-slate-700/60 px-5 py-3 text-center backdrop-blur-sm">
+                                <div className="flex items-center justify-center gap-1 text-amber-500/90 dark:text-amber-400/70"><Users className="w-3 h-3" /><p className="text-[10px] font-black uppercase tracking-widest">Lavoratori</p></div>
+                                <p className="text-2xl font-black tabular-nums text-slate-800 dark:text-slate-100 mt-0.5">{aggregato.nLavoratori}</p>
+                            </div>
+                            <div className="rounded-2xl bg-white/60 dark:bg-slate-900/50 border border-white/60 dark:border-slate-700/60 px-5 py-3 text-center backdrop-blur-sm">
+                                <div className="flex items-center justify-center gap-1 text-emerald-500/90 dark:text-emerald-400/70"><Euro className="w-3 h-3" /><p className="text-[10px] font-black uppercase tracking-widest">Credito stimato</p></div>
+                                <p className="text-2xl font-black tabular-nums text-slate-800 dark:text-slate-100 mt-0.5">{eur0(aggregato.credito)}</p>
+                            </div>
+                        </div>
+                    )}
                 </header>
 
                 {/* Pratiche */}
