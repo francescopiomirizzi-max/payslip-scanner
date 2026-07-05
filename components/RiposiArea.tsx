@@ -99,6 +99,14 @@ const RiposiArea: React.FC = () => {
                 {/* Header hero — identità dell'area + numeri aggregati a colpo d'occhio */}
                 <header className="relative overflow-hidden rounded-[2rem] border border-white/60 dark:border-slate-700/60 bg-white/70 dark:bg-slate-800/70 backdrop-blur-2xl p-7 shadow-xl">
                     <div className="absolute inset-x-0 top-0 h-40 pointer-events-none" style={{ background: riposiHeaderBand }} />
+                    {/* Fascia hero: bus + orologio + tachigrafo in linea continua, coda dissolta via mask */}
+                    <img
+                        src="/riposi-hero.webp"
+                        alt=""
+                        aria-hidden="true"
+                        draggable={false}
+                        className="absolute right-0 top-0 h-40 w-auto max-w-full pointer-events-none select-none opacity-70 hidden sm:block [mask-image:linear-gradient(to_right,transparent,black_18%)]"
+                    />
                     <div className="relative flex flex-wrap items-center gap-5">
                         <div
                             className="w-16 h-16 rounded-3xl flex items-center justify-center shadow-lg text-white shrink-0"

@@ -633,6 +633,15 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                 nel DOM (a parità di z vince chi viene dopo → il menu finiva sotto la barra di ricerca). */}
             <header className="relative z-30 rounded-[2rem] border border-white/60 dark:border-slate-700/60 bg-white/70 dark:bg-slate-800/70 backdrop-blur-2xl p-7 shadow-xl mb-8">
                 <div className="absolute inset-x-0 top-0 h-40 rounded-t-[2rem] pointer-events-none" style={{ background: incidenzaHeaderBand }} />
+                {/* Fascia hero: busta paga + calcolatrice + monete in linea continua, coda dissolta via mask.
+                    L'header non ha overflow-hidden (menu Dati) → angolo dell'img arrotondato a mano. */}
+                <img
+                    src="/incidenza-hero.webp"
+                    alt=""
+                    aria-hidden="true"
+                    draggable={false}
+                    className="absolute right-0 top-0 h-40 w-auto max-w-full rounded-tr-[2rem] pointer-events-none select-none opacity-70 hidden sm:block [mask-image:linear-gradient(to_right,transparent,black_18%)]"
+                />
                 <div className="relative flex flex-wrap items-center gap-5">
                     <div
                         className="w-16 h-16 rounded-3xl flex items-center justify-center shadow-lg text-white shrink-0"
