@@ -7,7 +7,6 @@ import {
     Upload,
     User,
     Ticket,
-    Sparkles,
     ArrowUp,
     X,
     Wallet,
@@ -47,7 +46,6 @@ import { SYSTEM_PROFILES, SYSTEM_PROFILE_KEYS, getCompanyLogo } from '../config/
 import { CASSETTI, type CassettoId, type CassettoConfig } from '../config/cassetti';
 import { CompanyLogo } from '../components/ui/CompanyLogo';
 import { SindacatoTag } from '../components/ui/SindacatoTag';
-import { AnimatedLogo } from '../components/ui/AnimatedLogo';
 import { DashboardStats, WorkerStatItem, ModalConfig } from '../hooks/useDashboardStats';
 import { matchesCompanyFilter } from '../hooks/useWorkers';
 import { generateReport, generateRegistroPagate } from '../utils/reportGenerator';
@@ -615,36 +613,10 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
 
     return (
         <div className="relative max-w-screen-2xl mx-auto px-6 py-10" style={{ display: viewMode === 'home' ? 'block' : 'none' }}>
-            {/* Riga alta: brand ValOra a sinistra, committente (Ufficio Vertenze + FAST-CONFSAL) a destra,
-                allineati in cima. Il centro resta libero per la Dynamic Island (fissa al centro-alto). */}
-            <div className="flex items-start justify-between gap-6 mb-6">
-
-                {/* SINISTRA: LOGO E TITOLO */}
-                <div className="flex items-center gap-4">
-                    {/* Logo Valora nudo con neon di contorno teal (niente sfondo/cerchio): colore in light, bianco in dark.
-                        Si accende al montaggio e ogni tanto una luce lo attraversa (sheen). */}
-                    <AnimatedLogo
-                        imgClassName="neon-vo h-16 w-auto object-contain select-none transition-transform duration-300 hover:scale-105"
-                        className="flex-shrink-0"
-                        delay={0.1}
-                    />
-
-                    <motion.div
-                        className="group/brand cursor-default"
-                        whileHover={{ scale: 1.02 }}
-                        transition={{ type: "spring", stiffness: 400, damping: 25 }}
-                    >
-                        <h1 className="neon-text text-[2.7rem] font-black tracking-tight select-none leading-none bg-gradient-to-r from-slate-800 via-teal-700 to-emerald-500 dark:from-white dark:via-teal-200 dark:to-emerald-300 bg-clip-text text-transparent">
-                            ValOra
-                        </h1>
-                        <p className="text-[10px] font-semibold tracking-[0.25em] uppercase text-slate-400 dark:text-slate-500 mt-2 flex items-center gap-2 select-none">
-                            <Sparkles className="w-3.5 h-3.5 text-teal-500/60 dark:text-teal-400/40" />
-                            Gestiamo · Creiamo · Tuteliamo
-                        </p>
-                    </motion.div>
-                </div>
-
-                {/* DESTRA della riga alta: committente */}
+            {/* Riga alta: solo il committente (Ufficio Vertenze + FAST-CONFSAL) a destra — dentro la
+                sezione del sindacato il brand ValOra non compare (vive nella dashboard d'ingresso e nel
+                login). Il centro resta libero per la Dynamic Island (fissa al centro-alto). */}
+            <div className="flex items-start justify-end gap-6 mb-6">
                 <SindacatoTag />
             </div>
 
