@@ -54,6 +54,11 @@ import { COLOR_VARIANTS } from '../utils/colorVariants';
 // Config dei cassetti (classificazione per stato) → fonte unica in config/cassetti.ts,
 // condivisa con la scheda azienda così le etichette di stato non divergono.
 
+// Fascia gradiente della testata dell'area (smeraldo→teal → trasparente), gemella di
+// `riposiHeaderBand`: stessa alfa-scala, hue del tema Incidenza (emerald-500 → teal-500).
+const incidenzaHeaderBand =
+    'linear-gradient(180deg, #10b9813d 0%, #10b98130 22%, #14b8a61f 45%, #14b8a610 68%, #14b8a606 86%, transparent 100%)';
+
 // ─── COMPONENTE CASSETTO ─────────────────────────────────────────────────────
 // Bar compatta in singola riga: icona + label + count + badge cliccabili
 // (uno per lavoratore, colorati per azienda) + chevron. I badge appaiono solo
@@ -619,6 +624,23 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
             <div className="flex items-start justify-end gap-6 mb-6">
                 <SindacatoTag />
             </div>
+
+            {/* Header hero — identità dell'area, gemello di Turni & Riposi / Indennità. */}
+            <header className="relative overflow-hidden rounded-[2rem] border border-white/60 dark:border-slate-700/60 bg-white/70 dark:bg-slate-800/70 backdrop-blur-2xl p-7 shadow-xl mb-8">
+                <div className="absolute inset-x-0 top-0 h-40 pointer-events-none" style={{ background: incidenzaHeaderBand }} />
+                <div className="relative flex flex-wrap items-center gap-5">
+                    <div
+                        className="w-16 h-16 rounded-3xl flex items-center justify-center shadow-lg text-white shrink-0"
+                        style={{ background: 'linear-gradient(135deg, #10b981 0%, #14b8a6 100%)', boxShadow: '0 10px 30px -8px rgba(16,185,129,0.45)' }}
+                    >
+                        <Wallet className="w-8 h-8" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                        <h1 className="text-3xl font-black text-slate-800 dark:text-slate-100">Incidenza</h1>
+                        <p className="text-slate-500 dark:text-slate-400">Analisi delle buste paga · differenze retributive e % di incidenza delle indennità</p>
+                    </div>
+                </div>
+            </header>
 
             {/* Riga bassa: pulsanti azione allineati a SINISTRA (il centro-alto resta all'isola fissa). */}
             <div className="flex flex-wrap justify-start gap-3 mb-8">
