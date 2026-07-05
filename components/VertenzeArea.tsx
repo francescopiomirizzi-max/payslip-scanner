@@ -185,17 +185,29 @@ const VertenzeArea: React.FC<{ workers: WorkerLike[] }> = ({ workers }) => {
                     transition={{ duration: 0.3 }}
                     className="rounded-3xl border border-slate-100 dark:border-slate-700/60 bg-white dark:bg-slate-800/60 p-7"
                 >
-                    <h2 className="text-lg font-bold text-slate-700 dark:text-slate-200">Cosa fa quest'area</h2>
-                    <p className="mt-2 text-slate-600 dark:text-slate-300 leading-relaxed">
-                        Calcola le <strong>differenze retributive sull'indennità di assenza dalla residenza</strong> dei
-                        lavoratori Elior <strong>viaggiante</strong>: per le voci <strong>4300</strong> e <strong>4305</strong> la misura
-                        corrisposta (ridotta) è confrontata con la misura piena prevista dal <strong>CCNL 2016</strong>; la
-                        differenza, anno per anno e nel rispetto della prescrizione, forma il credito da allegare al ricorso.
-                    </p>
-                    <p className="mt-2 text-sm text-slate-400 dark:text-slate-500 flex items-center gap-1.5">
-                        <ShieldCheck className="w-4 h-4 shrink-0" />
-                        Strumento di preparazione: i risultati sono input neutri per la decisione dell'avvocato.
-                    </p>
+                    <div className="lg:flex lg:items-center lg:gap-8">
+                        <div className="min-w-0 flex-1">
+                            <h2 className="text-lg font-bold text-slate-700 dark:text-slate-200">Cosa fa quest'area</h2>
+                            <p className="mt-2 text-slate-600 dark:text-slate-300 leading-relaxed">
+                                Calcola le <strong>differenze retributive sull'indennità di assenza dalla residenza</strong> dei
+                                lavoratori Elior <strong>viaggiante</strong>: per le voci <strong>4300</strong> e <strong>4305</strong> la misura
+                                corrisposta (ridotta) è confrontata con la misura piena prevista dal <strong>CCNL 2016</strong>; la
+                                differenza, anno per anno e nel rispetto della prescrizione, forma il credito da allegare al ricorso.
+                            </p>
+                            <p className="mt-2 text-sm text-slate-400 dark:text-slate-500 flex items-center gap-1.5">
+                                <ShieldCheck className="w-4 h-4 shrink-0" />
+                                Strumento di preparazione: i risultati sono input neutri per la decisione dell'avvocato.
+                            </p>
+                        </div>
+                        {/* Illustrazione tematica dell'area (Flow, whitelabel: nessun brand) */}
+                        <img
+                            src="/indennita-illustrazione.webp"
+                            alt="Casa, segnaposto e valigia accanto alla busta paga: indennità di assenza dalla residenza"
+                            loading="lazy"
+                            draggable={false}
+                            className="mt-6 lg:mt-0 w-full lg:w-72 shrink-0 rounded-2xl select-none"
+                        />
+                    </div>
                 </motion.div>
 
                 {/* Base giuridica (sintesi) */}

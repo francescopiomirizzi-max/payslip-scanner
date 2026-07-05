@@ -191,38 +191,50 @@ const RiposiArea: React.FC = () => {
                     transition={{ duration: 0.3 }}
                     className="rounded-3xl border border-white/60 dark:border-slate-700/60 bg-white/60 dark:bg-slate-800/60 backdrop-blur-2xl shadow-lg p-7"
                 >
-                    <div className="flex items-center gap-2.5">
-                        <span className="w-8 h-8 rounded-xl bg-indigo-100 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0"><BookOpen className="w-4 h-4" /></span>
-                        <h2 className="text-lg font-bold text-slate-700 dark:text-slate-200">Cosa fa quest'area</h2>
-                    </div>
-                    <p className="mt-2 text-slate-600 dark:text-slate-300 leading-relaxed">
-                        Verifica i <strong>mancati riposi</strong> dei conducenti del trasporto di linea e ne calcola le
-                        indennità. Si carica il prospetto turni, il motore controlla i riposi giornalieri e settimanali
-                        secondo il <strong>Reg. (CE) 561/2006</strong> — letto insieme al <strong>D.Lgs 234/2007</strong> sull'orario
-                        di lavoro — e produce una contestazione pronta da valutare.
-                    </p>
-                    <p className="mt-2 text-sm text-slate-400 dark:text-slate-500 flex items-center gap-1.5">
-                        <ShieldCheck className="w-4 h-4 shrink-0" />
-                        Strumento di preparazione: i risultati sono input neutri per la decisione dell'avvocato.
-                    </p>
-                    <div className="mt-5 flex flex-wrap items-center gap-3">
-                        {/* Vademecum (.docx) — nascosto al viewer (sola lettura): è un download. */}
-                        {!isReadOnly && (
-                        <a
-                            href={`${import.meta.env.BASE_URL}vademecum-turni-riposi.docx`}
-                            download="Vademecum_Turni_Riposi_FAST.docx"
-                            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold shadow-md shadow-indigo-500/30 transition-colors"
-                        >
-                            <BookOpen className="w-4 h-4" /> Apri il vademecum
-                        </a>
-                        )}
-                        <button
-                            type="button"
-                            disabled
-                            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-slate-200 dark:bg-slate-700 text-slate-400 dark:text-slate-500 font-semibold cursor-not-allowed"
-                        >
-                            <FileUp className="w-4 h-4" /> Nuova pratica (in arrivo)
-                        </button>
+                    <div className="lg:flex lg:items-center lg:gap-8">
+                        <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2.5">
+                                <span className="w-8 h-8 rounded-xl bg-indigo-100 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0"><BookOpen className="w-4 h-4" /></span>
+                                <h2 className="text-lg font-bold text-slate-700 dark:text-slate-200">Cosa fa quest'area</h2>
+                            </div>
+                            <p className="mt-2 text-slate-600 dark:text-slate-300 leading-relaxed">
+                                Verifica i <strong>mancati riposi</strong> dei conducenti del trasporto di linea e ne calcola le
+                                indennità. Si carica il prospetto turni, il motore controlla i riposi giornalieri e settimanali
+                                secondo il <strong>Reg. (CE) 561/2006</strong> — letto insieme al <strong>D.Lgs 234/2007</strong> sull'orario
+                                di lavoro — e produce una contestazione pronta da valutare.
+                            </p>
+                            <p className="mt-2 text-sm text-slate-400 dark:text-slate-500 flex items-center gap-1.5">
+                                <ShieldCheck className="w-4 h-4 shrink-0" />
+                                Strumento di preparazione: i risultati sono input neutri per la decisione dell'avvocato.
+                            </p>
+                            <div className="mt-5 flex flex-wrap items-center gap-3">
+                                {/* Vademecum (.docx) — nascosto al viewer (sola lettura): è un download. */}
+                                {!isReadOnly && (
+                                <a
+                                    href={`${import.meta.env.BASE_URL}vademecum-turni-riposi.docx`}
+                                    download="Vademecum_Turni_Riposi_FAST.docx"
+                                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold shadow-md shadow-indigo-500/30 transition-colors"
+                                >
+                                    <BookOpen className="w-4 h-4" /> Apri il vademecum
+                                </a>
+                                )}
+                                <button
+                                    type="button"
+                                    disabled
+                                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-slate-200 dark:bg-slate-700 text-slate-400 dark:text-slate-500 font-semibold cursor-not-allowed"
+                                >
+                                    <FileUp className="w-4 h-4" /> Nuova pratica (in arrivo)
+                                </button>
+                            </div>
+                        </div>
+                        {/* Illustrazione tematica dell'area (Flow, whitelabel: nessun brand) */}
+                        <img
+                            src="/riposi-illustrazione.webp"
+                            alt="Bus di linea, orologio e disco del tachigrafo accanto al prospetto turni"
+                            loading="lazy"
+                            draggable={false}
+                            className="mt-6 lg:mt-0 w-full lg:w-80 shrink-0 rounded-2xl select-none"
+                        />
                     </div>
                 </motion.div>
 
