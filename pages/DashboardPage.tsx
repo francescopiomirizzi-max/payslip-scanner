@@ -625,9 +625,13 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                 <SindacatoTag />
             </div>
 
-            {/* Header hero — identità dell'area, gemello di Turni & Riposi / Indennità. */}
-            <header className="relative overflow-hidden rounded-[2rem] border border-white/60 dark:border-slate-700/60 bg-white/70 dark:bg-slate-800/70 backdrop-blur-2xl p-7 shadow-xl mb-8">
-                <div className="absolute inset-x-0 top-0 h-40 pointer-events-none" style={{ background: incidenzaHeaderBand }} />
+            {/* Header hero — identità dell'area, gemello di Turni & Riposi / Indennità.
+                Niente overflow-hidden (il menu Dati a tendina vive dentro il pannello e non va
+                clippato): la fascia si arrotonda da sola con rounded-t. */}
+            {/* z-20: il backdrop-blur crea uno stacking context → senza, il menu Dati aperto
+                finirebbe SOTTO la striscia statistiche (relative z-10) che segue. */}
+            <header className="relative z-20 rounded-[2rem] border border-white/60 dark:border-slate-700/60 bg-white/70 dark:bg-slate-800/70 backdrop-blur-2xl p-7 shadow-xl mb-8">
+                <div className="absolute inset-x-0 top-0 h-40 rounded-t-[2rem] pointer-events-none" style={{ background: incidenzaHeaderBand }} />
                 <div className="relative flex flex-wrap items-center gap-5">
                     <div
                         className="w-16 h-16 rounded-3xl flex items-center justify-center shadow-lg text-white shrink-0"
@@ -639,11 +643,10 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                         <h1 className="text-3xl font-black text-slate-800 dark:text-slate-100">Incidenza</h1>
                         <p className="text-slate-500 dark:text-slate-400">Analisi delle buste paga · differenze retributive e % di incidenza delle indennità</p>
                     </div>
-                </div>
-            </header>
 
-            {/* Riga bassa: pulsanti azione allineati a SINISTRA (il centro-alto resta all'isola fissa). */}
-            <div className="flex flex-wrap justify-start gap-3 mb-8">
+                    {/* Azioni dell'area, inglobate nel pannello (si guadagna la riga sotto).
+                        "Nuovo Lavoratore" chiude la fila, più grande: è l'azione frequente. */}
+                    <div className="flex flex-wrap items-center gap-3">
 
                     {/* GRUPPO STRUMENTI */}
                     <div className="flex gap-3">
@@ -805,18 +808,21 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                             </div>
                         </div>
                     )}
+                    {/* AZIONE PRINCIPALE — più grande delle altre: qui si clicca di continuo. */}
                     {!isReadOnly && (
                     <button
                         onClick={() => handleOpenModal('create')}
-                        className="group relative h-11 px-6 rounded-xl text-sm font-bold text-white whitespace-nowrap shadow-[0_10px_30px_-10px_rgba(16,185,129,0.5)] hover:shadow-[0_20px_40px_-10px_rgba(16,185,129,0.7)] hover:-translate-y-1 active:scale-95 transition-all duration-300 border border-white/20 overflow-hidden flex gap-2 items-center"
+                        className="group relative h-14 px-7 rounded-2xl text-base font-black text-white whitespace-nowrap shadow-[0_14px_36px_-10px_rgba(16,185,129,0.6)] hover:shadow-[0_24px_48px_-12px_rgba(16,185,129,0.75)] hover:-translate-y-1 active:scale-95 transition-all duration-300 border border-white/20 overflow-hidden flex gap-2.5 items-center"
                         style={{ backgroundImage: 'linear-gradient(to right, #34d399, #06b6d4)' }}
                     >
                         <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500 rotate-12"></div>
-                        <Plus className="w-4 h-4 transition-transform duration-500 group-hover:rotate-180" strokeWidth={3} />
+                        <Plus className="w-5 h-5 transition-transform duration-500 group-hover:rotate-180" strokeWidth={3} />
                         <span>Nuovo Lavoratore</span>
                     </button>
                     )}
-            </div>
+                    </div>
+                </div>
+            </header>
 
             {/* STATISTICHE HOME — compatte di default (striscia KPI + loghi azienda),
                 espandibili nelle 3 card. Lo stato (statsCollapsed) è ricordato così
