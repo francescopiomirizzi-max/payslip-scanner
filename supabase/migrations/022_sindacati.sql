@@ -5,10 +5,12 @@
 -- Per rendere il sito generale si introduce un livello "organizzazione" SOPRA le aree:
 -- ogni pratica appartiene a un sindacato/CAF; l'owner sceglie l'organizzazione all'ingresso.
 --
--- ⚠️ NON ancora applicata al DB live. Da rivedere con l'utente (RLS viewer + backfill) prima di eseguire.
+-- Applicata al DB live via MCP il 2026-07-05 (decisioni utente: solo seed FAST-CONFSAL).
 --
--- Modello: owner-scoped come 013/021. `azienda` (RFI/Elior…) resta il DATORE del lavoratore,
--- indipendente dal sindacato che commissiona la pratica.
+-- Modello: come worker_profiles (019) — SELECT owner O viewer sola-lettura (Vincenzo),
+-- scritture owner E NON viewer; auth.uid() avvolto in (select …) per l'advisor initplan.
+-- `azienda` (RFI/Elior…) resta il DATORE del lavoratore, indipendente dal sindacato
+-- che commissiona la pratica.
 
 -- ── 1. Tabella organizzazioni ────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS public.sindacati (
@@ -30,16 +32,21 @@ DROP POLICY IF EXISTS "sindacati_insert_owner"  ON public.sindacati;
 DROP POLICY IF EXISTS "sindacati_update_owner"  ON public.sindacati;
 DROP POLICY IF EXISTS "sindacati_delete_owner"  ON public.sindacati;
 
--- SELECT: owner. ⚠️ Il viewer (Vincenzo) deve poter leggere il SUO sindacato → prima del
--- deploy allineare al modello delle altre tabelle (OR auth.uid() = '<viewer-uid>'), come nota in 021.
+-- SELECT: owner O viewer sola-lettura (il viewer deve leggere il sindacato dell'owner per
+-- il bypass/scoping). Scritture: owner E NON viewer. Stesso modello di worker_profiles (019).
 CREATE POLICY "sindacati_select_owner" ON public.sindacati FOR SELECT
-    TO authenticated USING (owner_id = auth.uid());
+    TO authenticated
+    USING ((owner_id = (select auth.uid())) OR ((select auth.uid()) = '34967593-6447-45fd-a303-13ec842c7b9e'::uuid));
 CREATE POLICY "sindacati_insert_owner" ON public.sindacati FOR INSERT
-    TO authenticated WITH CHECK (owner_id = auth.uid());
+    TO authenticated
+    WITH CHECK ((owner_id = (select auth.uid())) AND ((select auth.uid()) <> '34967593-6447-45fd-a303-13ec842c7b9e'::uuid));
 CREATE POLICY "sindacati_update_owner" ON public.sindacati FOR UPDATE
-    TO authenticated USING (owner_id = auth.uid()) WITH CHECK (owner_id = auth.uid());
+    TO authenticated
+    USING ((owner_id = (select auth.uid())) AND ((select auth.uid()) <> '34967593-6447-45fd-a303-13ec842c7b9e'::uuid))
+    WITH CHECK ((owner_id = (select auth.uid())) AND ((select auth.uid()) <> '34967593-6447-45fd-a303-13ec842c7b9e'::uuid));
 CREATE POLICY "sindacati_delete_owner" ON public.sindacati FOR DELETE
-    TO authenticated USING (owner_id = auth.uid());
+    TO authenticated
+    USING ((owner_id = (select auth.uid())) AND ((select auth.uid()) <> '34967593-6447-45fd-a303-13ec842c7b9e'::uuid));
 
 -- ── 2. Collegamento pratiche → sindacato (tabelle live) ───────────────────────
 ALTER TABLE public.worker_profiles ADD COLUMN IF NOT EXISTS sindacato_id uuid

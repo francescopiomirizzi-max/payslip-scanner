@@ -1,6 +1,6 @@
 # PIANO — Multi-Sindacato/CAF: dashboard di selezione + scoping pratiche per organizzazione (2026-07-04)
 
-> **STATO: SCHELETRO in attesa di OK + 3 decisioni (vedi in fondo). NON implementare finché non approvato.**
+> **STATO: 🟢 GIRO 1 ESEGUITO (05/07) — decisioni prese (vedi in fondo). Resta il GIRO 2 (scoping aree + bypass viewer + hash routing organizzazione).**
 > Richiesta utente: rendere il sito **generale**, non ristretto al Consaf di Vincenzo. L'owner apre il sito su una
 > **dashboard di selezione Sindacato/CAF**; scelto uno, entra nelle 3 aree (Incidenza/Riposi/Indennità) **filtrate
 > per quel sindacato**. Il **viewer Vincenzo** invece bypassa e apre direttamente le sue sezioni Consaf (com'è ora).
@@ -11,11 +11,13 @@
 - **Azienda ≠ Sindacato**: un sindacato/CAF commissiona pratiche di lavoratori di più aziende. Nuovo livello SOPRA le aree.
 - Le aree oggi vivono in `App.tsx` (`area` = incidenza/riposi/indennita); il sindacato è un livello sopra `area`.
 
-## Fase 1 — Dato (migration)
-- [ ] Tabella `sindacati` (id, nome, tipo `sindacato|caf`, logo_url, colore/tema, owner_id, created_at).
-- [ ] `sindacato_id` FK su `worker_profiles`, `pratiche_riposi`, `pratiche_vertenze` (+ index).
-- [ ] Backfill: tutte le righe esistenti → sindacato **FAST-CONFSAL** (seed). Migration NON applicata finché non approvato.
-- [ ] RLS: owner vede i propri sindacati; viewer legato al suo (`READONLY_VIEWER_UIDS` → FAST-CONFSAL).
+## Fase 1 — Dato (migration) — ✅ APPLICATA AL DB LIVE 05/07
+- [x] Tabella `sindacati` (id, nome, tipo `sindacato|caf`, logo_url, colore/tema, owner_id, created_at).
+- [x] `sindacato_id` FK su `worker_profiles`, `pratiche_riposi` (+ index). `pratiche_vertenze` NO: la 021 non è
+      applicata al live → la sua colonna va aggiunta dentro la 021 quando verrà eseguita (nota già nella 022).
+- [x] Backfill verificato via SQL: 1 sindacato FAST-CONFSAL, 39/39 worker_profiles + 1/1 pratiche_riposi collegati.
+- [x] RLS modello 019: SELECT owner O viewer (UID Vincenzo), scritture owner E NON viewer, `(select auth.uid())`
+      anti-initplan. Advisor security/performance post-apply: nessun warning nuovo.
 
 ## Fase 2 — Entry point owner: "Dashboard ValOra" (la base del sito) — 🟢 PROTOTIPO UI FATTO (04/07, dati client)
 - [x] `components/SindacatiDashboard.tsx`: header brand + **due macro-pannelli Sindacati / CAF** (da mockup utente),
@@ -26,7 +28,10 @@
 - **NOVITÀ dai mockup:** due TIPI di organizzazione — **sindacato** (vertenze: le 3 aree attuali) e **CAF** (fiscale:
       730/ISEE/redditi = sezioni NUOVE, in arrivo). Il CAF conferma "aree diverse per organizzazione". La migration 022
       ha già `tipo CHECK ('sindacato','caf')` → coerente.
-- [ ] Restano: hash routing del livello organizzazione; collegamento al DB (dopo apply migration); sezioni CAF (fiscale) future.
+- [x] **Collegamento al DB (05/07):** nuovo `hooks/useSindacati.ts` (osserva auth come useWorkers, anti double-fire;
+      demo/errore/tabella vuota → fallback client FAST-CONFSAL, fail-open). `App.tsx` usa l'hook al posto della
+      const `ORGANIZZAZIONI`; dashboard non renderizzata finché le organizzazioni caricano (no flash pannelli vuoti).
+- [ ] Restano: hash routing del livello organizzazione (giro 2); sezioni CAF (fiscale) future.
 
 ## Fase 3 — Scoping delle aree
 - [ ] Scelto un sindacato, `useWorkers`/`usePraticheRiposi`/`usePraticheVertenze` filtrano per `sindacato_id`.
@@ -42,10 +47,21 @@
 ## Fase 6 — Verifica
 - [ ] tsc/test/build; owner: scelta → area filtrata; viewer: bypass diretto; nessuna regressione.
 
-## DECISIONI da confermare prima di partire
-1. **Gestione sindacati**: seed solo FAST-CONFSAL ora, o UI di gestione già in questo giro?
-2. **Aree vuote** per un sindacato senza quel tipo di pratica: nascondere l'area o mostrarla vuota?
-3. **Granularità**: tutto in un colpo (DB+dashboard+scoping+bypass) o per gradi (prima DB+dashboard, poi scoping)?
+## DECISIONI — prese il 05/07
+1. **Gestione sindacati**: solo seed FAST-CONFSAL ora; la UI crea/modifica arriva quando arrivano organizzazioni vere.
+2. **Aree vuote**: si MOSTRANO vuote (si vede cosa offre la piattaforma; si crea la prima pratica da lì).
+3. **Granularità**: PER GRADI — giro 1 = migration+backfill+dashboard su DB (fatto); giro 2 = scoping + bypass viewer.
+
+### Review — GIRO 1 (2026-07-05) · gate: tsc=0 · 253 test · build ok
+- **DB live**: migration 022 applicata via MCP dopo il fix RLS (la bozza aveva SELECT owner-only: il viewer non
+  avrebbe letto il sindacato per bypass/scoping → allineata al modello worker_profiles/019, scritture negate al viewer).
+  Pre-check: tabella assente, 1 owner, 39 worker, 1 pratica riposi → post-apply: backfill completo (39/39 + 1/1).
+- **Client**: `hooks/useSindacati.ts` nuovo (sola lettura, mapping row→`OrganizzazioneInfo`, sezioni per tipo:
+  sindacato=3 aree, caf=[]); `App.tsx` −const ORGANIZZAZIONI, +hook, +gate anti-flash sul render della dashboard.
+- **Nota giro 2**: il bypass viewer usa ancora la sentinella `'fast-confsal'` (non l'uuid DB) — da risolvere quando
+  lo scoping filtrerà per `sindacato_id`; i worker/pratiche creati d'ora in poi NON hanno `sindacato_id` (client non
+  lo scrive ancora) → al giro 2 il client lo imposta alla creazione + re-run del backfill idempotente.
+- **Verifica visiva** = utente (login owner: dashboard con FAST-CONFSAL dal DB; login viewer: bypass invariato).
 
 ---
 

@@ -12,7 +12,7 @@ import AppRouter from './components/AppRouter';
 import AreaSwitch, { type AppArea } from './components/AreaSwitch';
 import RiposiArea from './components/RiposiArea';
 import VertenzeArea from './components/VertenzeArea';
-import { SindacatiDashboard, type OrganizzazioneInfo } from './components/SindacatiDashboard';
+import { SindacatiDashboard } from './components/SindacatiDashboard';
 import { useIsReadOnly } from './lib/readonly';
 import ViewerPaymentBlock from './components/ViewerPaymentBlock';
 import HiddenClasses from './HiddenClasses';
@@ -34,14 +34,9 @@ import { useWorkers } from './hooks/useWorkers';
 import { useAuth } from './hooks/useAuth';
 import { useDashboardStats } from './hooks/useDashboardStats';
 import { useHashRoute } from './hooks/useHashRoute';
+import { useSindacati } from './hooks/useSindacati';
 import { useViewerPaymentBlock } from './lib/readonly';
 import { IS_DEMO } from './config/demo';
-
-// Organizzazioni committenti (Sindacati/CAF). Oggi solo FAST-CONFSAL (sindacato); i CAF (fiscale)
-// arriveranno. Col multi-sindacato verranno dalla tabella `sindacati`. Per ora dati lato client.
-const ORGANIZZAZIONI: OrganizzazioneInfo[] = [
-    { id: 'fast-confsal', nome: 'FAST-CONFSAL', tipo: 'sindacato', logo: '/logos/fast-confsal.png', sezioni: ['incidenza', 'riposi', 'indennita'] },
-];
 
 const App: React.FC = () => {
     const { isDarkMode, toggleTheme } = useTheme();
@@ -101,9 +96,12 @@ const App: React.FC = () => {
     const [area, setArea] = useState<AppArea>('incidenza');
     const isReadOnly = useIsReadOnly();
     // Livello SOPRA le aree: organizzazione attiva. null = mostra la dashboard di scelta (owner).
-    // Il viewer (Vincenzo) bypassa ed entra diretto sul suo sindacato.
+    // Il viewer (Vincenzo) bypassa ed entra diretto sul suo sindacato (sentinella: lo scoping
+    // per sindacato_id arriva col giro 2, al viewer basta saltare la dashboard).
     const [sindacatoAttivo, setSindacatoAttivo] = useState<string | null>(null);
     useEffect(() => { if (isReadOnly) setSindacatoAttivo('fast-confsal'); }, [isReadOnly]);
+    // Organizzazioni dalla tabella `sindacati` (migration 022); demo/errore → fallback client.
+    const { organizzazioni, isLoading: isSindacatiLoading } = useSindacati();
 
     // --- URL SYNC (hash routing) ---
     // Back/Forward del browser, F5 e deep link (#/worker/:id, #/archive, ...)
@@ -297,7 +295,8 @@ const App: React.FC = () => {
             <Background area={area} />
 
             {sindacatoAttivo === null ? (
-                <SindacatiDashboard organizzazioni={ORGANIZZAZIONI} pratiche={workers} onSelect={(orgId, sez) => { setArea(sez); setSindacatoAttivo(orgId); }} />
+                // Finché le organizzazioni caricano non si mostra la dashboard vuota (flash di pannelli senza logo).
+                !isSindacatiLoading && <SindacatiDashboard organizzazioni={organizzazioni} pratiche={workers} onSelect={(orgId, sez) => { setArea(sez); setSindacatoAttivo(orgId); }} />
             ) : (
               <>
 
