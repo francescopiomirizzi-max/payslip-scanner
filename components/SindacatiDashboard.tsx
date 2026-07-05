@@ -24,10 +24,28 @@ export interface PraticaRow {
     status?: string;
 }
 
-const SEZIONE_META: Record<AppArea, { label: string; sub: string; icon: React.ComponentType<{ className?: string }>; gradient: string; glow: string; text: string }> = {
-    incidenza: { label: 'Incidenza', sub: 'Buste paga · differenze retributive', icon: Wallet, gradient: 'from-emerald-500 to-teal-500', glow: 'rgba(16,185,129,0.45)', text: 'group-hover/sez:text-emerald-600 dark:group-hover/sez:text-emerald-400' },
-    riposi: { label: 'Turni & Riposi', sub: 'Mancati riposi · Reg. CE 561/2006', icon: Clock, gradient: 'from-indigo-500 to-violet-500', glow: 'rgba(99,102,241,0.45)', text: 'group-hover/sez:text-indigo-600 dark:group-hover/sez:text-indigo-400' },
-    indennita: { label: 'Indennità', sub: 'Assenza residenza · voci 4300/4305', icon: MapPin, gradient: 'from-amber-500 to-orange-600', glow: 'rgba(245,158,11,0.45)', text: 'group-hover/sez:text-amber-600 dark:group-hover/sez:text-amber-400' },
+const SEZIONE_META: Record<AppArea, { label: string; sub: string; icon: React.ComponentType<{ className?: string }>; gradient: string; glow: string; text: string; hover: string; chev: string }> = {
+    incidenza: {
+        label: 'Incidenza', sub: 'Buste paga · differenze retributive', icon: Wallet,
+        gradient: 'from-emerald-500 to-teal-500', glow: 'rgba(16,185,129,0.45)',
+        text: 'group-hover/sez:text-emerald-600 dark:group-hover/sez:text-emerald-400',
+        hover: 'hover:border-emerald-300/70 dark:hover:border-emerald-400/30 hover:bg-emerald-50/70 dark:hover:bg-emerald-500/[0.07] hover:shadow-emerald-500/10',
+        chev: 'group-hover/sez:border-emerald-300/70 group-hover/sez:text-emerald-500 dark:group-hover/sez:border-emerald-400/40 dark:group-hover/sez:text-emerald-400',
+    },
+    riposi: {
+        label: 'Turni & Riposi', sub: 'Mancati riposi · Reg. CE 561/2006', icon: Clock,
+        gradient: 'from-indigo-500 to-violet-500', glow: 'rgba(99,102,241,0.45)',
+        text: 'group-hover/sez:text-indigo-600 dark:group-hover/sez:text-indigo-400',
+        hover: 'hover:border-indigo-300/70 dark:hover:border-indigo-400/30 hover:bg-indigo-50/70 dark:hover:bg-indigo-500/[0.07] hover:shadow-indigo-500/10',
+        chev: 'group-hover/sez:border-indigo-300/70 group-hover/sez:text-indigo-500 dark:group-hover/sez:border-indigo-400/40 dark:group-hover/sez:text-indigo-400',
+    },
+    indennita: {
+        label: 'Indennità', sub: 'Assenza residenza · voci 4300/4305', icon: MapPin,
+        gradient: 'from-amber-500 to-orange-600', glow: 'rgba(245,158,11,0.45)',
+        text: 'group-hover/sez:text-amber-600 dark:group-hover/sez:text-amber-400',
+        hover: 'hover:border-amber-300/70 dark:hover:border-amber-400/30 hover:bg-amber-50/70 dark:hover:bg-amber-500/[0.07] hover:shadow-amber-500/10',
+        chev: 'group-hover/sez:border-amber-300/70 group-hover/sez:text-amber-500 dark:group-hover/sez:border-amber-400/40 dark:group-hover/sez:text-amber-400',
+    },
 };
 
 const CATEGORIE = {
@@ -252,27 +270,37 @@ export const SindacatiDashboard: React.FC<{
                         <motion.div className="fixed inset-0 z-[9999] flex items-center justify-center p-4" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setOpenId(null)}>
                             <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" />
                             <motion.div initial={{ opacity: 0, scale: 0.92, y: 12 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.92, y: 12 }} transition={{ type: 'spring', stiffness: 380, damping: 30 }} onClick={(e) => e.stopPropagation()} className="relative w-full max-w-md rounded-[1.75rem] bg-white/95 dark:bg-slate-900/95 backdrop-blur-2xl border border-white/60 dark:border-slate-700/60 shadow-2xl overflow-hidden">
-                                <div className="flex items-center justify-between gap-3 px-6 pt-5 pb-4 border-b border-slate-100 dark:border-slate-800">
-                                    <div className="flex items-center h-12 dark:bg-white dark:rounded-lg dark:px-2 dark:py-1">
-                                        <img src={open.logo} alt={open.nome} className="max-h-12 w-auto object-contain" draggable={false} />
+                                {/* Header con identità: logo + nome/tipo dell'organizzazione, velo brand teal */}
+                                <div className="relative flex items-center justify-between gap-4 px-6 pt-5 pb-4 border-b border-slate-100 dark:border-slate-800 overflow-hidden">
+                                    <div aria-hidden className="absolute inset-0 bg-gradient-to-r from-teal-500/[0.08] via-transparent to-transparent pointer-events-none" />
+                                    <div className="relative flex items-center gap-4 min-w-0">
+                                        <div className="flex items-center h-12 shrink-0 dark:bg-white dark:rounded-xl dark:px-2 dark:py-1 dark:shadow-sm">
+                                            <img src={open.logo} alt={open.nome} className="max-h-12 w-auto object-contain" draggable={false} />
+                                        </div>
+                                        <div className="min-w-0">
+                                            <p className="font-black text-slate-800 dark:text-slate-100 leading-tight truncate">{open.nome}</p>
+                                            <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{open.tipo === 'caf' ? 'CAF e Patronato' : 'Sindacato'} · scegli una sezione</p>
+                                        </div>
                                     </div>
-                                    <button onClick={() => setOpenId(null)} className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors shrink-0"><X className="w-4 h-4" /></button>
+                                    <button onClick={() => setOpenId(null)} className="relative w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors shrink-0"><X className="w-4 h-4" /></button>
                                 </div>
-                                <div className="p-3 space-y-2">
-                                    <p className="px-3 pt-1 pb-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">Sezioni</p>
+                                <div className="p-4 space-y-2.5">
+                                    <p className="px-1 pb-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">Sezioni</p>
                                     {open.sezioni.map((sez) => {
                                         const m = SEZIONE_META[sez];
                                         const Icon = m.icon;
                                         return (
-                                            <button key={sez} onClick={() => { onSelect(open.id, sez); setOpenId(null); }} className="group/sez w-full flex items-center gap-3.5 text-left rounded-2xl px-3 py-3 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/60">
-                                                <span className={`w-11 h-11 rounded-2xl bg-gradient-to-br ${m.gradient} flex items-center justify-center text-white shrink-0 shadow-lg transition-transform duration-300 group-hover/sez:scale-110 group-hover/sez:rotate-3`} style={{ boxShadow: `0 8px 22px -8px ${m.glow}` }}>
+                                            <button key={sez} onClick={() => { onSelect(open.id, sez); setOpenId(null); }} className={`group/sez w-full flex items-center gap-4 text-left rounded-2xl px-4 py-3.5 border border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/30 shadow-sm transition-[transform,box-shadow,border-color,background-color] duration-200 hover:-translate-y-0.5 hover:shadow-lg ${m.hover}`}>
+                                                <span className={`w-11 h-11 rounded-2xl bg-gradient-to-br ${m.gradient} flex items-center justify-center text-white shrink-0 ring-1 ring-white/25 ring-inset transition-transform duration-300 group-hover/sez:scale-110 group-hover/sez:rotate-3`} style={{ boxShadow: `0 8px 22px -8px ${m.glow}` }}>
                                                     <Icon className="w-5 h-5" />
                                                 </span>
                                                 <span className="min-w-0 flex-1">
                                                     <span className={`block font-black text-slate-800 dark:text-slate-100 leading-tight transition-colors ${m.text}`}>{m.label}</span>
                                                     <span className="block text-xs text-slate-500 dark:text-slate-400 truncate">{m.sub}</span>
                                                 </span>
-                                                <ChevronRight className="w-5 h-5 text-slate-300 group-hover/sez:translate-x-0.5 transition-transform shrink-0" />
+                                                <span className={`w-8 h-8 rounded-full flex items-center justify-center border border-slate-200/80 dark:border-slate-700 text-slate-400 dark:text-slate-500 shrink-0 transition-[transform,border-color,color] duration-200 group-hover/sez:translate-x-0.5 ${m.chev}`}>
+                                                    <ChevronRight className="w-4 h-4" />
+                                                </span>
                                             </button>
                                         );
                                     })}
