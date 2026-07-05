@@ -296,7 +296,19 @@ const App: React.FC = () => {
 
             {sindacatoAttivo === null ? (
                 // Finché le organizzazioni caricano non si mostra la dashboard vuota (flash di pannelli senza logo).
-                !isSindacatiLoading && <SindacatiDashboard organizzazioni={organizzazioni} pratiche={workers} onSelect={(orgId, sez) => { setArea(sez); setSindacatoAttivo(orgId); }} />
+                !isSindacatiLoading && <SindacatiDashboard
+                    organizzazioni={organizzazioni}
+                    pratiche={workers}
+                    onSelect={(orgId, sez) => { setArea(sez); setSindacatoAttivo(orgId); }}
+                    onOpenPratica={(id) => {
+                        // Salto diretto dalla riga "Recenti": entra nel sindacato, area Incidenza, scheda aperta.
+                        const sind = organizzazioni.find((o) => o.tipo === 'sindacato');
+                        if (!sind) return;
+                        setArea('incidenza');
+                        setSindacatoAttivo(sind.id);
+                        handleOpenComplex(id);
+                    }}
+                />
             ) : (
               <>
 

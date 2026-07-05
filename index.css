@@ -218,3 +218,10 @@
      così vale ovunque, non solo quando è montato lo <style> print di TableComponent. */
   .print\:hidden { display: none !important; }
 }
+
+/* Cometa di luce che percorre le curve decorative della dashboard (dash animato sul path;
+   gap > lunghezza del path = una sola cometa per curva con pausa naturale nel ciclo). */
+@keyframes curve-comet {
+  from { stroke-dashoffset: 0; }
+  to   { stroke-dashoffset: -2600; }
+}

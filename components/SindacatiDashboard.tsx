@@ -41,13 +41,32 @@ const fadeUp = {
     show: { opacity: 1, y: 0, transition: { duration: 0.55, ease: [0.22, 1, 0.36, 1] as const } },
 };
 
-/** Curve morbide di sfondo (teal/emerald tenui) — richiamo del monogramma. */
+/** Le tre onde superiori delle curve di sfondo (riusate per le comete di luce). */
+const ONDE = [
+    'M-120,240 C260,80 520,360 860,220 S1360,120 1620,340',
+    'M-120,320 C280,180 560,440 900,300 S1400,210 1640,420',
+    'M-120,420 C300,300 600,560 960,410 S1440,320 1680,520',
+];
+
+/** Curve morbide di sfondo (teal/emerald tenui) — richiamo del monogramma.
+ *  Sulle tre onde corre una "cometa" di luce (dash animato sul path, una per curva,
+ *  sfalsata e lenta); nascosta se l'utente preferisce ridurre le animazioni. */
 const DecorCurves: React.FC = () => (
     <svg className="absolute inset-0 w-full h-full" preserveAspectRatio="xMidYMid slice" viewBox="0 0 1440 900" aria-hidden="true">
         <g fill="none" stroke="#14b8a6" strokeWidth="2" className="opacity-[0.30] dark:opacity-[0.20]">
-            <path d="M-120,240 C260,80 520,360 860,220 S1360,120 1620,340" />
-            <path d="M-120,320 C280,180 560,440 900,300 S1400,210 1640,420" />
-            <path d="M-120,420 C300,300 600,560 960,410 S1440,320 1680,520" />
+            {ONDE.map((d) => <path key={d} d={d} />)}
+        </g>
+        <g fill="none" strokeWidth="2.5" strokeLinecap="round" className="motion-reduce:hidden opacity-70 dark:opacity-50" style={{ filter: 'drop-shadow(0 0 6px rgba(45,212,191,0.8))' }}>
+            {ONDE.map((d, i) => (
+                <path
+                    key={d}
+                    d={d}
+                    stroke="#2dd4bf"
+                    strokeDasharray="110 2490"
+                    className="[animation:curve-comet_12s_linear_infinite]"
+                    style={{ animationDelay: `${i * 4}s` }}
+                />
+            ))}
         </g>
         <g fill="none" stroke="#10b981" strokeWidth="1.75" className="opacity-[0.24] dark:opacity-[0.16]">
             {[0, 1, 2, 3, 4].map((i) => <ellipse key={i} cx="1440" cy="450" rx={220 + i * 140} ry={320 + i * 150} />)}
@@ -60,12 +79,43 @@ const DecorCurves: React.FC = () => (
  * MULTI-organizzazione (card-logo + slot "+"), riepilogo pratiche recenti. Click su un'organizzazione
  * → popup con le sezioni. Immagini fuse nella card (loghi trasparenti, illustrazione CAF sfumata).
  */
+/** Contenuti del footer (Chi siamo / Assistenza / Contatti / Privacy) — informazioni reali sul fondatore. */
+const FOOTER_INFO: Record<string, React.ReactNode> = {
+    'Chi siamo': (
+        <>
+            <p><strong>ValOra</strong> è la piattaforma degli uffici vertenze e dei CAF/patronati: legge le buste paga con OCR e intelligenza artificiale, calcola differenze retributive, mancati riposi e indennità, e produce relazioni tecniche, conteggi e prospetti pronti per lo studio legale.</p>
+            <p>È ideata e sviluppata interamente da <strong>Francesco Pio Mirizzi</strong>, fondatore di ValOra: sviluppatore full-stack autodidatta di Foggia, laureato in Economia Aziendale con una tesi sull'intelligenza artificiale come leva strategica, con esperienza diretta su CCNL, retribuzioni e vertenze di lavoro.</p>
+        </>
+    ),
+    'Assistenza': (
+        <>
+            <p>Un problema tecnico, un dato che non torna, una funzione che non parte? Scrivi e rispondo personalmente.</p>
+            <p><a href="mailto:francescopiomirizzi@gmail.com?subject=Assistenza%20ValOra" className="font-bold text-teal-600 dark:text-teal-400 hover:underline">francescopiomirizzi@gmail.com</a></p>
+        </>
+    ),
+    'Contatti': (
+        <>
+            <p><strong>Francesco Pio Mirizzi</strong> — fondatore e sviluppatore di ValOra<br />Foggia · Puglia, Italia</p>
+            <p><a href="mailto:francescopiomirizzi@gmail.com" className="font-bold text-teal-600 dark:text-teal-400 hover:underline">francescopiomirizzi@gmail.com</a></p>
+        </>
+    ),
+    'Privacy': (
+        <>
+            <p>I documenti caricati (buste paga, prospetti turni) sono usati esclusivamente per l'elaborazione delle pratiche.</p>
+            <p>Ogni account vede solo i propri dati: l'isolamento è applicato a livello di database (Row Level Security) e gli accessi in sola consultazione sono limitati alle pratiche del proprio ufficio. Nessun dato viene ceduto a terzi.</p>
+        </>
+    ),
+};
+
 export const SindacatiDashboard: React.FC<{
     organizzazioni: OrganizzazioneInfo[];
     pratiche: PraticaRow[];
     onSelect: (organizzazioneId: string, sezione: AppArea) => void;
-}> = ({ organizzazioni, pratiche, onSelect }) => {
+    /** Click su una pratica recente → salta direttamente alla sua scheda (Incidenza). */
+    onOpenPratica: (workerId: string) => void;
+}> = ({ organizzazioni, pratiche, onSelect, onOpenPratica }) => {
     const [openId, setOpenId] = useState<string | null>(null);
+    const [footerTopic, setFooterTopic] = useState<string | null>(null);
     const open = organizzazioni.find((o) => o.id === openId) ?? null;
     const sindacati = useMemo(() => organizzazioni.filter((o) => o.tipo === 'sindacato'), [organizzazioni]);
     const caf = useMemo(() => organizzazioni.filter((o) => o.tipo === 'caf'), [organizzazioni]);
@@ -81,11 +131,11 @@ export const SindacatiDashboard: React.FC<{
                 <DecorCurves />
             </div>
 
-            {/* Topbar */}
-            <div className="bg-white/80 dark:bg-slate-900/70 backdrop-blur-xl border-b border-white/70 dark:border-slate-800 shadow-sm">
-                <div className="max-w-6xl mx-auto px-6 py-3.5 flex items-center gap-3">
-                    <AnimatedLogo imgClassName="neon-vo h-11 w-auto object-contain select-none dark:brightness-0 dark:invert" delay={0.1} />
-                    <span className="text-lg font-black tracking-tight text-slate-800 dark:text-slate-100">VALORA <span className="font-semibold text-slate-400 dark:text-slate-500">— Dashboard Personale</span></span>
+            {/* Topbar — chrome scuro navy (direzione brand 03/07): logo BIANCO ufficiale + neon, come sul login */}
+            <div className="bg-[#1E3A5F] border-b border-white/10 shadow-md">
+                <div className="max-w-6xl mx-auto px-6 py-3 flex items-center gap-3">
+                    <AnimatedLogo imgClassName="neon-vo-white h-10 w-auto object-contain select-none" delay={0.1} />
+                    <span className="text-lg font-black tracking-tight text-white">VALORA <span className="font-semibold text-slate-300/80">— Dashboard Personale</span></span>
                 </div>
             </div>
 
@@ -127,13 +177,21 @@ export const SindacatiDashboard: React.FC<{
                                             <th className="text-left font-bold px-6 py-3">Lavoratore</th>
                                             <th className="text-left font-bold px-3 py-3">Azienda</th>
                                             <th className="text-left font-bold px-3 py-3 w-[38%]">Stato</th>
+                                            <th className="w-10" aria-hidden="true" />
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {recenti.map((p) => {
                                             const completata = p.status === 'chiusa';
                                             return (
-                                                <tr key={p.id} className="border-b border-slate-50 dark:border-slate-700/40 last:border-0 transition-colors hover:bg-teal-50/40 dark:hover:bg-teal-500/[0.04]">
+                                                <tr
+                                                    key={p.id}
+                                                    role="button"
+                                                    tabIndex={0}
+                                                    title={`Apri la pratica di ${p.cognome} ${p.nome}`}
+                                                    onClick={() => onOpenPratica(p.id)}
+                                                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpenPratica(p.id); } }}
+                                                    className="group cursor-pointer border-b border-slate-50 dark:border-slate-700/40 last:border-0 transition-colors hover:bg-teal-50/40 dark:hover:bg-teal-500/[0.04] focus:outline-none focus-visible:bg-teal-50/60 dark:focus-visible:bg-teal-500/[0.08]">
                                                     <td className="px-6 py-3.5 font-bold text-slate-700 dark:text-slate-200"><span className="uppercase">{p.cognome}</span> <span className="font-medium text-slate-500 dark:text-slate-400 capitalize">{p.nome}</span></td>
                                                     <td className="px-3 py-3.5"><CompanyLogo profilo={p.profilo} h={16} title={p.profilo} /></td>
                                                     <td className="px-3 py-3.5">
@@ -143,6 +201,9 @@ export const SindacatiDashboard: React.FC<{
                                                             </div>
                                                             <span className={`text-[11px] font-bold ${completata ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>{completata ? 'Completata' : 'In lavorazione'}</span>
                                                         </div>
+                                                    </td>
+                                                    <td className="pr-4 py-3.5 text-right">
+                                                        <ChevronRight className="w-4 h-4 inline text-slate-300 dark:text-slate-600 transition-all group-hover:text-teal-500 group-hover:translate-x-0.5" />
                                                     </td>
                                                 </tr>
                                             );
@@ -156,9 +217,15 @@ export const SindacatiDashboard: React.FC<{
 
                 <footer className="mt-12 pt-5 border-t border-slate-200/70 dark:border-slate-700/60 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-400 dark:text-slate-500">
                     <div className="flex flex-wrap items-center gap-4 font-semibold">
-                        {['Chi siamo', 'Assistenza', 'Contatti', 'Privacy'].map((l) => <span key={l} className="hover:text-teal-600 dark:hover:text-teal-400 transition-colors cursor-default">{l}</span>)}
+                        {Object.keys(FOOTER_INFO).map((l) => (
+                            <button key={l} type="button" onClick={() => setFooterTopic(l)} className="hover:text-teal-600 dark:hover:text-teal-400 transition-colors">{l}</button>
+                        ))}
                     </div>
-                    <span>ValOra · Tutti i diritti riservati</span>
+                    {/* Logo a COLORI (variante "da occasione"; il bianco resta il default ufficiale del brand) */}
+                    <span className="inline-flex items-center gap-2.5">
+                        <img src="/logo.png" alt="" aria-hidden="true" draggable={false} className="h-7 w-auto select-none" />
+                        ValOra · Tutti i diritti riservati
+                    </span>
                 </footer>
             </div>
 
@@ -193,6 +260,27 @@ export const SindacatiDashboard: React.FC<{
                                             </button>
                                         );
                                     })}
+                                </div>
+                            </motion.div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>,
+                document.body,
+            )}
+
+            {/* Modale informativa del footer (Chi siamo / Assistenza / Contatti / Privacy) */}
+            {createPortal(
+                <AnimatePresence>
+                    {footerTopic && (
+                        <motion.div className="fixed inset-0 z-[9999] flex items-center justify-center p-4" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setFooterTopic(null)}>
+                            <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" />
+                            <motion.div initial={{ opacity: 0, scale: 0.92, y: 12 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.92, y: 12 }} transition={{ type: 'spring', stiffness: 380, damping: 30 }} onClick={(e) => e.stopPropagation()} className="relative w-full max-w-md rounded-[1.75rem] bg-white/95 dark:bg-slate-900/95 backdrop-blur-2xl border border-white/60 dark:border-slate-700/60 shadow-2xl overflow-hidden">
+                                <div className="flex items-center justify-between gap-3 px-6 pt-5 pb-4 border-b border-slate-100 dark:border-slate-800">
+                                    <h3 className="font-black text-slate-800 dark:text-slate-100">{footerTopic}</h3>
+                                    <button onClick={() => setFooterTopic(null)} className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors shrink-0"><X className="w-4 h-4" /></button>
+                                </div>
+                                <div className="px-6 py-5 text-sm text-slate-600 dark:text-slate-300 leading-relaxed space-y-3">
+                                    {FOOTER_INFO[footerTopic]}
                                 </div>
                             </motion.div>
                         </motion.div>
