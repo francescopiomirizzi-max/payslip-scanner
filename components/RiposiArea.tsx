@@ -113,19 +113,20 @@ const RiposiArea: React.FC = () => {
                                 <DevBadge label="Sezione nuova — in sviluppo, nuove funzioni in arrivo!" />
                             </div>
                         </div>
-                        {aggregato.nPratiche > 0 && (
-                            <div className="flex items-stretch gap-3">
-                                <div className="rounded-2xl bg-white/60 dark:bg-slate-900/50 border border-white/60 dark:border-slate-700/60 px-5 py-3 text-center backdrop-blur-sm">
-                                    <div className="flex items-center justify-center gap-1 text-rose-500/80 dark:text-rose-400/70"><AlertTriangle className="w-3 h-3" /><p className="text-[10px] font-black uppercase tracking-widest">Violazioni</p></div>
-                                    <p className="text-2xl font-black tabular-nums text-slate-800 dark:text-slate-100 mt-0.5">{groupThousandsIT(aggregato.tot.toLocaleString('it-IT'))}</p>
-                                </div>
-                                <div className="rounded-2xl bg-white/60 dark:bg-slate-900/50 border border-white/60 dark:border-slate-700/60 px-5 py-3 text-center backdrop-blur-sm">
-                                    <div className="flex items-center justify-center gap-1 text-emerald-500/90 dark:text-emerald-400/70"><Euro className="w-3 h-3" /><p className="text-[10px] font-black uppercase tracking-widest">Credito stimato</p></div>
-                                    <p className="text-2xl font-black tabular-nums text-slate-800 dark:text-slate-100 mt-0.5">{euroInt(aggregato.indennita)}</p>
-                                </div>
-                            </div>
-                        )}
                     </div>
+                    {/* Numeri aggregati su riga propria, sotto la banda (fa spazio alla futura fascia hero) */}
+                    {aggregato.nPratiche > 0 && (
+                        <div className="relative mt-5 flex flex-wrap items-stretch gap-3">
+                            <div className="rounded-2xl bg-white/60 dark:bg-slate-900/50 border border-white/60 dark:border-slate-700/60 px-5 py-3 text-center backdrop-blur-sm">
+                                <div className="flex items-center justify-center gap-1 text-rose-500/80 dark:text-rose-400/70"><AlertTriangle className="w-3 h-3" /><p className="text-[10px] font-black uppercase tracking-widest">Violazioni</p></div>
+                                <p className="text-2xl font-black tabular-nums text-slate-800 dark:text-slate-100 mt-0.5">{groupThousandsIT(aggregato.tot.toLocaleString('it-IT'))}</p>
+                            </div>
+                            <div className="rounded-2xl bg-white/60 dark:bg-slate-900/50 border border-white/60 dark:border-slate-700/60 px-5 py-3 text-center backdrop-blur-sm">
+                                <div className="flex items-center justify-center gap-1 text-emerald-500/90 dark:text-emerald-400/70"><Euro className="w-3 h-3" /><p className="text-[10px] font-black uppercase tracking-widest">Credito stimato</p></div>
+                                <p className="text-2xl font-black tabular-nums text-slate-800 dark:text-slate-100 mt-0.5">{euroInt(aggregato.indennita)}</p>
+                            </div>
+                        </div>
+                    )}
                 </header>
 
                 {/* Pratiche */}

@@ -645,9 +645,11 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                         <p className="text-slate-500 dark:text-slate-400">Analisi delle buste paga · differenze retributive e % di incidenza delle indennità</p>
                     </div>
 
-                    {/* Azioni dell'area, inglobate nel pannello (si guadagna la riga sotto).
+                    </div>
+
+                    {/* Azioni dell'area su riga propria sotto la banda (la fascia hero resta libera).
                         "Nuovo Lavoratore" chiude la fila, più grande: è l'azione frequente. */}
-                    <div className="flex flex-wrap items-center gap-3">
+                    <div className="relative mt-5 flex flex-wrap items-center gap-3">
 
                     {/* GRUPPO STRUMENTI */}
                     <div className="flex gap-3">
@@ -822,7 +824,6 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                     </button>
                     )}
                     </div>
-                </div>
             </header>
 
             {/* STATISTICHE HOME — compatte di default (striscia KPI + loghi azienda),
