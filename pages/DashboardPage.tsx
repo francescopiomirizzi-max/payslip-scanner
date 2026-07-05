@@ -628,9 +628,10 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
             {/* Header hero — identità dell'area, gemello di Turni & Riposi / Indennità.
                 Niente overflow-hidden (il menu Dati a tendina vive dentro il pannello e non va
                 clippato): la fascia si arrotonda da sola con rounded-t. */}
-            {/* z-20: il backdrop-blur crea uno stacking context → senza, il menu Dati aperto
-                finirebbe SOTTO la striscia statistiche (relative z-10) che segue. */}
-            <header className="relative z-20 rounded-[2rem] border border-white/60 dark:border-slate-700/60 bg-white/70 dark:bg-slate-800/70 backdrop-blur-2xl p-7 shadow-xl mb-8">
+            {/* z-30: il backdrop-blur crea uno stacking context → il menu Dati aperto deve stare
+                SOPRA la striscia statistiche (z-10) E la sezione ricerca/filtri (z-20) che seguono
+                nel DOM (a parità di z vince chi viene dopo → il menu finiva sotto la barra di ricerca). */}
+            <header className="relative z-30 rounded-[2rem] border border-white/60 dark:border-slate-700/60 bg-white/70 dark:bg-slate-800/70 backdrop-blur-2xl p-7 shadow-xl mb-8">
                 <div className="absolute inset-x-0 top-0 h-40 rounded-t-[2rem] pointer-events-none" style={{ background: incidenzaHeaderBand }} />
                 <div className="relative flex flex-wrap items-center gap-5">
                     <div
