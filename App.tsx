@@ -113,6 +113,26 @@ const App: React.FC = () => {
     // --- AREA GLOBALE: 'incidenza' (buste/RFI) vs 'riposi' (mancati riposi TPL) ---
     const [area, setArea] = useState<AppArea>('incidenza');
 
+    // Persistenza PER-SCHEDA di organizzazione e area attive: finché c'è una sola
+    // org l'hash non porta il prefisso org (#/s/:orgId rimandato a 2+ org), quindi
+    // senza questo un F5 dentro un'area ributtava sulla dashboard di scelta.
+    // sessionStorage = sopravvive al reload, NON a una nuova scheda/visita
+    // (l'ingresso resta l'esperienza della prima apertura). Cfr. effetto deep-link.
+    // Il guard ref evita che il primo render (org=null, area default) cancelli o
+    // sovrascriva lo snapshot PRIMA che l'effetto di ripristino lo abbia letto.
+    const orgPersistReady = useRef(false);
+    useEffect(() => {
+        if (sindacatoAttivo) {
+            sessionStorage.setItem('valora-org-attiva', sindacatoAttivo);
+            sessionStorage.setItem('valora-area-attiva', area);
+            orgPersistReady.current = true;
+        } else if (orgPersistReady.current) {
+            // uscita esplicita ("Cambia organizzazione") → anche su F5 si riparte dall'ingresso
+            sessionStorage.removeItem('valora-org-attiva');
+            sessionStorage.removeItem('valora-area-attiva');
+        }
+    }, [sindacatoAttivo, area]);
+
     // --- URL SYNC (hash routing) ---
     // Back/Forward del browser, F5 e deep link (#/worker/:id, #/archive, ...)
     // riportano alla vista giusta invece di buttare fuori dall'app.
@@ -144,12 +164,22 @@ const App: React.FC = () => {
         deepLinkOrgResolved.current = true;
         if (isReadOnly || sindacatoAttivo !== null) return;
         const hash = window.location.hash.replace(/^#\/?/, '');
-        if (!hash) return;
-        const [, id] = hash.split('/');
-        const target = id ? allWorkers.find((w) => w.id === id) : undefined;
-        const org = organizzazioni.find((o) => o.id === target?.sindacatoId)
-            ?? organizzazioni.find((o) => o.tipo === 'sindacato');
-        if (org) setSindacatoAttivo(org.id);
+        if (hash) {
+            const [, id] = hash.split('/');
+            const target = id ? allWorkers.find((w) => w.id === id) : undefined;
+            const org = organizzazioni.find((o) => o.id === target?.sindacatoId)
+                ?? organizzazioni.find((o) => o.tipo === 'sindacato');
+            if (org) setSindacatoAttivo(org.id);
+            return;
+        }
+        // F5 sulla home di un'area (hash vuoto): ripristina l'ultima organizzazione
+        // della scheda. Fail-open: id non più tra le organizzazioni → resta l'ingresso.
+        const storedOrg = sessionStorage.getItem('valora-org-attiva');
+        const org = organizzazioni.find((o) => o.id === storedOrg);
+        if (!org) return;
+        const storedArea = sessionStorage.getItem('valora-area-attiva');
+        if (storedArea === 'incidenza' || storedArea === 'riposi' || storedArea === 'indennita') setArea(storedArea);
+        setSindacatoAttivo(org.id);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isAuthenticated, isWorkersLoading, isSindacatiLoading, isReadOnly, sindacatoAttivo, organizzazioni, allWorkers]);
 
