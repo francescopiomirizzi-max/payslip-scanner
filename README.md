@@ -1,38 +1,76 @@
-# 🚀 RailFlow
+# Valora — piattaforma per uffici vertenze e CAF *(ex RailFlow)*
 
-## Panoramica
-Un'applicazione web di livello Enterprise progettata per la gestione avanzata dei dati dei lavoratori, l'elaborazione dei cedolini e il calcolo delle indennità (TFR, rivalutazioni ISTAT). 
+Applicazione web per uffici vertenze sindacali: dall'acquisizione OCR delle buste paga al calcolo
+delle differenze retributive, fino alla generazione dei documenti legali (relazioni .docx, conteggi
+Excel, prospetti di stampa) pronti per lo studio legale. Nata come scanner di cedolini, è cresciuta
+caso reale dopo caso reale fino a diventare una piattaforma multi-organizzazione.
 
-Questo progetto dimostra come una visione tecnica rigorosa possa trasformare processi originariamente frammentati e basati su fogli di calcolo disorganizzati in un'architettura centralizzata, reattiva e scalabile. La spinta verso un livello di definizione estremo e curato al singolo pixel ha guidato ogni scelta ingegneristica e di design, garantendo un'esperienza utente senza compromessi.
+## 📈 L'evoluzione del progetto
 
-## ✨ Funzionalità Principali (Core Features)
-* **Motore di Calcolo Avanzato:** Elaborazione in tempo reale di dati finanziari complessi, indennità e scorporo mesi, con ottimizzazione aggressiva dei re-render tramite `useMemo`.
-* **Data Entry Fulmineo (Excel-Like):** Griglia dati interattiva con navigazione nativa da tastiera (Frecce, Tab, Enter), highlight visivo profondo della riga attiva e focus management per un inserimento dati ad altissima velocità.
-* **Integrazione Hardware/Software:** Scanner QR in tempo reale ed elaborazione OCR integrata per l'acquisizione automatizzata e massiva dei documenti.
-* **UI/UX Premium:** Interfaccia utente basata su principi di Glassmorphism, con una Dark Mode nativa calibrata per il massimo comfort visivo (contrast ratio ottimizzato) e animazioni fluide a 60fps.
-* **Gestione Dinamica degli Stati (Smart UI):** Rendering condizionale intelligente (Empty States animati) basato sull'effettivo carico di dati matematici, per guidare l'utente nei flussi di lavoro a freddo.
+Il progetto non è nato "piattaforma": lo è diventato. Ogni fase è stata guidata da pratiche vere
+portate in giudizio, non da feature immaginate.
 
-## 🛠️ Stack Tecnologico
-* **Core:** React (Single Page Application)
-* **Styling & Design System:** Tailwind CSS v4 (sfruttando il nuovo standard semantico e le utility per alleggerire il DOM).
-* **Animazioni:** Framer Motion (curve di transizione fisiche `spring` standardizzate per transizioni burrose).
-* **Iconografia:** Lucide React.
-* **Architettura Dati:** Gestione eventi ottimizzata con rigoroso memory leak prevention e listener globali per shortcut da tastiera.
+1. **Scanner di cedolini (payslip-scanner).** OCR su buste paga italiane via Gemini: estrazione
+   strutturata di voci retributive, presenze e indennità da PDF e scansioni, con profili per
+   azienda (layout e codici voce diversi) e un secondo prompt AI di *verifica* indipendente
+   dall'estrazione.
+2. **RailFlow — il motore di calcolo.** Sopra l'archivio è cresciuto il motore per le differenze
+   retributive: incidenza percentuale delle voci variabili su ferie/festività (giurisprudenza di
+   Cassazione), TFR e rivalutazioni ISTAT, con griglia dati Excel-like per il controllo manuale
+   riga per riga. Output: relazione tecnica .docx, conteggi Excel e prospetti di stampa che un
+   avvocato può validare voce per voce.
+3. **Aree specializzate.** Il dominio si è allargato a tre aree operative gemelle nella UI ma
+   con motori distinti:
+   - **Incidenza** — differenze retributive su ferie e festività (l'area storica);
+   - **Turni & Riposi** — mancati riposi nel TPL (Reg. CE 561/2006, D.Lgs 234/2007), con
+     analisi delle giornate, tariffe per anno e quantificazione del danno;
+   - **Indennità** — differenze su indennità contrattuali (confronto Pagato↔Dovuto con
+     timeline di prescrizione).
+4. **Multi-organizzazione e rebrand Valora.** Dashboard d'ingresso per più sindacati e CAF,
+   scoping dei dati per organizzazione (RLS + filtri fail-open), accesso viewer in sola lettura
+   per i referenti, disciplina whitelabel (il brand Valora vive sull'ingresso, dentro le sezioni
+   parla l'organizzazione). Il rebrand ha toccato solo l'interfaccia: i documenti generati
+   restano invariati.
 
-## ⚙️ Architettura e Performance
-L'applicazione è ingegnerizzata per garantire stabilità strutturale e reattività anche sotto stress:
-* Estrazione di utility functions pure per la formattazione e i calcoli matematici, mantenendo i componenti UI leggeri.
-* Prevenzione attiva dei memory leak tramite la gestione chirurgica dei cicli di vita (`clearInterval`, `removeEventListener` al momento dell'unmount).
-* Risoluzione strutturale di *stale closures* per garantire la perfetta sincronizzazione dello stato asincrono tra componenti padre e figlio.
+## ✨ Funzionalità principali
 
-## 💻 Installazione e Sviluppo Locale (Local Setup)
-Per avviare l'ambiente di sviluppo locale, segui questi passaggi:
+* **Pipeline OCR resiliente:** scansione massiva di archivi (centinaia di buste), retry
+  budget-aware, pool di client e rate limiting; scanner QR realtime per l'acquisizione da mobile.
+* **Doppio controllo AI:** estrazione e verifica sono due prompt indipendenti; i campi ambigui
+  vengono segnalati, mai indovinati. Invarianti deterministiche lato codice dove l'OCR è fragile.
+* **Motori di calcolo verificabili:** ogni numero è riconducibile alla busta sorgente; i
+  generatori producono documenti che il legale può controllare riga per riga.
+* **Data entry Excel-like:** griglia con navigazione da tastiera per il controllo e la correzione
+  manuale dei dati estratti.
+* **Sicurezza per ruoli:** Row Level Security su tutte le tabelle e sullo storage; account
+  viewer in sola lettura con permessi di export selettivi.
+* **Modalità demo:** build separata con dati fittizi e zero chiamate al backend, usata come
+  showroom pubblico.
 
-**Prerequisiti:** Node.js installato sulla macchina.
+## 🛠️ Stack tecnologico
 
-1. **Installa le dipendenze:**
-   ```bash
-   npm install
+* **Frontend:** React 19 + TypeScript, Vite, Tailwind CSS 4, Framer Motion, Recharts, Lucide.
+* **Backend:** Supabase (Postgres + RLS, Storage, Realtime) e Netlify Functions per le chiamate
+  server-side a Gemini.
+* **AI:** Google Gemini per OCR strutturato e verifica dei cedolini.
+* **Documenti:** docx, ExcelJS, jsPDF per relazioni, conteggi e prospetti.
+* **Test:** Vitest (unit test sui motori di calcolo e sugli helper critici).
 
-👨‍💻 Tech Lead & Sviluppo
-Progettato, sviluppato e manutenuto da Francesco Pio Mirizzi.
+## 💻 Sviluppo locale
+
+Prerequisito: Node.js 24+.
+
+```bash
+npm install
+npm run dev        # app completa (richiede credenziali Supabase)
+npm run dev:demo   # modalità demo: dati fittizi, nessun backend
+npm test           # suite Vitest
+npm run build      # build di produzione
+```
+
+Le migration SQL vivono in `supabase/migrations/` (numerate e commentate); la conoscenza di
+dominio (CCNL, codici voce, metodologia di calcolo) in `knowledge/`.
+
+## 👨‍💻 Autore
+
+Progettato, sviluppato e manutenuto da **Francesco Pio Mirizzi**.

@@ -5,23 +5,25 @@
 > (Il piano precedente — Multi-Sindacato GIRO 2 — è COMPLETATO 05/07; storia nel diario del vault.)
 
 ## 1. Fix da verifica visiva (l'utente verifica, io correggo)
-- [ ] **Favicon invisibile in light mode** — la favicon ufficiale è bianca → su tab chiara sparisce.
-      Fix: variante consapevole del tema (colore in light / bianco in dark).
-      → verifica: tab visibile in entrambi i temi browser.
+- [x] **Favicon invisibile in light mode** — FATTO (c290785): `media="(prefers-color-scheme)"` in
+      index.html — bianca solo su tab scura, colorata in light; colorate per ultime = fallback
+      per i browser che ignorano `media`. → verifica finale: occhio dell'utente sui 2 temi.
 - [ ] Altri finding man mano che emergono dalla verifica d'insieme dell'utente.
 
-## 2. P1 — Stringere RLS RAG `legal_*`
-- [ ] Migration: restringere all'owner le 6 policy `USING(true)`/`WITH CHECK(true)` su
-      `legal_chunks` + `legal_documents` (INSERT/UPDATE/DELETE), oggi aperte a ogni `authenticated`
-      incluso il viewer. Applicare via MCP.
-      → verifica: query pg_policies post-migration; il viewer non può più scrivere.
+## 2. P1 — Stringere RLS RAG `legal_*` ✅
+- [x] Migration **023_legal_rls_owner_write** scritta nel repo + **APPLICATA al DB live** (ea9d9c7).
+      Chiuse le 6 policy tabelle **+ 3 policy storage `legal-corpus`** (stessa falla della 005,
+      non era nella lista audit). Scrittura = solo owner `7fec036e-…`; lettura invariata.
+      → VERIFICATO live: INSERT con JWT viewer → errore RLS 42501; INSERT owner → ok (rollback);
+      pg_policies: 0 policy di scrittura aperte residue.
 
-## 3. Demo pulita (da review 06/07)
-- [ ] Seed pratica riposi demo (come "Boriglione" in Indennità) → Turni & Riposi non più vuota in demo.
-- [ ] Demo-gate di `usePayslipArchive` → 0 errori console in demo.
-- [ ] Badge DEMO non copre più il wordmark ValOra.
-- [ ] Ammorbidire i badge "Sezione nuova — in sviluppo" per l'esterno.
-      → verifica: giro demo completo senza errori console né buchi visivi.
+## 3. Demo pulita (da review 06/07) ✅ (0fdb746)
+- [x] Turni & Riposi in demo → seed Viterbo via `loadSeed()` (gate IS_DEMO in `usePraticheRiposi`,
+      scritture neutralizzate: salvaInArchivio null, updatePratica solo ottimistico locale).
+- [x] Demo-gate di `usePayslipArchive` → guardia IS_DEMO su tutte e 7 le funzioni.
+- [x] Badge DEMO spostato top-center (a sinistra copriva il wordmark ValOra).
+- [x] DevBadge → "Novità" statico (via testo "in sviluppo" + animate-ping) nelle 3 aree.
+      → verifica: tsc pulito, 260/260 test, build prod + build demo ok. Giro visivo = utente.
 
 ## 4. Deploy in batch (~41 commit + quelli di oggi)
 - [ ] Gate pre-deploy: tsc + vitest + build verdi.
