@@ -3,10 +3,13 @@
 
 <head>
   <meta charset="UTF-8" />
-  <!-- Favicon = silhouette BIANCA (colore ufficiale del logo); le icone colorate
-       restano per manifest/apple-touch (contesti app-icon con fondo proprio) -->
-  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-white-32.png" />
-  <link rel="icon" type="image/png" sizes="192x192" href="/favicon-white-192.png" />
+  <!-- Favicon come il logo in-app: BIANCA su tema scuro, colorata su tema chiaro
+       (la bianca su tab chiara è invisibile). Le colorate per ultime: i browser
+       che ignorano `media` prendono l'ultima, e la colorata si vede su entrambi i fondi. -->
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-white-32.png" media="(prefers-color-scheme: dark)" />
+  <link rel="icon" type="image/png" sizes="192x192" href="/favicon-white-192.png" media="(prefers-color-scheme: dark)" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" media="(prefers-color-scheme: light)" />
+  <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" media="(prefers-color-scheme: light)" />
   <!-- iOS "Aggiungi a Home" -->
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   <link rel="manifest" href="/manifest.json" />
