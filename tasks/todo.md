@@ -14,6 +14,12 @@
       invariate. Verificato con JWT: viewer legge 1 pratica, UPDATE = 0 righe. Nessun deploy necessario.
       ⚠️ Con `viewer_payment_block=true` Vincenzo dal SUO account vede la schermata di manutenzione:
       all'incontro si mostra dal login owner, oppure si spegne il blocco (decisione di Francesco).
+- [x] **F5 dentro un'area ributtava sull'ingresso** (finding utente, sera): l'org attiva vive solo
+      nello stato React e con hash vuoto il deep-link non risolveva nulla. Fix 36a0379: snapshot
+      org+area in sessionStorage (per-scheda), ripristino fail-open nell'effetto una-tantum, guard
+      ref anti-clobber al primo render; "Cambia organizzazione" pulisce → F5 = ingresso. NON è una
+      regressione del code-split: c'era dal giro 1 multi-org, visibile solo ora che è deployato.
+      → verifica utente: F5 in Incidenza/Riposi/Indennità resta nell'area; dopo "Cambia org" F5 = ingresso.
 
 ## 2. P1 — Stringere RLS RAG `legal_*` ✅
 - [x] Migration **023_legal_rls_owner_write** scritta nel repo + **APPLICATA al DB live** (ea9d9c7).
@@ -101,7 +107,14 @@ non vale il rischio sulla vista più delicata. RagAdminPanel lasciato montato (e
 
 ## Rinviati a prossime sessioni (ordine concordato)
 - P2 code-split bundle (3,68 MB) → prima impressione mobile.
-- Restyle "sala macchine" (scheda lavoratore) a livello Incidenza.
+- Restyle "sala macchine" (scheda lavoratore) — **PROSSIMA SESSIONE: prima si RIVEDE INSIEME il
+  mockup** (artifact `7ece31dd`, versione "tasti-originali-raggruppati"), POI il piano e il codice.
+  Nessuna implementazione prima del giro di revisione. Direzione emersa il 06/07 sera:
+  (1) testata stile aree con azioni raggruppate; (2) stat su riga propria con etichette+"?";
+  (3) **tasti strumenti INVARIATI** ma raggruppati sotto etichette "Acquisizione dati"/"Analisi e calcolo";
+  (4) nota metodologica statica ripiegabile (via marquee); (5) tabella: colonna mese sticky, chip
+  codici con tooltip dalla knowledge, scroll contenuto nella tabella + pagina che scorre. Solo design,
+  zero motore. Tema scuro/palette attuali intoccabili.
 - Feature "prova d'accuratezza" riga-per-riga (cancello Bari, primo passo perizia-factory).
 - Mattone CAF (derivazione anagrafica da CF) — ultimo, non aprire un secondo fronte.
 - Le ~17 pratiche riposi in arrivo: PREZZARLE all'incontro prima di lavorarle.
