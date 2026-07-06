@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../supabaseClient';
+import { IS_DEMO } from '../config/demo';
 import type { GiornataInput } from '../utils/restEngine';
 import { matchesSindacato, sindacatoIdPerScrittura } from '../utils/sindacatoScope';
 
@@ -168,6 +169,14 @@ export function usePraticheRiposi(sindacatoAttivo: string | null = null) {
     useEffect(() => {
         let alive = true;
         (async () => {
+            // Demo: dritto al seed locale (asset statico) — il client punta a un host morto.
+            if (IS_DEMO) {
+                const list = await loadSeed();
+                if (!alive) return;
+                setPratiche(list);
+                setIsLoading(false);
+                return;
+            }
             const { data, error } = await supabase
                 .from('pratiche_riposi')
                 .select('*')
@@ -186,6 +195,7 @@ export function usePraticheRiposi(sindacatoAttivo: string | null = null) {
 
     /** Salva una pratica-seed nell'archivio Supabase; restituisce la riga vera. */
     const salvaInArchivio = useCallback(async (pratica: PraticaRiposi): Promise<PraticaRiposi | null> => {
+        if (IS_DEMO) return null;
         const { data, error } = await supabase
             .from('pratiche_riposi')
             // Nuova riga → organizzazione attiva (solo se reale, mai la sentinella).
@@ -204,6 +214,8 @@ export function usePraticheRiposi(sindacatoAttivo: string | null = null) {
     /** Aggiorna i campi di gestione (stato, date, importo, tariffa). Ottimistico. */
     const updatePratica = useCallback(async (id: string, fields: PraticaRiposiUpdate): Promise<boolean> => {
         setPratiche((prev) => prev.map((p) => (p.id === id ? { ...p, ...fields } : p)));
+        // Demo: l'aggiornamento ottimistico locale basta, niente scrittura.
+        if (IS_DEMO) return true;
         const { error } = await supabase
             .from('pratiche_riposi')
             .update(updateToDb(fields))

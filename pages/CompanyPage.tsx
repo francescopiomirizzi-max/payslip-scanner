@@ -144,7 +144,7 @@ const CompanyPage: React.FC<CompanyPageProps> = ({ companyKey, workers, onBack, 
                                     <Users className="w-3.5 h-3.5" />
                                     {list.length} {list.length === 1 ? 'lavoratore' : 'lavoratori'}
                                 </span>
-                                <DevBadge label="Sezione nuova — in sviluppo, nuove funzioni in arrivo" />
+                                <DevBadge />
                             </div>
                         </motion.div>
                     </div>

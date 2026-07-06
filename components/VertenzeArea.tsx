@@ -129,7 +129,7 @@ const VertenzeArea: React.FC<{ workers: WorkerLike[] }> = ({ workers }) => {
                             <h1 className="text-3xl font-black text-slate-800 dark:text-slate-100">Indennità di assenza residenza</h1>
                             <p className="text-slate-500 dark:text-slate-400">Differenze retributive voci 4300/4305 · Elior viaggiante · CCNL 2016</p>
                             <div className="mt-2">
-                                <DevBadge label="Sezione nuova — in sviluppo, nuove funzioni in arrivo!" />
+                                <DevBadge />
                             </div>
                         </div>
                     </div>

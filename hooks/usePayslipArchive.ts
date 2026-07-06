@@ -1,4 +1,5 @@
 import { supabase } from '../supabaseClient';
+import { IS_DEMO } from '../config/demo';
 
 const BUCKET = 'payslips_archive';
 
@@ -31,6 +32,8 @@ export function usePayslipArchive() {
         monthIndex: number,
         extractedData: any
     ): Promise<void> => {
+        // In demo il client punta a un host morto: archivio vuoto, nessuna chiamata.
+        if (IS_DEMO) return;
         const { data: { user }, error: authError } = await supabase.auth.getUser();
         if (authError || !user) return;
 
@@ -73,6 +76,7 @@ export function usePayslipArchive() {
     };
 
     const getPayslipsByWorker = async (workerId: string): Promise<PayslipRecord[]> => {
+        if (IS_DEMO) return [];
         // NB: si selezionano SOLO le colonne usate dalla lista. Si ESCLUDE
         // di proposito "extracted_data" perché contiene il base64 dell'immagine
         // (fileData, ~300-700KB per riga): tirarlo giù per ogni busta saturava
@@ -92,6 +96,7 @@ export function usePayslipArchive() {
     };
 
     const deletePayslip = async (id: string, storagePath: string): Promise<void> => {
+        if (IS_DEMO) return;
         const { error: storageError } = await supabase.storage
             .from(BUCKET)
             .remove([storagePath]);
@@ -111,6 +116,7 @@ export function usePayslipArchive() {
     };
 
     const getSignedUrl = async (storagePath: string): Promise<string | null> => {
+        if (IS_DEMO) return null;
         const { data, error } = await supabase.storage
             .from(BUCKET)
             .createSignedUrl(storagePath, 3600);
@@ -120,7 +126,7 @@ export function usePayslipArchive() {
     };
 
     const getSignedUrls = async (storagePaths: string[]): Promise<Record<string, string>> => {
-        if (storagePaths.length === 0) return {};
+        if (IS_DEMO || storagePaths.length === 0) return {};
         const { data, error } = await supabase.storage
             .from(BUCKET)
             .createSignedUrls(storagePaths, 3600);
@@ -130,6 +136,7 @@ export function usePayslipArchive() {
     };
 
     const addVerifyLog = async (id: string, entry: VerifyLogEntry): Promise<void> => {
+        if (IS_DEMO) return;
         const { data } = await supabase
             .from('payslip_metadata')
             .select('verify_history')
@@ -144,6 +151,7 @@ export function usePayslipArchive() {
     };
 
     const updateExtractedData = async (id: string, extractedData: any): Promise<void> => {
+        if (IS_DEMO) return;
         const { error } = await supabase
             .from('payslip_metadata')
             .update({ extracted_data: extractedData })

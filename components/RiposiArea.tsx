@@ -118,7 +118,7 @@ const RiposiArea: React.FC<{ sindacatoId?: string | null }> = ({ sindacatoId = n
                             <h1 className="text-3xl font-black text-slate-800 dark:text-slate-100">Turni &amp; Riposi</h1>
                             <p className="text-slate-500 dark:text-slate-400">Mancati riposi · Reg. (CE) n. 561/2006 — area separata dalle buste paga</p>
                             <div className="mt-2">
-                                <DevBadge label="Sezione nuova — in sviluppo, nuove funzioni in arrivo!" />
+                                <DevBadge />
                             </div>
                         </div>
                     </div>
