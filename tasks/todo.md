@@ -8,7 +8,12 @@
 - [x] **Favicon invisibile in light mode** — FATTO (c290785): `media="(prefers-color-scheme)"` in
       index.html — bianca solo su tab scura, colorata in light; colorate per ultime = fallback
       per i browser che ignorano `media`. → verifica finale: occhio dell'utente sui 2 temi.
-- [ ] Altri finding man mano che emergono dalla verifica d'insieme dell'utente.
+- [x] **Pratica Viterbo invisibile al viewer** (finding post-deploy): `pratiche_riposi` aveva la
+      SELECT owner-only (013) — il cambio policy 28/06 "viewer vede tutto" aveva tolto solo i filtri
+      client, non la RLS. **Migration 024 APPLICATA live**: SELECT = owner OR viewer, scritture
+      invariate. Verificato con JWT: viewer legge 1 pratica, UPDATE = 0 righe. Nessun deploy necessario.
+      ⚠️ Con `viewer_payment_block=true` Vincenzo dal SUO account vede la schermata di manutenzione:
+      all'incontro si mostra dal login owner, oppure si spegne il blocco (decisione di Francesco).
 
 ## 2. P1 — Stringere RLS RAG `legal_*` ✅
 - [x] Migration **023_legal_rls_owner_write** scritta nel repo + **APPLICATA al DB live** (ea9d9c7).
