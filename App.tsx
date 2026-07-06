@@ -10,8 +10,10 @@ import CompanyBuilder from './components/CompanyBuilder';
 import Background from './components/Background';
 import AppRouter from './components/AppRouter';
 import AreaSwitch, { type AppArea } from './components/AreaSwitch';
-import RiposiArea from './components/RiposiArea';
-import VertenzeArea from './components/VertenzeArea';
+// Aree secondarie on-demand (P2 code-split): montate solo quando si entra
+// nell'area, fuori dal chunk iniziale. Non stanno dentro AnimatePresence.
+const RiposiArea = React.lazy(() => import('./components/RiposiArea'));
+const VertenzeArea = React.lazy(() => import('./components/VertenzeArea'));
 import { SindacatiDashboard } from './components/SindacatiDashboard';
 import { useIsReadOnly } from './lib/readonly';
 import ViewerPaymentBlock from './components/ViewerPaymentBlock';
@@ -393,9 +395,17 @@ const App: React.FC = () => {
                 addToast={addToast}
             />}
 
-            {area === 'riposi' && <RiposiArea sindacatoId={sindacatoAttivo} />}
+            {area === 'riposi' && (
+                <React.Suspense fallback={<div className="min-h-screen" />}>
+                    <RiposiArea sindacatoId={sindacatoAttivo} />
+                </React.Suspense>
+            )}
 
-            {area === 'indennita' && <VertenzeArea workers={workers} />}
+            {area === 'indennita' && (
+                <React.Suspense fallback={<div className="min-h-screen" />}>
+                    <VertenzeArea workers={workers} />
+                </React.Suspense>
+            )}
 
             {/* "Cambia organizzazione": si esce pulendo anche area/vista, così l'hash
                 torna #/ e un F5 sulla dashboard non rientra nell'organizzazione. */}

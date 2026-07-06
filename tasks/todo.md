@@ -44,6 +44,61 @@
 - [ ] **Residuo**: RIDEPLOY del sito demo (separato) per portare live i fix "demo pulita" —
       serve URL/processo di deploy della demo (build locale `npm run build:demo`).
 
+---
+
+# PIANO — P2 Code-split del bundle (2026-07-06, ✅ ESEGUITO in serata)
+
+> **RISULTATO: first load 1,2 MB → ~378 kB gzip (−68%).** Dettaglio in fondo al piano.
+
+> **Baseline misurata:** `App-*.js` **3,6 MB raw (~1,04 MB gzip)** in un chunk unico. Già lazy:
+> MobileUploadPage, riposiExcel, riposiRelazione, reportScreenshotPdf, html2canvas, pdf.worker.
+> **Zero `React.lazy`** su route/aree. Bonus trovato: `recharts` = dipendenza ORFANA (0 import).
+> Principio: si spostano solo i CONFINI di caricamento, zero cambi di comportamento.
+
+## Fase 1 — I "cantieri" on-demand escono dal chunk iniziale (massima resa, minimo rischio)
+- [ ] 1.1 `RelazioneModal` (**exceljs + docx**) → `React.lazy` nei punti d'uso (TableComponent,
+      WorkerDetailModals) con Suspense. → verifica: chunk separato nel build; genera .docx e Excel reali.
+- [ ] 1.2 `StatsDashboard` (**jspdf**) → `React.lazy` in AppRouter. → verifica: rotta stats + EXPORT REPORT.
+- [ ] 1.3 `IstatDashboardModal` (**jspdf**) → `React.lazy` nel punto d'uso. → verifica: apertura + PDF.
+- [ ] 1.4 `lib/pdfChunker` (**pdfjs-dist + mammoth**) → `await import()` dentro `useRagIngestion`;
+      `RagAdminPanel` → lazy (owner-only). → verifica: apertura pannello RAG + ingestione un file.
+- [ ] 1.5 Export utils (`concluseExport`, `printTables`, `reportGenerator`, `riepilogoReport`) →
+      `await import()` nei rispettivi handler (menu Dati, stampe, TFR pdf). → verifica: un export per tipo.
+- [ ] 1.6 `fflate` in `PayslipArchiveTab` → dynamic import nel handler ZIP. → verifica: download ZIP buste.
+
+## Fase 2 — Route/aree lazy (secondo respiro)
+- [ ] `ArchivePage`, `CompanyPage`, `RiposiArea`, `VertenzeArea` (+ `WorkerDetailPage` solo se serve
+      ancora) → `React.lazy` + fallback skeleton coerente. Restano EAGER: SindacatiDashboard,
+      DashboardPage, Login (primo paint).
+      ⚠️ Lezioni: lazy sul CONTENUTO, mai sul wrapper dentro `AnimatePresence` (exit animations);
+      deps/TDZ (lezione 2026-05-28). → verifica: deep-link/F5 su OGNI rotta hash, transizioni pulite.
+
+## Fase 3 — Misura finale e rifiniture
+- [ ] Tabella chunk prima/dopo nel todo; solo se serve ancora: `manualChunks` vendor (react/framer).
+- [ ] Rimuovere `recharts` da package.json (orfano; non tocca il bundle, pulizia dipendenze).
+
+## Gate finale
+- [x] tsc pulito · 260/260 test · build prod + demo ok. **Target CENTRATO: ≤ 400 kB gzip.**
+- [ ] Verifica visiva utente sui flussi chiave (scheda lavoratore, relazione .docx/Excel, stampa
+      tabelle, stats+PDF, ZIP archivio, riposi, indennità, pannello RAG, F5 su ogni rotta).
+- [x] NIENTE push: si accumula per il prossimo batch.
+
+### Risultato misurato (build 06/07 sera)
+| | prima | dopo |
+|---|---|---|
+| Chunk `App` | 3.683 kB raw / 1.043 kB gzip | **849 kB raw / 217 kB gzip** |
+| First load totale (entry+readonly+App) | ~1,2 MB gzip | **~378 kB gzip (−68%)** |
+| exceljs / docx / jspdf+autotable / pdfjs / mammoth / jszip / fflate | nel chunk iniziale | chunk on-demand al click |
+| RiposiArea / VertenzeArea / Archivio / Company / Stats | nel chunk iniziale | lazy per rotta (Suspense nel motion.div) |
+
+Fatti tutti: 1.1–1.6 (dynamic import negli handler, `import type` per i tipi docx,
+`renderRiposiPdf`→async col caller aggiornato, getter lazy pdfjs/mammoth in pdfChunker),
+Fase 2 (Stats/Archive/Company in AppRouter + Riposi/Vertenze in App), Fase 3 (recharts
+DISINSTALLATO — era orfano). WorkerDetailPage/TableComponent lasciati eager: target già centrato,
+non vale il rischio sulla vista più delicata. RagAdminPanel lasciato montato (exit animations del portal).
+
+---
+
 ## Rinviati a prossime sessioni (ordine concordato)
 - P2 code-split bundle (3,68 MB) → prima impressione mobile.
 - Restyle "sala macchine" (scheda lavoratore) a livello Incidenza.

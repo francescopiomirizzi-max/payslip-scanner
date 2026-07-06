@@ -10,12 +10,18 @@
 //   - DOC (.doc) NON supportato (formato binario legacy pre-2007)
 // ============================================================
 
-import * as pdfjsLib from 'pdfjs-dist';
-import mammoth from 'mammoth';
-// pdfjs-dist 5.x: il worker va caricato come asset URL Vite (?url ottiene la URL del file emesso da Vite)
-import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
-
-pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
+// pdfjs-dist (~1 MB) e mammoth si caricano ON-DEMAND alla prima estrazione:
+// i consumer eager (RagAdminPanel) importano da questo modulo solo costanti e
+// detectDocumentFormat, che devono restare fuori dal chunk iniziale.
+// pdfjs-dist 5.x: il worker va caricato come asset URL Vite (?url → URL del file emesso).
+async function getPdfjs() {
+  const [pdfjsLib, worker] = await Promise.all([
+    import('pdfjs-dist'),
+    import('pdfjs-dist/build/pdf.worker.min.mjs?url'),
+  ]);
+  pdfjsLib.GlobalWorkerOptions.workerSrc = worker.default;
+  return pdfjsLib;
+}
 
 // MIME types accettati per l'ingestion
 export const PDF_MIME = 'application/pdf';
@@ -57,6 +63,7 @@ export interface PageText {
 }
 
 export async function extractPdfText(file: File | Blob | ArrayBuffer): Promise<PageText[]> {
+  const pdfjsLib = await getPdfjs();
   const data = file instanceof ArrayBuffer ? file : await (file as Blob).arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(data) }).promise;
 
@@ -86,6 +93,7 @@ export async function extractPdfText(file: File | Blob | ArrayBuffer): Promise<P
 // ============================================================
 
 export async function extractDocxText(file: File | Blob | ArrayBuffer): Promise<PageText[]> {
+  const { default: mammoth } = await import('mammoth');
   const arrayBuffer = file instanceof ArrayBuffer ? file : await (file as Blob).arrayBuffer();
   const result = await mammoth.extractRawText({ arrayBuffer });
   const text = (result.value ?? '').replace(/\r\n/g, '\n').trim();

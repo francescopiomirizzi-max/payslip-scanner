@@ -1,11 +1,15 @@
-import React from 'react';
+import React, { Suspense } from 'react';
 import { motion, AnimatePresence, type HTMLMotionProps } from 'framer-motion';
-import StatsDashboard from './StatsDashboard';
 import WorkerDetailPage from './WorkerDetailPage';
 import TableComponent from './TableComponent';
 import DashboardPage from '../pages/DashboardPage';
-import ArchivePage from '../pages/ArchivePage';
-import CompanyPage from '../pages/CompanyPage';
+
+// Route secondarie on-demand (P2 code-split): fuori dal chunk iniziale.
+// Lazy sul CONTENUTO dentro il motion.div, MAI sul wrapper: AnimatePresence
+// perderebbe le exit animations (cfr. lezioni DynamicIsland in tasks/lessons.md).
+const StatsDashboard = React.lazy(() => import('./StatsDashboard'));
+const ArchivePage = React.lazy(() => import('../pages/ArchivePage'));
+const CompanyPage = React.lazy(() => import('../pages/CompanyPage'));
 import { Worker, AnnoDati } from '../types';
 import { DashboardStats, WorkerStatItem, ModalConfig } from '../hooks/useDashboardStats';
 
@@ -117,18 +121,23 @@ const AppRouter: React.FC<AppRouterProps> = ({
             <AnimatePresence mode="wait">
                 {viewMode === 'stats' && (
                     <motion.div key="stats" {...pageAnim}>
-                        <StatsDashboard workers={workers} onBack={handleBack} />
+                        <Suspense fallback={<div className="min-h-screen" />}>
+                            <StatsDashboard workers={workers} onBack={handleBack} />
+                        </Suspense>
                     </motion.div>
                 )}
 
                 {viewMode === 'archive' && (
                     <motion.div key="archive" {...pageAnim} className="h-screen">
-                        <ArchivePage workers={workers} onBack={handleBack} initialWorkerId={archiveWorkerId ?? undefined} />
+                        <Suspense fallback={<div className="h-screen" />}>
+                            <ArchivePage workers={workers} onBack={handleBack} initialWorkerId={archiveWorkerId ?? undefined} />
+                        </Suspense>
                     </motion.div>
                 )}
 
                 {viewMode === 'company' && selectedCompany && (
                     <motion.div key={`company-${selectedCompany}`} {...pageAnim}>
+                        <Suspense fallback={<div className="min-h-screen" />}>
                         <CompanyPage
                             companyKey={selectedCompany}
                             workers={workers}
@@ -138,6 +147,7 @@ const AppRouter: React.FC<AppRouterProps> = ({
                             onOpenArchive={handleOpenArchive}
                             onGoDashboard={handleBack}
                         />
+                        </Suspense>
                     </motion.div>
                 )}
 

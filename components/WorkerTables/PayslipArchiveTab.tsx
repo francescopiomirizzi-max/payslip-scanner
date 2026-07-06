@@ -7,7 +7,6 @@ import {
 } from 'lucide-react';
 import { CompanyLogo } from '../ui/CompanyLogo';
 import { getProfiloBadgeLabel } from '../../utils/formatters';
-import { zip } from 'fflate';
 import { usePayslipArchive, PayslipRecord, VerifyLogEntry } from '../../hooks/usePayslipArchive';
 import { notifyIsland } from '../DynamicIsland';
 import { useIsReadOnly } from '../../lib/readonly';
@@ -243,6 +242,8 @@ export default function PayslipArchiveTab({ workerId, workerProfilo, workerElior
         );
 
         const safeName = (workerName ?? workerProfilo).replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_-]/g, '');
+        // fflate on-demand: serve solo per lo ZIP dell'archivio
+        const { zip } = await import('fflate');
         zip(fileEntries, { level: 0 }, (err, data) => {
             setZipProgress(null);
             if (err) {

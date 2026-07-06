@@ -100,7 +100,7 @@ async function buildWorkerDocs(w: Worker, riepilogoOverride?: Blob): Promise<Wor
     riepilogo = riepilogoOverride;
   } else {
     const riepilogoDoc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-    renderRiepilogoPdf(riepilogoDoc, w, startYear, endYear, tableData, totals, opts.includeTickets, opts.showPercepito);
+    await renderRiepilogoPdf(riepilogoDoc, w, startYear, endYear, tableData, totals, opts.includeTickets, opts.showPercepito);
     riepilogo = riepilogoDoc.output('blob');
   }
 

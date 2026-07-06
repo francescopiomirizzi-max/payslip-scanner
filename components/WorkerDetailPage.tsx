@@ -14,7 +14,6 @@ import PayslipArchiveTab from './WorkerTables/PayslipArchiveTab';
 import TableComponent from './TableComponent';
 import WorkerDetailLayout from './WorkerDetailLayout';
 import { WorkerDetailProvider } from './WorkerDetail/WorkerDetailContext';
-import { printPayslipTables } from '../utils/printTables';
 import { Worker, AnnoDati, getColumnsByProfile, MONTH_NAMES, resolveIncludePaidLeave } from '../types';
 import { SYSTEM_PROFILES, SYSTEM_PROFILE_KEYS, getCustomColorIndex } from '../config/profiles';
 import { parseMonthFromFilename } from '../constants';
@@ -595,9 +594,13 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
     window.location.href = `mailto:${profile.pec}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   };
 
-  const handlePrintTables = () => printPayslipTables({
-    worker, monthlyInputs, includeExFest, includeTickets, startClaimYear, includePaidLeave,
-  });
+  const handlePrintTables = async () => {
+    // printTables (jspdf+autotable) si carica on-demand al click di stampa
+    const { printPayslipTables } = await import('../utils/printTables');
+    printPayslipTables({
+      worker, monthlyInputs, includeExFest, includeTickets, startClaimYear, includePaidLeave,
+    });
+  };
 
   // Carica una busta scelta dal tab Archivio dentro il visore laterale (SplitView)
   // invece di aprirla in una nuova scheda. Usata dal visore in sola lettura, che

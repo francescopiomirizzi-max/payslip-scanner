@@ -3,8 +3,7 @@ import { createPortal } from 'react-dom'; // <--- AGGIUNGI QUESTA RIGA
 import { AnnoDati, Worker } from '../../types';
 import { formatCurrency } from '../../utils/formatters';
 import { Wallet, Printer, Edit3, Save, X, Info, Calculator, BookOpen, Calendar, FileSearch, LayoutGrid } from 'lucide-react';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
+// jspdf (+autotable) si carica on-demand dentro handlePrintTFR
 import { calculateTFR } from '../../utils/tfrCalculator';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useIsland } from '../../IslandContext'; // Aggiungiamo l'isola per le notifiche!
@@ -96,7 +95,8 @@ const TfrCalculationTable: React.FC<TfrCalculationTableProps> = ({
     };
 
     // Motore Stampa PDF
-    const handlePrintTFR = () => {
+    const handlePrintTFR = async () => {
+        const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([import('jspdf'), import('jspdf-autotable')]);
         const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
         const primaryColor: [number, number, number] = [15, 23, 42];
         const accentColor: [number, number, number] = [79, 70, 229];

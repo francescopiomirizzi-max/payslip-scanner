@@ -17,8 +17,7 @@ import {
     Ban // Icona aggiunta per i ticket esclusi
 } from 'lucide-react';
 import { motion, useSpring, useMotionValue, AnimatePresence } from 'framer-motion';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
+// jspdf (+autotable) si carica on-demand dentro handlePrintReport
 import { Worker, resolveIncludePaidLeave } from '../types';
 import { groupThousandsIT } from '../utils/formatters';
 import { SYSTEM_PROFILES, getCustomColorIndex, getCompanyHex, getCompanyLogo } from '../config/profiles';
@@ -276,7 +275,8 @@ const StatsDashboard: React.FC<StatsDashboardProps> = ({ workers = [], onBack })
         };
     }, [workers]);
 
-    const handlePrintReport = () => {
+    const handlePrintReport = async () => {
+        const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([import('jspdf'), import('jspdf-autotable')]);
         const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
         const today = new Date().toLocaleDateString('it-IT');
 

@@ -1,4 +1,6 @@
-import autoTable from 'jspdf-autotable';
+// jspdf-autotable si carica on-demand dentro renderRiepilogoPdf: questo modulo
+// è importato staticamente da TableComponent (per computeRiepilogoData, pura)
+// e non deve trascinare jspdf nel chunk iniziale.
 import { Worker, AnnoDati, resolveIncludePaidLeave } from '../types';
 import { computeHolidayIndemnity, computePeriodIncidence } from './calculationEngine';
 
@@ -118,7 +120,7 @@ export function computeRiepilogoData(
 
 // Disegna il PDF "Prospetto Ufficiale di Ricalcolo" su un doc jsPDF (landscape).
 // NON salva: il chiamante decide save() o output('blob').
-export function renderRiepilogoPdf(
+export async function renderRiepilogoPdf(
   doc: any,
   worker: Worker,
   startYear: number,
@@ -127,7 +129,8 @@ export function renderRiepilogoPdf(
   totals: RiepilogoTotals,
   includeTickets: boolean,
   showPercepito: boolean,
-): void {
+): Promise<void> {
+  const { default: autoTable } = await import('jspdf-autotable');
   const fmt = (n: number) => n !== 0 ? n.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €' : '-';
   const fmtNum = (n: number) => n !== 0 ? n.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-';
 

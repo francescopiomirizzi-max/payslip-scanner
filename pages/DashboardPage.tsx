@@ -48,7 +48,7 @@ import { CompanyLogo } from '../components/ui/CompanyLogo';
 import { SindacatoTag } from '../components/ui/SindacatoTag';
 import { DashboardStats, WorkerStatItem, ModalConfig } from '../hooks/useDashboardStats';
 import { matchesCompanyFilter } from '../hooks/useWorkers';
-import { generateReport, generateRegistroPagate } from '../utils/reportGenerator';
+// reportGenerator (docx+fflate) si carica on-demand dai click del menu Dati
 import { COLOR_VARIANTS } from '../utils/colorVariants';
 
 // Config dei cassetti (classificazione per stato) → fonte unica in config/cassetti.ts,
@@ -738,7 +738,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                                                 iconBg: 'bg-indigo-500',
                                                 hoverBg: 'hover:bg-indigo-50 dark:hover:bg-indigo-950/60',
                                                 hoverText: 'hover:text-indigo-700 dark:hover:text-indigo-300',
-                                                onClick: () => { generateReport(workers); setIsDataMenuOpen(false); },
+                                                onClick: async () => { const { generateReport } = await import('../utils/reportGenerator'); generateReport(workers); setIsDataMenuOpen(false); },
                                             },
                                             {
                                                 icon: <CheckCircle2 className="w-4 h-4 text-white" strokeWidth={2.5} />,
@@ -746,7 +746,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                                                 iconBg: 'bg-emerald-500',
                                                 hoverBg: 'hover:bg-emerald-50 dark:hover:bg-emerald-950/60',
                                                 hoverText: 'hover:text-emerald-700 dark:hover:text-emerald-300',
-                                                onClick: () => { generateRegistroPagate(workers); setIsDataMenuOpen(false); },
+                                                onClick: async () => { const { generateRegistroPagate } = await import('../utils/reportGenerator'); generateRegistroPagate(workers); setIsDataMenuOpen(false); },
                                             },
                                             // Strumento interno di workflow: nascosto al viewer
                                             // readonly (sindacalista).

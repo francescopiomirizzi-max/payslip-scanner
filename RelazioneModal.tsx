@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { X, Printer, Copy, CheckCircle, PenTool, FileText, FileSpreadsheet } from 'lucide-react';
-import ExcelJS from 'exceljs';
-import { saveAs } from 'file-saver';
-import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, HeadingLevel, AlignmentType, WidthType, BorderStyle, ShadingType } from 'docx';
+// exceljs / docx / file-saver (~1,7 MB) si caricano on-demand dentro gli handler
+// di export: qui restano solo i TIPI (erasi in compilazione, zero bundle).
+import type { Paragraph, Table, TableRow } from 'docx';
 import { motion } from 'framer-motion';
 import { YEARS, MONTH_NAMES, AnnoDati, getColumnsByProfile, getFixedColumnsByProfile, resolveIncludePaidLeave } from './types';
 import { parseLocalFloat, getProfiloBadgeLabel, formatDay } from './utils/formatters';
@@ -219,6 +219,7 @@ export async function buildRelazioneDocxBlob({
     showPercepito = false,
     startClaimYear = 2008,
 }: RelazioneDocxParams): Promise<Blob> {
+    const { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, HeadingLevel, AlignmentType, WidthType, BorderStyle, ShadingType } = await import('docx');
     // --- 1. Ricalcolo Variabili ---
     const tettoGiorni = includeExFest ? 32 : 28;
     const gt = totals?.grandTotal || totals || {};
@@ -545,11 +546,13 @@ export const RelazioneModal = ({ isOpen, onClose, worker, totals, includeExFest 
         printWindow.print();
     };
     const handleExportWord = async () => {
+        const { saveAs } = await import('file-saver');
         const blob = await buildRelazioneDocxBlob({ worker, totals, includeExFest, includeTickets, showPercepito, startClaimYear });
         saveAs(blob, `Relazione_Tecnica_${worker?.cognome || 'Ricorrente'}.docx`);
     };
 
     const handleExportExcel = async () => {
+        const [{ default: ExcelJS }, { saveAs }] = await Promise.all([import('exceljs'), import('file-saver')]);
         const nominativo = `${worker?.cognome || ''} ${worker?.nome || ''}`.trim();
         const tettoGiorni = includeExFest ? 32 : 28;
 
