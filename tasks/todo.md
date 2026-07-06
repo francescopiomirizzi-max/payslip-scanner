@@ -25,11 +25,19 @@
 - [x] DevBadge → "Novità" statico (via testo "in sviluppo" + animate-ping) nelle 3 aree.
       → verifica: tsc pulito, 260/260 test, build prod + build demo ok. Giro visivo = utente.
 
-## 4. Deploy in batch (~41 commit + quelli di oggi)
-- [ ] Gate pre-deploy: tsc + vitest + build verdi.
-- [ ] ATTESA OK visivo dell'utente sull'insieme (localhost).
-- [ ] Push su main → un solo deploy Netlify → smoke test post-deploy.
-      Nota tempismo: deploy PRIMA dell'incontro con Vincenzo; `viewer_payment_block` resta acceso.
+## 4. Deploy in batch ✅ FATTO 06/07
+- [x] Gate pre-deploy: tsc pulito + 260/260 test + build prod e demo verdi.
+- [x] OK visivo dell'utente ricevuto.
+- [x] README riscritto prima del push (39db75d): evoluzione scanner→RailFlow→aree→Valora
+      multi-org, stack reale, niente dati sensibili (vetrina portfolio).
+- [x] Push su main: **44 commit** in un colpo → **UN deploy Netlify** (railflow-2, stato `ready`).
+- [x] Smoke test live: titolo "Valora — Ufficio Vertenze", 4 link favicon con `media`,
+      bundle 200, favicon colorate+bianche 200, elior-residenza-seed 200.
+      `viterbo-seed.json` → 404 **by-design**: git-ignorato per privacy (riga 37 .gitignore);
+      in prod innocuo (il DB ha la pratica, il fallback non scatta). La demo si builda in
+      locale, dove il file esiste.
+- [ ] **Residuo**: RIDEPLOY del sito demo (separato) per portare live i fix "demo pulita" —
+      serve URL/processo di deploy della demo (build locale `npm run build:demo`).
 
 ## Rinviati a prossime sessioni (ordine concordato)
 - P2 code-split bundle (3,68 MB) → prima impressione mobile.
@@ -39,4 +47,10 @@
 - Le ~17 pratiche riposi in arrivo: PREZZARLE all'incontro prima di lavorarle.
 
 ## Review (a fine sessione)
-- [ ] Aggiornare `_roadmap.md` nel vault (data + stato) e diario.
+- [x] Aggiornare `_roadmap.md` nel vault (data + stato) e diario.
+
+### Esito sessione 06/07
+Consolidamento completo in una sessione: favicon theme-aware, P1 RLS chiuso e VERIFICATO
+(incluso il bucket storage `legal-corpus`, fuori lista audit), demo pulita (4 fix), README
+riscritto, 44 commit deployati con un solo deploy Netlify, smoke test verde. Restano: rideploy
+della demo, P2 code-split, sala macchine, prova d'accuratezza (ordine già concordato).
