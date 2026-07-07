@@ -1,3 +1,98 @@
+# Todo — Sessione 2026-07-07 · Restyle "sala macchine" (scheda lavoratore)
+
+> ⏸️ **PARCHEGGIATO (07/07) — BOZZA PER IL FUTURO, non implementare.** Decisione utente: per ora non si cambia
+> nulla. Mockup salvato in [ideas/sala-macchine-restyle-mockup.html](ideas/sala-macchine-restyle-mockup.html)
+> (indice: [ideas/README.md](ideas/README.md)). Questo piano resta come riferimento per quando si riprenderà.
+>
+> Piano nato dalla revisione del mockup (artifact
+> `6048e507`, versione "tre-tab-complete", theme-aware). Inventario dei comandi tracciato dal file
+> di composizione `WorkerDetailLayout.tsx` (lezione 07/07 in `tasks/lessons.md`).
+
+## Obiettivo e vincoli
+- **Solo layout/gerarchia/leggibilità.** Zero modifiche a motore, calcoli, numeri. **Nessun comando
+  rimosso o rinominato** (inventario completo qui sotto). Palette e temi per-azienda intoccabili.
+- **Theme-aware**: l'app ha chiaro E scuro; il restyle deve reggere entrambi.
+- Struttura verticale confermata (quella reale): **Testata → Stato vertenza → Statistiche → Strumenti → Corpo del tab**.
+
+## Decisioni bloccate (dalla revisione 07/07)
+1. **Testata**: Dashboard, Start Year, identità (nome/azienda/sede/ruolo/Assunzione), Azioni (ISTAT+PEC),
+   Download, Vai al Report, Archivio. Tasti in alto **esteticamente invariati** (glass/gradienti/spotlight).
+   **NOVITÀ (richiesta utente 07/07): la barra testata prende il COLORE-AZIENDA del lavoratore** (non più il
+   verde fisso) e mostra il **logo azienda reale**. Sorgenti già esistenti: `getCompanyGradient(profilo)`
+   (`config/profiles.ts` → RFI blu #3b82f6→#06b6d4, Trenitalia rosso, Elior arancio, Clean Service emerald,
+   Mercitalia ambra) e `getCompanyLogo(profilo, eliorType)` (`public/logos/*` via `CompanyLogo`). L'avatar è
+   già company-colored; da estendere alla banda/accento della testata + logo accanto al nome (come `CompanyLogo`,
+   con `forceWhite` sui fondi scuri). Nessun colore hardcoded: leggere sempre dal profilo.
+2. **Stato vertenza**: timeline dei **5 cassetti** dell'area Incidenza (Da Analizzare · Conteggi · Buste Paga
+   Mancanti · Conclusa · Pagata, valori interni `analisi/pronta/inviata/trattativa/chiusa`) + i **parametri
+   globali** Ex-Festività (28/32gg), Ticket, Permessi — **una volta sola qui** (consolidamento scelto dall'utente).
+3. **Statistiche (ex-ticker `useStatsData`)**: da marquee che scorre a **riga statica** con "?" (Totale da
+   liquidare, Totale ISTAT+interessi, Lordo spettante, Già percepito, Totale buoni pasto; + TFR su differenze
+   e Fondo TFR storico marcate **solo-owner**, nascoste al viewer come già oggi).
+4. **Nota metodologica** (banda ambra in `MonthlyDataGrid`): da **marquee a statica ripiegabile**.
+5. **Strumenti** (`WorkerDetailCommandBar`): stessi tasti, raggruppati sotto **"Acquisizione dati"**
+   (AI Agent, Cartella, Scan AI Busta paga, Mobile Scan) e **"Analisi e calcolo"** (tab Inserimento Mensile,
+   Riepilogo Annuale, Analisi Voci, Prospetto TFR). Solo la cornice cambia.
+7. **Stato vertenza + Quadro economico RIPIEGABILI** (richiesta utente 07/07): entrambi i pannelli devono poter
+   **collassare** per non rubare altezza alla tabella Inserimento. Da chiusi: Stato vertenza mostra titolo + stato
+   corrente + parametri attivi; Quadro economico mostra il titolo + il numero-guida "Totale da liquidare". Stato
+   ripiegato **persistente per-lavoratore** (come gli altri flag di scheda). Verifica: da chiusi la tabella prende
+   l'altezza liberata; da aperti tutto invariato.
+
+6. **Tabella (Inserimento Mensile)**: colonna mese **sticky**, chip codici con **tooltip dalla knowledge**,
+   **scroll interno** alla tabella (la pagina scorre normale). Barra Periodo con tutti i tasti attuali
+   (‹anni›, Visore, PDF n/12, Verifica anno, Annulla, Manuale legale, Archivio, Variabili/Fisse) + stat per-anno
+   (Media Giornaliera, Totale Indennità Variabili).
+
+## Ottimizzazione — consolidamento parametri globali (scelta: "consolida nello Stato vertenza")
+- [ ] **O1 — Ex-Festività: unificare lo stato.** In `AnnualCalculationTable.tsx` è **stato LOCALE**
+      (`useState(false)`, riga ~70), separato da quello dello Stato vertenza (context `includeExFest`/`onToggleExFest`).
+      → farlo leggere dal context/props condivisi e **rimuovere il toggle duplicato** dall'header del Riepilogo.
+      Verifica: cambiando Ex-Fest nello Stato vertenza, il "Tetto 28/32gg" del Riepilogo e i totali si aggiornano
+      da soli; il numero "Totale da liquidare" combacia tra riga statistiche e Riepilogo Finale (a parità di interessi).
+- [ ] **O2 — Media Giornaliera** compare in 3 posti (griglia, colonna Riepilogo, modalità pivot): NON accorpare
+      (scope diversi), ma allineare **etichetta e formato** ovunque. Verifica: stessa dicitura + stessi decimali.
+- [ ] **O3 — Titolo scuro** ripetuto in ogni header di tab: alleggerire, MA **tenere il logo azienda** nelle barre
+      tabella (Periodo) e negli header dei tab — richiesta utente 07/07: serve quando la testata è scrollata via
+      (cfr. commento reale in `MonthlyDataGrid`: "logo visibile anche con l'header di pagina scrollato via").
+      Verifica: logo azienda presente in Periodo + header dei 4 tab; nessun testo-titolo ridondante.
+
+## Implementazione zona per zona (ogni step: → verifica)
+- [ ] **1. Testata** (`WorkerDetail/WorkerDetailHeader.tsx`): già vicina al target; ritocchi di raggruppamento
+      azioni, nessun tasto tolto. → verifica: tutti i tasti presenti e funzionanti in light+dark.
+- [ ] **2. Stato vertenza** (`WorkerDetail/VertenzaTimeline.tsx`): resta timeline + toggle globali; **il ticker
+      statistiche esce da qui** (diventa la riga statica, step 3). Timeline invariata nella logica (onUpdateStatus).
+      → verifica: click su uno step cambia stato come oggi; toggle Ex-Fest/Ticket/Permessi guidano i calcoli.
+- [ ] **3. Statistiche riga statica**: nuovo componente (o refactor del render ticker) che dispone le card di
+      `useStatsData` in griglia statica con tooltip "?" (mantenere il filtro viewer per le 2 voci TFR).
+      → verifica: stesse voci/valori del ticker; "?" apre lo stesso contenuto; viewer non vede le 2 TFR.
+- [ ] **4. Strumenti** (`WorkerDetail/WorkerDetailCommandBar.tsx`): wrap dei tasti nei due gruppi etichettati.
+      Tasti invariati. → verifica: AI/scan/QR e i 4 tab funzionano; estetica dei bottoni identica.
+- [ ] **5. Nota metodologica** (`WorkerTables/MonthlyDataGrid.tsx`): marquee ambra → blocco statico ripiegabile
+      (stesso testo). → verifica: testo integrale leggibile fermo; niente animazione x.
+- [ ] **6. Tabella Inserimento Mensile** (`MonthlyDataGrid.tsx`): confermare mese sticky + scroll interno (già
+      presenti) e agganciare i **tooltip codici alla knowledge**. → verifica: hover su un codice mostra la voce; scroll ok.
+- [ ] **7. Riepilogo Annuale** (`WorkerTables/AnnualCalculationTable.tsx`): header senza Ex-Fest (vedi O1); tiene
+      Mostra Parametri, Soglia %, Interessi %. → verifica: espansione anni, Incidenza %, Totale da liquidare + copia.
+- [ ] **8. Analisi Voci** (`WorkerTables/IndemnityPivotTable.tsx`): header alleggerito; tiene Totali/Media.
+      → verifica: pivot voci×anni, toggle Totali/Media, Totale storico + riga Totale voci.
+- [ ] **9. Prospetto TFR** (`WorkerTables/TfrCalculationTable.tsx`) — **IN SCOPE (inventariato 07/07, nel mockup)**:
+      header "Rivalutazione TFR" + **Punto Zero / Base Storica** (editabile, modale) + **Stampa TFR**; tabella
+      Anno · Fondo Iniziale · Imponibile Utile (editabile) · Quota Maturata · Indice ISTAT (FOI) · Rivalutazione ·
+      Fondo Finale (righe editabili) + footer Totale / **TFR Spettante**. Allineare alla cornice + rimuovere
+      badge/titolo ridondanti (O3). → verifica: modifica Punto Zero, edit riga, stampa, TFR spettante invariato.
+
+## Gate finali
+- [ ] `tsc --noEmit` pulito · suite Vitest verde · `build` prod + demo ok.
+- [ ] **Diff comportamento**: i numeri (differenze, totali, %, TFR) identici a prima su un lavoratore campione.
+- [ ] **Verifica visiva utente** sui 4 tab, in **light e dark**, owner e viewer.
+- [ ] Niente push finché non richiesto (batch deploy).
+
+## Review (a fine sessione)
+- [ ] Aggiornare `_roadmap.md` (voce "Sala macchine") + memoria + lessons se emergono correzioni.
+
+---
+
 # Todo — Sessione 2026-07-06 · Consolidamento e deploy (zero feature nuove)
 
 > Piano approvato dall'utente. Ordine: fix da verifica visiva → P1 RLS → demo pulita → deploy in batch.

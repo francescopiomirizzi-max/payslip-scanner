@@ -3,6 +3,37 @@
 > Pattern e errori da evitare nelle prossime sessioni.
 > Aggiornato dopo ogni correzione utente.
 
+## 2026-07-07 — Mockup di restyle: PARTIRE dall'inventario reale dei controlli, non da uno schizzo "pulito"
+
+**Contesto:** proposto un mockup HTML del restyle "sala macchine" (scheda lavoratore). L'utente l'ha
+respinto: «hai omesso molti tasti che ci sono — start year, archivio in tabella, verifica anno… ho paura
+che tolga troppe cose importanti; e i tasti in alto devono mantenere la stessa estetica che hanno ora,
+non vanno semplificati». Inoltre avevo messo un tasto "Export" che NON esiste (il nostro è "Download").
+
+**Errore:** ho disegnato un mockup "da zero" come idealizzazione grafica, trattandolo come fonte di verità
+sui comandi. Un mockup pulito che omette controlli reali viene letto (giustamente) come "proposta di
+rimozione". Ho anche introdotto un'etichetta ("Export") non ancorata a nessun comando esistente.
+
+**Lezione (per QUALSIASI restyle di una vista esistente):**
+1. **Prima l'inventario dal codice, poi il layout.** Estrarre la lista COMPLETA dei controlli reali
+   (grep su `title=`/label/onClick nei file della vista) e verificarla con l'utente. Il restyle
+   RI-DISPONE quegli stessi controlli; non è l'occasione per potarli.
+2. **Zero tasti-fantasma:** ogni elemento del mockup deve mappare 1:1 su un comando esistente, col
+   NOME reale che usa l'app (da noi: "Download", non "Export"; "Verifica anno"; "Start Year"; "Archivio").
+3. **L'estetica dei tasti esistenti è un vincolo, non una variabile.** "Raggruppare sotto etichette"
+   ≠ "ridisegnare i tasti". I bottoni in alto (glass-panel, gradienti, spotlight) restano identici;
+   cambia solo la loro organizzazione/contenitore.
+4. Un mockup di restyle va marcato esplicitamente come "stessi comandi, riorganizzati" e mostrato con
+   TUTTI i controlli presenti, o non mostrato affatto. Renderlo **theme-aware** (l'app ha chiaro E scuro):
+   non bloccarlo su un tema. Cfr. lezione 03/07 (non ridisegnare il logo scelto) e `feedback-verifica-video-utente`.
+5. **L'inventario si traccia dal file che COMPONE la vista, non dai singoli file che capita di aprire.**
+   Qui la scheda lavoratore è composta in `WorkerDetailLayout.tsx` (Header → **VertenzaTimeline** → CommandBar →
+   Content). Avendo greppato solo Header/CommandBar/Grid mi erano sfuggiti un intero blocco (STATO VERTENZA:
+   timeline dei 5 cassetti + toggle Ex-Festività/Ticket/Permessi) e le **statistiche vere** (le card di
+   `useStatsData` che scorrono nel ticker: Totale da liquidare, ISTAT+interessi, Lordo spettante, TFR su diff…),
+   che avevo perfino "corretto" via come inventate. Regola: apri prima il file di layout/compose e segui OGNI
+   sottocomponente montato; e prima di dire "questa stat è inventata", cerca la sua label in `hooks/use*Stats*`.
+
 ## 2026-07-05 — Dropdown dentro un pannello con backdrop-blur: audit di TUTTI gli z-index fratelli, non solo del vicino
 
 **Contesto:** inglobando i pulsanti (incluso il menu a tendina "Dati") nell'header hero glass dell'Incidenza,
