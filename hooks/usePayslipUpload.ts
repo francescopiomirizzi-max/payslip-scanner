@@ -325,6 +325,13 @@ export function usePayslipUpload({
     const failedFiles: string[] = []; // feedback per-file: quali buste paga non sono passate
     const mismatchFiles: string[] = []; // buste col periodo della testata (AI) diverso dal nome file → da verificare
 
+    // --- MISURA BATCH (passo 1: tempi reali + throttle, per dimensionare chiavi/pool) ---
+    const batchT0 = performance.now();
+    const fileDurations: number[] = [];
+    let retryCount = 0;          // tentativi oltre il primo (coda lunga/timeout Gemini)
+    let geminiThrottleCount = 0; // quota / RESOURCE_EXHAUSTED da Gemini → serve più quota (chiavi)
+    let ipLimitCount = 0;        // 429 dal nostro _rateLimit per IP → alzare il rate limit
+
     const expectedColumns = getColumnsByProfile(worker.profilo, worker.eliorType) || [];
 
     // Flush incrementale: snapshot dello stato ogni FLUSH_EVERY buste completate.
@@ -341,6 +348,7 @@ export function usePayslipUpload({
     };
 
     const processFile = async (file: File) => {
+      const fileT0 = performance.now();
       const monthNames = [
         'Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
         'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre',
@@ -404,6 +412,7 @@ export function usePayslipUpload({
             body: scanBody,
           });
           responseText = await response.text();
+          if (response.status === 429) ipLimitCount++;
 
           try {
             let parsed = JSON.parse(responseText);
@@ -417,12 +426,15 @@ export function usePayslipUpload({
             aiResult = null;
           }
 
+          if (/quota|resource_exhausted/i.test(String(aiResult?.error ?? responseText ?? ''))) geminiThrottleCount++;
+
           if (response.ok && aiResult && !aiResult.error) {
             success = true;
             break;
           }
 
           if (attempt < MAX_ATTEMPTS) {
+            retryCount++;
             console.warn(`⏳ Retry automatico per ${file.name} (${attempt + 1}/${MAX_ATTEMPTS}) dopo fallimento`);
           }
         }
@@ -633,6 +645,7 @@ export function usePayslipUpload({
         errorCount++;
         failedFiles.push(label);
       } finally {
+        fileDurations.push(performance.now() - fileT0);
         completedCount++;
         if (!isSingle) {
           updateUploadProgress(completedCount);
@@ -649,7 +662,17 @@ export function usePayslipUpload({
     // richieste parallele non si accodano sullo stesso progetto GCP. Le mutazioni
     // su currentAnni avvengono in blocchi sincroni (nessun await tra findIndex/push
     // e le scritture) → nessuna race tra file dello stesso mese.
-    const SCAN_CONCURRENCY = 3;
+    // MISURA (passo 1): default alzato a 10 (era 3). Override a caldo senza redeploy per
+    // fare lo sweep dei valori: in console `localStorage.scan_concurrency = '12'` (clamp 1..24),
+    // poi rilancia il batch. `localStorage.removeItem('scan_concurrency')` torna al default 10.
+    const SCAN_CONCURRENCY = (() => {
+      let n = 10;
+      try {
+        const raw = localStorage.getItem('scan_concurrency');
+        if (raw != null && raw.trim() !== '' && Number.isFinite(Number(raw))) n = Math.round(Number(raw));
+      } catch { /* storage non disponibile */ }
+      return Math.max(1, Math.min(24, n));
+    })();
     let nextFile = 0;
     batchRunningRef.current = true;
     try {
@@ -663,6 +686,35 @@ export function usePayslipUpload({
     } finally {
       batchRunningRef.current = false;
     }
+
+    // --- RIEPILOGO MISURA (console + notifica) — passo 1 per dimensionare chiavi/pool ---
+    const wallSec = (performance.now() - batchT0) / 1000;
+    const sumSec = fileDurations.reduce((a, b) => a + b, 0) / 1000;
+    const avgSec = fileDurations.length ? sumSec / fileDurations.length : 0;
+    const maxSec = fileDurations.length ? Math.max(...fileDurations) / 1000 : 0;
+    const effConc = wallSec > 0 ? sumSec / wallSec : 0;      // concorrenza reale ottenuta
+    const perMin = wallSec > 0 ? (files.length / wallSec) * 60 : 0;
+    const measureLine =
+      `⏱️ Misura batch: ${files.length} buste in ${wallSec.toFixed(0)}s ` +
+      `(${perMin.toFixed(1)}/min · ~${avgSec.toFixed(0)}s/busta · max ${maxSec.toFixed(0)}s · ` +
+      `conc. ${SCAN_CONCURRENCY}→eff ${effConc.toFixed(1)}) · retry ${retryCount} · ` +
+      `throttle Gemini ${geminiThrottleCount} · 429 IP ${ipLimitCount}`;
+    console.log(
+      '%c📊 MISURA BATCH SCAN',
+      'font-weight:bold;font-size:13px;color:#0891b2',
+      {
+        file_totali: files.length, ok: successCount, falliti: errorCount,
+        concorrenza_impostata: SCAN_CONCURRENCY,
+        tempo_totale_s: +wallSec.toFixed(1),
+        buste_al_minuto: +perMin.toFixed(1),
+        sec_per_busta_medio: +avgSec.toFixed(1),
+        sec_per_busta_max: +maxSec.toFixed(1),
+        concorrenza_effettiva: +effConc.toFixed(1),
+        retry: retryCount,
+        throttle_gemini: geminiThrottleCount,
+        limite_ip_429: ipLimitCount,
+      }
+    );
 
     currentAnni.sort((a: AnnoDati, b: AnnoDati) => {
       if (a.year !== b.year) return a.year - b.year;
@@ -685,7 +737,9 @@ export function usePayslipUpload({
     };
 
     const segments: string[] = [];
-    let notifType: 'success' | 'warning' | 'error' = 'warning';
+    let notifType: 'success' | 'warning' | 'error' = 'success';
+
+    if (!isSingle) segments.push(measureLine);
 
     if (!isSingle && errorCount > 0) {
       notifType = successCount > 0 ? 'warning' : 'error';
