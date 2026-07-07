@@ -42,6 +42,9 @@ function cleanAndParseJSON(text: string): any {
       if (blocks.length === 0) throw new Error("Nessun dato trovato");
       let finalData = { ...blocks[0] };
       finalData.codes = { ...blocks[0].codes };
+      // Trasferta 0AA1: il modello TRASCRIVE ogni riga qui (una per giornata), la somma la fa il codice.
+      finalData.trasferta_esente_righe = Array.isArray(blocks[0].trasferta_esente_righe)
+        ? [...blocks[0].trasferta_esente_righe] : [];
 
       if (!finalData.aiWarning) finalData.aiWarning = "Nessuna anomalia";
 
@@ -62,6 +65,23 @@ function cleanAndParseJSON(text: string): any {
             finalData.codes[key] = (finalData.codes[key] || 0) + (val as number);
           }
         }
+        if (Array.isArray(nextPage.trasferta_esente_righe)) {
+          finalData.trasferta_esente_righe.push(...nextPage.trasferta_esente_righe);
+        }
+      }
+
+      // 0AA1 (Trasferta esente): la SOMMA la fa il CODICE, non il modello. Sui cedolini RFI la
+      // trasferta è una lista di 1-14 righe giornaliere (su più pagine) e il modello la somma
+      // male (test accuratezza 07/07: 0AA1 esatta solo nel ~53% dei mesi). Il modello trascrive
+      // ogni riga in "trasferta_esente_righe"; qui sommiamo e sovrascriviamo codes["0AA1"].
+      // Fallback sicuro: se l'array è assente/vuoto (altri profili, o nessuna trasferta) NON si tocca.
+      if (Array.isArray(finalData.trasferta_esente_righe) && finalData.trasferta_esente_righe.length > 0) {
+        const somma = finalData.trasferta_esente_righe.reduce((s: number, v: any) => {
+          const n = typeof v === "number" ? v : Number(String(v).replace(",", "."));
+          return s + (Number.isFinite(n) ? n : 0);
+        }, 0);
+        finalData.codes = finalData.codes || {};
+        finalData.codes["0AA1"] = Math.round(somma * 100) / 100;
       }
       return finalData;
     };
@@ -350,7 +370,7 @@ const PROMPT_RFI = `
   - 0496 (Ind. Disp. Chiamata)
   - 0687 (Ind. Linea <= 10h)
   - 0686 (Ind. Linea > 10h)
-  - 0AA1 (Trasferta - Somma tutte le occorrenze)
+  - 0AA1 (Trasferta esente) ⚠️ NON sommarla tu: nel campo "codes" lascia "0AA1": 0.0 e trascrivi ogni riga nell'array "trasferta_esente_righe" (vedi §TRASFERTA). La somma la fa il sistema.
   - 0576 (Ind. Orario Spezz.)
   - 0584 (Rep. Festive/Riposo)
   - 0919 (Str. Feriale Diurno)
@@ -360,6 +380,13 @@ const PROMPT_RFI = `
   - 0995 (Str. Diurno Disp.)
   - 0996 (Str. Fest/Not Disp.)
   - 0376 (Indennità varie)
+
+  #### §TRASFERTA — voce 0AA1 (regola speciale: NON sommare tu, trascrivi le righe)
+  La voce 0AA1 "Ind.trasferta (esente)" compare su PIÙ righe (una per giornata di trasferta), spesso su più pagine.
+  Trascrivi in un array "trasferta_esente_righe" l'importo della colonna Competenze di OGNI riga con codice 0AA1 e
+  descrizione "Ind.trasferta (esente)", nell'ordine in cui appaiono, INCLUSE le righe sulle pagine successive.
+  NON includere le righe 0AA2 "Ind.trasferta (Imponibile)" (è un'altra voce, non tracciata). Se non ci sono righe
+  0AA1, restituisci un array vuoto []. Esempio: se vedi 3 righe 0AA1 da 12,00 / 22,16 / 37,65 → [12.00, 22.16, 37.65].
 
   #### VOCI FISSE CONTINUATIVE (base retributiva mensile — "Quadro B")
   [SCOPO]: servono SOLO al calcolo delle percentuali di incidenza, NON al credito ferie.
@@ -405,6 +432,7 @@ const PROMPT_RFI = `
     "isCUD": false, "month": 3, "year": 2019, "ticketRate": 7.0, "arretrati": 158.12, "eventNote": "[Malattia/Carenza]", "aiWarning": "Nessuna anomalia",
     "presenzeVuota": false,
     "fondo_pregresso_31_12": 2938.55, "imponibile_tfr_mensile": 2107.91,
+    "trasferta_esente_righe": [12.00, 22.16, 37.65],
     "attendance": { "presenze": 18.0, "riposi": 9.0, "ferie": 1.0, "ptv26": 0.0, "malattie": null, "infortuni": null, "assenzeRetribuite": null, "assenzeNonRetribuite": null, "ferieAnnoPrec": 12.0, "ferieAnnoCorrente": 20.0 },
     "codes": {
       "0152": 576.06, "0421": 0.0, "0423": 0.0, "0457": 140.00, "0470": 0.0, "0482": 0.0, "0496": 0.0, "0687": 0.0, "0686": 0.0, "0AA1": 0.0, "0576": 0.0, "0584": 64.00, "0919": 0.0, "0920": 0.0, "0932": 0.0, "0933": 0.0, "0995": 0.0, "0996": 0.0, "0376": 0.0,
@@ -487,7 +515,7 @@ const PROMPT_TRENITALIA = `
   - 0496 (Ind. Disp. Chiamata)
   - 0687 (Ind. Linea <= 10h)
   - 0686 (Ind. Linea > 10h)
-  - 0AA1 (Trasferta - Somma tutte le occorrenze)
+  - 0AA1 (Trasferta esente) ⚠️ NON sommarla tu: nel campo "codes" lascia "0AA1": 0.0 e trascrivi ogni riga nell'array "trasferta_esente_righe" (vedi §TRASFERTA). La somma la fa il sistema.
   - 0576 (Ind. Orario Spezz.)
   - 0584 (Rep. Festive/Riposo)
   - 0919 (Str. Feriale Diurno)
@@ -497,6 +525,13 @@ const PROMPT_TRENITALIA = `
   - 0995 (Str. Diurno Disp.)
   - 0996 (Str. Fest/Not Disp.)
   - 0376 (Indennità varie)
+
+  #### §TRASFERTA — voce 0AA1 (regola speciale: NON sommare tu, trascrivi le righe)
+  La voce 0AA1 "Ind.trasferta (esente)" compare su PIÙ righe (una per giornata di trasferta), spesso su più pagine.
+  Trascrivi in un array "trasferta_esente_righe" l'importo della colonna Competenze di OGNI riga con codice 0AA1 e
+  descrizione "Ind.trasferta (esente)", nell'ordine in cui appaiono, INCLUSE le righe sulle pagine successive.
+  NON includere le righe 0AA2 "Ind.trasferta (Imponibile)" (è un'altra voce, non tracciata). Se non ci sono righe
+  0AA1, restituisci un array vuoto []. Esempio: se vedi 3 righe 0AA1 da 12,00 / 22,16 / 37,65 → [12.00, 22.16, 37.65].
 
   #### VOCI FISSE CONTINUATIVE (base retributiva mensile — "Quadro B")
   [SCOPO]: servono SOLO al calcolo delle percentuali di incidenza, NON al credito ferie.
@@ -542,6 +577,7 @@ const PROMPT_TRENITALIA = `
     "isCUD": false, "month": 3, "year": 2019, "ticketRate": 7.0, "arretrati": 158.12, "eventNote": "[Malattia/Carenza]", "aiWarning": "Nessuna anomalia",
     "presenzeVuota": false,
     "fondo_pregresso_31_12": 2938.55, "imponibile_tfr_mensile": 2107.91,
+    "trasferta_esente_righe": [12.00, 22.16, 37.65],
     "attendance": { "presenze": 18.0, "riposi": 9.0, "ferie": 1.0, "ptv26": 0.0, "malattie": null, "infortuni": null, "assenzeRetribuite": null, "assenzeNonRetribuite": null, "ferieAnnoPrec": 12.0, "ferieAnnoCorrente": 20.0 },
     "codes": {
       "0152": 576.06, "0421": 0.0, "0423": 0.0, "0457": 140.00, "0470": 0.0, "0482": 0.0, "0496": 0.0, "0687": 0.0, "0686": 0.0, "0AA1": 0.0, "0576": 0.0, "0584": 64.00, "0919": 0.0, "0920": 0.0, "0932": 0.0, "0933": 0.0, "0995": 0.0, "0996": 0.0, "0376": 0.0,
