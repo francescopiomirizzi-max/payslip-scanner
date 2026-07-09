@@ -14,7 +14,7 @@
 // i consumer eager (RagAdminPanel) importano da questo modulo solo costanti e
 // detectDocumentFormat, che devono restare fuori dal chunk iniziale.
 // pdfjs-dist 5.x: il worker va caricato come asset URL Vite (?url → URL del file emesso).
-async function getPdfjs() {
+export async function getPdfjs() {
   const [pdfjsLib, worker] = await Promise.all([
     import('pdfjs-dist'),
     import('pdfjs-dist/build/pdf.worker.min.mjs?url'),

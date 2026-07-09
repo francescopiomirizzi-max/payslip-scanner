@@ -14,6 +14,8 @@ import PayslipArchiveTab from './WorkerTables/PayslipArchiveTab';
 import TableComponent from './TableComponent';
 import WorkerDetailLayout from './WorkerDetailLayout';
 import { WorkerDetailProvider } from './WorkerDetail/WorkerDetailContext';
+import AccuracyCheckModal from './WorkerTables/AccuracyCheckModal';
+import type { Discrepancy } from '../utils/verifyFromFolder';
 import { Worker, AnnoDati, getColumnsByProfile, MONTH_NAMES, resolveIncludePaidLeave } from '../types';
 import { SYSTEM_PROFILES, SYSTEM_PROFILE_KEYS, getCustomColorIndex } from '../config/profiles';
 import { parseMonthFromFilename } from '../constants';
@@ -38,6 +40,20 @@ interface WorkerDetailPageProps {
 
 const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateData, onUpdateStatus, onUpdateWorkerFields, onPersistWorkerById, onBack }) => {
   const [monthlyInputs, setMonthlyInputs] = useState<AnnoDati[]>(Array.isArray(worker?.anni) ? worker.anni : []);
+
+  // Feature "prova d'accuratezza": verifica le buste dal DISCO (PDF.js, zero egress) e applica
+  // la verità-PDF alle righe esistenti con un click.
+  const [showAccuracy, setShowAccuracy] = useState(false);
+  const applyTruthFixes = (fixes: Discrepancy[]) => {
+    if (!fixes.length) return;
+    setMonthlyInputs(prev => prev.map(row => {
+      const rf = fixes.filter(f => Number(row.year) === f.year && Number(row.monthIndex) === f.monthIndex);
+      if (!rf.length) return row;
+      const next: any = { ...row };
+      for (const f of rf) next[f.field] = f.truth;
+      return next;
+    }));
+  };
 
   // DYNAMIC SYNC: Lo stato locale comanda, il Parent riceve aggiornamenti in automatico
   const lastSyncRef = useRef<string>(JSON.stringify(monthlyInputs));
@@ -859,6 +875,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
       onSendPec: handleSendPec,
       onPrintTables: handlePrintTables,
       onOpenIstat: () => setIsIstatModalOpen(true),
+      onOpenAccuracyCheck: () => setShowAccuracy(true),
       startClaimYear,
       onStartClaimYearChange: setStartClaimYear,
       onUpdateWorkerFields,
@@ -1147,6 +1164,14 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
           )}
         </div>
       </div>
+    )}
+
+    {showAccuracy && (
+      <AccuracyCheckModal
+        anni={monthlyInputs}
+        onApply={applyTruthFixes}
+        onClose={() => setShowAccuracy(false)}
+      />
     )}
     </WorkerDetailProvider>
   );

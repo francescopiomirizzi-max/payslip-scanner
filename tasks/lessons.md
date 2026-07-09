@@ -3,6 +3,36 @@
 > Pattern e errori da evitare nelle prossime sessioni.
 > Aggiornato dopo ogni correzione utente.
 
+## 2026-07-07 — Parser banda presenze: colonna gemella "Assenze retribuite" vs "non retribuite" + verifica in Node
+
+**Contesto:** aggiunta di `daysPaidLeave` (assenze retribuite) al parser di verità RFI/Trenitalia,
+utile per i due Cataneo in distacco sindacale (con il toggle "Permessi"/Strategia B entra nel
+DIVISORE → total-mover, non info). L'utente mi ha invitato a "verificarlo io stesso perché è un
+campo presente in tutti e due i layout".
+
+**Due errori evitati SOLO grazie alla verifica su PDF reali:**
+1. **Colonna gemella.** La banda ha `... Infortuni | Assenze Retribuite | Assenze non retribuite | Ferie...`.
+   Il mio primo confine di colonna (prima etichetta a destra che NON contiene "retribuit") SALTAVA
+   la colonna "non retribuite" e, quando la retribuita era vuota (Vincenzo Giu 2007), pescava il
+   valore della colonna NON retribuita → falso positivo `daysPaidLeave=1`. Fix: confine = etichetta
+   **immediatamente successiva** (`labels[idx+1].x`), cioè l'inizio di "Assenze non retribuite".
+2. **Assunzione "campo solo informativo" sbagliata:** lo è di DEFAULT, ma il toggle "Permessi"
+   ([VertenzaTimeline] + [MonthlyDataGrid]) lo somma al divisore per i distaccati → va verificato eccome.
+
+**Regola (per QUALSIASI parser di colonna su banda tabellare):**
+> Prima di dichiararlo fatto, gira il parser in **Node con la stessa pdfjs-dist del progetto**
+> contro PDF REALI, su ENTRAMBI i layout e su regimi diversi (qui: pre-distacco vs distacco pieno).
+> Sono bastate 24 buste (Vincenzo 2007+2025, Pasquale) per scoprire il bug della colonna gemella e
+> confermare la fix (dw/pl coerenti col distacco, 0 anomalie). Diffidare di etichette quasi-identiche
+> adiacenti (`X` vs `X non`): ancorare al confine della colonna SUCCESSIVA, non a un match testuale
+> che le confonde. Cfr. lezione 21/05 (disambiguazione spaziale Presenze/Riposi) e `ocr-ambiguity-flag-policy`.
+
+**Bonus (stessa sessione):** memory leak nel parser — `extractRfiTruth` non chiamava mai
+`pdf.destroy()`; sulla prova d'accuratezza (cartella 200+ buste) i documenti PDF.js si accumulavano
+→ tab in OOM (Chrome "Uffa!", codice errore 5). Fix: `try/finally` con `await pdf.destroy()` +
+`page.cleanup()`. Regola: ogni `getDocument()` va sempre bilanciato con `destroy()` in un `finally`,
+come già faceva `extractPdfText` in `lib/pdfChunker.ts`.
+
 ## 2026-07-07 — Mockup di restyle: PARTIRE dall'inventario reale dei controlli, non da uno schizzo "pulito"
 
 **Contesto:** proposto un mockup HTML del restyle "sala macchine" (scheda lavoratore). L'utente l'ha
@@ -849,3 +879,21 @@ si mimetizzava). Pipeline che ha retto (commit 1984d80, `caf-patronato-illustraz
    (erode r4 → reconstruct) + fill dei buchi chiusi + blur/soglia per lisciare il bordo.
 4. Verifica sul **backdrop REALE** (riprodurre il gradiente della card in dark, non un grigio a caso) +
    zoom sulle zone che l'utente ha indicato + le zone a rischio (bianchi≈sfondo, elementi che toccano i bordi).
+
+## 2026-07-08 — Verità da input multipli: se la stessa chiave ha due fonti che discordano, NON auto-applicare
+
+**Sintomo (prova d'accuratezza, Cataneo):** il perser trovava ~15 errori, "Correggi" li correggeva, ma al
+ri-controllo ritrovava gli **stessi errori al contrario** e li riportava al valore vecchio (flip-flop infinito).
+
+**Causa:** `verifyFromFolder` confrontava **ogni file PDF** contro la riga del mese. Se la cartella aveva
+**più buste sullo stesso (anno,mese)** (doppioni `... (1).PDF`, conguagli, file misfilati), nascevano **due
+"verità" in conflitto sulla stessa cella**; `applyTruthFixes` (last-wins) ne applicava una, e al giro dopo la
+riga combaciava con un file e contrastava con l'altro → oscillazione. **Il write in tabella era già corretto:**
+il difetto era la *verità ambigua a monte*. (Diagnosi verificata riproducendo il round-trip in Node, non a occhio.)
+
+**Regola per me:** quando una feature "porta il dato alla verità estratta", la verità dev'essere **univoca per
+chiave** prima di scrivere. Se più fonti mappano sulla stessa chiave: se **concordano** → collassa a una; se
+**discordano** → è un CONFLITTO, non correggere in automatico, **segnalalo** e lascia decidere all'umano
+(dati legali!). Un tool che verifica non deve *dipendere* dall'input perfetto: un errore umano silenzioso che
+sovrascrive un dato giusto è peggio di un errore visibile. Fix: raggruppo per chiave, `truthSignature` per
+riconoscere i doppioni identici, campo `mesiInConflitto` mostrato nel modale.

@@ -379,10 +379,11 @@ export function usePayslipUpload({
       try {
         const base64String = await toBase64(file);
 
-        // Retry automatico contro la coda lunga di Gemini: 1 retry silenzioso se la prima
-        // chiamata fallisce per timeout/abort. Nuova rotazione delle chiavi → quasi sempre
-        // passa al secondo giro. Costo zero se la prima va.
-        const MAX_ATTEMPTS = 2;
+        // Retry automatico contro la coda lunga/throttle di Gemini: fino a 2 retry (3 tentativi
+        // totali) con backoff crescente. Ogni tentativo re-invoca la Function → nuova rotazione
+        // chiavi + budget fresco → quasi sempre passa entro il 2°/3° giro. Costo zero se la 1ª va
+        // (solo le buste che falliscono ritentano): recupera i ~1% "Nessun dato valido".
+        const MAX_ATTEMPTS = 3;
         const scanBody = JSON.stringify({
           fileData: base64String,
           mimeType: file.type || 'application/pdf',
@@ -436,6 +437,9 @@ export function usePayslipUpload({
           if (attempt < MAX_ATTEMPTS) {
             retryCount++;
             console.warn(`⏳ Retry automatico per ${file.name} (${attempt + 1}/${MAX_ATTEMPTS}) dopo fallimento`);
+            // Backoff crescente (0,6s poi 1,2s): un fallimento è spesso un momento di coda/throttle;
+            // una breve pausa lo lascia passare e dà tempo alla rotazione chiavi lato Function.
+            await new Promise(r => setTimeout(r, 600 * attempt));
           }
         }
 

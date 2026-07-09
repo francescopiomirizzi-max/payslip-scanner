@@ -5,7 +5,7 @@ import {
   User, BadgeCheck, CalendarPlus, Wallet, Ticket, CalendarClock,
   Briefcase, Eye, X, Loader2, ScanLine, Send, Gavel,
   Handshake, CheckCircle2, AlertCircle, Search, ChevronDown,
-  QrCode, Download, Bot, Cpu, FileText, Save, CheckCircle, AlertTriangle, Archive, Zap, LineChart,
+  QrCode, Download, Bot, Cpu, FileText, Save, CheckCircle, AlertTriangle, Archive, Zap, LineChart, ShieldCheck,
 } from 'lucide-react';
 import { YEARS } from '../../types';
 import { getCompanyGradient, getCompanyLogo } from '../../config/profiles';
@@ -21,7 +21,7 @@ const MESE_ABBR = ['Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set'
 // locale del menu Azioni (dropdown + click-outside). Legge tutto dal context.
 const WorkerDetailHeader: React.FC = () => {
   const {
-    worker, badgeStyles, onBack, onShowReport, onSendPec, onPrintTables, onOpenIstat,
+    worker, badgeStyles, onBack, onShowReport, onSendPec, onPrintTables, onOpenIstat, onOpenAccuracyCheck,
     startClaimYear, onStartClaimYearChange, onUpdateWorkerFields,
     onSetActiveTab, activeTab, archiveCount,
   } = useWorkerDetail();
@@ -244,6 +244,15 @@ const WorkerDetailHeader: React.FC = () => {
                       <LineChart className="w-4 h-4 text-amber-500" strokeWidth={2.5} />
                       Calcolo interessi (ISTAT)
                     </button>
+                    {!isReadOnly && (worker.profilo === 'RFI' || worker.profilo === 'TRENITALIA') && (
+                    <button
+                      onClick={() => { onOpenAccuracyCheck(); setIsActionsOpen(false); }}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-sm font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors border-t border-slate-100 dark:border-slate-800"
+                    >
+                      <ShieldCheck className="w-4 h-4 text-emerald-500" strokeWidth={2.5} />
+                      Verifica accuratezza (dal disco)
+                    </button>
+                    )}
                     {!isReadOnly && (
                     <button
                       onClick={() => { onSendPec(); setIsActionsOpen(false); }}

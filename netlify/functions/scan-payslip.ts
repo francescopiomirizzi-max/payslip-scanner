@@ -384,7 +384,13 @@ const PROMPT_RFI = `
   #### §TRASFERTA — voce 0AA1 (regola speciale: NON sommare tu, trascrivi le righe)
   La voce 0AA1 "Ind.trasferta (esente)" compare su PIÙ righe (una per giornata di trasferta), spesso su più pagine.
   Trascrivi in un array "trasferta_esente_righe" l'importo della colonna Competenze di OGNI riga con codice 0AA1 e
-  descrizione "Ind.trasferta (esente)", nell'ordine in cui appaiono, INCLUSE le righe sulle pagine successive.
+  descrizione "Ind.trasferta (esente)", nell'ordine in cui appaiono.
+  ⚠️ DUE ERRORI DA EVITARE:
+  1) PAGINE: la busta RFI ha 2-3 pagine e le righe 0AA1 CONTINUANO sulle pagine successive. Scorri OGNI pagina fino
+     in fondo: capita spesso che una o più righe 0AA1 stiano sulla 2ª o 3ª pagina. NON fermarti alla prima pagina.
+  2) RIGHE IDENTICHE: trascrivi UNA voce per OGNI riga fisica che vedi, anche quando molte righe hanno lo STESSO
+     importo (es. otto righe da 12,00 → devi scrivere 12.00 esattamente otto volte). NON fondere, NON saltare e
+     NON duplicare le righe con importo uguale: conta le righe con attenzione.
   NON includere le righe 0AA2 "Ind.trasferta (Imponibile)" (è un'altra voce, non tracciata). Se non ci sono righe
   0AA1, restituisci un array vuoto []. Esempio: se vedi 3 righe 0AA1 da 12,00 / 22,16 / 37,65 → [12.00, 22.16, 37.65].
 
@@ -529,7 +535,13 @@ const PROMPT_TRENITALIA = `
   #### §TRASFERTA — voce 0AA1 (regola speciale: NON sommare tu, trascrivi le righe)
   La voce 0AA1 "Ind.trasferta (esente)" compare su PIÙ righe (una per giornata di trasferta), spesso su più pagine.
   Trascrivi in un array "trasferta_esente_righe" l'importo della colonna Competenze di OGNI riga con codice 0AA1 e
-  descrizione "Ind.trasferta (esente)", nell'ordine in cui appaiono, INCLUSE le righe sulle pagine successive.
+  descrizione "Ind.trasferta (esente)", nell'ordine in cui appaiono.
+  ⚠️ DUE ERRORI DA EVITARE:
+  1) PAGINE: la busta RFI ha 2-3 pagine e le righe 0AA1 CONTINUANO sulle pagine successive. Scorri OGNI pagina fino
+     in fondo: capita spesso che una o più righe 0AA1 stiano sulla 2ª o 3ª pagina. NON fermarti alla prima pagina.
+  2) RIGHE IDENTICHE: trascrivi UNA voce per OGNI riga fisica che vedi, anche quando molte righe hanno lo STESSO
+     importo (es. otto righe da 12,00 → devi scrivere 12.00 esattamente otto volte). NON fondere, NON saltare e
+     NON duplicare le righe con importo uguale: conta le righe con attenzione.
   NON includere le righe 0AA2 "Ind.trasferta (Imponibile)" (è un'altra voce, non tracciata). Se non ci sono righe
   0AA1, restituisci un array vuoto []. Esempio: se vedi 3 righe 0AA1 da 12,00 / 22,16 / 37,65 → [12.00, 22.16, 37.65].
 

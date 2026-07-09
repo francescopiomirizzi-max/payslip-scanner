@@ -13,6 +13,7 @@ export interface WorkerDetailContextValue {
   onSendPec: () => void;
   onPrintTables: () => void;
   onOpenIstat: () => void;
+  onOpenAccuracyCheck: () => void;
   startClaimYear: number;
   onStartClaimYearChange: (y: number) => void;
   /** Persistenza campi worker (cloud-synced via auto-sync useWorkers). */
