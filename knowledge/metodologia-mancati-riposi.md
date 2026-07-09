@@ -74,6 +74,10 @@ CCNL **Autoferrotranvieri** e successive integrazioni:
 - Pausa di guida art. 7 (cronotachigrafo): fuori perimetro (dati non nel prospetto turni).
 - I documenti del perito sono **template** (esempi "Clarino Francesco" / Ferrovie Sud Est), ma la tabella
   paga e il periodo (2011–2024) coincidono col caso Viterbo.
+  - **Aggiornamento 09/07/2026:** consegnata da Vincenzo una relazione tecnica su **Monteleone Giuseppe**,
+    operatore d'esercizio **Ferrovie del Sud Est (FSE)** — ora soggetto **reale** di una nuova pratica riposi
+    (buste 2009–2024). Il metodo è identico a quello qui sopra (nessuna modifica). Delta + nodo tariffa in
+    [`tasks/analisi-relazione-monteleone-fse-2026-07-09.md`](../tasks/analisi-relazione-monteleone-fse-2026-07-09.md).
 - Vademecum FAST Turni/Riposi (561/2006 + D.Lgs. 234/2007) tra le fonti sul Desktop.
 
 Collegati: [`ccnl-e-normativa.md`](ccnl-e-normativa.md) · [`avvocato-decisioni.md`](avvocato-decisioni.md) · [`glossario.md`](glossario.md)

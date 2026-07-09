@@ -10,7 +10,7 @@
 // Le stringhe Tailwind restano literal (necessario per il JIT purge).
 // ============================================================
 
-import { Building2, Train, Coffee, Sparkles, Truck } from 'lucide-react';
+import { Building2, Train, Coffee, Sparkles, Truck, TramFront } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 // ── Aziende custom: 6 famiglie cromatiche assegnate deterministicamente ──────
@@ -292,6 +292,52 @@ export const SYSTEM_PROFILES: Record<string, SystemProfile> = {
       icon: Truck,
     },
   },
+
+  // Ferrovie del Sud Est (Gruppo FS). Famiglia cromatica UI: 'teal' (verde-adiacente, già
+  // cablata ovunque), per distinguersi da Clean Service (emerald) e Trenitalia (red); il verde
+  // di brand vive nel logo. Vertenza ferie ex art. 7 Dir. 2003/88/CE (Williams/Lock), metodo
+  // media 12 mesi delle indennità "di incomodo" (= motore ferie esistente).
+  FSE: {
+    key: 'FSE',
+    label: 'FSE',
+    sub: 'Ferrovie Sud Est',
+    detailLabel: 'Ferrovie del Sud Est',
+    pec: '',
+    ccnl: 'CCNL Autoferrotranvieri',
+    ccnlRef: 'Autoferrotranvieri/TPL',
+    ccnlSummary: 'Ferrovie del Sud Est e Servizi Automobilistici S.r.l. (Gruppo FS) applica il CCNL Autoferrotranvieri. La vertenza ferie segue l\'art. 7 Dir. 2003/88/CE (CGUE Williams/Lock): le indennità "di incomodo" (turno, domenicale, presenza, trasferte…) percepite nei 12 mesi precedenti vanno incluse nella retribuzione feriale, con media giornaliera su quel periodo. Cedolino ZUCCHETTI: importi indennità dalla colonna "Competenze".',
+    ccnlHighlights: [
+      'CCNL Autoferrotranvieri (Gruppo FS)',
+      'Ferie ex art. 7 Dir. 2003/88/CE (Williams/Lock)',
+      'Indennità di incomodo su media 12 mesi',
+      'Cedolino ZUCCHETTI → importi da "Competenze"',
+    ],
+    hex: '#0d9488',
+    badge: {
+      filter: 'bg-teal-600 text-white shadow-lg shadow-teal-500/40 ring-2 ring-teal-400 scale-105 border-transparent',
+      card: 'bg-teal-100/50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-400 border-teal-200 dark:border-teal-700/50',
+      detail: 'bg-teal-50 dark:bg-teal-900/30 text-teal-600 dark:text-teal-400 border-teal-200 dark:border-teal-700/50',
+      archive: 'bg-teal-100 text-teal-700 border-teal-200',
+      pivot: 'text-teal-400 border-teal-600 bg-teal-900/30',
+      pivotHeader: 'text-teal-700',
+      statsBg: 'bg-teal-600',
+    },
+    footer: {
+      wrap: 'bg-teal-50 dark:bg-teal-900/30 border-teal-200 dark:border-teal-700/50',
+      dot: 'bg-teal-600 dark:bg-teal-400 dark:shadow-[0_0_8px_currentColor]',
+      name: 'text-teal-800 dark:text-teal-300',
+      count: 'text-teal-600 dark:text-teal-500',
+    },
+    modal: {
+      color: '#0d9488',
+      glow: '0 0 60px -15px rgba(13, 148, 136, 0.7)',
+      gradient: 'from-teal-600 via-teal-500 to-emerald-600',
+      avatarBg: 'from-teal-600 to-emerald-600',
+      avatarText: 'text-white',
+      lightGlow: 'rgba(13, 148, 136, 0.5)',
+      icon: TramFront,
+    },
+  },
 };
 
 // ── Helper di accesso ───────────────────────────────────────────────────────
@@ -326,6 +372,7 @@ const COMPANY_LOGOS: Record<string, { file: string; scale?: number }> = {
   ELIOR: { file: 'elior.png' },
   MERCITALIA: { file: 'mercitalia.svg' },
   CLEAN_SERVICE: { file: 'cleanservice.png', scale: 1.3 },
+  FSE: { file: 'fse.svg' },
 };
 
 const ELIOR_MAGAZZINO_LOGO = 'elior-services.png';
@@ -356,6 +403,7 @@ const SYSTEM_COLOR_KEY: Record<string, string> = {
   ELIOR: 'orange',
   CLEAN_SERVICE: 'emerald',
   MERCITALIA: 'amber',
+  FSE: 'teal',
 };
 
 const CUSTOM_COLOR_KEYS = ['fuchsia', 'violet', 'cyan', 'rose', 'indigo', 'teal'];

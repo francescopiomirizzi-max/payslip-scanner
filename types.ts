@@ -18,7 +18,7 @@ export const YEARS = Array.from({ length: 19 }, (_, i) => 2007 + i);
 // --- MODIFICA CHIRURGICA 1: TIPO APERTO ---
 // Invece di limitare alle sole 3 aziende, lo apriamo a qualsiasi stringa, 
 // mantenendo i suggerimenti per le 3 principali.
-export type ProfiloAzienda = 'RFI' | 'TRENITALIA' | 'ELIOR' | 'CLEAN_SERVICE' | 'MERCITALIA' | string;
+export type ProfiloAzienda = 'RFI' | 'TRENITALIA' | 'ELIOR' | 'CLEAN_SERVICE' | 'MERCITALIA' | 'FSE' | string;
 
 export interface AnnoDati {
   id?: string;
@@ -279,6 +279,41 @@ export const INDENNITA_MERCITALIA_FISSE: ColumnDef[] = [
   { id: '1025', label: 'Scatti Anz.',   subLabel: '(1025)', width: 'min-w-[110px]', type: 'currency' },
 ];
 
+// Colonne FSE (Ferrovie del Sud Est — Gruppo FS, cedolino ZUCCHETTI a 7 colonne).
+// Vertenza ferie ex art. 7 Dir. 2003/88/CE: si valorizzano le indennità "di incomodo" percepite
+// nei 12 mesi precedenti (media giornaliera × giorni ferie). Importi letti dalla colonna COMPETENZE.
+// Set ricostruito su 40 cedolini reali di Clarino (2023-2025), mappato sulle categorie del PERITO
+// (che lavora per descrizione, senza codici). STRAORDINARI/FESTIVI ESCLUSI (scelta 09/07: seguiamo
+// il perito, il cui riepilogo non ha colonna straordinario → totale di riferimento 8.170,94 €).
+// Codici del periodo vecchio (percorrenze/nastri/flessibilità/riserva) da confermare in fase OCR
+// sui cedolini 2011-2016 (scansioni immagine). Vedi tasks/fse-profilo-incidenze-spec.md.
+export const INDENNITA_FSE: ColumnDef[] = [
+  { id: 'I86178', label: 'Comp. Presenza',    subLabel: '(I86178)', width: 'min-w-[120px]', type: 'currency' },
+  { id: 'I85240', label: 'Ind. Turno 5A',     subLabel: '(I85240)', width: 'min-w-[120px]', type: 'currency' },
+  { id: 'I85245', label: 'Ind. Turno 5A (2)', subLabel: '(I85245)', width: 'min-w-[120px]', type: 'currency' },
+  { id: 'I85248', label: 'Ind. Domenicale',   subLabel: '(I85248)', width: 'min-w-[120px]', type: 'currency' },
+  { id: 'I85210', label: 'Ord. Nott. 20%',    subLabel: '(I85210)', width: 'min-w-[120px]', type: 'currency' },
+  { id: 'I86161', label: 'Comp. Turno Prod.', subLabel: '(I86161)', width: 'min-w-[130px]', type: 'currency' },
+  { id: 'I86174', label: 'Prod. a Vuoto',     subLabel: '(I86174)', width: 'min-w-[120px]', type: 'currency' },
+  { id: 'I86110', label: 'Ind. Disponib.',    subLabel: '(I86110)', width: 'min-w-[120px]', type: 'currency' },
+  { id: 'AA712',  label: 'Funzione Sala',     subLabel: '(AA712)',  width: 'min-w-[120px]', type: 'currency' },
+  { id: 'T8305',  label: 'Trasferta 90%',     subLabel: '(T8305)',  width: 'min-w-[120px]', type: 'currency' },
+  { id: 'T8306',  label: 'Trasferta 50%',     subLabel: '(T8306)',  width: 'min-w-[120px]', type: 'currency' },
+  { id: 'T8309',  label: 'Trasferta C1 10%',  subLabel: '(T8309)',  width: 'min-w-[130px]', type: 'currency' },
+  { id: 'I8320',  label: 'Rimb. Vitto',       subLabel: '(I8320)',  width: 'min-w-[120px]', type: 'currency' },
+];
+
+// Voci FISSE FSE (denominatore % incidenza) — box "ELEMENTI DELLA RETRIBUZIONE" della testata
+// (etichette a parole, NON codici voce). Scelta 09/07: 5 elementi separati. Il prompt OCR deve
+// mapparle su questi id sintetici. La loro somma = voce AA245 "Retribuzione" della tabella.
+export const INDENNITA_FSE_FISSE: ColumnDef[] = [
+  { id: 'fse_minimo',      label: 'Minimo Contr.', subLabel: '(Elem.)', width: 'min-w-[120px]', type: 'currency' },
+  { id: 'fse_contingenza', label: 'Contingenza',   subLabel: '(Elem.)', width: 'min-w-[120px]', type: 'currency' },
+  { id: 'fse_scatti',      label: 'Scatti Anz.',   subLabel: '(Elem.)', width: 'min-w-[110px]', type: 'currency' },
+  { id: 'fse_tdr',         label: 'T.D.R.',        subLabel: '(Elem.)', width: 'min-w-[100px]', type: 'currency' },
+  { id: 'fse_mensa',       label: 'Ind. Mensa',    subLabel: '(Elem.)', width: 'min-w-[110px]', type: 'currency' },
+];
+
 // --- COLONNA ARRETRATI (Universale) ---
 export const COLONNA_ARRETRATI: ColumnDef = {
   id: 'arretrati',
@@ -323,6 +358,9 @@ export const getColumnsByProfile = (profilo: ProfiloAzienda, eliorType?: 'viaggi
         break;
       case 'MERCITALIA':
         specificColumns = INDENNITA_MERCITALIA;
+        break;
+      case 'FSE':
+        specificColumns = INDENNITA_FSE;
         break;
       case 'RFI':
       case 'TRENITALIA':
@@ -413,6 +451,8 @@ export const getFixedColumnsByProfile = (profilo: ProfiloAzienda): ColumnDef[] =
       return INDENNITA_CLEAN_SERVICE_FISSE;
     case 'ELIOR':
       return INDENNITA_ELIOR_FISSE;
+    case 'FSE':
+      return INDENNITA_FSE_FISSE;
     default:
       return [];
   }
