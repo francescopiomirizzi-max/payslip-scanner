@@ -282,25 +282,32 @@ export const INDENNITA_MERCITALIA_FISSE: ColumnDef[] = [
 // Colonne FSE (Ferrovie del Sud Est — Gruppo FS, cedolino ZUCCHETTI a 7 colonne).
 // Vertenza ferie ex art. 7 Dir. 2003/88/CE: si valorizzano le indennità "di incomodo" percepite
 // nei 12 mesi precedenti (media giornaliera × giorni ferie). Importi letti dalla colonna COMPETENZE.
-// Set ricostruito su 40 cedolini reali di Clarino (2023-2025), mappato sulle categorie del PERITO
-// (che lavora per descrizione, senza codici). STRAORDINARI/FESTIVI ESCLUSI (scelta 09/07: seguiamo
-// il perito, il cui riepilogo non ha colonna straordinario → totale di riferimento 8.170,94 €).
-// Codici del periodo vecchio (percorrenze/nastri/flessibilità/riserva) da confermare in fase OCR
-// sui cedolini 2011-2016 (scansioni immagine). Vedi tasks/fse-profilo-incidenze-spec.md.
+// Set RICONCILIATO col riepilogo del perito (09/07 sera, tasks/riconciliazione-perito-clarino-
+// 2026-07-09.md): 49/49 mesi nov2020-nov2024 riprodotti al centesimo con queste voci. Il perito
+// ESCLUDE presenza/giornaliera (I86178/I86005/IX0023 — serve solo come contatore GG nel prompt),
+// funzione sala (AA712), notturno, straordinari/festivi, ticket. Due ere di codici sui cedolini
+// testuali: IX (lug2017-ott2020) e I8/T8 (nov2020-oggi); era 2011-2016 (scansioni, codici a 3
+// cifre) da censire in fase OCR. Nel 2017-2020 il perito somma ANCHE ricostruzioni a tariffa non
+// stampate (3,50×GG; 1,76×gg-Art5A) → quesito aperto per l'avvocato, NON colonne.
 export const INDENNITA_FSE: ColumnDef[] = [
-  { id: 'I86178', label: 'Comp. Presenza',    subLabel: '(I86178)', width: 'min-w-[120px]', type: 'currency' },
+  // Era recente (nov 2020 → oggi)
   { id: 'I85240', label: 'Ind. Turno 5A',     subLabel: '(I85240)', width: 'min-w-[120px]', type: 'currency' },
-  { id: 'I85245', label: 'Ind. Turno 5A (2)', subLabel: '(I85245)', width: 'min-w-[120px]', type: 'currency' },
+  { id: 'I85245', label: 'Ind. Turno 5B',     subLabel: '(I85245)', width: 'min-w-[120px]', type: 'currency' },
   { id: 'I85248', label: 'Ind. Domenicale',   subLabel: '(I85248)', width: 'min-w-[120px]', type: 'currency' },
-  { id: 'I85210', label: 'Ord. Nott. 20%',    subLabel: '(I85210)', width: 'min-w-[120px]', type: 'currency' },
-  { id: 'I86161', label: 'Comp. Turno Prod.', subLabel: '(I86161)', width: 'min-w-[130px]', type: 'currency' },
+  { id: 'I86025', label: 'Ind. Aggiuntiva',   subLabel: '(I86025)', width: 'min-w-[120px]', type: 'currency' },
   { id: 'I86174', label: 'Prod. a Vuoto',     subLabel: '(I86174)', width: 'min-w-[120px]', type: 'currency' },
-  { id: 'I86110', label: 'Ind. Disponib.',    subLabel: '(I86110)', width: 'min-w-[120px]', type: 'currency' },
-  { id: 'AA712',  label: 'Funzione Sala',     subLabel: '(AA712)',  width: 'min-w-[120px]', type: 'currency' },
+  { id: 'T8304',  label: 'Trasferta',         subLabel: '(T8304)',  width: 'min-w-[110px]', type: 'currency' },
   { id: 'T8305',  label: 'Trasferta 90%',     subLabel: '(T8305)',  width: 'min-w-[120px]', type: 'currency' },
   { id: 'T8306',  label: 'Trasferta 50%',     subLabel: '(T8306)',  width: 'min-w-[120px]', type: 'currency' },
   { id: 'T8309',  label: 'Trasferta C1 10%',  subLabel: '(T8309)',  width: 'min-w-[130px]', type: 'currency' },
-  { id: 'I8320',  label: 'Rimb. Vitto',       subLabel: '(I8320)',  width: 'min-w-[120px]', type: 'currency' },
+  { id: 'T8323',  label: 'Trasferta (var.)',  subLabel: '(T8323)',  width: 'min-w-[120px]', type: 'currency' },
+  // Era IX (lug 2017 → ott 2020)
+  { id: 'IX0002', label: 'Art. 5A',           subLabel: '(IX0002)', width: 'min-w-[110px]', type: 'currency' },
+  { id: 'IX0001', label: 'Art. 5/B',          subLabel: '(IX0001)', width: 'min-w-[110px]', type: 'currency' },
+  { id: 'IX0051', label: 'Trasf. A1 24%',     subLabel: '(IX0051)', width: 'min-w-[120px]', type: 'currency' },
+  { id: 'IX0052', label: 'Trasf. A2 9%',      subLabel: '(IX0052)', width: 'min-w-[120px]', type: 'currency' },
+  { id: 'IX0057', label: 'Trasf. B1 90%',     subLabel: '(IX0057)', width: 'min-w-[120px]', type: 'currency' },
+  { id: 'IX0058', label: 'Trasf. B2 50%',     subLabel: '(IX0058)', width: 'min-w-[120px]', type: 'currency' },
 ];
 
 // Voci FISSE FSE (denominatore % incidenza) — box "ELEMENTI DELLA RETRIBUZIONE" della testata

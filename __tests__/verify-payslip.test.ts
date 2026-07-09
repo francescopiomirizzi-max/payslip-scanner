@@ -83,6 +83,14 @@ describe('buildVerifyPrompt — selezione regole aziendali', () => {
         expect(buildVerifyPrompt('MERCITALIA')).toContain('ADP');
     });
 
+    it('FSE usa i giorni della voce presenza e la regola ferie ÷ 6,5', () => {
+        const p = buildVerifyPrompt('FSE');
+        expect(p).toContain('ZUCCHETTI');
+        expect(p).toContain('I86178');       // voce presenza = contatore giorni
+        expect(p).toContain('÷ 6,5');        // ferie F2105 in ore
+        expect(p).toContain('fse_minimo');   // voci fisse dal box testata
+    });
+
     it('azienda sconosciuta ricade sulle regole generiche', () => {
         expect(buildVerifyPrompt('PIPPO_SPA')).toContain('PIPPO_SPA');
     });
@@ -92,7 +100,7 @@ describe('buildVerifyPrompt — selezione regole aziendali', () => {
     });
 
     it('include sempre la Regola Globale TFR', () => {
-        for (const co of ['ELIOR', 'RFI', 'CLEAN_SERVICE', 'MERCITALIA', 'CUSTOM']) {
+        for (const co of ['ELIOR', 'RFI', 'CLEAN_SERVICE', 'MERCITALIA', 'FSE', 'CUSTOM']) {
             expect(buildVerifyPrompt(co)).toContain('REGOLA GLOBALE TFR');
         }
     });

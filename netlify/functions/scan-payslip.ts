@@ -903,6 +903,121 @@ const PROMPT_MERCITALIA = `
   }
 `;
 // =========================================================================
+// 3-bis. PROMPT FSE (Ferrovie del Sud Est — cedolino ZUCCHETTI a 7 colonne)
+// Set voci = riconciliazione deterministica col riepilogo del perito
+// (tasks/riconciliazione-perito-clarino-2026-07-09.md): 49/49 mesi al centesimo.
+// =========================================================================
+const PROMPT_FSE = `
+  Sei un estrattore dati deterministico specializzato in Buste Paga FSE (Ferrovie del Sud Est e Servizi Automobilistici SRL), elaborate con il gestionale ZUCCHETTI.
+  Il tuo unico scopo è generare un JSON valido, preciso e impeccabile.
+  [REGOLE SUI NUMERI]: Ignora i punti delle migliaia (es. 1.254,81 diventa 1254.81). Usa sempre e solo il PUNTO (.) come separatore decimale. MAI la virgola nel JSON finale.
+  [REGOLE OCR]: I documenti scansionati possono contenere errori di lettura (es. "O" al posto di "0"). Usa le descrizioni testuali come conferma se il codice risulta sporco.
+
+  [ANATOMIA ZUCCHETTI FSE — STRUTTURA DELLE COLONNE (CRITICA)]
+  La tabella centrale delle voci ha ESATTAMENTE queste 7 colonne, in quest'ordine da sinistra a destra:
+    1) "CODICE"            -> codice alfanumerico (es. I85240, T8305, IX0002, F2105)
+    2) "DESCRIZIONE VOCE"  -> il nome della voce
+    3) "ORE/GIORNI"        -> quantità, preceduta dal marcatore G (giorni), H (ore) o N (numero)
+    4) "IMPORTO UNITARIO"  -> tariffa unitaria (3-5 decimali)
+    5) "IMPORTI FIGURATI"  -> importi figurativi NON pagati
+    6) "COMPETENZE"        -> L'IMPORTO IN EURO EFFETTIVAMENTE PAGATO (le indennità si leggono QUI)
+    7) "TRATTENUTE"        -> le decurtazioni
+  REGOLA D'ORO DELLE COLONNE: l'importo di un'indennità si trova SEMPRE nella colonna "COMPETENZE" (6ª), MAI in "IMPORTO UNITARIO" né in "IMPORTI FIGURATI".
+  In testata c'è il box "ELEMENTI DELLA RETRIBUZIONE" (voci fisse, etichette a parole) e la banda "FERIE SPETTANTI … GG. INPS" (NON usarla per i giorni: vedi §3).
+  Il retro/pagina 2 contiene solo dati fiscali (IRPEF, contributi, T.F.R.). Se il file contiene più COPIE IDENTICHE della stessa pagina, considerale UNA volta sola; se lo stesso codice compare su RIGHE diverse della tabella voci, SOMMA gli importi.
+
+  ### 0. LE DUE ERE DI CODICI (stessa azienda, codici diversi nel tempo)
+  - Cedolini da NOVEMBRE 2020 in poi: codici I8..../T8.... (es. I85240, T8305).
+  - Cedolini da LUGLIO 2017 a OTTOBRE 2020: codici IX.... (es. IX0002, IX0051).
+  - Un cedolino contiene UNA sola era: le chiavi dell'altra era restano 0.0.
+  - Cedolini 2011-2016 (scansioni, layout fax-simile INAIL con codici a 2-3 CIFRE, es. 029, 663): l'era NON è ancora mappata → estrai solo "month"/"year", tutte le chiavi "codes" a 0.0 e "aiWarning": "Layout FSE era 2011-2016 non mappato".
+
+  ### 1. PERIODO (MESE / ANNO) E MENSILITÀ AGGIUNTIVE
+  - Box "PERIODO DI RETRIBUZIONE" in alto a destra (es. "Marzo 2023"). "month": 1-12, "year": 4 cifre.
+  - 🚨 Se sotto il periodo compare "13a mens." o "14a mens." (cedolino di tredicesima/quattordicesima, voci R4210/R4230): NON è un mensile. Restituisci month/year del box, TUTTE le chiavi "codes" a 0.0, daysWorked 0.0, daysVacation 0.0, arretrati 0.0 e "eventNote": "[13a/14a mensilità - fuori conteggio]".
+
+  ### 2. GIORNI LAVORATI (daysWorked) — DAI GIORNI DELLA VOCE PRESENZA (MAI DALLA BANDA)
+  daysWorked = il numero di GIORNI (colonna "ORE/GIORNI", marcatore G) della voce di presenza dell'era:
+  - I86178 (Compenso di presenza) — era recente. Es.: "I86178 Compenso di presenza G 21,000" -> daysWorked = 21.0
+  - I86005 (Indennita' giornaliera) — cedolini ~nov 2020-2021.
+  - IX0023 (Indenn. giornaliera) — era IX 2017-2020.
+  È VIETATO usare "GG LAV.", "GG. RETR." o "GG. INPS" della banda di testata: NON sono i giorni di servizio effettivo.
+  Se la voce di presenza è del tutto assente -> daysWorked = 0.0 (mese di sola assenza: è normale).
+
+  ### 3. FERIE DEL MESE (daysVacation) — ORE F2105 ÷ 6,5
+  - Cerca la voce F2105 (Ferie godute): il valore è in ORE (marcatore H). daysVacation = ore ÷ 6.5.
+    Esempi REALI: "F2105 H 6,500" -> 1.0 · "F2105 H 45,500" -> 7.0 · "F2105 H 52,000" -> 8.0.
+  - [DIVIETO]: NON confondere F2105 con X2016 (Permessi retribuiti) né con PIH../PX.. (permessi L104, congedi INPS): hanno la stessa forma ma NON sono ferie.
+  - [DIVIETO]: NON usare la banda "FERIE SPETTANTI/GODUTE/RESIDUE" di testata né i ratei "FERIE : Spt.GG" del retro.
+  - Se F2105 è assente -> daysVacation = 0.0.
+
+  ### 4. TICKET MENSA (Codici I86121 / I86120)
+  - I86121 (Ticket mensa elettr.): "count" = giorni (marcatore G), "ticketRate" = IMPORTO UNITARIO (es. 0.50, 10.50).
+  - I86120 (era 2021): "count" = numero (marcatore N), "ticketRate" = importo unitario (es. 7.30).
+  - Questi codici NON devono comparire nella mappa "codes". Se assenti, "count" e "ticketRate" = 0.0.
+
+  ### 5. MASTER LIST CODICI FSE — importi dalla colonna "COMPETENZE"
+  Per ognuno dei 16 codici sotto, estrai l'importo dalla colonna "COMPETENZE" (importi positivi).
+  REGOLA D'ORO: il JSON DEVE contenere TUTTE le 21 chiavi (16 variabili + 5 fisse del §5-bis). Codice assente -> 0.0.
+
+  Era recente (nov 2020 → oggi):
+  - I85240 (Punto 5 acc.21/5/81 (1) — ind. turno Art.5A)
+  - I85245 (Punto 5 acc.21/5/81 (2) — Art.5B)
+  - I85248 (Indennità domenicale)
+  - I86025 (Indennità Aggiuntiva)
+  - I86174 (Comp. produttività a vuoto)
+  - T8304, T8305 (Trasferta 90%), T8306 (Trasferta 50%), T8309 (Trasferta C1 10%), T8323 (trasferte)
+  Era IX (lug 2017 → ott 2020):
+  - IX0002 (Art. 5A)
+  - IX0001 (Art. 5/B)
+  - IX0051 (Trasferta A1 24%), IX0052 (Trasferta A2 9%), IX0057 (Trasferta B1 90%), IX0058 (Trasferta B2 50%)
+
+  ### 5-bis. VOCI FISSE — box "ELEMENTI DELLA RETRIBUZIONE" in TESTATA (base % incidenza)
+  [SCOPO]: servono SOLO al calcolo delle percentuali di incidenza, NON al credito ferie.
+  ⚠️ Si leggono dal BOX in testata (etichette a parole, NON codici voce), mappate su queste 5 chiavi:
+  - "fse_minimo"      <- "Minimo contr."
+  - "fse_contingenza" <- "Contingenza"
+  - "fse_scatti"      <- "Scatti"
+  - "fse_tdr"         <- "T.D.R."
+  - "fse_mensa"       <- "Ind.mensa"
+  ⚠️ Il TOTALE del box coincide con la voce AA245 (Retribuzione) della tabella: usa AA245 SOLO come verifica (fse_minimo+fse_contingenza+fse_scatti+fse_tdr+fse_mensa ≈ AA245), NON inserirla in "codes".
+
+  ### 6. CODICI ESCLUSI (VIETATO metterli in "codes" — il conteggio segue il modello del perito)
+  - I86178 / I86005 / IX0023 (presenza/giornaliera): usati SOLO come contatore giorni del §2. MAI il loro importo.
+  - AA712 (Compenso funzione sala), I85210 / IX0046 (notturno), I86161 (Comp. turno produttivo), I8320 / I86110.
+  - S11000 / IX0048 / V12000 / V12001 / I86125 (straordinari e festivi: ESCLUSI dal conteggio).
+  - PIH.. / PX.. (assenze e congedi INPS/L104), A0100 (ANF), TN.. (trattenute sindacali/associative), W75.. / W80.. (tariffe e TFR), L1110 e simili (malattia).
+
+  ### 7. ARRETRATI
+  Somma nel campo "arretrati" SOLO gli importi positivi (colonna COMPETENZE) delle voci la cui DESCRIZIONE contiene "UNA TANTUM", "ARRETRAT", "CONGUAGLIO" (case-insensitive). Se presenti, aggiungi "[Arretrati/UnaTantum]" a "eventNote". NON contarci le mensilità aggiuntive del §1.
+
+  ### 8. NOTE EVENTI E AUDITOR
+  - "eventNote": "[Malattia/Carenza]" se rilevi voci di malattia/infortunio; "[13a/14a mensilità - fuori conteggio]" per il §1; "[Arretrati/UnaTantum]" per il §7. Più marker separati da " + ". Altrimenti "".
+  - "aiWarning": daysWorked > 31 -> "Anomalia: Presenze > 31"; daysWorked = 0 con importi > 0 -> "Nessuna anomalia (mese di assenza/conguaglio)"; altrimenti "Nessuna anomalia".
+
+  ### 9. TFR
+  - "fondo_pregresso_31_12": riquadro "Imposta sul T.F.R" (retro/pagina 2), valore della riga W75005 "Fondo TFR al 31/12 a.p.". Se assente -> 0.0.
+  - "imponibile_tfr_mensile": TASSATIVAMENTE 0.0 — il cedolino FSE NON stampa un imponibile TFR annuo consolidato (la riga W75000 "Retribuzione TFR mese" è un valore MENSILE: NON usarla).
+
+  ### 10. 🚨 MODALITÀ CERTIFICAZIONE UNICA (CUD) 🚨
+  Se il documento è una "CERTIFICAZIONE UNICA" / "CUD": "isCUD": true, "month": 12, popola "imponibile_tfr_mensile" (imponibile TFR annuo) e "fondo_pregresso_31_12"; tutti gli altri campi a 0.0.
+
+  ### 11. FORMATO DI OUTPUT STRICT (DIVIETO DI MARKDOWN)
+  Restituisci ESCLUSIVAMENTE un oggetto JSON crudo. È SEVERAMENTE VIETATO usare formattazioni markdown come \`\`\`json o \`\`\`.
+
+  Esempio di output perfetto (busta di MARZO 2023, era recente, 1 giorno di ferie):
+  {
+    "isCUD": false, "month": 3, "year": 2023, "daysWorked": 21.0, "daysVacation": 1.0, "count": 19.0, "ticketRate": 0.50, "arretrati": 0.0, "eventNote": "", "aiWarning": "Nessuna anomalia",
+    "fondo_pregresso_31_12": 0.0, "imponibile_tfr_mensile": 0.0,
+    "codes": {
+      "I85240": 10.40, "I85245": 0.0, "I85248": 0.0, "I86025": 0.0, "I86174": 0.0,
+      "T8304": 0.0, "T8305": 133.34, "T8306": 0.0, "T8309": 0.0, "T8323": 0.0,
+      "IX0002": 0.0, "IX0001": 0.0, "IX0051": 0.0, "IX0052": 0.0, "IX0057": 0.0, "IX0058": 0.0,
+      "fse_minimo": 1254.81, "fse_contingenza": 542.39, "fse_scatti": 177.48, "fse_tdr": 56.96, "fse_mensa": 16.53
+    }
+  }
+`;
+// =========================================================================
 // 4. PROMPT GENERALE PER ELIOR
 // =========================================================================
 export const getEliorPrompt = (eliorType = 'viaggiante') => {
@@ -1058,7 +1173,8 @@ const PROMPT_DIRECTORY: Record<string, string> = {
   "RFI": PROMPT_RFI,
   "TRENITALIA": PROMPT_TRENITALIA,
   "CLEAN_SERVICE": PROMPT_CLEAN_SERVICE,
-  "MERCITALIA": PROMPT_MERCITALIA
+  "MERCITALIA": PROMPT_MERCITALIA,
+  "FSE": PROMPT_FSE
 };
 
 export const handler: Handler = async (event, context) => {

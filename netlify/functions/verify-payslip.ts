@@ -197,6 +197,56 @@ indennità ordinarie: sono confluiti in "arretrati". Non segnalarli come discrep
 **Voci fisse (1000 RETRIBUZIONE BASE, 1001 SALARIO PROFESS., 1025 SCATTI ANZIANITA'):** possono comparire tra i dati estratti. Sono le righe in TESTA alla tabella voci e il loro importo si legge nella colonna "Valori" (3ª colonna), NON in "Competenze". La riga 1100 (TOT.RETRIBUZIONE) è il loro totale di controllo. Confrontale SOLO con la colonna "Valori": NON segnalarle come discrepanza per il fatto che in "Competenze" non hanno importo.
 `;
 
+  } else if (co === "FSE") {
+    companyRules = `
+### REGOLE DI CALCOLO AZIENDALI — FSE / FERROVIE DEL SUD EST (gestionale ZUCCHETTI)
+
+**MARCATORI DEL LAYOUT:**
+Testata con "COD.AZ FSE FERROVIE DEL SUD EST E SERVIZI AUTOMOBILISTICI SRL", box "ELEMENTI DELLA
+RETRIBUZIONE" e banda "FERIE SPETTANTI … GG. INPS". La tabella voci ha 7 colonne:
+"CODICE | DESCRIZIONE VOCE | ORE/GIORNI | IMPORTO UNITARIO | IMPORTI FIGURATI | COMPETENZE | TRATTENUTE".
+Due ERE di codici: I8..../T8.... (da nov 2020) e IX.... (lug 2017 - ott 2020). Un cedolino ne contiene
+UNA sola: i codici dell'altra era a 0.0 nel JSON sono CORRETTI, non segnalarli come mancanti.
+
+**daysWorked — GIORNI DELLA VOCE PRESENZA, NON la banda (CRITICO):**
+daysWorked = giorni (colonna ORE/GIORNI, marcatore G) della voce di presenza dell'era:
+I86178 "Compenso di presenza" (recente) / I86005 "Indennita' giornaliera" (~2020-21) / IX0023
+"Indenn. giornaliera" (era IX). Es.: "I86178 G 21,000" → daysWorked corretto = 21.
+È VIETATO proporre come "suggested" i valori "GG LAV.", "GG. RETR." o "GG. INPS" della banda di
+testata: NON sono i giorni di servizio effettivo. Se la voce di presenza è assente, daysWorked = 0
+è CORRETTO (mese di sola assenza).
+
+**daysVacation — ORE F2105 ÷ 6,5:**
+La voce F2105 (Ferie godute) è in ORE (marcatore H): daysVacation = ore ÷ 6,5 (es. H 45,500 → 7.0).
+NON confondere F2105 con X2016 (Permessi retribuiti) né con PIH../PX.. (L104/congedi INPS).
+Se F2105 è assente → daysVacation = 0.0 è corretto. NON usare la banda ferie di testata né i ratei del retro.
+
+**ticket:** codici I86121 (giorni G × importo unitario, es. 0,50 o 10,50) o I86120 (era 2021, N × 7,30)
+→ solo "ticketRate"/"count". NON devono comparire in "codes".
+
+**Codici indennità (sotto-oggetto "codes"):** importo dalla colonna "COMPETENZE" (6ª), MAI da
+"IMPORTO UNITARIO" o "IMPORTI FIGURATI". Il set segue il MODELLO DEL PERITO: sono ESCLUSI di
+proposito (NON segnalarli come valori mancanti) i codici I86178/I86005/IX0023 (presenza — usati solo
+come contatore giorni), AA712 (funzione sala), I85210/IX0046 (notturno), I86161, I8320, I86110,
+S11000/IX0048/V12000/V12001/I86125 (straordinari/festivi), PIH../PX.. (INPS), TN.. (trattenute), W75../W80.. .
+
+**Voci fisse (chiavi fse_minimo, fse_contingenza, fse_scatti, fse_tdr, fse_mensa):** si leggono dal
+box "ELEMENTI DELLA RETRIBUZIONE" in TESTATA (etichette a parole: "Minimo contr.", "Contingenza",
+"Scatti", "T.D.R.", "Ind.mensa"), NON dalla tabella voci. La loro somma ≈ voce AA245 (Retribuzione).
+NON segnalarle come mancanti dal corpo voci.
+
+**Mensilità aggiuntive:** se sotto il periodo compare "13a mens." o "14a mens." (voci R4210/R4230),
+il cedolino è una tredicesima/quattordicesima: tutte le voci a 0.0 con eventNote dedicata sono CORRETTE.
+
+**Arretrati:** somma degli importi positivi (COMPETENZE) delle sole voci con descrizione
+"UNA TANTUM"/"ARRETRAT"/"CONGUAGLIO". Le mensilità aggiuntive NON sono arretrati.
+
+**TFR:** "fondo_pregresso_31_12" = riga W75005 "Fondo TFR al 31/12 a.p." (riquadro "Imposta sul
+T.F.R", retro). "imponibile_tfr_mensile" DEVE essere 0.0 anche a Dicembre: il cedolino FSE non
+stampa un imponibile TFR annuo consolidato (W75000 è un valore mensile, non usarlo). La Regola
+Globale TFR sotto si applica con questa eccezione.
+`;
+
   } else {
     // Custom / generico
     companyRules = `
