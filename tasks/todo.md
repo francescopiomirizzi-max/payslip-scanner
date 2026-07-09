@@ -64,6 +64,11 @@
 - [x] `verify-payslip.ts`: ramo FSE gemello (stesse regole, esclusioni esplicitate come NON-mancanti) · `scan-worker.ts`: FSE nell'enum (anti-confusione con Ferrovie dello Stato)
 - [x] Gate: tsc 0 err · vitest 261/261 · build ok · commit senza push
 
+## Follow-up (stessa serata, richieste utente) — FATTO
+- [x] Prompt anagrafica FSE in `scan-worker.ts` (matricola fusa col nominativo, DESCRIZIONE QUALIFICA = mansione, QUA./IN = livello)
+- [x] Chip azienda della striscia compatta a scorrimento orizzontale (no-scrollbar) — segnalato taglio dal clip
+- [x] Verificato: chip FSE già auto-cablato dal registry (logo 3,36 ≈ elior, footer teal, filtro generico) — commit ca312aa
+
 ## Review (sessione serale)
 - La riconciliazione ha ribaltato il set del pomeriggio: sovra-contava ~800€/mese (presenza+sala+notturno).
   Ora le colonne = esattamente ciò che il perito somma, dimostrato al centesimo su tutti i mesi 2021-2024.

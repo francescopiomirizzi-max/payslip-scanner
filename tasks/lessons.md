@@ -3,6 +3,26 @@
 > Pattern e errori da evitare nelle prossime sessioni.
 > Aggiornato dopo ogni correzione utente.
 
+## 2026-07-09 — Riga nowrap con clip: non dichiararla "sicura" a tavolino, il taglio dipende dal viewport
+
+**Contesto:** chip azienda nella striscia compatta della dashboard (nowrap + `overflow-hidden` +
+clip-path). Ho calcolato le proporzioni dei loghi, concluso che il chip FSE "entra comodo — zero
+modifiche, zero rischio", relegando il taglio a caveat teorico ("se un giorno dà fastidio…").
+L'utente ha risposto che i chip **si tagliano già** sul suo schermo → fix subito dopo
+(`min-w-0 overflow-x-auto no-scrollbar` sul contenitore, commit ca312aa).
+
+**Lezione:**
+1. In una riga `nowrap` dentro un contenitore che CLIPPA, il taglio non dipende (solo) dalla
+   larghezza dei nuovi elementi ma dal **viewport reale dell'utente** + zoom: la matematica sugli
+   asset dice "quanto è largo il contenuto", non "quanto è larga la finestra". Non dichiarare
+   "zero rischio" ciò che non posso osservare (cfr. `feedback-verifica-video-utente`: la verifica
+   visiva la fa l'utente).
+2. Quando la salvaguardia costa 3 classi CSS già presenti nel progetto (`overflow-x-auto` +
+   `no-scrollbar` + `min-w-0`), **proporla subito** invece di rimandarla come caveat: un contenuto
+   che può crescere (aziende/chip/pill) dentro un clip è un bug latente, non un edge case.
+3. Dentro un contenitore reso scrollabile, hover `scale` e animazioni d'entrata con offset verticale
+   vengono clippati dall'overflow: dare aria con `py-N -my-N`.
+
 ## 2026-07-07 — Parser banda presenze: colonna gemella "Assenze retribuite" vs "non retribuite" + verifica in Node
 
 **Contesto:** aggiunta di `daysPaidLeave` (assenze retribuite) al parser di verità RFI/Trenitalia,
