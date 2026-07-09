@@ -48,6 +48,15 @@ const PROMPT_ANAGRAFICA = `
   ❌ SBAGLIATO → "ruolo": "Professional",                "profiloProfessionale": ""               (livello scivolato in ruolo)
   ❌ SBAGLIATO → "ruolo": "Quadro",                      "profiloProfessionale": ""
 
+  📌 CEDOLINI FSE (Ferrovie del Sud Est, layout ZUCCHETTI) — 3 regole dedicate:
+  - Il riquadro "DIPENDENTE" fonde la matricola col nominativo SENZA spazio (es. "7029782CLARINO FRANCESCO"):
+    scarta le cifre iniziali. L'ordine è COGNOME NOME → "cognome": "Clarino", "nome": "Francesco".
+  - "ruolo" ← campo "DESCRIZIONE QUALIFICA" (es. "Addetto all'Esercizio"): su FSE quel campo contiene la
+    MANSIONE OPERATIVA nonostante l'etichetta dica "qualifica" — è l'ECCEZIONE alla regola sulle etichette.
+    Sui cedolini FSE più vecchi (2011-2017, fax-simile) la mansione è accanto al servizio (es. "SPA-GUIDA").
+  - "profiloProfessionale" ← campo "QUA./IN" (es. "Ope" = "Operaio") oppure, se illeggibile, il parametro
+    (es. "Par. 140E"). Meglio vuoto che sbagliato.
+
   5. "azienda": Identifica l'azienda dalla testata o dal logo (valori validi: "RFI", "TRENITALIA", "ELIOR", "CLEAN_SERVICE", "MERCITALIA", "FSE"). Se trovi "Rete Ferroviaria Italiana" o "RFI", scrivi "RFI". Se trovi "Trenitalia", scrivi "TRENITALIA". Se trovi "Mercitalia", "Mercitalia Shunting", "Mercitalia Shunting & Terminal" oppure il framework/logo del gestionale ADP (it-adp.com), scrivi "MERCITALIA". Se trovi "Ferrovie del Sud Est", "FERROVIE DEL SUD EST E SERVIZI AUTOMOBILISTICI" o il codice azienda "FSE" in testata, scrivi "FSE" (NON confonderla con "Ferrovie dello Stato"). Se trovi "Ferrovie dello Stato" o "FS" senza altra specificazione, scrivi "RFI" come fallback storico. Se trovi "Clean Service", "Clean Service SRL" o varianti, scrivi "CLEAN_SERVICE".
 
   🚨 REGOLA ANTI-INVENZIONE AZIENDA: Se nella testata/logo NON vedi chiaramente una delle aziende sopra elencate, restituisci "azienda": "" (stringa vuota). È SEVERAMENTE VIETATO scegliere un'azienda "a caso" da quelle elencate solo perché citate nel prompt — preferisci sempre lasciare vuoto piuttosto che indovinare.

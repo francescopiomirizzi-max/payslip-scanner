@@ -902,13 +902,16 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
 
                                 {/* Loghi delle aziende su cui si lavora DAVVERO (conteggio > 0) — stesso
                                     linguaggio dei badge footer. Una sola riga (nowrap), niente a capo:
-                                    mostrando solo le aziende attive la riga resta compatta a h=20. */}
+                                    se i chip eccedono lo spazio, il blocco SCORRE in orizzontale
+                                    (scrollbar nascosta) invece di venire tagliato dal clip della striscia.
+                                    py-2/-my-2 = aria verticale per hover:scale e per l'entrata y:6 dei
+                                    chip, che altrimenti l'overflow del contenitore clipperebbe. */}
                                 <div className="hidden sm:block w-px h-9 bg-slate-200/70 dark:bg-slate-700/70 shrink-0"></div>
                                 <motion.div
                                     variants={{ show: { transition: { staggerChildren: 0.05, delayChildren: 0.08 } } }}
                                     initial="hidden"
                                     animate="show"
-                                    className="hidden sm:flex items-center gap-2.5 shrink-0"
+                                    className="hidden sm:flex items-center gap-2.5 min-w-0 overflow-x-auto no-scrollbar py-2 -my-2"
                                 >
                                         {SYSTEM_PROFILE_KEYS.flatMap(k => k === 'ELIOR' ? [k, 'ELIOR_MAGAZZINO'] : [k]).map((key) => {
                                             const isEliorMag = key === 'ELIOR_MAGAZZINO';
