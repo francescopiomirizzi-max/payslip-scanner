@@ -1,3 +1,25 @@
+# Todo — Sessione 10/07 sera: primo collaudo delega a Codex (test TFR/verify)
+
+> **Contesto:** Codex CLI (bundled in ChatGPT.app, piano Plus attivo) usato come esecutore:
+> Claude scrive la spec e verifica, Codex implementa. Primo task = estendere la copertura
+> test di `tfrCalculator` e `verify-payslip` (tech debt backlog; i file test esistono già
+> ma sottili — mancano i casi-lezione e il blocco era storica FSE di be4fd20).
+
+- [x] 1. Spec dettagliata (target, casi limite, regole vincolanti: solo `__tests__/`, niente fix ai sorgenti)
+- [x] 2. `codex exec --sandbox workspace-write` sul repo → 13 test nuovi, perimetro rispettato (sole aggiunte)
+- [x] 3. Review del diff + gate rifatti da Claude: vitest 274/274 · tsc 0 → commit ac56b80
+- [x] 4. Finding triage: virgola su imponibile/daysWorked = rischio LATENTE (upload usa parseLocalFloat,
+      edit manuale TFR usa replace(',','.') — resta il caso jsonb legacy); "12,34"→NaN nel verificatore =
+      da valutare hardening; punto zero anno = by design (il malloppo include la quota); punto zero futuro =
+      config assurda, bassa priorità. Nessun fix applicato — decisione all'utente.
+
+### Review collaudo Codex
+- Il flusso spec→exec→review→gate funziona: Codex ha rispettato tutti i vincoli (solo 2 file, stile
+  italiano, ⚠️ sui sospetti, niente fix ai sorgenti) e i conti dei test tornano (verificati a mano).
+- Bonus stessa sessione: verificato `viewer_payment_block=false` su Supabase (punto flaggato in roadmap).
+
+---
+
 # Todo — Sessione 10/07: split PDF annuali FSE Clarino 2010-2016 in cedolini mensili
 
 > **Contesto:** i ruoli paga Clarino 2010-2016 sono scansioni accorpate in un PDF per anno
