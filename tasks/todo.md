@@ -1,3 +1,95 @@
+# Todo — Sessione 10/07: split PDF annuali FSE Clarino 2010-2016 in cedolini mensili
+
+> **Contesto:** i ruoli paga Clarino 2010-2016 sono scansioni accorpate in un PDF per anno
+> (`Ruoli paga Clarino/2010.pdf` … `2016.pdf`, 12+28×6 = 180 pagine, fronte+retro alternati,
+> ordine NON cronologico). Vanno divisi in PDF mensili (2 pagine ciascuno) nelle cartelle
+> anno, con la convenzione esistente `Mese Anno.PDF` / `Tredicesima Anno.PDF` / `Quattordicesima Anno.PDF`.
+
+- [x] 1. Ispezione layout → verifica: fronte = pagine dispari col box "Periodo di Retribuzione", retro = pari (IRPEF)
+- [x] 2. Lettura periodo di OGNI pagina via griglie di ritagli (lezione split Elior 13/06: mai inferire dalla sequenza)
+      → 2011-2016 completi (12 mesi + 13ª + 14ª); 2010 parziale da Settembre (assunzione 01/09/2010)
+      → ⚠️ 2010 ha DUE cedolini "Dicembre 2010" distinti (Nº 0022887 netto 1.490,57 vs Nº 0046860 netto 1.439,58,
+        stesse competenze, ritenute diverse — probabile riemissione/conguaglio): estratti entrambi col Nº nel nome,
+        decide l'utente quale inserire nell'app (policy: segnalare, non indovinare)
+- [x] 3. Split lossless con pdfseparate+pdfunite in scratchpad → verificato: 90 file, tutti da 2 pagine (pdfinfo)
+- [x] 4. Verifica visiva post-split: griglia fronte-di-ogni-file-creato etichettata col nome file → 90/90 periodo = nome
+- [x] 5. Copia nelle cartelle `Ruoli paga Clarino/2010` … `2016` (originali annuali INTATTI) → 6+14×6 file in posizione
+
+## Blocco 2 — Censimento codici voce era 2011-2016 (+ Gen-Giu 2017 SPA-GUIDA)
+> Prerequisito del quesito 2 all'avvocato: confermare che le colonne del riepilogo perito
+> (Percorrenze, Nastri, Guide, Rimorchio…) corrispondano alle voci stampate dell'era.
+- [x] 1. Griglie crop tabella voci (colonne Voce+Descrizione) di OGNI fronte 2010-2016 + bundle Gen-Giu 2017
+      (96 fronti in 12 griglie + griglia periodi bundle: Gen→Giu 2017 in ordine crescente)
+- [x] 2. Lettura visiva → 9 mesi con tabella lunga ricontrollati con crop di coda (nessuna riga persa)
+- [x] 3. Deliverable [tasks/censimento-codici-fse-2011-2016.md](censimento-codici-fse-2011-2016.md)
+- [x] 4. Memoria aggiornata
+
+### Esito censimento (sintesi)
+- Indennità di incomodo STAMPATE nell'era = solo **029 Art.5A · 094 Art.5/B · 300/301/303/306/307 Trasferte
+  · 663 Ind. giornaliera (presenza, da OTT 2012)**. Percorrenze/Nastri/Guide/Rimorchio/Disponibilità/Riserva/
+  Flessibilità/IndAggiun **NON esistono come voci stampate** → nel riepilogo perito 2011-2016 possono essere
+  solo ricostruzioni a tariffa (pattern §4 report riconciliazione) → bozza di risposta al quesito 2.
+- Pre-ott 2012 la fonte GG è la banda "Presenze del mese" (in questo layout è compilata e affidabile):
+  la regola "vietato usare la banda" del PROMPT_FSE andrà differenziata per era.
+- PRIMA di estendere colonne/prompt: verifica quantitativa a campione (importi 029/094/30x vs celle riepilogo
+  perito) + risposta avvocato al quesito 2. Poi PROMPT_FSE + verify-payslip gemello insieme.
+
+## Blocco 3 — Verifica quantitativa a campione (FATTA, 8/8 al centesimo)
+- [x] Header riepilogo perito decodificato per coordinate (15 colonne numeratore, dump-riepilogo.mjs)
+- [x] 8 mesi campione (Giu/Nov 2011, Apr/Ott 2012, Feb/Set 2013, Mar 2015, Ott 2016): importi letti dai crop
+      full-width e confrontati cella per cella → **8/8 al centesimo**, esito in
+      [censimento-codici-fse-2011-2016.md](censimento-codici-fse-2011-2016.md) §7 + cross-link nel report riconciliazione §8.2
+- Regole inchiodate: Diarie = serie A (300/301/303) · Trasferte = serie B (306/307) · GG = banda Presenze
+  (663 qty ≈ 26 fisso, DIVERGE) · Ferie = banda Congedi (anche il 17 di Set 2013) · 029 = 0,52×GG ·
+  "Ind. Aziendale" = 3,50×GG anche nel 2011-2016 (la ricostruzione parte da gen 2011, non dal 2017)
+- Il numeratore perito 2011-2016 è DOMINATO dal ricostruito (~120-480 €/mese; Mar 2015 = 97%) → quesito 2
+  pronto per l'avvocato coi numeri; estensione colonne/prompt SOLO dopo la sua risposta
+
+## Blocco 4 — Estensione era storica (DECISIONE UTENTE 10/07: si fa ORA, voci stampate)
+> L'utente vuole caricare TUTTI gli anni con estrazione AI reale. L'app conterà le voci STAMPATE
+> (029/094/300/301/303/306/307); le ricostruzioni del perito restano quesito 2 per l'avvocato.
+- [x] 1. `types.ts`: +7 colonne era storica in INDENNITA_FSE (029, 094, 300, 301, 303, 306, 307)
+- [x] 2. `scan-payslip.ts` PROMPT_FSE: guardia → blocco §5-ter era storica (tre ere nel §0; §2/§3 scopati
+      alle ere Zucchetti; GG=banda Presenze, ferie=banda Congedi, 663 VIETATO sia importo sia giorni,
+      fisse dal box con A.P.A.+3°El.Sal. sommati in fse_scatti, 13-14 MENS., esclusioni censimento §3;
+      esempio few-shot Nov 2011 coi numeri verificati; contratto JSON a 28 chiavi)
+- [x] 3. `verify-payslip.ts` FSE: blocco ERA STORICA speculare (regole "ribaltate": qui la banda È la fonte)
+- [x] 4. Bundle 2017 splittato → 6 mensili verificati (6/6 periodo=nome) nella cartella 2017; originale
+      rinominato e spostato nella root: `Gennaio-Giugno 2017 (scansione, originale non caricare).pdf`
+- [x] 5. Gate: tsc 0 err · vitest 261/261 · build ok
+
+### Review Blocco 4
+- L'app ora estrae le voci STAMPATE dell'era storica; scelta deliberata di NON replicare le ricostruzioni
+  del perito (3,50×GG, Percorrenze, Guide…) → restano il quesito 2. Quando/se l'avvocato dirà di
+  replicarle, la via è la colonna-formula (es. `3,50×[daysWorked]`), non il prompt.
+- Restano da caricare (utente, via AI): 2010-2016 splittati + Gen-Giu 2017; NO 13ª/14ª; UN solo Dic 2010.
+
+## Blocco 5 — DECISIONE UTENTE 10/07: "i calcoli come li facciamo noi, il perito era una linea guida"
+> Supera il "seguiamo il modello del perito" del 09/07. Criterio nuovo (proposto da me, confermato):
+> nel numeratore le INDENNITÀ DI PRESTAZIONE (perse nei giorni di ferie); fuori gli straordinari
+> (lavoro aggiuntivo, CGUE Hein) e le voci FISSE mensili pagate anche in ferie (nessuna perdita).
+- [x] +9 colonne in `INDENNITA_FSE` (32 totali): I86178 presenza, I86005 giornaliera, I85210 notturno,
+      I86161 turno prod., I86110 disponibilità, V12001 lavoro festivo, IX0023, IX0046, 013 notturno storico
+- [x] PROMPT_FSE §5 (24 variabili Zucchetti, presenza = importo in codes E quantità → daysWorked),
+      §6 esclusi riscritto (AA712 fisso mensile, S11000/IX0048/V12000/I86125 straordinari, I8320 rimborso),
+      §5-ter: +013; 663 ESCLUSA con motivazione empirica (fisso ~26gg anche con 17gg ferie — Set 2013)
+- [x] verify-payslip specchiato (presenza: importo+contatore NON è doppio uso da segnalare)
+- [x] Gate: tsc 0 · vitest 261/261 · build ok
+- ⚠️ Conseguenze attese: totali app ≠ perito OVUNQUE d'ora in poi (2021-24: ~+800€/mese di voci
+  in più del suo set; 2011-16: niente ricostruzioni). La riconciliazione 49/49 resta la prova che
+  leggiamo i cedolini giusti, NON il target dei totali. 041 festività esclusa = nota per l'avvocato.
+
+## Review
+- Split **lossless** (pdfseparate+pdfunite, zero ricompressione delle scansioni); generato in scratchpad,
+  verificato (pagine + lettura visiva di ogni fronte), POI copiato su Desktop. Originali annuali lasciati al loro posto.
+- Nomi = convenzione delle cartelle già inserite (`Mese Anno.PDF`, `Tredicesima/Quattordicesima Anno.PDF`) →
+  compatibili col parsing mese/anno dal nome file di `usePayslipUpload` (§ label, riga ~357).
+- Nota per l'inserimento in app: prompt FSE ([scan-payslip.ts:933](../netlify/functions/scan-payslip.ts)) tratta
+  l'era 2011-2016 come NON mappata → in archivio sì, voci a 0.0 con aiWarning. Il doppio Dicembre 2010 va
+  scelto dall'utente prima dell'upload (i due file hanno il Nº documento nel nome).
+
+---
+
 # Todo — Sessione 09/07: nuovo logo FAST-CONFSAL + sottotitolo + analisi mancati riposi
 
 > **Contesto:** incontro con Vincenzo il 09/07. Ha pagato (accesso viewer sbloccato su Supabase,

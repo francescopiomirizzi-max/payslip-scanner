@@ -111,6 +111,10 @@ per il 2017-2020 (≈ 3,50×GG + 1,76×gg5A al mese, ~100-135 €/mese).
    una scelta di metodo che spetta a lui.)
 2. **2011-2016:** confermare che le colonne del suo riepilogo corrispondano alle voci stampate dell'era
    SPA-GUIDA (verificabile solo dopo l'OCR delle scansioni).
+   **→ VERIFICATO 10/07 a campione (8/8 mesi al centesimo): stampate solo Art5A (029), Art5B (094),
+   Diarie = serie A 300/301/303, Trasferte = serie B 306/307; Percorrenze/Nastri/AgUnico/Guide/
+   Rimorchio/IndAggiun/Ind.Aziendale = ricostruzioni (Ind.Az = 3,50×GG anche qui, da gen 2011).
+   Dettagli: [censimento-codici-fse-2011-2016.md](censimento-codici-fse-2011-2016.md) §7.**
 3. **2025-2026:** il riepilogo si ferma a nov 2024; i cedolini successivi esistono — estendere il conteggio?
    (Compare anche `I86110` Ind. disponibilità nel censimento pomeridiano: mai vista nel periodo del perito,
    trattamento da decidere se ricorre nel 2025-26.)

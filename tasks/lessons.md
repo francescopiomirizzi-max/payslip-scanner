@@ -3,6 +3,28 @@
 > Pattern e errori da evitare nelle prossime sessioni.
 > Aggiornato dopo ogni correzione utente.
 
+## 2026-07-10 — Non trasformare il quesito per l'avvocato in un GATE sul lavoro dell'utente
+
+**Contesto:** estensione FSE era storica. Avevo impostato la sequenza come "estendiamo colonne/prompt
+SOLO dopo la risposta dell'avvocato al quesito 2" e presentavo i totali del perito come riferimento
+da inseguire. L'utente mi ha corretto due volte nella stessa giornata: «estendi il prompt, ci serve
+il lavoro finito di tutti gli anni» e poi «i nostri calcoli come li facciamo noi, il perito era una
+linea guida».
+
+**Lezione:**
+1. **I quesiti per i terzi (avvocato/perito) sono flag, non lucchetti.** "Noi prepariamo, l'avvocato
+   decide" significa: costruisci la capacità, documenta il punto aperto e vai avanti — non subordinare
+   lo strumento dell'utente a una risposta esterna che può arrivare tra settimane.
+2. **Una decisione di metodo registrata in memoria ("seguiamo il perito", 09/07) non è eterna:**
+   quando inizia a vincolare lavoro nuovo, ri-verificarla con l'utente invece di applicarla come
+   dogma. Il riferimento esterno serve a capire i documenti (la riconciliazione 49/49 = prova di
+   lettura corretta), non a definire il perimetro dei NOSTRI conteggi.
+3. Quando l'utente delega il criterio ("secondo te vanno messe?"), rispondere nel merito con una
+   regola difendibile e coerente (qui: dentro le indennità di prestazione perse in ferie; fuori il
+   lavoro aggiuntivo e i fissi mensili pagati anche in ferie — con prova empirica: la 663 storica
+   paga 26gg anche con 17gg di ferie) e implementarla subito, marcando le zone grigie (041
+   festività) come note per l'avvocato.
+
 ## 2026-07-09 — Riga nowrap con clip: non dichiararla "sicura" a tavolino, il taglio dipende dal viewport
 
 **Contesto:** chip azienda nella striscia compatta della dashboard (nowrap + `overflow-hidden` +
