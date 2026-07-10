@@ -1,3 +1,23 @@
+# Todo — Sessione 10/07 notte: controllo totale pratica Clarino (post-caricamento)
+
+> **Contesto:** l'utente ha caricato TUTTA la pratica Clarino in app (deploy unico ancora pendente
+> → caricamento via dev locale). Controllo integrale su DB, anche in vista del parser di verità FSE
+> (roadmap punto 4). NOVITÀ 10/07: Vincenzo ha riconsegnato le buste di TUTTI i lavoratori Elior
+> viaggiante + archivio → sblocca la sezione Indennità (vertenza residenza); si parte DOPO Clarino.
+
+- [x] 1. Inventario archivio: 183 buste, copertura piena (manca solo Set 2017 = noto), zero duplicati,
+      zero 13ª/14ª, Dic 2010 = Nº 0046860
+- [x] 2. Griglia + estrazioni: prompt NUOVO (32+5 chiavi) su TUTTI i mesi; Nov 2011/Set 2013 = censimento
+      al centesimo; griglia coerente, zero virgole
+- [x] 3. Sanity + storni: scan full-text 2017-2025 → 3 mesi con righe negative (tutti 2021), importi
+      NETTATI correttamente; **2 FIX da fare: daysWorked Mag 2021 75→24, Gen 2018 38→22/15** (dall'app!)
+- [x] 4. Report: [controllo-pratica-clarino-2026-07-10.md](controllo-pratica-clarino-2026-07-10.md)
+      (+ nota: perito usa media MOBILE 12 mesi, noi anno solare precedente → altro delta by design)
+- [x] 5. Roadmap vault + memorie aggiornate: Clarino controllato, Elior viaggiante SBLOCCATO
+      (buste tutti i lavoratori + archivio da Vincenzo, 10/07)
+
+---
+
 # Todo — Sessione 10/07 sera: primo collaudo delega a Codex (test TFR/verify)
 
 > **Contesto:** Codex CLI (bundled in ChatGPT.app, piano Plus attivo) usato come esecutore:
