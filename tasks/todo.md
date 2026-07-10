@@ -10,7 +10,8 @@
 - [x] 2. Griglia + estrazioni: prompt NUOVO (32+5 chiavi) su TUTTI i mesi; Nov 2011/Set 2013 = censimento
       al centesimo; griglia coerente, zero virgole
 - [x] 3. Sanity + storni: scan full-text 2017-2025 → 3 mesi con righe negative (tutti 2021), importi
-      NETTATI correttamente; **2 FIX da fare: daysWorked Mag 2021 75→24, Gen 2018 38→22/15** (dall'app!)
+      NETTATI correttamente; **2 FIX FATTI l'11/07 via SQL verificato: Mag 2021 75→24, Gen 2018 38→16**
+      (16 = 38 − 22 arretrati Dic 2017, voce assente a dicembre; perito 15 ±1) → hard refresh utente
 - [x] 4. Report: [controllo-pratica-clarino-2026-07-10.md](controllo-pratica-clarino-2026-07-10.md)
       (+ nota: perito usa media MOBILE 12 mesi, noi anno solare precedente → altro delta by design)
 - [x] 5. Roadmap vault + memorie aggiornate: Clarino controllato, Elior viaggiante SBLOCCATO

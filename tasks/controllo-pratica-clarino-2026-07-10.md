@@ -19,20 +19,19 @@
 | TFR | Imponibile 0 ovunque **BY DESIGN** (il cedolino FSE non stampa un imponibile TFR consolidato; regola esplicita nel PROMPT_FSE). Punto zero utente: 973,64 @ 2018. |
 | Set 2022 tutto a 0 | Coerente: **anche la riga del perito è vuota** (report riconciliazione §, riga 84). Cedolino = solo AA712 (fisso, escluso). |
 
-## 2. Da CORREGGERE (2 mesi, solo il campo giorni)
+## 2. CORRETTI l'11/07 (2 mesi, solo il campo giorni) ✅
 
-I due mesi che l'AI stessa ha flaggato ("Anomalia: Presenze > 31") hanno gli **importi giusti ma i GIORNI sbagliati** — `daysWorked` è il divisore delle medie, quindi sono total-mover:
+I due mesi che l'AI stessa ha flaggato ("Anomalia: Presenze > 31") avevano gli **importi giusti ma i GIORNI sbagliati** — `daysWorked` è il divisore delle medie, quindi total-mover. **Corretti via SQL l'11/07** (griglia `anni` con ordinalità preservata + `payslip_metadata`, nota ✏️ appesa al mese; verificato: 228 elementi, mese di controllo intatto, divisori 2021 334→283 e 2018 295→273; richiesto hard refresh all'utente prima di riusare l'app su Clarino):
 
-### 2a. Maggio 2021 — `daysWorked` 75 → **24**
-- Cedolino: DUE righe I86178 (24 gg del mese + **75 gg retroattivi** di ricodifica I86005→I86178) + storno I86005 −75. L'app ha preso 75.
-- **Banda GG LAV = 24** (fonte pulita). Il perito usa 25. Netto voce: 24+75−75 = 24.
-- Impatto: divisore 2021 gonfiato **334 → 283 gg reali (+18%)** → media 2021 sottostimata → si riflette sul credito 2022 (media anno precedente).
+### 2a. Maggio 2021 — `daysWorked` 75 → **24** ✅
+- Cedolino: DUE righe I86178 (24 gg del mese + **75 gg retroattivi** di ricodifica I86005→I86178) + storno I86005 −75. L'app aveva preso 75.
+- **Banda GG LAV = 24** (fonte pulita). Il perito usa 25 (±1). Netto voce: 24+75−75 = 24.
+- Chiusura del cerchio: lo storno di 75 gg = esattamente Feb+Mar+Apr 2021 (24+24+27 gg di I86005 positiva; Gennaio rimasto I86005) → il trattamento "importi come pagati, gg del mese reali" è coerente a livello anno.
 
-### 2b. Gennaio 2018 — `daysWorked` 38 → **da decidere (NON 38)**
-- Voce IX0023 qty **38** (include arretrati; mese con Malattia/Carenza). **Banda GG LAV = 22** · **perito = 15**.
-- Tre numeri diversi: 38 è certamente sbagliato; la scelta tra 22 (banda) e 15 (perito, coerente con la malattia) è metodologica → nota per l'avvocato o criterio interno. Impatto sul divisore 2018: −23 o −16 gg.
-
-**Come correggere:** DALL'APP (griglia mensile) + hard refresh — MAI via SQL (lezione anni-clobber 30/06).
+### 2b. Gennaio 2018 — `daysWorked` 38 → **16** ✅ (deciso su prova documentale)
+- Voce IX0023 qty **38** = 16 di gennaio + **22 arretrati di Dicembre 2017**: il cedolino di Dic 2017 NON ha la voce giornaliera (Nov 2017 sì, 24×9,63) e **GG Dic = 22 sia nella nostra estrazione sia nella riga del perito**.
+- Il perito scrive 15 per Gen 2018 (±1 come su Mag 2021, dove scrive 25 vs banda 24) → annotato nella nota del mese, eventuale quesito.
+- Prova collaterale: banda GG LAV vuota nel mese di assenza totale (Set 2022) → la banda traccia il servizio reale, non i giorni teorici.
 
 ## 3. Nota metodologica (non è un bug, ma va saputa)
 
@@ -57,7 +56,8 @@ I due mesi che l'AI stessa ha flaggato ("Anomalia: Presenze > 31") hanno gli **i
 
 ## 5. Azioni aperte
 
-- [ ] Correzione `daysWorked` Mag 2021 (→24) e Gen 2018 (→22 o 15, decide l'utente/avvocato) dall'app.
+- [x] Correzione `daysWorked` Mag 2021 (→24) e Gen 2018 (→16) — FATTA 11/07 via SQL con verifica; hard refresh richiesto all'utente.
 - [ ] Set 2017 quando arriva da Vincenzo; 2026 (Gen-Giu) se rilevante per la pratica.
 - [ ] Parser di verità FSE (requisiti §4) — prossima sessione.
-- [ ] Quesiti avvocato invariati (ricostruzioni 2011-2020, 041, oltre nov-24) + eventuale quesito su Gen 2018 e media mobile vs anno solare.
+- [ ] Quesiti avvocato invariati (ricostruzioni 2011-2020, 041, oltre nov-24) + nuovi: Gen 2018 16-vs-15, media mobile vs anno solare.
+- [ ] Push/deploy unico: DOPO il lavoro Elior (decisione utente 11/07).
