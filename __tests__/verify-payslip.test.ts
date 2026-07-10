@@ -55,6 +55,37 @@ describe('normalizeVerifyResponse', () => {
         expect(discrepancies[0].message).toContain('5000');
         expect(typeof discrepancies[0].message).toBe('string');
     });
+
+    it('converte le stringhe decimali con il punto ma produce NaN con la virgola', () => {
+        // ⚠️ COMPORTAMENTO ATTUALE (possibile bug): Number("12,34") non gestisce il formato italiano.
+        const { discrepancies } = normalizeVerifyResponse({
+            status: 'warning',
+            discrepancies: [{ field: 'ticket', extracted: '12.34', suggested: '12,34', message: 'x' }],
+        });
+        expect(discrepancies[0].extracted).toBe(12.34);
+        expect(discrepancies[0].suggested).toBeNaN();
+    });
+
+    it('ignora expected, found, severity e gli altri campi extra', () => {
+        // ⚠️ COMPORTAMENTO ATTUALE (possibile bug): expected/found non sono alias di extracted/suggested.
+        const { discrepancies } = normalizeVerifyResponse({
+            status: 'error',
+            discrepancies: [{
+                field: 'daysWorked',
+                expected: '12.34',
+                found: '12,34',
+                severity: 'high',
+                detail: 'extra',
+                message: 'valori discordanti',
+            }],
+        });
+        expect(discrepancies[0]).toEqual({
+            field: 'daysWorked',
+            extracted: 0,
+            suggested: 0,
+            message: 'valori discordanti',
+        });
+    });
 });
 
 describe('buildVerifyPrompt — selezione regole aziendali', () => {
@@ -91,6 +122,24 @@ describe('buildVerifyPrompt — selezione regole aziendali', () => {
         expect(p).toContain('fse_minimo');   // voci fisse dal box testata
     });
 
+    it('FSE include le regole dell\'era storica SPA-GUIDA', () => {
+        const p = buildVerifyPrompt('FSE');
+        expect(p).toContain('ERA STORICA SPA-GUIDA (set 2010 - giu 2017)');
+        expect(p).toContain('daysWorked = valore "Presenze" della banda dei totali in testata');
+        expect(p).toContain('029 (Art. 5A)');
+        expect(p).toContain('094 (Art. 5/B)');
+        expect(p).toContain('300/301/303/306/307');
+        expect(p).toMatch(/ESCLUSI di proposito[\s\S]*663 \(in[\s\S]*né importo né giorni/);
+    });
+
+    it('FSE era Zucchetti elenca le voci di prestazione del set nuovo', () => {
+        const p = buildVerifyPrompt('FSE');
+        for (const code of ['I86178/I86005/IX0023', 'I85210/IX0046', 'I86161', 'I86110', 'V12001']) {
+            expect(p).toContain(code);
+        }
+        expect(p).toContain('importo dalla colonna "COMPETENZE"');
+    });
+
     it('azienda sconosciuta ricade sulle regole generiche', () => {
         expect(buildVerifyPrompt('PIPPO_SPA')).toContain('PIPPO_SPA');
     });
@@ -113,5 +162,12 @@ describe('buildVerifyPrompt — selezione regole aziendali', () => {
         expect(p).toContain('1801 (Indennità di linea)');
         expect(p).toContain('3E10 (Premio)');
         expect(p).toContain('SOLO questi codici');
+    });
+
+    it('tratta customColumns vuoto come customColumns non definito', () => {
+        const withEmptyColumns = buildVerifyPrompt('RFI', undefined, []);
+        const withoutColumns = buildVerifyPrompt('RFI', undefined, undefined);
+        expect(withEmptyColumns).toBe(withoutColumns);
+        expect(withEmptyColumns).not.toContain('Questa azienda prevede SOLO questi codici indennità');
     });
 });

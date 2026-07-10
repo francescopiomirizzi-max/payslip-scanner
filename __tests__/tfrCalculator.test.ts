@@ -52,6 +52,47 @@ describe('calculateTFR — anno singolo', () => {
         expect(res[0].year).toBe(2021);
         expect(res[0].quotaMaturataNetta).toBe(0);
     });
+
+    it('accetta un imponibile stringa con il punto decimale', () => {
+        const res = calculateTFR([row({ imponibile_tfr_mensile: '1234.56' as any })], 0);
+        expect(res).toHaveLength(1);
+        expect(res[0].imponibileLordo).toBe(1234.56);
+        expect(res[0].quotaMaturataNetta).toBe(85.28);
+        expect(res[0].fondoFinale).toBe(85.28);
+    });
+
+    it('scarta un imponibile stringa con la virgola decimale come anno fantasma', () => {
+        // ⚠️ COMPORTAMENTO ATTUALE (possibile bug): Number("1234,56") è NaN e l'anno non viene considerato vivo.
+        const res = calculateTFR([row({ imponibile_tfr_mensile: '1234,56' as any })], 0);
+        expect(res).toEqual([]);
+    });
+
+    it('scarta daysWorked con la virgola decimale come anno fantasma', () => {
+        // ⚠️ COMPORTAMENTO ATTUALE (possibile bug): Number("21,5") è NaN e non tiene vivo l'anno.
+        const res = calculateTFR([row({ imponibile_tfr_mensile: 0, daysWorked: '21,5' as any })], 0);
+        expect(res).toEqual([]);
+    });
+
+    it('arrotonda esattamente a due decimali tutti i campi monetari calcolati', () => {
+        const res = calculateTFR([
+            row({ year: 2020, imponibile_tfr_mensile: 1000 }),
+            row({ year: 2021, imponibile_tfr_mensile: 0, daysWorked: 20 }),
+        ], 0);
+        expect(res[0]).toMatchObject({
+            fondoIniziale: 0,
+            imponibileLordo: 1000,
+            quotaMaturataNetta: 69.07,
+            rivalutazione: 0,
+            fondoFinale: 69.07,
+        });
+        expect(res[1]).toMatchObject({
+            fondoIniziale: 69.07,
+            imponibileLordo: 0,
+            quotaMaturataNetta: 0,
+            rivalutazione: 3,
+            fondoFinale: 72.07,
+        });
+    });
 });
 
 describe('calculateTFR — rivalutazione multi-anno', () => {
@@ -78,6 +119,22 @@ describe('calculateTFR — rivalutazione multi-anno', () => {
         expect(TFR_REVALUATION_RATES[2025]).toBeUndefined();
         const fondo2024 = res[0].fondoFinale;
         expect(res[1].rivalutazione).toBe(round2(fondo2024 * 0.015));
+    });
+
+    it('inserisce gli anni-gap con quota zero e rivaluta il fondo accumulato', () => {
+        const res = calculateTFR([
+            row({ year: 2020, imponibile_tfr_mensile: 13500 }),
+            row({ year: 2022, imponibile_tfr_mensile: 13500 }),
+        ], 0);
+        expect(res.map(r => r.year)).toEqual([2020, 2021, 2022]);
+        expect(res[1]).toMatchObject({
+            year: 2021,
+            fondoIniziale: 932.5,
+            imponibileLordo: 0,
+            quotaMaturataNetta: 0,
+            rivalutazione: 40.47,
+            fondoFinale: 972.97,
+        });
     });
 });
 
@@ -107,5 +164,46 @@ describe('calculateTFR — punto zero (TFR pregresso)', () => {
         const y2018 = res.find(r => r.year === 2018)!;
         expect(y2018.isBeforePuntoZero).toBe(true);
         expect(y2018.fondoFinale).toBe(0); // calcoli congelati
+    });
+
+    it("riporta la quota dell'anno del punto zero ma non la somma al fondo finale", () => {
+        // ⚠️ COMPORTAMENTO ATTUALE (possibile bug): la quota calcolata resta solo nel summary.
+        const res = calculateTFR([
+            row({ year: 2020, imponibile_tfr_mensile: 13500 }),
+        ], 10000, 2020);
+        expect(res).toHaveLength(1);
+        expect(res[0]).toMatchObject({
+            year: 2020,
+            imponibileLordo: 13500,
+            quotaMaturataNetta: 932.5,
+            fondoFinale: 10000,
+            isPuntoZeroYear: true,
+        });
+    });
+
+    it('crea la sola riga del punto zero quando non esistono dati reali', () => {
+        const res = calculateTFR([], 10000, 2019);
+        expect(res).toEqual([{
+            year: 2019,
+            fondoIniziale: 0,
+            imponibileLordo: 0,
+            quotaMaturataNetta: 0,
+            rivalutazione: 0,
+            fondoFinale: 10000,
+            isPuntoZeroYear: true,
+            isBeforePuntoZero: false,
+        }]);
+    });
+
+    it('non crea il punto zero futuro e congela tutti gli anni disponibili', () => {
+        // ⚠️ COMPORTAMENTO ATTUALE (possibile bug): l'intervallo termina all'ultimo anno dati, prima del punto zero.
+        const res = calculateTFR([
+            row({ year: 2018, imponibile_tfr_mensile: 5000 }),
+            row({ year: 2020, imponibile_tfr_mensile: 13500 }),
+        ], 10000, 2025);
+        expect(res.map(r => r.year)).toEqual([2018, 2019, 2020]);
+        expect(res.some(r => r.isPuntoZeroYear)).toBe(false);
+        expect(res.every(r => r.isBeforePuntoZero)).toBe(true);
+        expect(res.every(r => r.fondoFinale === 0)).toBe(true);
     });
 });
