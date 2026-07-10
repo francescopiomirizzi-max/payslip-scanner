@@ -926,17 +926,18 @@ const PROMPT_FSE = `
   In testata c'è il box "ELEMENTI DELLA RETRIBUZIONE" (voci fisse, etichette a parole) e la banda "FERIE SPETTANTI … GG. INPS" (NON usarla per i giorni: vedi §3).
   Il retro/pagina 2 contiene solo dati fiscali (IRPEF, contributi, T.F.R.). Se il file contiene più COPIE IDENTICHE della stessa pagina, considerale UNA volta sola; se lo stesso codice compare su RIGHE diverse della tabella voci, SOMMA gli importi.
 
-  ### 0. LE DUE ERE DI CODICI (stessa azienda, codici diversi nel tempo)
-  - Cedolini da NOVEMBRE 2020 in poi: codici I8..../T8.... (es. I85240, T8305).
-  - Cedolini da LUGLIO 2017 a OTTOBRE 2020: codici IX.... (es. IX0002, IX0051).
-  - Un cedolino contiene UNA sola era: le chiavi dell'altra era restano 0.0.
-  - Cedolini 2011-2016 (scansioni, layout fax-simile INAIL con codici a 2-3 CIFRE, es. 029, 663): l'era NON è ancora mappata → estrai solo "month"/"year", tutte le chiavi "codes" a 0.0 e "aiWarning": "Layout FSE era 2011-2016 non mappato".
+  ### 0. LE TRE ERE DI CODICI (stessa azienda, codici diversi nel tempo)
+  - Cedolini da NOVEMBRE 2020 in poi: codici I8..../T8.... (es. I85240, T8305). Layout ZUCCHETTI descritto sopra.
+  - Cedolini da LUGLIO 2017 a OTTOBRE 2020: codici IX.... (es. IX0002, IX0051). Layout ZUCCHETTI descritto sopra.
+  - Cedolini da SETTEMBRE 2010 a GIUGNO 2017: SCANSIONI col layout fax-simile INAIL "Direzione Generale Ferrovie del Sud Est" (era SPA-GUIDA), codici NUMERICI a 3 cifre (es. 029, 301). Per QUESTI cedolini ignora l'anatomia Zucchetti e i §2-§4 e segui ESCLUSIVAMENTE il §5-ter.
+  - Un cedolino contiene UNA sola era: le chiavi delle altre ere restano 0.0.
 
   ### 1. PERIODO (MESE / ANNO) E MENSILITÀ AGGIUNTIVE
   - Box "PERIODO DI RETRIBUZIONE" in alto a destra (es. "Marzo 2023"). "month": 1-12, "year": 4 cifre.
   - 🚨 Se sotto il periodo compare "13a mens." o "14a mens." (cedolino di tredicesima/quattordicesima, voci R4210/R4230): NON è un mensile. Restituisci month/year del box, TUTTE le chiavi "codes" a 0.0, daysWorked 0.0, daysVacation 0.0, arretrati 0.0 e "eventNote": "[13a/14a mensilità - fuori conteggio]".
 
-  ### 2. GIORNI LAVORATI (daysWorked) — DAI GIORNI DELLA VOCE PRESENZA (MAI DALLA BANDA)
+  ### 2. GIORNI LAVORATI (daysWorked) — ERE ZUCCHETTI (I8/T8 e IX): DAI GIORNI DELLA VOCE PRESENZA (MAI DALLA BANDA)
+  [Per l'era storica SPA-GUIDA vale il §5-ter, NON questa sezione.]
   daysWorked = il numero di GIORNI (colonna "ORE/GIORNI", marcatore G) della voce di presenza dell'era:
   - I86178 (Compenso di presenza) — era recente. Es.: "I86178 Compenso di presenza G 21,000" -> daysWorked = 21.0
   - I86005 (Indennita' giornaliera) — cedolini ~nov 2020-2021.
@@ -944,7 +945,7 @@ const PROMPT_FSE = `
   È VIETATO usare "GG LAV.", "GG. RETR." o "GG. INPS" della banda di testata: NON sono i giorni di servizio effettivo.
   Se la voce di presenza è del tutto assente -> daysWorked = 0.0 (mese di sola assenza: è normale).
 
-  ### 3. FERIE DEL MESE (daysVacation) — ORE F2105 ÷ 6,5
+  ### 3. FERIE DEL MESE (daysVacation) — ERE ZUCCHETTI: ORE F2105 ÷ 6,5 [era storica → §5-ter]
   - Cerca la voce F2105 (Ferie godute): il valore è in ORE (marcatore H). daysVacation = ore ÷ 6.5.
     Esempi REALI: "F2105 H 6,500" -> 1.0 · "F2105 H 45,500" -> 7.0 · "F2105 H 52,000" -> 8.0.
   - [DIVIETO]: NON confondere F2105 con X2016 (Permessi retribuiti) né con PIH../PX.. (permessi L104, congedi INPS): hanno la stessa forma ma NON sono ferie.
@@ -957,8 +958,9 @@ const PROMPT_FSE = `
   - Questi codici NON devono comparire nella mappa "codes". Se assenti, "count" e "ticketRate" = 0.0.
 
   ### 5. MASTER LIST CODICI FSE — importi dalla colonna "COMPETENZE"
-  Per ognuno dei 16 codici sotto, estrai l'importo dalla colonna "COMPETENZE" (importi positivi).
-  REGOLA D'ORO: il JSON DEVE contenere TUTTE le 21 chiavi (16 variabili + 5 fisse del §5-bis). Codice assente -> 0.0.
+  Per ognuno dei codici sotto, estrai l'importo dalla colonna "COMPETENZE" (importi positivi).
+  Il criterio del set: INDENNITÀ DI PRESTAZIONE (perse nei giorni di ferie). Straordinari e voci fisse mensili sono ESCLUSI (§6).
+  REGOLA D'ORO: il JSON DEVE contenere TUTTE le 37 chiavi (24 variabili Zucchetti + 8 era storica del §5-ter + 5 fisse del §5-bis). Codice assente -> 0.0.
 
   Era recente (nov 2020 → oggi):
   - I85240 (Punto 5 acc.21/5/81 (1) — ind. turno Art.5A)
@@ -966,10 +968,18 @@ const PROMPT_FSE = `
   - I85248 (Indennità domenicale)
   - I86025 (Indennità Aggiuntiva)
   - I86174 (Comp. produttività a vuoto)
+  - I86178 (Compenso di presenza — l'IMPORTO va qui; la sua quantità G resta la fonte di daysWorked del §2)
+  - I86005 (Indennita' giornaliera, cedolini ~nov 2020-2021 — idem: importo qui, quantità G -> daysWorked)
+  - I85210 (Ordinario notturno avv. 20%)
+  - I86161 (Comp. turno produttivo)
+  - I86110 (Ind. disponibilità)
+  - V12001 (Lavoro festivo 120% — ⚠️ NON confonderlo con V12000 "Straord. festivo", che resta ESCLUSO)
   - T8304, T8305 (Trasferta 90%), T8306 (Trasferta 50%), T8309 (Trasferta C1 10%), T8323 (trasferte)
   Era IX (lug 2017 → ott 2020):
   - IX0002 (Art. 5A)
   - IX0001 (Art. 5/B)
+  - IX0023 (Indenn. giornaliera — importo qui, quantità -> daysWorked)
+  - IX0046 (notturno ordinario)
   - IX0051 (Trasferta A1 24%), IX0052 (Trasferta A2 9%), IX0057 (Trasferta B1 90%), IX0058 (Trasferta B2 50%)
 
   ### 5-bis. VOCI FISSE — box "ELEMENTI DELLA RETRIBUZIONE" in TESTATA (base % incidenza)
@@ -982,10 +992,38 @@ const PROMPT_FSE = `
   - "fse_mensa"       <- "Ind.mensa"
   ⚠️ Il TOTALE del box coincide con la voce AA245 (Retribuzione) della tabella: usa AA245 SOLO come verifica (fse_minimo+fse_contingenza+fse_scatti+fse_tdr+fse_mensa ≈ AA245), NON inserirla in "codes".
 
-  ### 6. CODICI ESCLUSI (VIETATO metterli in "codes" — il conteggio segue il modello del perito)
-  - I86178 / I86005 / IX0023 (presenza/giornaliera): usati SOLO come contatore giorni del §2. MAI il loro importo.
-  - AA712 (Compenso funzione sala), I85210 / IX0046 (notturno), I86161 (Comp. turno produttivo), I8320 / I86110.
-  - S11000 / IX0048 / V12000 / V12001 / I86125 (straordinari e festivi: ESCLUSI dal conteggio).
+  ### 5-ter. ERA STORICA SPA-GUIDA (set 2010 → giu 2017) — REGOLE DEDICATE ALLE SCANSIONI
+  [ANATOMIA]: pagina 1 = fronte del cedolino; pagina 2 = retro fiscale "ASSOGGETTAMENTO AD IRPEF" (IGNORALO).
+  La tabella voci del fronte ha le colonne: "Ass. | Voce | Descrizione | Quantità | Compenso Unitario | Trattenute | Competenze".
+  In testata: calendario "Presenze del mese" (lettere P/R/C/F giorno per giorno) e sotto una banda di TOTALI:
+  "Presenze | Riposi | Festivi | Congedi | Inf.60% | Mal.50% | Malattia | Infortunio | Maternità | Aspettativa | Totale".
+  Sotto ancora, il box elementi fissi: "Minimo Tabellare | Contingenza + EDR | A.P.A. | T.D.R. | Mensa | Assegno A.P. | C.A.U. | 3° Elem. Sal." con "Totale Elementi Fissi".
+
+  - PERIODO: box "Periodo di Retribuzione" in alto a destra (es. "DICEMBRE 2010", "SETTEMB. 2012"). Se riporta
+    "13 MENS." o "14 MENS." è una tredicesima/quattordicesima: vale la regola del §1 (tutto 0.0, eventNote "[13a/14a mensilità - fuori conteggio]").
+  - "daysWorked" = valore "Presenze" della banda dei totali (es. "Presenze 24,00" -> 24.0). In QUEST'ERA la banda è affidabile ed è l'UNICA fonte.
+    ⚠️ VIETATO usare la Quantità della voce 663 "Indennità giornaliera": in quest'era è ≈26 fisso e NON corrisponde alle presenze. VIETATO usare "Totale" (include riposi e festivi).
+  - "daysVacation" = valore "Congedi" della banda dei totali, già in GIORNI (es. "Congedi 17,00" -> 17.0; vuoto -> 0.0). La voce F2105 NON esiste in quest'era.
+  - CODICI da estrarre in "codes" (importo dalla colonna "Competenze"):
+    - "013" (Ordinario Notturno)
+    - "029" (Art. 5A — indennità di turno)
+    - "094" (Art. 5/B — indennità domenicale)
+    - "300" (Trasferta A1 24%), "301" (Trasferta A2 9%), "303" (Trasferta A4 13%), "306" (Trasferta B1 90%), "307" (Trasferta B2 50%)
+  - VOCI FISSE: stesse 5 chiavi del §5-bis, ma dal box di quest'era:
+    "fse_minimo" <- "Minimo Tabellare" · "fse_contingenza" <- "Contingenza + EDR" · "fse_scatti" <- "A.P.A." + "3° Elem. Sal." (somma, se presenti) · "fse_tdr" <- "T.D.R." · "fse_mensa" <- "Mensa".
+    Verifica: la somma delle 5 chiavi ≈ "Totale Elementi Fissi" ≈ Competenze della voce 011 (che NON va in "codes").
+  - Ticket: non esiste in quest'era -> "count" 0.0, "ticketRate" 0.0. TFR: nessun dato consolidato stampato -> "fondo_pregresso_31_12" 0.0, "imponibile_tfr_mensile" 0.0.
+  - ESCLUSI in quest'era (MAI in "codes"): 011 (Totale retribuzione = elementi fissi), 014 (Straord. Feriale Diurno = lavoro aggiuntivo), 041 (Festività = retribuzione di calendario), 663 (Indennità giornaliera: in QUEST'ERA è un FISSO di ~26 giorni pagato anche nei mesi di ferie piene -> nessuna perdita in ferie; NÉ importo NÉ giorni), 048/100 (13ª/14ª), 375 (Art.1 DL 66/2014 = bonus fiscale), 180/181 (Assegno nucleo/ANF), 127/130/132/133/384 (rimborsi), 731/732 (malattia), 071/074 (sciopero/assenze), 027/028 (una tantum CCNL -> regola arretrati §7), 161/170/171/174/261/452/543/707/766/974 e tutte le addizionali/saldi IRPEF (901, 902, 907, 941, 942, 959, 962, 475).
+
+  Esempio era storica (Novembre 2011) — banda: "Presenze 24,00 | Riposi 4,00 | Mal.50% 3,00 | Totale 31,00", Congedi vuoto;
+  voci: 011=1.262,39 · 013 (1,33 x 1,62) = 2,16 · 029 (24,00 x 0,52) = 12,48 · 127 = 10,80 · 300 = 13,04 · 301 = 73,37 · 306 = 48,92 · 307 = 27,18 · 732 = 145,41.
+  -> "daysWorked": 24.0, "daysVacation": 0.0, "eventNote": "[Malattia/Carenza]",
+     "codes": { "013": 2.16, "029": 12.48, "300": 13.04, "301": 73.37, "306": 48.92, "307": 27.18, "094": 0.0, tutte le chiavi Zucchetti a 0.0, fisse dal box (fse_minimo 806.22, fse_contingenza 533.58, fse_scatti 0.0, fse_tdr 41.32, fse_mensa 16.53) }.
+
+  ### 6. CODICI ESCLUSI (VIETATO metterli in "codes")
+  - S11000 / IX0048 / V12000 / I86125 (straordinari e straordinari festivi: lavoro AGGIUNTIVO, non indennità di prestazione).
+  - AA712 (Compenso funzione sala): importo FISSO mensile pagato anche nei mesi di ferie -> nessuna perdita in ferie, fuori dal conteggio.
+  - I8320 (rimborso spese vitto: è un rimborso, non un'indennità).
   - PIH.. / PX.. (assenze e congedi INPS/L104), A0100 (ANF), TN.. (trattenute sindacali/associative), W75.. / W80.. (tariffe e TFR), L1110 e simili (malattia).
 
   ### 7. ARRETRATI
@@ -1011,8 +1049,10 @@ const PROMPT_FSE = `
     "fondo_pregresso_31_12": 0.0, "imponibile_tfr_mensile": 0.0,
     "codes": {
       "I85240": 10.40, "I85245": 0.0, "I85248": 0.0, "I86025": 0.0, "I86174": 0.0,
+      "I86178": 542.22, "I86005": 0.0, "I85210": 24.15, "I86161": 0.0, "I86110": 0.0, "V12001": 0.0,
       "T8304": 0.0, "T8305": 133.34, "T8306": 0.0, "T8309": 0.0, "T8323": 0.0,
-      "IX0002": 0.0, "IX0001": 0.0, "IX0051": 0.0, "IX0052": 0.0, "IX0057": 0.0, "IX0058": 0.0,
+      "IX0002": 0.0, "IX0001": 0.0, "IX0023": 0.0, "IX0046": 0.0, "IX0051": 0.0, "IX0052": 0.0, "IX0057": 0.0, "IX0058": 0.0,
+      "013": 0.0, "029": 0.0, "094": 0.0, "300": 0.0, "301": 0.0, "303": 0.0, "306": 0.0, "307": 0.0,
       "fse_minimo": 1254.81, "fse_contingenza": 542.39, "fse_scatti": 177.48, "fse_tdr": 56.96, "fse_mensa": 16.53
     }
   }

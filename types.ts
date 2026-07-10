@@ -282,13 +282,16 @@ export const INDENNITA_MERCITALIA_FISSE: ColumnDef[] = [
 // Colonne FSE (Ferrovie del Sud Est — Gruppo FS, cedolino ZUCCHETTI a 7 colonne).
 // Vertenza ferie ex art. 7 Dir. 2003/88/CE: si valorizzano le indennità "di incomodo" percepite
 // nei 12 mesi precedenti (media giornaliera × giorni ferie). Importi letti dalla colonna COMPETENZE.
-// Set RICONCILIATO col riepilogo del perito (09/07 sera, tasks/riconciliazione-perito-clarino-
-// 2026-07-09.md): 49/49 mesi nov2020-nov2024 riprodotti al centesimo con queste voci. Il perito
-// ESCLUDE presenza/giornaliera (I86178/I86005/IX0023 — serve solo come contatore GG nel prompt),
-// funzione sala (AA712), notturno, straordinari/festivi, ticket. Due ere di codici sui cedolini
-// testuali: IX (lug2017-ott2020) e I8/T8 (nov2020-oggi); era 2011-2016 (scansioni, codici a 3
-// cifre) da censire in fase OCR. Nel 2017-2020 il perito somma ANCHE ricostruzioni a tariffa non
-// stampate (3,50×GG; 1,76×gg-Art5A) → quesito aperto per l'avvocato, NON colonne.
+// DECISIONE 10/07 (supera il "seguiamo il perito" del 09/07: il perito è LINEA GUIDA, i conti
+// sono nostri): il set copre le INDENNITÀ DI PRESTAZIONE stampate sui cedolini — turno,
+// domenicale, trasferte, notturno ordinario, lavoro festivo, turno produttivo, disponibilità e
+// presenza/giornaliera (pagata a giornata lavorata → persa in ferie). ESCLUSI di proposito:
+// straordinari/festivi-straordinari (lavoro aggiuntivo, CGUE Hein), voci FISSE mensili che non
+// si perdono in ferie (AA712 funzione sala; 663 dell'era storica: pagata ~26gg fissi anche con
+// 17gg di ferie — Set 2013), rimborsi spese, ANF, 041 festività (nota per l'avvocato).
+// TRE ere di codici: I8/T8 (nov2020-oggi), IX (lug2017-ott2020), SPA-GUIDA a 3 cifre
+// (set2010-giu2017, scansioni — censimento+verifica 8/8 in tasks/censimento-codici-fse-2011-2016.md).
+// Le ricostruzioni a tariffa del perito (3,50×GG, Percorrenze/Guide/Nastri…) NON sono colonne.
 export const INDENNITA_FSE: ColumnDef[] = [
   // Era recente (nov 2020 → oggi)
   { id: 'I85240', label: 'Ind. Turno 5A',     subLabel: '(I85240)', width: 'min-w-[120px]', type: 'currency' },
@@ -296,6 +299,12 @@ export const INDENNITA_FSE: ColumnDef[] = [
   { id: 'I85248', label: 'Ind. Domenicale',   subLabel: '(I85248)', width: 'min-w-[120px]', type: 'currency' },
   { id: 'I86025', label: 'Ind. Aggiuntiva',   subLabel: '(I86025)', width: 'min-w-[120px]', type: 'currency' },
   { id: 'I86174', label: 'Prod. a Vuoto',     subLabel: '(I86174)', width: 'min-w-[120px]', type: 'currency' },
+  { id: 'I86178', label: 'Comp. Presenza',    subLabel: '(I86178)', width: 'min-w-[120px]', type: 'currency' },
+  { id: 'I86005', label: 'Ind. Giornaliera',  subLabel: '(I86005)', width: 'min-w-[120px]', type: 'currency' },
+  { id: 'I85210', label: 'Ord. Notturno',     subLabel: '(I85210)', width: 'min-w-[120px]', type: 'currency' },
+  { id: 'I86161', label: 'Comp. Turno Prod.', subLabel: '(I86161)', width: 'min-w-[130px]', type: 'currency' },
+  { id: 'I86110', label: 'Ind. Disponibilità',subLabel: '(I86110)', width: 'min-w-[130px]', type: 'currency' },
+  { id: 'V12001', label: 'Lavoro Festivo',    subLabel: '(V12001)', width: 'min-w-[120px]', type: 'currency' },
   { id: 'T8304',  label: 'Trasferta',         subLabel: '(T8304)',  width: 'min-w-[110px]', type: 'currency' },
   { id: 'T8305',  label: 'Trasferta 90%',     subLabel: '(T8305)',  width: 'min-w-[120px]', type: 'currency' },
   { id: 'T8306',  label: 'Trasferta 50%',     subLabel: '(T8306)',  width: 'min-w-[120px]', type: 'currency' },
@@ -304,10 +313,22 @@ export const INDENNITA_FSE: ColumnDef[] = [
   // Era IX (lug 2017 → ott 2020)
   { id: 'IX0002', label: 'Art. 5A',           subLabel: '(IX0002)', width: 'min-w-[110px]', type: 'currency' },
   { id: 'IX0001', label: 'Art. 5/B',          subLabel: '(IX0001)', width: 'min-w-[110px]', type: 'currency' },
+  { id: 'IX0023', label: 'Ind. Giornaliera',  subLabel: '(IX0023)', width: 'min-w-[120px]', type: 'currency' },
+  { id: 'IX0046', label: 'Ord. Notturno',     subLabel: '(IX0046)', width: 'min-w-[120px]', type: 'currency' },
   { id: 'IX0051', label: 'Trasf. A1 24%',     subLabel: '(IX0051)', width: 'min-w-[120px]', type: 'currency' },
   { id: 'IX0052', label: 'Trasf. A2 9%',      subLabel: '(IX0052)', width: 'min-w-[120px]', type: 'currency' },
   { id: 'IX0057', label: 'Trasf. B1 90%',     subLabel: '(IX0057)', width: 'min-w-[120px]', type: 'currency' },
   { id: 'IX0058', label: 'Trasf. B2 50%',     subLabel: '(IX0058)', width: 'min-w-[120px]', type: 'currency' },
+  // Era storica SPA-GUIDA (set 2010 → giu 2017, scansioni fax-simile INAIL, codici a 3 cifre)
+  // NB: la 663 "Indennità giornaliera" di quest'era NON è colonna (fissa ~26gg anche in ferie)
+  { id: '013',    label: 'Ord. Notturno',     subLabel: '(013)',    width: 'min-w-[110px]', type: 'currency' },
+  { id: '029',    label: 'Art. 5A',           subLabel: '(029)',    width: 'min-w-[110px]', type: 'currency' },
+  { id: '094',    label: 'Art. 5/B',          subLabel: '(094)',    width: 'min-w-[110px]', type: 'currency' },
+  { id: '300',    label: 'Trasf. A1 24%',     subLabel: '(300)',    width: 'min-w-[120px]', type: 'currency' },
+  { id: '301',    label: 'Trasf. A2 9%',      subLabel: '(301)',    width: 'min-w-[120px]', type: 'currency' },
+  { id: '303',    label: 'Trasf. A4 13%',     subLabel: '(303)',    width: 'min-w-[120px]', type: 'currency' },
+  { id: '306',    label: 'Trasf. B1 90%',     subLabel: '(306)',    width: 'min-w-[120px]', type: 'currency' },
+  { id: '307',    label: 'Trasf. B2 50%',     subLabel: '(307)',    width: 'min-w-[120px]', type: 'currency' },
 ];
 
 // Voci FISSE FSE (denominatore % incidenza) — box "ELEMENTI DELLA RETRIBUZIONE" della testata

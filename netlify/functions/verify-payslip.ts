@@ -201,14 +201,19 @@ indennità ordinarie: sono confluiti in "arretrati". Non segnalarli come discrep
     companyRules = `
 ### REGOLE DI CALCOLO AZIENDALI — FSE / FERROVIE DEL SUD EST (gestionale ZUCCHETTI)
 
-**MARCATORI DEL LAYOUT:**
-Testata con "COD.AZ FSE FERROVIE DEL SUD EST E SERVIZI AUTOMOBILISTICI SRL", box "ELEMENTI DELLA
-RETRIBUZIONE" e banda "FERIE SPETTANTI … GG. INPS". La tabella voci ha 7 colonne:
-"CODICE | DESCRIZIONE VOCE | ORE/GIORNI | IMPORTO UNITARIO | IMPORTI FIGURATI | COMPETENZE | TRATTENUTE".
-Due ERE di codici: I8..../T8.... (da nov 2020) e IX.... (lug 2017 - ott 2020). Un cedolino ne contiene
-UNA sola: i codici dell'altra era a 0.0 nel JSON sono CORRETTI, non segnalarli come mancanti.
+**MARCATORI DEL LAYOUT — TRE ERE:**
+- Ere ZUCCHETTI (testata "COD.AZ FSE FERROVIE DEL SUD EST E SERVIZI AUTOMOBILISTICI SRL", box
+  "ELEMENTI DELLA RETRIBUZIONE", banda "FERIE SPETTANTI … GG. INPS"; tabella voci a 7 colonne
+  "CODICE | DESCRIZIONE VOCE | ORE/GIORNI | IMPORTO UNITARIO | IMPORTI FIGURATI | COMPETENZE | TRATTENUTE"):
+  codici I8..../T8.... (da nov 2020) e IX.... (lug 2017 - ott 2020).
+- ERA STORICA SPA-GUIDA (set 2010 - giu 2017): SCANSIONE, layout fax-simile INAIL "Direzione Generale
+  Ferrovie del Sud Est", codici NUMERICI a 3 cifre (029, 301…); tabella voci con colonne
+  "Ass. | Voce | Descrizione | Quantità | Compenso Unitario | Trattenute | Competenze"; in testata il
+  calendario "Presenze del mese" con banda dei TOTALI "Presenze | Riposi | Festivi | Congedi | … | Totale".
+  Per quest'era valgono le regole del blocco ERA STORICA più sotto.
+Un cedolino contiene UNA sola era: i codici delle ALTRE ere a 0.0 nel JSON sono CORRETTI, non segnalarli come mancanti.
 
-**daysWorked — GIORNI DELLA VOCE PRESENZA, NON la banda (CRITICO):**
+**daysWorked — ere ZUCCHETTI: GIORNI DELLA VOCE PRESENZA, NON la banda (CRITICO):**
 daysWorked = giorni (colonna ORE/GIORNI, marcatore G) della voce di presenza dell'era:
 I86178 "Compenso di presenza" (recente) / I86005 "Indennita' giornaliera" (~2020-21) / IX0023
 "Indenn. giornaliera" (era IX). Es.: "I86178 G 21,000" → daysWorked corretto = 21.
@@ -216,19 +221,43 @@ I86178 "Compenso di presenza" (recente) / I86005 "Indennita' giornaliera" (~2020
 testata: NON sono i giorni di servizio effettivo. Se la voce di presenza è assente, daysWorked = 0
 è CORRETTO (mese di sola assenza).
 
-**daysVacation — ORE F2105 ÷ 6,5:**
+**daysVacation — ere ZUCCHETTI: ORE F2105 ÷ 6,5:**
 La voce F2105 (Ferie godute) è in ORE (marcatore H): daysVacation = ore ÷ 6,5 (es. H 45,500 → 7.0).
 NON confondere F2105 con X2016 (Permessi retribuiti) né con PIH../PX.. (L104/congedi INPS).
 Se F2105 è assente → daysVacation = 0.0 è corretto. NON usare la banda ferie di testata né i ratei del retro.
+
+**ERA STORICA SPA-GUIDA (set 2010 - giu 2017) — regole ribaltate rispetto alle ere Zucchetti:**
+- daysWorked = valore "Presenze" della banda dei totali in testata (qui la banda È la fonte giusta).
+  È SBAGLIATO usare la Quantità della voce 663 "Indennità giornaliera" (≈26 fisso, non sono le presenze)
+  o il "Totale" (include riposi e festivi). Se il JSON ha daysWorked = banda "Presenze", è CORRETTO.
+- daysVacation = valore "Congedi" della banda, già in GIORNI (vuoto → 0.0). F2105 non esiste in quest'era.
+- Codici attesi in "codes" (importo dalla colonna "Competenze"): 013 (Ordinario Notturno),
+  029 (Art. 5A), 094 (Art. 5/B), 300/301/303/306/307 (Trasferte A1 24% / A2 9% / A4 13% / B1 90% / B2 50%).
+- ESCLUSI di proposito (non segnalarli come mancanti): 011 (Totale retribuzione = elementi fissi),
+  014 (straordinario = lavoro aggiuntivo), 041 (festività = retribuzione di calendario), 663 (in
+  quest'era è un FISSO ~26 giorni pagato anche in ferie: né importo né giorni), 048/100 (13ª/14ª),
+  375 (bonus DL 66/2014), 180/181 (ANF), 127/130/132/133/384 (rimborsi), 731/732 (malattia),
+  071/074, 027/028 (una tantum), 161/170/171/174/261/452/543/707/766/974 e addizionali/saldi IRPEF
+  (901, 902, 907, 941, 942, 959, 962, 475).
+- Voci fisse: dal box di quest'era "Minimo Tabellare" → fse_minimo, "Contingenza + EDR" → fse_contingenza,
+  "A.P.A." + "3° Elem. Sal." (somma) → fse_scatti, "T.D.R." → fse_tdr, "Mensa" → fse_mensa;
+  somma delle 5 ≈ "Totale Elementi Fissi" ≈ Competenze della voce 011.
+- Mensilità aggiuntive: periodo "13 MENS." / "14 MENS." → tredicesima/quattordicesima (voci 048/100),
+  tutte le chiavi a 0.0 con eventNote dedicata sono CORRETTE.
+- TFR: in quest'era "fondo_pregresso_31_12" = 0.0 e "imponibile_tfr_mensile" = 0.0 sono CORRETTI
+  (nessun dato consolidato stampato); pagina 2 = solo tabelle IRPEF, nessun dato utile.
 
 **ticket:** codici I86121 (giorni G × importo unitario, es. 0,50 o 10,50) o I86120 (era 2021, N × 7,30)
 → solo "ticketRate"/"count". NON devono comparire in "codes".
 
 **Codici indennità (sotto-oggetto "codes"):** importo dalla colonna "COMPETENZE" (6ª), MAI da
-"IMPORTO UNITARIO" o "IMPORTI FIGURATI". Il set segue il MODELLO DEL PERITO: sono ESCLUSI di
-proposito (NON segnalarli come valori mancanti) i codici I86178/I86005/IX0023 (presenza — usati solo
-come contatore giorni), AA712 (funzione sala), I85210/IX0046 (notturno), I86161, I8320, I86110,
-S11000/IX0048/V12000/V12001/I86125 (straordinari/festivi), PIH../PX.. (INPS), TN.. (trattenute), W75../W80.. .
+"IMPORTO UNITARIO" o "IMPORTI FIGURATI". Il set = INDENNITÀ DI PRESTAZIONE stampate: incluse anche
+presenza/giornaliera (I86178/I86005/IX0023 — il loro IMPORTO è una colonna E la loro quantità G
+resta la fonte di daysWorked: NON è un doppio uso da segnalare), notturno ordinario (I85210/IX0046),
+turno produttivo (I86161), disponibilità (I86110) e lavoro festivo (V12001).
+Sono ESCLUSI di proposito (NON segnalarli come valori mancanti): AA712 (funzione sala — FISSO mensile
+pagato anche in ferie), S11000/IX0048/V12000/I86125 (straordinari: lavoro aggiuntivo), I8320 (rimborso
+spese), PIH../PX.. (INPS), A0100 (ANF), TN.. (trattenute), W75../W80.. .
 
 **Voci fisse (chiavi fse_minimo, fse_contingenza, fse_scatti, fse_tdr, fse_mensa):** si leggono dal
 box "ELEMENTI DELLA RETRIBUZIONE" in TESTATA (etichette a parole: "Minimo contr.", "Contingenza",
