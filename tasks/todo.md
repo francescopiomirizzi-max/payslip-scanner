@@ -48,6 +48,13 @@
 - [x] 5. UI selettore 3 opzioni + banner/relazione/Excel aggiornati (danno vs maggiorazione).
 - [ ] 6. Riconciliazione coi conteggi del perito per Viterbo FSE (15__conteggi.pdf,
       RiepilogoGenerale, Interessi e Rivalutazioni) — rinviata a sessione dedicata.
+- [x] 9. **Toggle tempestività per pratica** (richiesta 11/07 sera): migration 025
+      (`tempestivita_settimanale boolean`, APPLICATA live) + mapper/tipo/update + wiring motore
+      (dettaglio E card area) + controllo nel pannello Parametri (owner; viewer read-only).
+      Documenti GIÀ adattivi (nTiming): con toggle ON descrivono la regola come passo del metodo
+      e tolgono l'esclusione prudenziale; causale «Settimanale oltre il termine: 45h intere».
+      Riscritta in chiaro l'«unità di conteggio del settimanale» (ex granularità) in doc + UI.
+      +4 test (mapper roundtrip, documenti adattivi) → 296/296.
 - [x] 7a. Azienda + logo (richiesta 11/07 pomeriggio): `azienda='Ferrovie del Sud Est'` in DB
       (UPDATE verificato), helper `aziendaToProfilo` in profiles.ts, logo FSE nel header del
       dettaglio e nell'avatar card (fallback BusFront per aziende ignote), azienda nel sottotitolo.

@@ -232,7 +232,7 @@ export function divarioBullets(model: DocModel, result: RestResult): Bullet[] {
     if (model.nTiming === 0) {
         out.push({ lead: 'Tempestività del settimanale', testo: 'il documento sorgente riconosce 45 ore intere quando il riposo settimanale non risulta fruito in tempo utile; la serie B, in via prudenziale, allo stato non applica tale criterio (riserva di integrazione, v. sezione riserve).' });
     }
-    out.push({ lead: 'Granularità del settimanale', testo: 'il documento sorgente espone il mancato riposo settimanale giorno per giorno (a scorrimento); la serie B lo conta una volta per evento: per il settimanale il confronto corretto è su numero di eventi e importi, non sul singolo giorno di calendario.' });
+    out.push({ lead: 'Unità di conteggio del settimanale', testo: 'il documento sorgente conta per SETTIMANA DI CALENDARIO (una riga per ogni settimana con riposo sotto le 45 ore, attribuita a un giorno di quella settimana); la serie B conta per EVENTO (una sola violazione per il riposo che viola la norma, applicate le tolleranze di legge). Le righe del documento e le violazioni della serie B possono quindi cadere in giorni diversi pur riferendosi alla stessa settimana: per il settimanale il confronto corretto è su numero di eventi e importi, non sulla coincidenza del singolo giorno di calendario.' });
     return out;
 }
 

@@ -116,7 +116,7 @@ const RiposiPraticaDetail: React.FC<Props> = ({ pratica, onBack, onUpdate }) => 
     const coeff = pratica.coefficiente ?? 1;
 
     const result = useMemo(
-        () => computeRestViolations(pratica.giornate, { tariffaOraria: pratica.tariffaOraria, fonteTariffa: pratica.fonteTariffa, tariffePerAnno, coefficiente: pratica.coefficiente, soloCEE: hasCEEDays(pratica.giornate) }),
+        () => computeRestViolations(pratica.giornate, { tariffaOraria: pratica.tariffaOraria, fonteTariffa: pratica.fonteTariffa, tariffePerAnno, coefficiente: pratica.coefficiente, soloCEE: hasCEEDays(pratica.giornate), termineRiposoSettimanale: pratica.tempestivitaSettimanale ? 144 : undefined }),
         [pratica, tariffePerAnno]
     );
 
@@ -402,6 +402,33 @@ const RiposiPraticaDetail: React.FC<Props> = ({ pratica, onBack, onUpdate }) => 
                                 </span>
                             )}
                             <span className="text-[11px] text-slate-400 dark:text-slate-500 w-full sm:w-auto sm:ml-auto">Scelta del legale{canManage && ' · ricalcola tutto, nessun dato perso'}</span>
+                        </div>
+
+                        {/* Tempestività del riposo settimanale (art. 8 §6): 45h piene se il riposo
+                            inizia oltre 144h dal precedente. OFF = esclusione prudenziale, dichiarata
+                            con riserva nei documenti; ON = criterio del documento sorgente. */}
+                        <div className="flex flex-wrap items-center gap-2 pt-4 border-t border-slate-200/70 dark:border-slate-700/50">
+                            <span className="text-sm font-semibold text-slate-700 dark:text-slate-200 mr-1" title="Art. 8 §6 Reg. 561/2006: il riposo settimanale deve iniziare entro sei periodi di 24h dal precedente; oltre → 45 ore intere">Tempestività del settimanale</span>
+                            {canManage ? ([
+                                { v: false, label: 'Esclusa · prudenziale' },
+                                { v: true, label: 'Inclusa · 45h piene oltre il termine' },
+                            ]).map(({ v, label }) => {
+                                const active = Boolean(pratica.tempestivitaSettimanale) === v;
+                                return (
+                                    <button
+                                        key={label}
+                                        onClick={() => { if (!active) onUpdate?.({ tempestivitaSettimanale: v }); }}
+                                        className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-colors ${active ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-indigo-400'}`}
+                                    >
+                                        {label}
+                                    </button>
+                                );
+                            }) : (
+                                <span className="px-3 py-1.5 rounded-xl text-xs font-bold bg-indigo-600 text-white shadow-sm">
+                                    {pratica.tempestivitaSettimanale ? 'Inclusa · 45h piene oltre il termine' : 'Esclusa · prudenziale'}
+                                </span>
+                            )}
+                            <span className="text-[11px] text-slate-400 dark:text-slate-500 w-full sm:w-auto sm:ml-auto">Art. 8 §6 · i documenti dichiarano la scelta{canManage && ' · ricalcola tutto'}</span>
                         </div>
 
                         {/* Tariffa €/h per anno (override CCNL) */}
@@ -986,7 +1013,7 @@ const ConfrontoView: React.FC<{ giornate: GiornataInput[]; confronto: ConfrontoR
             {/* Nota onesta sul settimanale */}
             <div className="flex items-start gap-2 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/60 px-4 py-3 text-[12px] text-slate-600 dark:text-slate-400">
                 <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
-                <span>I riposi <strong>giornalieri</strong> si allineano bene ({confronto.concordiGiorn} su {confronto.nostreGiorn} nostre cadono su un giorno indennizzato dal PDF). I <strong>settimanali</strong> no: il PDF li conta giorno-per-giorno (a scorrimento), noi una volta per evento → per il settimanale conta il confronto su <strong>numero e importo</strong>, non sul singolo giorno del calendario.</span>
+                <span>I riposi <strong>giornalieri</strong> si allineano bene ({confronto.concordiGiorn} su {confronto.nostreGiorn} nostre cadono su un giorno indennizzato dal PDF). I <strong>settimanali</strong> usano unità di conteggio diverse: il PDF conta <strong>per settimana di calendario</strong> (una riga per ogni settimana con riposo sotto le 45h), noi <strong>per evento</strong> (una violazione per il riposo che viola la norma) → possono cadere in giorni diversi pur parlando della stessa settimana. Per il settimanale conta il confronto su <strong>numero e importo</strong>, non sul singolo giorno del calendario.</span>
             </div>
         </section>
     );

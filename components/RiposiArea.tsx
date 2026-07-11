@@ -58,7 +58,7 @@ const RiposiArea: React.FC<{ sindacatoId?: string | null }> = ({ sindacatoId = n
     const statsByPratica = useMemo(() => {
         const m: Record<string, PraticaStats> = {};
         for (const p of pratiche) {
-            const r = computeRestViolations(p.giornate, { tariffaOraria: p.tariffaOraria, tariffePerAnno: resolveTariffePerAnno(p.giornate, p.tariffePerAnno), coefficiente: p.coefficiente, soloCEE: hasCEEDays(p.giornate) });
+            const r = computeRestViolations(p.giornate, { tariffaOraria: p.tariffaOraria, tariffePerAnno: resolveTariffePerAnno(p.giornate, p.tariffePerAnno), coefficiente: p.coefficiente, soloCEE: hasCEEDays(p.giornate), termineRiposoSettimanale: p.tempestivitaSettimanale ? 144 : undefined });
             m[p.id] = { tot: r.nViolazioniGiornaliere + r.nViolazioniSettimanali, indennita: r.totIndennita, perAnno: violazioniPerAnno(r.violazioni) };
         }
         return m;

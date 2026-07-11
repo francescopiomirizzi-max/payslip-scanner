@@ -110,3 +110,18 @@ describe('praticaToDb', () => {
         expect(back.isSeed).toBeUndefined();
     });
 });
+
+// ─── Tempestività del settimanale (toggle per pratica, migration 025) ─────────
+
+describe('tempestivita_settimanale (art. 8 §6, 45h piene oltre il termine)', () => {
+    it('roundtrip DB: true letto, assente/false → undefined (default prudenziale)', () => {
+        expect(dbToPratica({ id: 'x', giornate: [], tempestivita_settimanale: true }).tempestivitaSettimanale).toBe(true);
+        expect(dbToPratica({ id: 'x', giornate: [], tempestivita_settimanale: false }).tempestivitaSettimanale).toBeUndefined();
+        expect(dbToPratica({ id: 'x', giornate: [] }).tempestivitaSettimanale).toBeUndefined();
+    });
+    it('scrittura: sempre esplicita (mai null in colonna NOT NULL)', () => {
+        const base: PraticaRiposi = { id: 'x', nome: 'A', cognome: 'B', tariffaOraria: 10, stato: 'in_corso', giornate: [] };
+        expect(praticaToDb(base).tempestivita_settimanale).toBe(false);
+        expect(praticaToDb({ ...base, tempestivitaSettimanale: true }).tempestivita_settimanale).toBe(true);
+    });
+});

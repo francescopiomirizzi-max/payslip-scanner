@@ -79,7 +79,7 @@ describe('testi critici: divario, riserve, metodo', () => {
         const leads = divarioBullets(model, result).map((b) => b.lead);
         expect(leads).toContain('Perimetro CEE');
         expect(leads).toContain('Tempestività del settimanale');
-        expect(leads).toContain('Granularità del settimanale');
+        expect(leads).toContain('Unità di conteggio del settimanale');
         const cee = divarioBullets(model, result).find((b) => b.lead === 'Perimetro CEE')!;
         expect(cee.testo).toContain('€ 10,00'); // quota non-CEE della serie A
     });
@@ -143,5 +143,32 @@ describe('i due documenti dicono le stesse cose (nucleo condiviso)', () => {
         const xml = strFromU8(unzipSync(new Uint8Array(buffer))['word/document.xml']);
         expect(xml).toContain('maggiorato del 20%');
         expect(xml).not.toContain('120% del valore');
+    });
+});
+
+describe('con la tempestività ATTIVA i documenti cambiano dichiarazione', () => {
+    // 9 turni consecutivi tra due riposi: il secondo settimanale arriva oltre 144h → 45h piene.
+    const turno = (data: string): GiornataInput => ({ data, tipo: 'CEE', inizio: '6.00', termine: '15.00' });
+    const giornateRitardo: GiornataInput[] = [
+        turno('01/03/2023'),
+        ...['04/03/2023', '05/03/2023', '06/03/2023', '07/03/2023', '08/03/2023', '09/03/2023', '10/03/2023', '11/03/2023', '12/03/2023'].map(turno),
+        turno('15/03/2023'),
+    ];
+    const p = { ...basePratica, giornate: giornateRitardo };
+    const r = computeRestViolations(giornateRitardo, { tariffaOraria: 10, soloCEE: true, termineRiposoSettimanale: 144 });
+    const m = buildDocModel(p, r);
+
+    it('nTiming rilevato → passo del metodo presente, esclusione prudenziale ASSENTE', () => {
+        expect(m.nTiming).toBe(1);
+        const passi = metodoMotorePassi(m, p, r).map((x) => x.lead + x.testo).join('\n');
+        expect(passi).toContain('Tempestività del settimanale');
+        const leads = riserveBullets(m, p, r).map((b) => b.lead).join('|');
+        expect(leads).not.toContain('esclusione prudenziale');
+        const div = divarioBullets(m, r).map((b) => b.lead);
+        expect(div).not.toContain('Tempestività del settimanale');
+    });
+    it('la violazione di tempestività ha la causale giusta nei documenti', () => {
+        const html = buildConteggiRiposiHtml(p, r);
+        expect(html).toContain('Settimanale oltre il termine: 45h intere');
     });
 });

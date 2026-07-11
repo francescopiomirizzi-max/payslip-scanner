@@ -33,6 +33,11 @@ export interface PraticaRiposi {
      *  Metodo avvocato «danno = 20% del valore» → 0.20. Non ancora persistito su DB
      *  (follow-up con `tariffe_per_anno`). Vedi `RestParams.coefficiente`. */
     coefficiente?: number;
+    /** true = il motore computa la TEMPESTIVITÀ del riposo settimanale (art. 8 §6:
+     *  inizio oltre 144h dal precedente → 45h piene, criterio del documento sorgente).
+     *  Default false = esclusione prudenziale, dichiarata con riserva nei documenti.
+     *  Migration 025. Vedi `RestParams.termineRiposoSettimanale`. */
+    tempestivitaSettimanale?: boolean;
     giornate: GiornataInput[];
     /** Organizzazione committente (`sindacati`, migration 022). Assente = legacy,
      *  visibile in ogni organizzazione (fail-open, vedi utils/sindacatoScope). */
@@ -49,7 +54,7 @@ export interface PraticaRiposi {
 
 /** Campi di gestione aggiornabili dal dettaglio. */
 export type PraticaRiposiUpdate = Partial<Pick<PraticaRiposi,
-    'stato' | 'dataApertura' | 'dataChiusura' | 'dataPagamento' | 'importoRiconosciuto' | 'tariffaOraria' | 'fonteTariffa' | 'coefficiente' | 'tariffePerAnno'
+    'stato' | 'dataApertura' | 'dataChiusura' | 'dataPagamento' | 'importoRiconosciuto' | 'tariffaOraria' | 'fonteTariffa' | 'coefficiente' | 'tariffePerAnno' | 'tempestivitaSettimanale'
 >>;
 
 // ─── Mappers (esportati per i test) ──────────────────────────────────────────
@@ -78,6 +83,7 @@ export function dbToPratica(row: any): PraticaRiposi {
         fonteTariffa: row.fonte_tariffa ?? undefined,
         tariffePerAnno: row.tariffe_per_anno ?? undefined,
         coefficiente: row.coefficiente != null ? Number(row.coefficiente) : undefined,
+        tempestivitaSettimanale: row.tempestivita_settimanale === true ? true : undefined,
         giornate: row.giornate ?? [],
         sindacatoId: row.sindacato_id ?? undefined,
         stato: row.stato ?? 'in_corso',
@@ -101,6 +107,7 @@ export function praticaToDb(p: PraticaRiposi): Record<string, unknown> {
         fonte_tariffa: p.fonteTariffa ?? null,
         tariffe_per_anno: p.tariffePerAnno ?? null,
         coefficiente: p.coefficiente ?? null,
+        tempestivita_settimanale: p.tempestivitaSettimanale ?? false,
         giornate: p.giornate,
         // Chiave scritta solo se presente (coerente con workerToDb: mai azzerare
         // dal client un collegamento fatto su DB).
@@ -124,6 +131,7 @@ const updateToDb = (u: PraticaRiposiUpdate): Record<string, unknown> => {
     if ('fonteTariffa' in u) out.fonte_tariffa = u.fonteTariffa ?? null;
     if ('coefficiente' in u) out.coefficiente = u.coefficiente ?? null;
     if ('tariffePerAnno' in u) out.tariffe_per_anno = u.tariffePerAnno ?? null;
+    if ('tempestivitaSettimanale' in u) out.tempestivita_settimanale = u.tempestivitaSettimanale ?? false;
     return out;
 };
 
