@@ -69,6 +69,56 @@
          quando determinabile) + legenda arricchita.
       Vincoli: nessun controllo rimosso, tema chiaro/scuro, viewer = stessa leggibilità.
 
+## 8. Documenti da giudice — relazione .docx + conteggi stampa (richiesta 11/07 sera, PIANO)
+
+> Obiettivo: accuratezza notevole, tutto dichiarato, zero spazio a interpretazioni. I due documenti
+> devono dire le STESSE cose (oggi duplicano testi a mano → rischio divergenza) e riflettere tutto
+> ciò che oggi è cambiato/si è scoperto.
+
+**Gap trovati nella lettura integrale dei generatori attuali:**
+1. **"Coefficiente danno" ovunque, stale**: con coefficiente 1,20 stamperebbero «danno = 120% del
+   valore» — testo sbagliato davanti a un giudice. Serve la tripartizione pieno/maggiorazione/danno
+   (come la UI di oggi). Anche `coeffSuffix` («× 120%») e `causaleSintetica` (non conosce la
+   violazione di tempestività → la etichetterebbe «inferiore al minimo ridotto») vanno adeguati.
+2. **Tariffa oraria spiegata in modo vago** («ricavata dal documento, confermabile») quando ORA
+   abbiamo la catena contrattuale VERIFICATA: retribuzione oraria (fissi+ratei ÷195, art. 15 CCNL
+   '76) × 1,20 festivo (art. 14 CCNL '97), riscontrata al centesimo sulle buste 2023-24 e −0,3%
+   nel 2022. Da dichiarare con onestà sul perimetro (anni verificati vs derivati).
+3. **La guardia sui giorni lavorati senza orari NON è dichiarata** nel metodo (i gap che li
+   attraversano non sono riposi): regola che sposta i numeri → va scritta.
+4. **La tempestività art. 8 §6 (45h piene) non è menzionata**: se spenta va dichiarata ESCLUSA con
+   riserva (spiega parte del divario A↔B ed è prudenziale); se attiva va descritta (rilevabile dai
+   risultati). 
+5. **Serie A descritta come scatola nera** («criteri di chi ha prodotto il documento») quando ora
+   conosciamo il suo metodo esatto (Rip.Gro/Rip.Set, 11h−fatto, 45h−fatto, 45 piene oltre il
+   termine, paga mensile ×1,20) → descriverlo rende il confronto A↔B leggibile dal giudice.
+6. **Divario A↔B senza numeri**: serve la sezione dedicata con le ragioni QUANTIFICATE (split fonte
+   CEE/non-CEE calcolabile dalle giornate; riduzioni lecite; tempestività esclusa; granularità
+   settimanale per-evento vs a scorrimento).
+7. **Perimetro CEE citato senza base normativa completa**: artt. 2 §1 lett. b) e 3 lett. a)
+   Reg. 561/2006 (a contrario) + nota INL prot. 61 del 14/01/2021.
+
+**Piano:**
+- [x] A. **Nucleo testuale condiviso `utils/riposiDocText.ts`** — una sola fonte della verità per i
+      testi/calcoli che compaiono in ENTRAMBI i documenti: valorizzazione (3 casi), catena tariffa
+      con perimetro di verifica, metodo serie A, regole motore complete (guardia, ridotti leciti,
+      alternanza, tempestività presente/esclusa), ragioni del divario con numeri, riferimenti
+      normativi, riserve. Fix `causaleSintetica` per la tempestività.
+- [x] B. **Relazione .docx** ristrutturata sul nucleo: 1 dati pratica · 2 fonte dei dati e
+      affidabilità (parser deterministico quadrato al centesimo) · 3 quadro normativo (con CEE
+      completo) · 4 metodo del documento sorgente (serie A) · 5 metodo del motore (serie B) +
+      esempio numerico · 6 risultanze e riepilogo per anno · 7 il divario A↔B spiegato coi numeri ·
+      8 elenco violazioni · 9 riserve e limiti. Stile docx invariato (branding documenti INVARIATO
+      come da decisione rebrand).
+- [x] C. **Conteggi stampa** allineati: stessi contenuti dal nucleo, layout tabellare A4 attuale.
+- [x] D. **Verifica FATTA**: 14 test nuovi sul nucleo (3 valorizzazioni, split CEE, salvaguardia,
+      tempestività, «mai danno=120%», parità docx↔html) + 18 test esistenti INVARIATI verdi;
+      generazione END-TO-END dei documenti REALI di Viterbo in Node (5.022 giornate): serie B
+      € 21.784,85 = configurazione scelta, divario CEE quantificato al centesimo (€ 32.372,41 =
+      98.732−66.360), 584 intervalli di salvaguardia e 1.264 giornate senza orari dichiarati,
+      riscontro tariffa (fonte_tariffa aggiornata in DB) citato nel testo. Gate 292/292 · build ok.
+      Copie reali su ~/Desktop (viterbo-relazione.docx + viterbo-conteggi.html) per il collaudo visivo.
+
 ### Review — sessione riposi 11/07
 - Gate: tsc 0 · vitest 278/278 (4 test nuovi tempestività) · build ok. Nessun tocco a migration/DB.
 - La banda dei chiarimenti ha retto TUTTA alla prova dei dati: GRO, 45h piene, paga×parametro,

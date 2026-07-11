@@ -7,31 +7,25 @@
 // generateRelazioneRiposi scarica il file. Import del modulo DINAMICO dal
 // componente: docx resta fuori dal bundle principale.
 //
-// Le due serie (fonte vs motore 561/2006) sono presentate AFFIANCATE e mai
-// sommate: la scelta della base di quantificazione spetta all'avvocato.
+// DOCUMENTO DA GIUDICE: tutti i testi di metodo/tariffa/valorizzazione/divario/
+// riserve vengono dal nucleo condiviso utils/riposiDocText.ts (stessa fonte dei
+// conteggi stampabili: i due documenti non possono divergere). Le due serie
+// (fonte vs motore 561/2006) sono presentate AFFIANCATE e mai sommate: la
+// scelta della base di quantificazione spetta all'avvocato.
 // ==========================================
 
 import {
     Document, Packer, Paragraph, Table, TableCell, TableRow,
     TextRun, HeadingLevel, AlignmentType, WidthType, BorderStyle, ShadingType,
 } from 'docx';
-import { causaleSintetica, computeSerieFonte, tariffaRange, formatHm, type RestResult, type Violazione } from './restEngine';
-import { groupThousandsIT } from './formatters';
+import { causaleSintetica, tariffaRange, formatHm, type RestResult, type Violazione } from './restEngine';
+import {
+    euro, intIT, tariffaLabel, coeffSuffix, dmyhm, buildDocModel,
+    quadroNormativoBullets, quadroContrattualeBullets, fonteDatiBullets, metodoFonteBullets,
+    metodoMotorePassi, tariffaSpiegazione, divarioBullets, riserveBullets,
+    AVVERTENZA_SERIE, DISCLAIMER, type Bullet,
+} from './riposiDocText';
 import type { PraticaRiposi } from '../hooks/usePraticheRiposi';
-
-const euro = (n: number) => '€ ' + groupThousandsIT(n.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
-const intIT = (n: number) => groupThousandsIT(Math.round(n).toLocaleString('it-IT'));
-/** Etichetta tariffa: valore singolo se piatta, range "€min → €max" se per-anno. */
-const tariffaLabel = (rates: Record<string, number>): string => {
-    const { min, max, uniform } = tariffaRange(rates);
-    return uniform ? `${euro(min)}/h` : `${euro(min)} → ${euro(max)}/h`;
-};
-/** Suffisso coefficiente danno (es. " × 20%") quando attivo; vuoto se valore pieno. */
-const coeffSuffix = (coeff: number): string => (coeff !== 1 ? ` × ${Math.round(coeff * 100)}%` : '');
-const dmyhm = (iso: string) => {
-    const d = new Date(iso);
-    return d.toLocaleDateString('it-IT') + ' ' + d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
-};
 
 // ─── Mattoni docx (stesso linguaggio visivo di reportGenerator) ───────────────
 
@@ -48,6 +42,9 @@ const bullet = (runs: (TextRun | string)[]): Paragraph =>
     new Paragraph({ bullet: { level: 0 }, spacing: { after: 60 }, children: runs.map((r) => (typeof r === 'string' ? new TextRun(r) : r)) });
 
 const b = (text: string) => new TextRun({ text, bold: true });
+
+/** Punto elenco dal nucleo condiviso: lead in grassetto + testo. */
+const bulletB = (bl: Bullet): Paragraph => bullet([b(bl.lead), ` — ${bl.testo}`]);
 
 const headerCell = (text: string): TableCell =>
     new TableCell({
@@ -81,24 +78,10 @@ const bordered = (rows: TableRow[]): Table =>
 // ─── Contenuto ────────────────────────────────────────────────────────────────
 
 export function buildRelazioneRiposiDoc(pratica: PraticaRiposi, result: RestResult): Document {
-    const fonte = computeSerieFonte(pratica.giornate);
-    const coeff = pratica.coefficiente ?? 1;
-    const pct = Math.round(coeff * 100);
-    const rates = result.tariffePerAnnoApplicate;
-    const violazioni = [...result.violazioni].sort((a, b) => a.inizio.localeCompare(b.inizio));
-    const totViol = result.nViolazioniGiornaliere + result.nViolazioniSettimanali;
+    const model = buildDocModel(pratica, result);
+    const { coeff, val, rates, fonte, violazioni, righeAnno, totViol } = model;
     const oggi = new Date().toLocaleDateString('it-IT', { day: '2-digit', month: 'long', year: 'numeric' });
-
-    // Riepilogo annuale: motore + fonte affiancate.
-    const perAnno: Record<string, { g: number; s: number; ore: number; vp: number; ind: number; indFonte: number }> = {};
-    const riga = (y: string) => (perAnno[y] ??= { g: 0, s: 0, ore: 0, vp: 0, ind: 0, indFonte: 0 });
-    for (const v of violazioni) {
-        const r = riga(v.inizio.slice(0, 4));
-        if (v.tipo === 'riposo_giornaliero') r.g++; else r.s++;
-        r.ore += v.oreMancanti; r.vp += v.valorePieno; r.ind += v.indennita;
-    }
-    for (const [y, ind] of Object.entries(fonte.perAnno)) riga(y).indFonte = ind;
-    const anni = Object.keys(perAnno).sort();
+    const mostraVP = coeff !== 1; // colonna "valore pieno" solo quando c'è un coefficiente
 
     // Esempio didattico: la violazione con più ore mancanti (mirror della modale in-app).
     const esempio = violazioni.reduce<Violazione | null>((best, v) => (!best || v.oreMancanti > best.oreMancanti ? v : best), null);
@@ -114,7 +97,7 @@ export function buildRelazioneRiposiDoc(pratica: PraticaRiposi, result: RestResu
         new Paragraph({
             alignment: AlignmentType.CENTER,
             spacing: { after: 60 },
-            children: [new TextRun({ text: `Lavoratore: ${pratica.cognome} ${pratica.nome} — periodo ${pratica.periodoStart ?? '—'} / ${pratica.periodoEnd ?? '—'}`, italics: true })],
+            children: [new TextRun({ text: `Lavoratore: ${pratica.cognome} ${pratica.nome}${pratica.azienda ? ` (${pratica.azienda})` : ''} — periodo ${pratica.periodoStart ?? '—'} / ${pratica.periodoEnd ?? '—'}`, italics: true })],
         }),
         new Paragraph({
             alignment: AlignmentType.CENTER,
@@ -129,51 +112,39 @@ export function buildRelazioneRiposiDoc(pratica: PraticaRiposi, result: RestResu
             ...(pratica.azienda ? [new TableRow({ children: [dataCell('Azienda'), dataCell(pratica.azienda)] })] : []),
             new TableRow({ children: [dataCell('Periodo analizzato'), dataCell(`${pratica.periodoStart ?? '—'} – ${pratica.periodoEnd ?? '—'}`)] }),
             new TableRow({ children: [dataCell('Giornate nel prospetto turni'), dataCell(intIT(pratica.giornate.length))] }),
-            new TableRow({ children: [dataCell('Tariffa oraria applicata (per anno)'), dataCell(`${tariffaLabel(rates)}${tariffaRange(rates).uniform ? '' : ', cresce per anzianità'}${pratica.fonteTariffa ? ` (${pratica.fonteTariffa})` : ''}`)] }),
-            ...(coeff !== 1 ? [new TableRow({ children: [dataCell('Coefficiente danno'), dataCell(`${Math.round(coeff * 100)}% del valore del riposo perso`)] })] : []),
+            new TableRow({ children: [dataCell('Perimetro di calcolo (serie B)'), dataCell(model.soloCEE ? 'sole giornate in regime Reg. (CE) n. 561/2006 (marcate «CEE»)' : 'tutte le giornate del prospetto')] }),
+            new TableRow({ children: [dataCell('Tariffa oraria applicata (per anno)'), dataCell(`${tariffaLabel(rates)}${tariffaRange(rates).uniform ? '' : ', cresce per anzianità di servizio'}`)] }),
+            new TableRow({ children: [dataCell('Valorizzazione della serie B'), dataCell(val.riga)] }),
         ]),
 
-        heading('2. Quadro normativo'),
+        heading('2. Fonte dei dati e affidabilità'),
+        ...fonteDatiBullets(model, pratica).map(bulletB),
+
+        heading('3. Quadro normativo e contrattuale'),
         para([
             'La disciplina dei tempi di guida e di riposo del personale viaggiante su strada è dettata dal ',
             b('Reg. (CE) n. 561/2006'), ', attuato nell\'ordinamento interno dal ', b('D.Lgs. n. 234/2007'), '. In particolare:',
         ]),
-        bullet([b('Riposo giornaliero'), ' (art. 8 §§2,4; art. 4 lett. g): almeno ', b('11 ore consecutive'), ' nell\'arco delle 24 ore dal termine del precedente riposo; riducibile a ', b('9 ore'), ' al massimo ', b('3 volte'), ' tra due riposi settimanali.']),
-        bullet([b('Riposo settimanale'), ' (art. 8 §6; art. 4 lett. h): almeno ', b('45 ore consecutive'), '; riducibile a ', b('24 ore'), ' solo in alternanza con un riposo regolare (mai due ridotti consecutivi).']),
-        bullet([b('Gravità'), ': la riduzione superiore al 10% della soglia è classificata «grave» secondo i criteri del ', b('Reg. (UE) 2016/403'), '; è un criterio di classificazione, non il presupposto dell\'illecito.']),
+        ...quadroNormativoBullets().map(bulletB),
         para([
             'Per la ', b('quantificazione economica'), ' del riposo non fruito si fa riferimento alla disciplina ',
             b('contrattuale collettiva'), ' di settore — CCNL Autoferrotranvieri e successive integrazioni (',
             b('23/07/1976'), ' artt. 6 e 15; ', b('12/03/1980'), ' art. 11; ', b('12/06/1982'), '; ',
             b('25/07/1997'), ' art. 14) — letta insieme alla ', b('L. n. 138/1958'), ' e al ', b('D.Lgs. n. 66/2003'), '. In sintesi:',
         ]),
-        bullet([b('Natura festiva del riposo perso'), ' (art. 14 CCNL 25/07/1997): per chi lavora di domenica e riposa in altro giorno, il giorno fissato per il riposo periodico è considerato ', b('festivo a tutti gli effetti'), '; ogni prestazione resa in tale giorno va trattata, in via principale, come ', b('lavoro festivo'), '.']),
-        bullet([b('Retribuzione oraria'), ' (art. 15 CCNL 1976): la «retribuzione normale» (tabellare/minimo, contingenza, scatti, mensa, T.D.R., assegni ad personam) è rapportata al ', b('divisore 195'), ' (39 ore settimanali su 6 giorni = 6,5 h/giorno; 6,5 × 30 = 195).']),
-        bullet([b('Maggiorazioni'), ' (cumulabili, sommate): straordinario ', b('+10%'), ', festivo ', b('+20%'), ', notturno ', b('+20%'), ' (combinazioni: straordinario festivo o notturno 130%, straordinario festivo notturno 150%).']),
-        bullet([b('Impostazione prudenziale'), ': sono assunti importi ', b('minimi'), ' — non si applicano né la maggiorazione notturna (fascia 22:00–05:00) né l\'integrazione del 50% prevista per il servizio reso nel giorno di riposo in misura inferiore all\'orario giornaliero; resta ferma ogni maggiore valutazione del Giudicante.']),
-        para([
-            'Coerentemente, il ', b('valore pieno'), ' del riposo perso recepisce la valorizzazione contrattuale qui richiamata (la tariffa oraria per anno è ricavata dalle indennità della fonte, che già la incorpora); su tale valore pieno la ',
-            b('serie B'), ' applica il coefficiente di danno secondo il criterio del legale (v. sezione «Metodo di calcolo»).',
-        ]),
+        ...quadroContrattualeBullets().map(bulletB),
 
-        heading('3. Metodo di calcolo'),
+        heading('4. Criteri del documento sorgente (serie A)'),
+        para('Per trasparenza del confronto si descrivono i criteri applicati dal compilatore del prospetto, come risultano dal documento stesso:'),
+        ...metodoFonteBullets(model).map(bulletB),
+
+        heading('5. Metodo di calcolo del motore (serie B)'),
         para([
-            'Le giornate di servizio sono state estratte dal documento sorgente («Mancati riposi») con un ',
-            b('parser deterministico'), ' — nessuna interpretazione AI/OCR — i cui totali ', b('quadrano al centesimo'),
-            ' con quelli stampati nel documento stesso. Su tali dati il calcolo procede per i passaggi seguenti, tutti verificabili:',
+            'Sui dati del prospetto il calcolo procede per i passaggi seguenti, tutti verificabili e riproducibili:',
         ]),
-        bullet([b('1) Perimetro CEE'), ' — si considerano le sole giornate in regime Reg. (CE) n. 561/2006 (servizio di linea, marcate «CEE»).']),
-        bullet([b('2) Ricostruzione dei riposi'), ' — dai soli orari di inizio/termine si ricava il riposo effettivamente fruito tra turni consecutivi.']),
-        bullet([b('3) Soglie ed esclusioni'), ' — riposo giornaliero 11h (riducibile a 9h max 3 volte = lecito), settimanale 45h (riducibile a 24h solo in alternanza). I riposi ridotti leciti (', b(intIT(result.nRidottiGiornalieriLeciti)), ' nel periodo) ', b('non'), ' sono conteggiati. Le righe non interpretabili sono segnalate, mai stimate.']),
-        bullet([b('4) Ore mancanti'), ' — per ogni violazione: soglia di legge − riposo fruito.']),
-        bullet([b('5) Valore pieno'), ' — ore mancanti × tariffa oraria ', b('dell\'anno'), ' (cresce per anzianità di servizio, ', tariffaLabel(rates), ').']),
-        ...(coeff !== 1 ? [bullet([b(`6) Coefficiente danno ${pct}%`), ' — sul valore pieno si applica il ', b(`${pct}%`), ' (criterio del legale): è l\'indennità.'])] : []),
-        para([
-            'In formula: ', b(coeff !== 1
-                ? `Indennità = Σ (ore mancanti × tariffa €/h dell'anno) × ${pct}%`
-                : 'Indennità = Σ (ore mancanti × tariffa €/h dell\'anno)'),
-            '. Il dettaglio per violazione è nella sezione 5, il riepilogo per anno qui sotto.',
-        ]),
+        ...metodoMotorePassi(model, pratica, result).map(bulletB),
+        para([b('Tariffa oraria'), ` — ${tariffaSpiegazione(model, pratica)}`]),
+        para(['In formula: ', b(val.formula), '. Il dettaglio per violazione è nella sezione 8, il riepilogo per anno nella sezione 6.']),
 
         ...(esempio ? [
             para([b('Esempio di calcolo')], { after: 60 }),
@@ -187,7 +158,7 @@ export function buildRelazioneRiposiDoc(pratica: PraticaRiposi, result: RestResu
             ]),
         ] : []),
 
-        heading('4. Risultanze — le due serie a confronto'),
+        heading('6. Risultanze — le due serie a confronto'),
         para([
             'Sono disponibili due quantificazioni dello stesso pregiudizio, costruite con criteri diversi: ',
             b('non si sommano'), '.',
@@ -197,7 +168,7 @@ export function buildRelazioneRiposiDoc(pratica: PraticaRiposi, result: RestResu
             new TableRow({
                 children: [
                     dataCell('A — documento sorgente', { bold: true }),
-                    dataCell(fonte.gg > 0 ? `${intIT(fonte.gg)} giornate indennizzate · ${intIT(fonte.ore)} ore · criteri di chi ha prodotto il documento` : 'serie non presente nei dati'),
+                    dataCell(fonte.gg > 0 ? `${intIT(fonte.gg)} giornate indennizzate · ${intIT(fonte.ore)} ore · criteri del compilatore (sezione 4)` : 'serie non presente nei dati'),
                     dataCell(fonte.gg > 0 ? euro(fonte.ind) : '—', { right: true, bold: true }),
                 ],
             }),
@@ -216,23 +187,20 @@ export function buildRelazioneRiposiDoc(pratica: PraticaRiposi, result: RestResu
                 tableHeader: true,
                 children: [
                     headerCell('Anno'), headerCell('Tariffa €/h'), headerCell('Viol. giornaliere'), headerCell('Viol. settimanali'), headerCell('Ore mancanti'),
-                    ...(coeff !== 1 ? [headerCell('Valore pieno')] : []),
-                    headerCell(coeff !== 1 ? `Indennità (×${pct}%)` : '€ motore (B)'), headerCell('€ fonte (A)'),
+                    ...(mostraVP ? [headerCell('Valore pieno')] : []),
+                    headerCell(mostraVP ? `Indennità (${coeffSuffix(coeff).trim()})` : '€ motore (B)'), headerCell('€ fonte (A)'),
                 ],
             }),
-            ...anni.map((y) => {
-                const r = perAnno[y];
-                return new TableRow({
-                    children: [
-                        dataCell(y), dataCell(rates[y] != null ? euro(rates[y]) : '—', { right: true }),
-                        dataCell(String(r.g), { right: true }), dataCell(String(r.s), { right: true }),
-                        dataCell(formatHm(r.ore), { right: true }),
-                        ...(coeff !== 1 ? [dataCell(euro(r.vp), { right: true })] : []),
-                        dataCell(euro(r.ind), { right: true }),
-                        dataCell(r.indFonte ? euro(r.indFonte) : '—', { right: true }),
-                    ],
-                });
-            }),
+            ...righeAnno.map((r) => new TableRow({
+                children: [
+                    dataCell(r.y), dataCell(rates[r.y] != null ? euro(rates[r.y]) : '—', { right: true }),
+                    dataCell(String(r.g), { right: true }), dataCell(String(r.s), { right: true }),
+                    dataCell(formatHm(r.oreMancanti), { right: true }),
+                    ...(mostraVP ? [dataCell(euro(r.vp), { right: true })] : []),
+                    dataCell(euro(r.ind), { right: true }),
+                    dataCell(r.indFonte ? euro(r.indFonte) : '—', { right: true }),
+                ],
+            })),
             new TableRow({
                 children: [
                     dataCell('Totale', { bold: true, fill: 'F2F2F2' }),
@@ -240,28 +208,32 @@ export function buildRelazioneRiposiDoc(pratica: PraticaRiposi, result: RestResu
                     dataCell(String(result.nViolazioniGiornaliere), { right: true, bold: true, fill: 'F2F2F2' }),
                     dataCell(String(result.nViolazioniSettimanali), { right: true, bold: true, fill: 'F2F2F2' }),
                     dataCell(formatHm(result.totOreMancanti), { right: true, bold: true, fill: 'F2F2F2' }),
-                    ...(coeff !== 1 ? [dataCell(euro(result.totValorePieno), { right: true, bold: true, fill: 'F2F2F2' })] : []),
+                    ...(mostraVP ? [dataCell(euro(result.totValorePieno), { right: true, bold: true, fill: 'F2F2F2' })] : []),
                     dataCell(euro(result.totIndennita), { right: true, bold: true, fill: 'F2F2F2' }),
                     dataCell(fonte.ind ? euro(fonte.ind) : '—', { right: true, bold: true, fill: 'F2F2F2' }),
                 ],
             }),
         ]),
-        ...(coeff !== 1 ? [para([
+        ...(mostraVP ? [para([
             b('Come si arriva al totale'),
-            `: il valore pieno (ore mancanti × tariffa €/h dell'anno) ammonta a ${euro(result.totValorePieno)}; su ciascuna violazione si applica il ${pct}% e si arrotonda al centesimo, quindi si somma → indennità complessiva ${euro(result.totIndennita)}. Ogni colonna quadra per somma.`,
+            `: il valore pieno (ore mancanti × tariffa €/h dell'anno) ammonta a ${euro(result.totValorePieno)}; su ciascuna violazione si applica la valorizzazione (${val.riga}) e si arrotonda al centesimo, quindi si somma → indennità complessiva ${euro(result.totIndennita)}. Ogni colonna quadra per somma.`,
         ], { after: 60 })] : []),
 
-        heading(`5. Elenco delle violazioni rilevate (${intIT(totViol)})`),
-        para('Ogni riga è un riposo fruito in misura inferiore alle soglie del Reg. (CE) n. 561/2006 (riferimenti normativi in sezione 2).', { italics: true }),
-        para(coeff !== 1
-            ? `Per ogni violazione: ore mancanti × tariffa €/h dell'anno = valore pieno; × ${pct}% = indennità.`
+        heading('7. Perché le due serie differiscono'),
+        para('Le ragioni del divario, dichiarate e quantificate dove possibile:'),
+        ...divarioBullets(model, result).map(bulletB),
+
+        heading(`8. Elenco delle violazioni rilevate (${intIT(totViol)})`),
+        para('Ogni riga è un riposo fruito in misura inferiore alle soglie del Reg. (CE) n. 561/2006 (riferimenti normativi in sezione 3).', { italics: true }),
+        para(mostraVP
+            ? `Per ogni violazione: ore mancanti × tariffa €/h dell'anno = valore pieno; valorizzazione (${val.riga}) = indennità.`
             : 'Per ogni violazione: ore mancanti × tariffa €/h dell\'anno = indennità.', { italics: true }),
         bordered([
             new TableRow({
                 tableHeader: true,
                 children: [
                     headerCell('Riposo dal'), headerCell('al'), headerCell('Tipo'), headerCell('Fruito'), headerCell('Mancante'), headerCell('Tariffa €/h'),
-                    ...(coeff !== 1 ? [headerCell('Valore pieno')] : []),
+                    ...(mostraVP ? [headerCell('Valore pieno')] : []),
                     headerCell('Indennità'), headerCell('Gravità'), headerCell('Causale'),
                 ],
             }),
@@ -271,7 +243,7 @@ export function buildRelazioneRiposiDoc(pratica: PraticaRiposi, result: RestResu
                     dataCell(v.tipo === 'riposo_giornaliero' ? 'Giornaliero' : 'Settimanale'),
                     dataCell(formatHm(v.ore), { right: true }), dataCell(formatHm(v.oreMancanti), { right: true }),
                     dataCell(euro(rates[v.inizio.slice(0, 4)] ?? pratica.tariffaOraria), { right: true }),
-                    ...(coeff !== 1 ? [dataCell(euro(v.valorePieno), { right: true })] : []),
+                    ...(mostraVP ? [dataCell(euro(v.valorePieno), { right: true })] : []),
                     dataCell(euro(v.indennita), { right: true }),
                     dataCell(v.gravita, { bold: v.gravita === 'grave' }),
                     dataCell(causaleSintetica(v)),
@@ -279,24 +251,18 @@ export function buildRelazioneRiposiDoc(pratica: PraticaRiposi, result: RestResu
             })),
         ]),
 
-        heading('6. Riserve e limiti'),
-        bullet([b('Tariffa oraria'), `: ricavata anno per anno dal documento sorgente (${tariffaLabel(rates)}), in quanto cresce per anzianità di servizio${pratica.fonteTariffa ? ` — ${pratica.fonteTariffa}` : ''}. La fonte contrattuale (CCNL tabellare o con maggiorazione) è confermabile con il legale; alla conferma la quantificazione della serie B si ricalcola.`]),
-        coeff !== 1
-            ? bullet([b('Coefficiente danno'), `: l'indennità della serie B è quantificata come ${Math.round(coeff * 100)}% del valore del riposo perso (danno equitativo ancorato al CCNL, criterio del legale).`])
-            : bullet([b('Coefficiente danno'), ': la serie B è esposta al valore pieno (100%); l\'eventuale criterio «danno = 20% del valore» va confermato dal legale e si applica come fattore globale, senza rielaborare i dati.']),
-        bullet([b('Pausa di guida (art. 7)'), ': richiede i dati del cronotachigrafo, non presenti nel prospetto turni; è esclusa dal perimetro di questa relazione.']),
-        bullet([b('Codici di servizio'), ': i codici di linea/turno non sono decodificabili senza la legenda aziendale.']),
-        bullet([b('Cumulo delle serie'), ': le serie A e B quantificano i medesimi riposi non fruiti; la scelta della base di quantificazione — e la verifica che le indennità della serie A non risultino già corrisposte in busta paga — spettano al legale incaricato.']),
+        heading('9. Riserve e limiti'),
+        ...riserveBullets(model, pratica, result).map(bulletB),
         ...(result.warnings.length
             ? [
-                para([b(`Righe da verificare a mano (${result.warnings.length})`), ' — escluse dal calcolo, segnalate per trasparenza:'], { after: 60 }),
+                para([b(`Righe da verificare a mano (${result.warnings.length})`), ' — escluse dal calcolo, dichiarate per trasparenza:'], { after: 60 }),
                 ...result.warnings.map((w) => bullet([w])),
             ]
             : []),
 
         new Paragraph({
             spacing: { before: 400 },
-            children: [new TextRun({ text: 'La presente è un\'elaborazione tecnica di supporto: ogni valutazione sull\'azionabilità delle pretese spetta al professionista legale incaricato.', italics: true, color: '666666' })],
+            children: [new TextRun({ text: DISCLAIMER, italics: true, color: '666666' })],
         }),
     ];
 

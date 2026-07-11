@@ -488,6 +488,7 @@ export function causaleSintetica(v: Violazione): string {
   if (v.tipo === 'riposo_giornaliero') {
     return /Quarto/.test(v.motivo) ? 'Riposo ridotto oltre i 3 consentiti' : 'Riposo inferiore al minimo ridotto (9h)';
   }
+  if (/oltre il termine/.test(v.motivo)) return 'Settimanale oltre il termine: 45h intere';
   return /Secondo/.test(v.motivo) ? 'Secondo ridotto consecutivo senza alternanza (45h)' : 'Riposo inferiore al minimo ridotto (24h)';
 }
 

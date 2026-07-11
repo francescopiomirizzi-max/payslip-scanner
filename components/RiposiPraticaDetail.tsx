@@ -19,7 +19,9 @@ const tariffaLabel = (rates: Record<string, number>): string => {
     return uniform ? `${euro(min)}/h` : `${euro(min)} → ${euro(max)}/h`;
 };
 /** Suffisso coefficiente danno (es. " × 20%") quando attivo; vuoto se valore pieno. */
-const coeffSuffix = (coeff: number): string => (coeff !== 1 ? ` × ${Math.round(coeff * 100)}%` : '');
+// " +20%" per la maggiorazione, " × 20%" per il danno, vuoto a valore pieno (come nei documenti).
+const coeffSuffix = (coeff: number): string =>
+    coeff > 1 ? ` +${Math.round((coeff - 1) * 100)}%` : coeff < 1 ? ` × ${Math.round(coeff * 100)}%` : '';
 // Valorizzazioni del riposo perso proposte dal selettore. Il "+20%" è la MAGGIORAZIONE sul
 // totale chiarita da Vincenzo l'11/07 (Cass. 14940/2014: 20% = maggiorazione straordinario
 // festivo); il "danno 20%" resta selezionabile come interpretazione alternativa del legale.
