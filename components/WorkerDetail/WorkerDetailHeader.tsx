@@ -244,7 +244,7 @@ const WorkerDetailHeader: React.FC = () => {
                       <LineChart className="w-4 h-4 text-amber-500" strokeWidth={2.5} />
                       Calcolo interessi (ISTAT)
                     </button>
-                    {!isReadOnly && (worker.profilo === 'RFI' || worker.profilo === 'TRENITALIA') && (
+                    {!isReadOnly && ['RFI', 'TRENITALIA', 'FSE', 'MERCITALIA'].includes(worker.profilo) && (
                     <button
                       onClick={() => { onOpenAccuracyCheck(); setIsActionsOpen(false); }}
                       className="w-full flex items-center gap-3 px-4 py-3 text-sm font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors border-t border-slate-100 dark:border-slate-800"

@@ -3,6 +3,30 @@
 > Pattern e errori da evitare nelle prossime sessioni.
 > Aggiornato dopo ogni correzione utente.
 
+## 2026-07-11 — Parser FSE/Mercitalia: riconcilia ogni documento col SUO totale stampato; e ri-misura le conclusioni dei report passati
+
+**Contesto:** parser di verità FSE + Mercitalia. Il report Clarino (§4.3) prescriveva "banda GG LAV
+come fonte primaria" e (§2b) affermava "banda vuota in Set 2022". Entrambe le affermazioni — mie,
+di 12 ore prima — erano FALSE sui PDF reali: la banda stampa un **22 teorico** in tutta l'era IX,
+perfino nel mese di congedo totale. Se avessi implementato il requisito com'era scritto, il flag
+avrebbe prodotto 27+ falsi allarmi.
+
+**Lezione:**
+1. **Una conclusione scritta in un report (anche mio) non è un fatto: è un'ipotesi da ri-misurare**
+   quando ci si costruisce sopra del codice. La calibrazione su TUTTO il corpus (107 buste) ha
+   ribaltato il design in 10 minuti di batch. Cfr. lezione 21/05 ("invarianti non verificate").
+2. **Pattern d'oro per i parser di cedolini: l'autovalidazione per-documento.** Somma TUTTO ciò che
+   leggi nella colonna e confrontala col totale stampato sul documento stesso (TOT COMPETENZE /
+   riga "Totali"): se non quadra, la lettura o il layout è sbagliato → il documento si SCARTA come
+   verità, mai "si spera". Così sono saltate fuori 3 trappole invisibili a occhio: la riga banca
+   "INTESA SANPAOLO … Emolumenti correnti" (dal 2022 cade in zona Competenze e "INTESA" passa il
+   regex codice), l'esonero D01CNG (in zona Competenze ma NON nel totale) e i crediti WZF* DL 66/2014
+   (nel totale ma NON voci). Un campione a mano non le avrebbe mai trovate tutte.
+3. **I form ristampano interi blocchi sul retro** (banda, box ELEMENTI, header voci): ogni blocco va
+   letto UNA volta o con regione delimitata (header → separatore "----"/NOTE), altrimenti i fissi
+   raddoppiano. E il flag giusto per i giorni ambigui è quello che l'app usa già (presenze>31), non
+   un confronto con un campo dalla semantica non dimostrata.
+
 ## 2026-07-10 — Non trasformare il quesito per l'avvocato in un GATE sul lavoro dell'utente
 
 **Contesto:** estensione FSE era storica. Avevo impostato la sequenza come "estendiamo colonne/prompt

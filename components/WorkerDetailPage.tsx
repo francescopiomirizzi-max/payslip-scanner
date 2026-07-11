@@ -15,7 +15,7 @@ import TableComponent from './TableComponent';
 import WorkerDetailLayout from './WorkerDetailLayout';
 import { WorkerDetailProvider } from './WorkerDetail/WorkerDetailContext';
 import AccuracyCheckModal from './WorkerTables/AccuracyCheckModal';
-import type { Discrepancy } from '../utils/verifyFromFolder';
+import type { Discrepancy, VerifyProfile } from '../utils/verifyFromFolder';
 import { Worker, AnnoDati, getColumnsByProfile, MONTH_NAMES, resolveIncludePaidLeave } from '../types';
 import { SYSTEM_PROFILES, SYSTEM_PROFILE_KEYS, getCustomColorIndex } from '../config/profiles';
 import { parseMonthFromFilename } from '../constants';
@@ -1169,6 +1169,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
     {showAccuracy && (
       <AccuracyCheckModal
         anni={monthlyInputs}
+        profilo={worker.profilo as VerifyProfile}
         onApply={applyTruthFixes}
         onClose={() => setShowAccuracy(false)}
       />

@@ -2,14 +2,23 @@ import React, { useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X, FolderSearch, ShieldCheck, Loader2, AlertTriangle, Wand2 } from 'lucide-react';
 import type { AnnoDati } from '../../types';
-import { verifyFromFolder, type VerifyReport, type Discrepancy } from '../../utils/verifyFromFolder';
+import { verifyFromFolder, type VerifyReport, type Discrepancy, type VerifyProfile } from '../../utils/verifyFromFolder';
 
 const MESI = ['Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic'];
 const fmt = (n: number | null) => n === null ? '—' : n.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const campo = (f: string) => f === 'daysWorked' ? 'Giorni lav.' : f === 'daysVacation' ? 'Ferie' : f === 'daysPaidLeave' ? 'Ass. Retrib.' : f;
 
+// Nota sul perimetro, per profilo: cosa il parser può verificare e cosa no.
+const HINT: Record<VerifyProfile, string> = {
+  RFI: 'Solo buste RFI/Trenitalia con testo (le scansioni verranno segnalate come non verificabili).',
+  TRENITALIA: 'Solo buste RFI/Trenitalia con testo (le scansioni verranno segnalate come non verificabili).',
+  FSE: 'Buste FSE digitali da luglio 2017 in poi (ere IX e I8/T8). L\'era storica 2010–giu 2017 è fatta di scansioni: non verificabile qui.',
+  MERCITALIA: 'Buste Mercitalia in PDF (layout ADP). Vale anche per i nomi file numerici tipo "Cedolini-2019-10-…".',
+};
+
 interface Props {
   anni: AnnoDati[];
+  profilo: VerifyProfile;
   onApply: (fixes: Discrepancy[]) => void;
   onClose: () => void;
 }
@@ -17,7 +26,7 @@ interface Props {
 // Feature "Prova d'accuratezza" — verifica DAL DISCO (zero egress): l'utente sceglie la cartella
 // locale delle buste; leggiamo i PDF con PDF.js e confrontiamo col dato del motore. Poi si
 // applicano le correzioni (verità dal PDF) con un click.
-const AccuracyCheckModal: React.FC<Props> = ({ anni, onApply, onClose }) => {
+const AccuracyCheckModal: React.FC<Props> = ({ anni, profilo, onApply, onClose }) => {
   const inputRef = useRef<HTMLInputElement>(null);
   const [phase, setPhase] = useState<'idle' | 'running' | 'done'>('idle');
   const [progress, setProgress] = useState({ done: 0, total: 0 });
@@ -30,7 +39,7 @@ const AccuracyCheckModal: React.FC<Props> = ({ anni, onApply, onClose }) => {
     if (files.length === 0) return;
     setPhase('running');
     setProgress({ done: 0, total: files.filter(f => /\.pdf$/i.test(f.name)).length });
-    const rep = await verifyFromFolder(files, anni, (done, total) => setProgress({ done, total }));
+    const rep = await verifyFromFolder(files, anni, profilo, (done, total) => setProgress({ done, total }));
     setReport(rep);
     setPhase('done');
   };
@@ -67,7 +76,7 @@ const AccuracyCheckModal: React.FC<Props> = ({ anni, onApply, onClose }) => {
                 Scegli la cartella locale delle buste di questo lavoratore (es. <b>BUSTE PAGA</b> con le sottocartelle-anno).
                 I file restano sul tuo disco: <b>nessun consumo di banda</b>.
               </p>
-              <p className="text-[11px] text-slate-400 dark:text-slate-500 mb-6">Solo buste RFI/Trenitalia con testo (le scansioni verranno segnalate come non verificabili).</p>
+              <p className="text-[11px] text-slate-400 dark:text-slate-500 mb-6">{HINT[profilo] ?? HINT.RFI}</p>
               <button
                 onClick={() => inputRef.current?.click()}
                 className="inline-flex items-center gap-2 px-5 py-3 rounded-xl font-bold text-white bg-gradient-to-r from-emerald-600 to-teal-600 shadow-lg hover:-translate-y-0.5 active:scale-95 transition-all"
@@ -121,6 +130,40 @@ const AccuracyCheckModal: React.FC<Props> = ({ anni, onApply, onClose }) => {
                 </div>
               )}
 
+              {/* Giorni ambigui sul PDF (quantità presenze con arretrati multi-mese): non corretti. */}
+              {report.mesiGiorniIncerti.length > 0 && (
+                <div className="mb-4 rounded-xl border border-amber-300 dark:border-amber-800/60 bg-amber-50 dark:bg-amber-900/20 p-3">
+                  <div className="flex items-center gap-2 text-amber-700 dark:text-amber-300 font-bold text-sm">
+                    <AlertTriangle className="w-4 h-4 shrink-0" />
+                    Giorni lavorati da verificare a mano ({report.mesiGiorniIncerti.length} {report.mesiGiorniIncerti.length === 1 ? 'mese' : 'mesi'})
+                  </div>
+                  <p className="text-xs text-amber-700/90 dark:text-amber-300/80 mt-1.5">
+                    La voce di presenza supera i 31 giorni (arretrati di mesi precedenti dentro la quantità):
+                    il valore vero va deciso sui documenti, quindi <b>i giorni di questi mesi non vengono toccati</b>.
+                  </p>
+                  <div className="text-xs font-mono text-amber-800 dark:text-amber-200 mt-2 flex flex-wrap gap-x-3 gap-y-0.5">
+                    {report.mesiGiorniIncerti.map((m, i) => (
+                      <span key={i}>{MESI[m.monthIndex]} {m.year} <span className="opacity-60">({m.presenze} gg)</span></span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Buste col periodo interno diverso dal nome file: confrontarle corromperebbe il mese sbagliato. */}
+              {report.busteMisfiled.length > 0 && (
+                <div className="mb-4 rounded-xl border border-amber-300 dark:border-amber-800/60 bg-amber-50 dark:bg-amber-900/20 p-3">
+                  <div className="flex items-center gap-2 text-amber-700 dark:text-amber-300 font-bold text-sm">
+                    <AlertTriangle className="w-4 h-4 shrink-0" />
+                    {report.busteMisfiled.length} {report.busteMisfiled.length === 1 ? 'busta ha' : 'buste hanno'} un nome che non torna col contenuto — saltate
+                  </div>
+                  <div className="text-xs font-mono text-amber-800 dark:text-amber-200 mt-2 space-y-0.5">
+                    {report.busteMisfiled.map((b, i) => (
+                      <div key={i}>{b.name} <span className="opacity-60">→ dentro è {MESI[b.monthIndex]} {b.year}</span></div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {report.discrepancies.length === 0 ? (
                 <div className="text-center py-8 text-emerald-600 dark:text-emerald-400 font-bold flex flex-col items-center gap-2">
                   <ShieldCheck className="w-8 h-8" /> Nessuno scarto: i dati combaciano col PDF al centesimo.
@@ -160,6 +203,16 @@ const AccuracyCheckModal: React.FC<Props> = ({ anni, onApply, onClose }) => {
               {report.busteNonTestuali > 0 && (
                 <p className="flex items-center gap-2 text-[11px] text-amber-600 dark:text-amber-400 mt-3">
                   <AlertTriangle className="w-3.5 h-3.5" /> {report.busteNonTestuali} buste sono scansioni (senza testo): non verificabili così.
+                </p>
+              )}
+              {report.busteNonQuadrate > 0 && (
+                <p className="flex items-center gap-2 text-[11px] text-amber-600 dark:text-amber-400 mt-3">
+                  <AlertTriangle className="w-3.5 h-3.5" /> {report.busteNonQuadrate} buste non quadrano col totale stampato sul cedolino (layout inatteso): saltate per prudenza.
+                </p>
+              )}
+              {report.buste13a14a > 0 && (
+                <p className="flex items-center gap-2 text-[11px] text-slate-400 dark:text-slate-500 mt-3">
+                  <AlertTriangle className="w-3.5 h-3.5" /> {report.buste13a14a} cedolini di 13ª/14ª: fuori conteggio, saltati.
                 </p>
               )}
             </div>

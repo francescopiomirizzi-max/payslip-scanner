@@ -1,3 +1,76 @@
+# Todo — Sessione 11/07: parser di verità FSE + MERCITALIA (prova d'accuratezza)
+
+> **Contesto:** estendere la feature "Verifica accuratezza (dal disco)" — oggi solo RFI/Trenitalia
+> (`utils/rfiTruthParser.ts` + `utils/verifyFromFolder.ts`) — alle buste FSE (Clarino, 200 PDF sul
+> Desktop) e MERCITALIA (Gagliano, 78 PDF). Requisiti FSE già raccolti nel §4 del
+> [controllo-pratica-clarino-2026-07-10.md](controllo-pratica-clarino-2026-07-10.md).
+> Lezione vincolante 20/05: parser scritto SUI PDF REALI; lezione 07/07: validare in Node con la
+> stessa pdfjs-dist PRIMA di dichiararlo fatto.
+
+**Perimetro dati (ricognizione fatta):**
+- FSE testuali = ere Zucchetti I8/T8 (nov 2020→) e IX (lug 2017–ott 2020), ~100 buste; era storica
+  2010–giu 2017 = scansioni → `isText=false`, restano OCR+censimento (fuori dal parser, by design).
+- MERCITALIA = ADP 7 colonne, tutte testuali; nomi file NUMERICI (`Cedolini-2019-10-…`) → il
+  `detectYM` attuale (solo nomi mese italiani) NON li riconosce: va esteso.
+
+**Decisioni di design (da ratificare):**
+1. **daysWorked FSE (verità)** = quantità G NETTA delle voci presenza (I86178/I86005/IX0023, storni
+   inclusi) — stessa definizione del motore → confronto omogeneo. La banda **GG LAV** si legge come
+   CONTROLLO: se diverge dalla voce → mese **flaggato, non auto-corretto** (req. §4.3: avrebbe preso
+   sia Mag 2021 sia Gen 2018). Relazione esatta banda↔voce (es. GG LAV = presenza − ferie, visto su
+   Ago 2021: 24−6=18) da calibrare empiricamente in fase 0.
+2. **Codici FSE confrontati** = 24 variabili Zucchetti + 5 fisse `fse_*` (dal box ELEMENTI, mappate
+   come chiavi nel `codes`); gli 8 codici era storica mai raggiungibili dal parser testo.
+3. **MERCITALIA**: 12 variabili da "Competenze" + 3 fisse (1000/1001/1025) da "Valori";
+   daysVacation = somma righe 3833 POSITIVE; daysWorked = GIORNI INPS (pag. 2) − daysVacation
+   (fallback 1213). Ticket/arretrati fuori confronto (come per RFI).
+4. **Robustezza FSE** (req. §4): multi-riga stesso codice → somma col segno; pagine duplicate
+   identiche nello stesso PDF → dedup per firma testo; 13ª/14ª ("13a mens."/R4210/R4230) → busta
+   SALTATA e contata a parte; daysPaidLeave non tracciato per FSE/Merc → non confrontato.
+
+**Fasi:**
+- [x] 0. **Calibrazione in Node** FATTA — FSE: 107/107 riconciliazione Σ Competenze vs TOT COMPETENZE
+      stampato, 107/107 box ELEMENTI vs AA245, 107/107 periodo PDF = nome file, 14/14 campioni al
+      centesimo (storni Mag/Giu/Ott 2021 nettati, Ago 2021 completo, Set 2022 vuoto, Gen 2018 qty 38,
+      Ago 2018 era IX). Merc: 78/78 + 78/78 (1000+1001+1025=1100) + campione Mag 2022 al centesimo.
+      **Esiti che cambiano il design:** (1) banda GG LAV = 22 TEORICO in tutta l'era IX e sporadicamente
+      altrove → INUTILIZZABILE come controllo; flag giusto = presenze>31 (becca Gen 2018=38 e Apr
+      2026=46), giorni non confrontati per quei mesi. (2) Trappole di layout risolte: riga banca
+      "INTESA SANPAOLO … Emolumenti correnti" (2022+) e "D01CNG Esonero L.234" cadono in zona
+      Competenze → regione voci delimitata da header→separatore "---- Imponibili"/NOTE; crediti WZF*
+      (DL 66/2014) contati da Zucchetti nel TOT → solo riconciliazione, mai codici. (3) Ferie F2105
+      H÷6,5 = intere su TUTTI i 107 mesi. (4) Box ELEMENTI ristampato sul retro → lettura singola.
+      (5) Merc: GIORNI INPS assente 1 volta (Dic 2025) → fallback 1213 ok; 1 storno 3833 gestito;
+      esiste doppione "Cedolini-2025-12 (1).pdf" → gestito dal guardrail mesiInConflitto.
+- [x] 1. `utils/fseTruthParser.ts` — con autovalidazione reconOk (Σ Competenze = TOT COMPETENZE),
+      flag daysUncertain (presenze>31), periodo dal PDF, skip 13ª/14ª, dedup pagine identiche.
+- [x] 2. `utils/mercitaliaTruthParser.ts` — reconOk vs riga "Totali", GIORNI INPS + fallback 1213,
+      3833 col segno (storni esclusi), fisse da "Valori".
+- [x] 3. `utils/verifyFromFolder.ts` parametrizzato (`PROFILES`: parser + codici derivati da
+      types.ts + campi giorni); `detectYM` esteso ai nomi numerici; report con busteNonQuadrate,
+      buste13a14a, busteMisfiled (periodo PDF ≠ nome file), mesiGiorniIncerti — RFI invariato.
+- [x] 4. UI: gating header + prop `profilo` + hint per azienda + avvisi nuovi nel modale.
+- [x] 5. Validazione finale coi parser DEFINITIVI (transpilati esbuild, stub solo getPdfjs):
+      **22/22 asserzioni verdi** su 200 PDF FSE + 78 Mercitalia; tsc 0 · vitest 274/274 · build ok.
+- [x] 6. Commit locale (NO push: deploy unico dopo Elior) + todo/report/lessons/memoria aggiornati.
+
+### Review — parser di verità FSE + Mercitalia (11/07)
+- **Copertura**: FSE 107 buste testuali verificabili (lug 2017→giu 2026; le 93 scansioni era storica
+  restano OCR+censimento, segnalate nel modale); Mercitalia 78/78 verificabili.
+- **Scoperta che cambia il §4.3 del report Clarino**: la banda "GG LAV." NON è una fonte — nell'era
+  IX è un 22 TEORICO fisso (anche nel mese di congedo totale Set 2022, dove il report la diceva
+  vuota). Il netting delle quantità becca da solo Mag 2021 (24+75−75=24); i casi Gen-2018-style
+  (arretrati nella quantità) li becca il flag presenze>31 → mese segnalato, giorni NON toccati
+  (protegge anche i 2 fix manuali dell'11/07 dal ri-rollback).
+- **Autovalidazione per-busta (novità)**: ogni busta deve quadrare col SUO totale stampato
+  (TOT COMPETENZE / riga Totali); se non quadra → scartata come verità e contata nel modale.
+  In calibrazione questo ha scovato 3 trappole reali: riga banca INTESA (2022+), esonero D01CNG,
+  crediti WZF* — tutte invisibili a un parser "a colonne" ingenuo.
+- **Non fatto di proposito**: nessun tocco al parser RFI/Trenitalia (solo firma verifyFromFolder);
+  ticket/arretrati fuori confronto (come per RFI); era storica FSE fuori perimetro parser.
+
+---
+
 # Todo — Sessione 10/07 notte: controllo totale pratica Clarino (post-caricamento)
 
 > **Contesto:** l'utente ha caricato TUTTA la pratica Clarino in app (deploy unico ancora pendente

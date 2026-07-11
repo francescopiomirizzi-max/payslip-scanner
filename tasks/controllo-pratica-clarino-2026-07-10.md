@@ -54,10 +54,20 @@ I due mesi che l'AI stessa ha flaggato ("Anomalia: Presenze > 31") avevano gli *
 5. Skip 13ª/14ª e mesi di assenza (Set 2022: GG LAV 0 → riga legittimamente vuota).
 6. Base di partenza: logica dello script di riconciliazione (49/49) + regole censimento §7.
 
+## 4-bis. Aggiornamento 11/07 — parser di verità FSE COSTRUITO (e un requisito superato dai fatti)
+
+Parser fatto ([utils/fseTruthParser.ts](../utils/fseTruthParser.ts)) e validato su tutte le 200 buste
+Clarino (107 testuali riconciliate al centesimo col TOT COMPETENZE stampato). **Correzione al §4.3 e
+al §2b:** la banda "GG LAV." NON è una fonte primaria — nell'era IX vale 22 TEORICO fisso, e in Set
+2022 (assenza totale) NON è vuota come scritto al §2b: stampa 22. Il parser quindi usa la quantità
+NETTA delle voci di presenza (che da sola risolve Mag 2021: 24+75−75=24) e flagga i mesi con
+presenze>31 (Gen 2018 = 38; trovato anche Apr 2026 = 46) senza toccarne i giorni. La cartella
+Desktop contiene anche Gen-Giu 2026 (non in archivio app).
+
 ## 5. Azioni aperte
 
 - [x] Correzione `daysWorked` Mag 2021 (→24) e Gen 2018 (→16) — FATTA 11/07 via SQL con verifica; hard refresh richiesto all'utente.
 - [ ] Set 2017 quando arriva da Vincenzo; 2026 (Gen-Giu) se rilevante per la pratica.
-- [ ] Parser di verità FSE (requisiti §4) — prossima sessione.
+- [x] Parser di verità FSE (requisiti §4, con §4.3 rivisto — vedi §4-bis) — FATTO 11/07, insieme al gemello Mercitalia.
 - [ ] Quesiti avvocato invariati (ricostruzioni 2011-2020, 041, oltre nov-24) + nuovi: Gen 2018 16-vs-15, media mobile vs anno solare.
 - [ ] Push/deploy unico: DOPO il lavoro Elior (decisione utente 11/07).
