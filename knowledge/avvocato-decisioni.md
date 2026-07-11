@@ -59,6 +59,19 @@ le voci sono diverse. Da qui la richiesta di portare lo stesso impianto (le %) a
   secondario se vada almeno nel denominatore dell'incidenza. Da decidere.
 - **Reperibilità "da remoto €6"** (novità CCNL 2025): possibile **codice voce nuovo** sui cedolini
   2025/2026 oggi non letto → da verificare e, se serve, aggiungere.
+- **RIPOSI (Viterbo): quale base di quantificazione tra serie A (PDF perito) e serie B (motore)?**
+  — **Raccomandazione tecnica (11/07): serie B con tempestività ATTIVA** per una domanda fondata
+  sul Reg. 561/2006. Motivo: la serie B computa solo condotte che VIOLANO il regolamento,
+  applicandone le tolleranze (riduzioni giornaliere lecite ×3, alternanza del settimanale); la
+  serie A indennizza anche riduzioni CONSENTITE dal 561 e 550 giornate non-CEE (€32.372) fuori
+  dal suo campo (base semmai D.Lgs. 66/2003). Giurisprudenza a supporto della linea prudente:
+  **Cass. 14940/2014** (autoferrotranvieri: respinto dove le riduzioni erano "riequilibrate" da
+  riposi adiacenti → chiedere solo violazioni vere) e **Cass. 6727/2013** (danno talvolta da
+  PROVARE → cifra ancorata e difendibile). Numeri: B esclusa tempestività €21.785 · B con
+  tempestività (144h) €75.182 (114 eventi vs 82 del perito: finestra nostra più severa, da
+  ratificare o rifinire) · A €98.732 (quota CEE €66.360). La serie A resta inviluppo massimo per
+  trattativa o domanda subordinata su base 66/2003. NB: la relazione contiene SOLO la
+  qualificazione neutra delle due serie (sez. 7) — questa raccomandazione resta fuori dagli atti.
 
 ## Aspetto economico (contesto)
 

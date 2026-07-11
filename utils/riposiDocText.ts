@@ -257,6 +257,13 @@ export function riserveBullets(model: DocModel, pratica: PraticaRiposi, result: 
     return out;
 }
 
+/** Qualificazione giuridica delle due serie: chiude la sezione «Perché le due serie
+ *  differiscono» spiegando COSA rappresenta legalmente ciascuna. Volutamente neutra:
+ *  descrive la natura delle serie senza indicarne una come corretta — la scelta della
+ *  base (e la prospettazione della domanda) spetta al legale. */
+export const QUALIFICAZIONE_SERIE =
+    'Qualificazione delle due serie: la serie B computa le sole condotte che integrano VIOLAZIONE del Reg. (CE) n. 561/2006, applicando le tolleranze che il regolamento stesso consente (riduzioni giornaliere lecite fino a 3 tra due riposi settimanali; settimanale ridotto in alternanza); la serie A quantifica integralmente la compressione del riposo rispetto alle soglie piene (11h/45h), comprese le riduzioni consentite dal regolamento e le giornate estranee al suo campo di applicazione, per le quali l\'eventuale tutela va ricercata nel D.Lgs. n. 66/2003 e nella disciplina contrattuale. La scelta della base di quantificazione — anche in funzione della prospettazione della domanda — spetta al legale incaricato.';
+
 export const AVVERTENZA_SERIE =
     'Le due serie NON si sommano: quantificano lo stesso pregiudizio (i medesimi riposi non fruiti) con criteri diversi. La scelta della base di quantificazione, e la verifica che le indennità della serie A non risultino già corrisposte in busta paga, spettano al legale incaricato.';
 

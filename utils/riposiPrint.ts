@@ -15,7 +15,7 @@ import { causaleSintetica, tariffaRange, formatHm, type RestResult } from './res
 import {
     euro, intIT, tariffaLabel, coeffSuffix, dmyhm, buildDocModel,
     fonteDatiBullets, metodoFonteBullets, metodoMotorePassi, tariffaSpiegazione,
-    divarioBullets, riserveBullets, AVVERTENZA_SERIE, DISCLAIMER, RIF_PERIMETRO_CEE, type Bullet,
+    divarioBullets, riserveBullets, AVVERTENZA_SERIE, QUALIFICAZIONE_SERIE, DISCLAIMER, RIF_PERIMETRO_CEE, type Bullet,
 } from './riposiDocText';
 import type { PraticaRiposi } from '../hooks/usePraticheRiposi';
 
@@ -148,6 +148,7 @@ export function buildConteggiRiposiHtml(pratica: PraticaRiposi, result: RestResu
 
     <h2>3. Perché le due serie differiscono</h2>
     <ul class="blocco">${divarioBullets(model, result).map(li).join('')}</ul>
+    <p class="nota" style="margin-top:6pt"><strong>Qualificazione delle due serie.</strong> ${esc(QUALIFICAZIONE_SERIE.replace('Qualificazione delle due serie: ', ''))}</p>
 
     <h2>4. Elenco delle violazioni rilevate dal motore (${intIT(totViol)})</h2>
     <table>

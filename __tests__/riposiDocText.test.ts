@@ -172,3 +172,16 @@ describe('con la tempestività ATTIVA i documenti cambiano dichiarazione', () =>
         expect(html).toContain('Settimanale oltre il termine: 45h intere');
     });
 });
+
+describe('qualificazione giuridica delle serie (sezione 7)', () => {
+    it('presente in entrambi i documenti, neutra: descrive, non giudica', async () => {
+        const html = buildConteggiRiposiHtml(basePratica, result);
+        expect(html).toContain('Qualificazione delle due serie');
+        expect(html).toContain('VIOLAZIONE del Reg. (CE) n. 561/2006');
+        expect(html).toContain('D.Lgs. n. 66/2003');
+        const buffer = await Packer.toBuffer(buildRelazioneRiposiDoc(basePratica, result));
+        const xml = strFromU8(unzipSync(new Uint8Array(buffer))['word/document.xml']);
+        expect(xml).toContain('Qualificazione delle due serie');
+        expect(xml).toContain('spetta al legale incaricato');
+    });
+});

@@ -23,7 +23,7 @@ import {
     euro, intIT, tariffaLabel, coeffSuffix, dmyhm, buildDocModel,
     quadroNormativoBullets, quadroContrattualeBullets, fonteDatiBullets, metodoFonteBullets,
     metodoMotorePassi, tariffaSpiegazione, divarioBullets, riserveBullets,
-    AVVERTENZA_SERIE, DISCLAIMER, type Bullet,
+    QUALIFICAZIONE_SERIE, DISCLAIMER, type Bullet,
 } from './riposiDocText';
 import type { PraticaRiposi } from '../hooks/usePraticheRiposi';
 
@@ -222,6 +222,7 @@ export function buildRelazioneRiposiDoc(pratica: PraticaRiposi, result: RestResu
         heading('7. Perché le due serie differiscono'),
         para('Le ragioni del divario, dichiarate e quantificate dove possibile:'),
         ...divarioBullets(model, result).map(bulletB),
+        para([b('Qualificazione delle due serie'), ` — ${QUALIFICAZIONE_SERIE.replace('Qualificazione delle due serie: ', '')}`]),
 
         heading(`8. Elenco delle violazioni rilevate (${intIT(totViol)})`),
         para('Ogni riga è un riposo fruito in misura inferiore alle soglie del Reg. (CE) n. 561/2006 (riferimenti normativi in sezione 3).', { italics: true }),
