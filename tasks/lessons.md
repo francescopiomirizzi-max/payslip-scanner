@@ -27,6 +27,18 @@ avrebbe prodotto 27+ falsi allarmi.
    raddoppiano. E il flag giusto per i giorni ambigui è quello che l'app usa già (presenze>31), non
    un confronto con un campo dalla semantica non dimostrata.
 
+**Appendice (stesso 11/07, dallo scetticismo dell'utente sul primo report live).** Il primo giro su
+Clarino proponeva 3 correzioni ai giorni: 2 erano ERRORI del parser, 1 era un errore vero del motore
+(Lug 2017: 22 teorico vs 20 su DUE voci concordi). Altre due regole imparate sui casi veri:
+4. **Un parser per-file non può vedere gli arretrati cross-mese.** Dic 2017 non stampa la voce
+   giornaliera (pagata dentro il 38 di Gen 2018): il PDF da solo "direbbe 0", ma azzerare
+   distruggerebbe il 22 documentato → voce di presenza ASSENTE + motore≠0 = segnalazione
+   (daysMissingVoce), MAI correzione automatica. Cfr. `ocr-ambiguity-flag-policy`.
+5. **La quantità è un giorno solo se qty × tariffa = importo.** Ago 2018 ha una riga IX0023 di
+   conguaglio con qty "1" e 84,76 senza tariffa unitaria: contatore fittizio che gonfiava i giorni
+   (27 vs 26). Il guard qty×unit≈importo l'ha eliminata e sul corpus intero ha cambiato SOLO quel
+   mese (verificato col diff pre/post fix).
+
 ## 2026-07-10 — Non trasformare il quesito per l'avvocato in un GATE sul lavoro dell'utente
 
 **Contesto:** estensione FSE era storica. Avevo impostato la sequenza come "estendiamo colonne/prompt

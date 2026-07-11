@@ -24,6 +24,10 @@ export interface PayslipTruth {
   daysPaidLeave: number;
   /** true = giorni ambigui (es. FSE presenze>31: quantità con arretrati multi-mese) → daysWorked non confrontato. */
   daysUncertain?: boolean;
+  /** true = voce di presenza assente dal cedolino (assenza totale O giorni pagati in arretrato in
+   *  un ALTRO mese, es. FSE Dic 2017 → dentro il 38 di Gen 2018): uno scarto sui giorni si segnala
+   *  soltanto — azzerare in automatico distruggerebbe le ricostruzioni documentate. */
+  daysMissingVoce?: boolean;
   /** false = la Σ dei valori letti NON quadra col totale stampato sul cedolino → busta scartata. */
   reconOk?: boolean;
   /** true = cedolino di 13ª/14ª → fuori conteggio, busta saltata. */
@@ -234,8 +238,15 @@ export async function verifyFromFolder(
       for (const field of cfg.dayFields) {
         if (field === 'daysWorked' && truth.daysUncertain) continue; // ambiguo → decisione umana
         const e = pv(row[field]);
-        if (Math.abs(e - truth[field]) >= EPS)
-          rep.discrepancies.push({ year: g.year, monthIndex: g.monthIndex, field, engine: e, truth: truth[field] });
+        if (Math.abs(e - truth[field]) < EPS) continue;
+        // Voce di presenza assente + motore ≠ 0: può essere un'assenza vera come un pagamento in
+        // arretrato su un altro mese (FSE Dic 2017 = 22 gg documentati, voce dentro Gen 2018).
+        // Il PDF da solo non basta a decidere → segnalazione, niente correzione.
+        if (field === 'daysWorked' && truth.daysMissingVoce) {
+          rep.mesiGiorniIncerti.push({ year: g.year, monthIndex: g.monthIndex, presenze: truth.daysWorked });
+          continue;
+        }
+        rep.discrepancies.push({ year: g.year, monthIndex: g.monthIndex, field, engine: e, truth: truth[field] });
       }
     }
   }

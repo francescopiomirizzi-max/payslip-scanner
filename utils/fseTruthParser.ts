@@ -9,7 +9,12 @@
 //   - giorni lavorati = quantità G NETTA delle voci di presenza (I86178/I86005/IX0023), stessa
 //     definizione del motore (PROMPT_FSE §2). La banda "GG LAV." di testata NON si usa: la
 //     calibrazione su 107 buste reali ha mostrato che nell'era IX è un 22 TEORICO costante.
-//     Quantità > 31 (arretrati multi-mese, es. Gen 2018 = 16+22) → daysUncertain, non si confronta;
+//     La quantità di una riga presenza conta SOLO se quantità × tariffa unitaria = importo
+//     (Ago 2018 ha una riga IX0023 di conguaglio con qty "1" e 84,76 senza tariffa: contatore
+//     fittizio, non un giorno). Quantità > 31 (arretrati multi-mese, es. Gen 2018 = 16+22) →
+//     daysUncertain, non si confronta. Voce di presenza ASSENTE → daysMissingVoce: il mese può
+//     essere di sola assenza (Set 2022) O pagato in arretrato in un altro mese (Dic 2017 → 38 di
+//     Gen 2018): il confronto giorni si segnala soltanto, mai auto-corretto;
 //   - ferie = ore della voce F2105 ÷ 6,5 (intere su tutti i 107 mesi calibrati);
 //   - voci fisse fse_* dal box "ELEMENTI DELLA RETRIBUZIONE" (solo le 5 etichette tracciate;
 //     il box è ristampato sul retro → si legge UNA volta sola).
@@ -38,6 +43,9 @@ export interface FseTruth {
   daysPaidLeave: number;
   /** true = presenze > 31 (arretrati multi-mese): giorni ambigui, da non confrontare. */
   daysUncertain: boolean;
+  /** true = nessuna voce di presenza sul cedolino: assenza totale O giorni pagati in un altro
+   *  mese (arretrato) → un eventuale scarto sui giorni va segnalato, mai corretto. */
+  daysMissingVoce: boolean;
   /** false = Σ Competenze ≠ TOT COMPETENZE stampato → busta da scartare come verità. */
   reconOk: boolean;
   /** true = cedolino di 13ª/14ª (fuori conteggio per regola pratica). */
@@ -50,6 +58,7 @@ interface Item { x: number; s: string; }
 
 const NUM2 = /^-?\d+(?:\.\d{3})*,\d{2}$/;   // importi: 609,84 · -1611,75 · 1.985,50
 const QTY3 = /^-?\d+(?:\.\d{3})*,\d{3}$/;   // quantità ORE/GIORNI: 24,000 · -75,000
+const UNIT5 = /^-?\d+(?:\.\d{3})*,\d{5}$/;  // tariffa unitaria: 9,63000 (unica colonna a 5 decimali)
 const CODE = /^[A-Z][A-Z0-9]{3,5}$/;        // I85240, T8305, IX0023, F2105… (esclude 005/088/F11)
 const toNum = (s: string) => parseFloat(s.replace(/\./g, '').replace(',', '.'));
 const norm = (s: string) => s.replace(/\s+/g, ''); // "C O M P E T E N Z E" → "COMPETENZE"
@@ -169,16 +178,23 @@ export async function extractFseTruth(data: Uint8Array): Promise<FseTruth> {
           if (!CODE.test(code)) continue;
           const inVoci = y > endY;
           if (!inVoci && !code.startsWith('WZF')) continue; // sotto il separatore: solo crediti WZF (recon)
-          let cv: number | null = null, qv: number | null = null;
+          let cv: number | null = null, qv: number | null = null, uv: number | null = null;
           for (const it of items) {
             if (it === first) continue;
             if (NUM2.test(it.s) && it.x >= compX - 10 && it.x < trattX - 10) cv = toNum(it.s);
             if (QTY3.test(it.s) && oreX !== null && unitX !== null && it.x >= oreX - 10 && it.x < unitX - 10) qv = toNum(it.s);
+            if (UNIT5.test(it.s)) uv = toNum(it.s);
           }
           if (cv !== null) sumComp = r2(sumComp + cv);
           if (!inVoci) continue;
           if (cv !== null) codes[code] = r2((codes[code] || 0) + cv);
-          if (qv !== null) qty[code] = Math.round(((qty[code] || 0) + qv) * 1000) / 1000;
+          if (qv !== null) {
+            // per le voci di presenza la quantità è fatta di GIORNI solo se qty × tariffa = importo:
+            // le righe di conguaglio senza tariffa (Ago 2018: IX0023 "1,000" con 84,76) non contano
+            const genuine = !PRESENZA.includes(code)
+              || (uv !== null && cv !== null && Math.abs(qv * uv - cv) <= 0.02);
+            if (genuine) qty[code] = Math.round(((qty[code] || 0) + qv) * 1000) / 1000;
+          }
         }
 
         // box ELEMENTI DELLA RETRIBUZIONE (una volta sola: il retro lo ristampa identico)
@@ -237,6 +253,7 @@ export async function extractFseTruth(data: Uint8Array): Promise<FseTruth> {
     daysVacation: r2((qty['F2105'] || 0) / 6.5),
     daysPaidLeave: 0,
     daysUncertain: presQty > 31,
+    daysMissingVoce: !PRESENZA.some(c => qty[c] !== undefined),
     reconOk: totComp !== null && Math.abs(sumComp - totComp) < 0.011,
     is13a14a,
     period,

@@ -138,12 +138,13 @@ const AccuracyCheckModal: React.FC<Props> = ({ anni, profilo, onApply, onClose }
                     Giorni lavorati da verificare a mano ({report.mesiGiorniIncerti.length} {report.mesiGiorniIncerti.length === 1 ? 'mese' : 'mesi'})
                   </div>
                   <p className="text-xs text-amber-700/90 dark:text-amber-300/80 mt-1.5">
-                    La voce di presenza supera i 31 giorni (arretrati di mesi precedenti dentro la quantità):
-                    il valore vero va deciso sui documenti, quindi <b>i giorni di questi mesi non vengono toccati</b>.
+                    La voce di presenza contiene arretrati di altri mesi (quantità &gt; 31) oppure manca dal
+                    cedolino (assenza totale o giorni pagati in un altro mese): il PDF da solo non basta a
+                    decidere, quindi <b>i giorni di questi mesi non vengono toccati</b>.
                   </p>
                   <div className="text-xs font-mono text-amber-800 dark:text-amber-200 mt-2 flex flex-wrap gap-x-3 gap-y-0.5">
                     {report.mesiGiorniIncerti.map((m, i) => (
-                      <span key={i}>{MESI[m.monthIndex]} {m.year} <span className="opacity-60">({m.presenze} gg)</span></span>
+                      <span key={i}>{MESI[m.monthIndex]} {m.year} <span className="opacity-60">(PDF: {m.presenze} gg)</span></span>
                     ))}
                   </div>
                 </div>
