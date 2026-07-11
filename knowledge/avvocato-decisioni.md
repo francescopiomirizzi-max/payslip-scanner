@@ -72,6 +72,16 @@ le voci sono diverse. Da qui la richiesta di portare lo stesso impianto (le %) a
   ratificare o rifinire) · A €98.732 (quota CEE €66.360). La serie A resta inviluppo massimo per
   trattativa o domanda subordinata su base 66/2003. NB: la relazione contiene SOLO la
   qualificazione neutra delle due serie (sez. 7) — questa raccomandazione resta fuori dagli atti.
+  **Scomposizione 114-vs-82 (misurata per settimana, 11/07 sera): 60 eventi in comune · 54 solo
+  nostri · 22 solo del perito.** Le TRE manopole di criterio da fissare con l'avvocato:
+  (1) *festivi/assenze* — ~30 dei 54 solo-nostri hanno un festivo/ferie/malattia nella finestra
+  scaduta: il perito esenta quelle settimane (festivo lavorato = lavoro festivo, non mancato
+  riposo), noi contiamo solo le ore; (2) *finestra* — 144 ore esatte dalla fine del riposo
+  precedente (noi) vs conteggio a giorni «il 7° dev'essere riposo» (lui); (3) *riposo
+  riconosciuto* — se il riposo candidato attraversa un giorno lavorato senza orari noi lo
+  scartiamo (→ 45h piene), lui in parte di quei casi espone una riga parziale (45−x); dei suoi
+  22 non-nostri, diversi risultano da noi come violazioni di ALTERNANZA (quota) anziché
+  tempestività. Fissate le tre manopole, i numeri convergono.
 
 ## Aspetto economico (contesto)
 
