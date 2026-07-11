@@ -126,6 +126,20 @@
       riscontro tariffa (fonte_tariffa aggiornata in DB) citato nel testo. Gate 292/292 · build ok.
       Copie reali su ~/Desktop (viterbo-relazione.docx + viterbo-conteggi.html) per il collaudo visivo.
 
+## 10. PROSSIMA SESSIONE — allineamento al modello di relazione + rivalutazione/interessi riposi
+
+> Confronto (11/07 notte) con «IMPORTANTE Relazione_tecnica_mancati_riposi_.docx» (il modello che
+> lo studio usò in passato, template Monteleone): la nostra relazione è GIÀ più completa su dati,
+> metodo, trasparenza e elenco violazioni. Da adottare dal modello:
+- [ ] **Rivalutazione ISTAT FOI + interessi legali "tempo per tempo"** per i riposi (loro §7,
+      con allegato analitico per annualità: capitale rivalutato + interessi = totale). È il gap
+      SOSTANZIALE: il numero da giudice è quello rivalutato. Riusare il motore ISTAT delle
+      Incidenze; bersaglio di riconciliazione = «Viterbo (Interessi e Rivalutazioni).pdf» del
+      perito (cartella VITERBO FSE) → si aggancia alla fase 6 (riconciliazione conteggi).
+- [ ] Cornice formale nella relazione: «Oggetto» + «Premessa e incarico» (campo firmatario in
+      bianco, come il modello) + «Conclusioni» a punti + riga firma.
+- [ ] (cosmetico) Schema maggiorazioni in tabella base-100 nel quadro contrattuale.
+
 ### Review — sessione riposi 11/07
 - Gate: tsc 0 · vitest 278/278 (4 test nuovi tempestività) · build ok. Nessun tocco a migration/DB.
 - La banda dei chiarimenti ha retto TUTTA alla prova dei dati: GRO, 45h piene, paga×parametro,
