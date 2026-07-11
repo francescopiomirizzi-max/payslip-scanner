@@ -105,16 +105,16 @@ export function buildRiposiWorkbook(pratica: PraticaRiposi, result: RestResult):
     // Range assoluto per i VLOOKUP delle indennità (anno→€/h).
     const TARIFFA_BLOCK = `Riepilogo!$A$${TAR_FIRST}:$B$${TAR_LAST}`;
 
-    // ── Cella COEFFICIENTE danno (× sul valore): da qui le indennità si scalano ──
+    // ── Cella COEFFICIENTE di valorizzazione (× sul valore): da qui le indennità si scalano ──
     const COEFF_ROW = TAR_LAST + 2;
-    rie.getCell(`A${COEFF_ROW}`).value = 'Coefficiente danno (× sul valore) — MODIFICABILE';
+    rie.getCell(`A${COEFF_ROW}`).value = 'Coefficiente di valorizzazione (× sul valore) — MODIFICABILE';
     rie.getCell(`A${COEFF_ROW}`).font = { bold: true };
     const coeffCell = rie.getCell(`B${COEFF_ROW}`);
     coeffCell.value = coeff;
     coeffCell.numFmt = '0%';
     coeffCell.font = { bold: true };
     coeffCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF3C4' } };
-    rie.getCell(`C${COEFF_ROW}`).value = 'es. 20% = danno (criterio avvocato) · 100% = valore pieno';
+    rie.getCell(`C${COEFF_ROW}`).value = 'es. 120% = maggiorazione +20% · 20% = danno · 100% = valore pieno (criterio del legale)';
     rie.getCell(`C${COEFF_ROW}`).font = { italic: true, size: 9 };
     const COEFF_CELL = `Riepilogo!$B$${COEFF_ROW}`;
 

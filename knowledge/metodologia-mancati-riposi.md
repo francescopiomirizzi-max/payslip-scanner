@@ -46,6 +46,33 @@ CCNL **Autoferrotranvieri** e successive integrazioni:
 - **Rivalutazione + interessi**: rivalutazione **ISTAT FOI** (generale) + interessi legali "tempo per tempo"
   (decreti ministeriali). RailFlow lo fa già.
 
+## 2-bis. Chiarimenti di Vincenzo (incontro, 11/07/2026) — verificati nei dati del PDF sorgente
+
+Struttura vera della tabella del PDF («Mancati riposi di Viterbo-1.pdf», 165 pag., identico al
+sorgente del seed): `G.set | Data | Tipo | Servizio | Inizio | Termine | Rip.Gro | Rip.Set |
+Giornal | Sett.le | Totale Giorno/Sett. | Totale Mensile`.
+
+- **«GRO» = colonna `Rip.Gro`** = ore di riposo GiornalieRO **fatto** (minimo di legge 11 h).
+  Mancato giornaliero = 11:00 − Rip.Gro (verificato al minuto: Rip.Gro 9:15 → mancante 1:45;
+  10:55 → 0:05). `Rip.Set` = riposo settimanale fatto; mancato = 45:00 − Rip.Set (38:50 → 6:10).
+- **Regola delle 45 ore (ciclo su 3 settimane)**: il settimanale (45 h) va riconosciuto **entro il
+  6° giorno** (il 7° dev'essere riposo); se arriva **oltre** → violazione con **TUTTE le 45 ore**.
+  Nei dati: **103/499** righe settimanali valgono esattamente 45:00 e hanno TUTTE `Rip.Set` vuoto
+  (riposo non fatto in tempo); le altre ~387 sono quote parziali con `Rip.Set` valorizzato.
+- **Valorizzazione fonte = paga oraria DEL MESE × parametro** (561 artt. 6-7-8): la tariffa
+  implicita per riga è IDENTICA tra giornalieri e settimanali dello stesso anno (mediane
+  10,03 → 13,13 €/h dal 2011 al 2024) → conferma un'unica paga oraria di riferimento per periodo.
+- **Il «20%» dell'avvocato = MAGGIORAZIONE da applicare al totale** (×1,20), NON «danno = 20%»:
+  ribalta l'interpretazione registrata il 21/06. Coerente con Cass. 14940/2014 (20% = maggiorazione
+  straordinario festivo) e con la relazione Monteleone (paga oraria × 1,20 = ora festiva).
+  ⚠️ **Prima di toccare il coefficiente della pratica** va verificato con le BUSTE (ruoli paga
+  Viterbo, testuali dal lug 2017 → parser FSE) se la tariffa effettiva derivata (13,13 nel 2024)
+  **incorpora già** il ×1,20 (teorica Monteleone 2024: 9,63 × 1,20 = 11,56, anzianità diversa):
+  se sì, coefficiente corretto = **1,0** con curva derivata; se no, **1,20**.
+- **Gap del seed**: il parser (`scripts/parse-mancati-riposi-pdf.py`) NON estrae `Rip.Gro`/`Rip.Set`
+  (solo mancati e indennità) → estensione candidata per la verifica riga-per-riga delle regole
+  11h/45h e per l'allineamento del motore (serie B oggi conta solo la quota mancante).
+
 ## 3. Come RailFlow implementa il calcolo (`utils/restEngine.ts`)
 
 ### Tariffa €/h per anno — VERIFICATO (30/06/2026)
@@ -56,12 +83,17 @@ CCNL **Autoferrotranvieri** e successive integrazioni:
   intermedio più basso (l'effettiva ≈ base × ~1,1, perché incorpora la valorizzazione). Per l'indennità si
   usa la tariffa **effettiva**, non la paga base. → la tariffa del motore è **corretta, non va sostituita**.
 
-### Coefficiente danno — due teorie
+### Coefficiente di valorizzazione — tre opzioni (aggiornato 11/07/2026)
 - **Valore pieno (100%)**: ore × tariffa effettiva = valore intero del riposo perso.
-- **Danno (20%)**: coefficiente **0,20** sul valore pieno (danno equitativo ancorato al CCNL).
-  **Criterio scelto e CONFERMATO dall'avvocato** per Viterbo (vedi [`avvocato-decisioni.md`](avvocato-decisioni.md)).
-- In app: campo `coefficiente` per pratica + **selettore UI** in `RiposiPraticaDetail` (Valore pieno 100% ↔
-  Danno 20%). Default e motore **invariati**; la scelta resta del legale.
+- **Maggiorazione +20% (×1,20)**: lettura del «20%» chiarita da Vincenzo l'11/07 (maggiorazione sul
+  totale, cfr. §2-bis) — con l'avvertenza che se la tariffa effettiva incorpora già il ×1,20, il
+  coefficiente giusto è 1,0.
+- **Danno (20%)**: coefficiente **0,20** sul valore pieno (interpretazione registrata il 21/06, oggi
+  superata dal chiarimento ma selezionabile; vedi [`avvocato-decisioni.md`](avvocato-decisioni.md)).
+- In app: campo `coefficiente` per pratica + **selettore UI** in `RiposiPraticaDetail` (3 opzioni;
+  per il viewer il pannello è in sola lettura). Motore invariato; la scelta resta del legale.
+  ⚠️ La pratica Viterbo in DB ha ancora `coefficiente=0,20`: da correggere DOPO la verifica
+  tariffa-dalle-buste (§2-bis).
 
 ### Due serie a confronto (mai sommate)
 - **Serie FONTE (PDF)**: *tutte* le ore di mancato riposo × tariffa effettiva, coi criteri del perito.

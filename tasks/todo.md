@@ -1,3 +1,63 @@
+# Todo — Sessione 11/07 (pomeriggio): Riposi — parità vista viewer + chiarimenti Vincenzo su Viterbo
+
+> **Contesto:** (1) Vincenzo non vede alcune cose nell'area Turni & Riposi dal suo account viewer →
+> parità di vista; (2) dall'incontro: il PDF sorgente calcola giornate CEE + riposi giornalieri
+> (sigla GRO, ≥11h/giorno) e settimanali con **paga oraria del mese × parametro** (561 artt. 6-7-8);
+> ciclo riposi 3 settimane; settimanale 45h entro il 6° giorno (7° = riposo; se riconosciuto
+> all'8° = violazione con TUTTE le 45 ore); **il 20% dell'avvocato = MAGGIORAZIONE sul totale**
+> (non "danno = 20%": ribalta l'interpretazione registrata il 21/06).
+
+**Evidenze già misurate (seed fonte, 5.022 giornate):**
+- Regola 45h CONFERMATA nei dati: **103/499 righe settimanali valgono esattamente 45h piene**,
+  le altre quote parziali (1-23h) → il perito applica entrambe le casistiche.
+- Tariffa implicita per riga: G e S IDENTICHE per anno (10,03 → 13,13 €/h, mediana), coerente con
+  la curva derivata del motore. Ipotesi da verificare con le buste: 13,13 = paga oraria mensile
+  × 1,20 (teorica Monteleone 2024: 9,63 × 1,20 = 11,56 con anzianità diversa) → se vero, il +20%
+  è GIÀ dentro la curva derivata.
+- Il nostro motore serie B conta solo la QUOTA mancante (129 viol. sett./975h) → gran parte del
+  gap con la fonte è la regola 45h, non la tariffa.
+- **Inventario vista viewer** (`useIsReadOnly`/`canManage`/`canExport`): il viewer NON vede
+  (a) pannello "Parametri di calcolo" (valorizzazione + curva €/h + editor) — unico blocco
+  INFORMATIVO nascosto; (b) Excel/Relazione/Stampa su pratiche non "pagata" (regola-leva
+  deliberata, cross-app); (c) tutto il lavoro post-28/06 non ancora deployato (coda deploy unico).
+  Stato/importo riconosciuto già visibili read-only.
+
+**Fasi:**
+- [x] 1. Parità vista FATTA: pannello "Parametri di calcolo" ora visibile al viewer in SOLA LETTURA
+      (valorizzazione applicata + curva €/h; editor/bottoni solo owner). Scelta utente: export
+      (Excel/Relazione/Stampa) restano solo sulle Pagate (regola-leva invariata).
+- [x] 2. Knowledge aggiornata (§2-bis metodologia-mancati-riposi): GRO = colonna Rip.Gro (riposo
+      giornaliero fatto, 11−Rip.Gro = mancante, verificato al minuto), 45h piene = righe con
+      Rip.Set VUOTO (103/103), tariffa = paga mensile × parametro, 20% = maggiorazione.
+- [x] 3. Verifica tariffa FATTA (92 buste testuali Viterbo col parser FSE): **implicita fonte =
+      teorica (AA245×7/6÷195) × 1,20 ESATTO su 2023-24 (13,13 = 10,94×1,20), 1,203 nel 2022** →
+      il +20% è GIÀ nella curva derivata → coefficiente corretto = 1,0. Bonus: nota perito conferma
+      (1,75h × 8,36 × 1,20 = 17,55 = riga PDF). **DB: coefficiente era GIÀ 1 (memoria 21/06 stale)**
+      → serie B in produzione = €11.620,48, nessun intervento. UI: opzione "Maggiorazione · +20%"
+      aggiunta per i casi a curva-base (es. Monteleone con teorica).
+- [~] 4. Motore — DUE interventi, decisione di quantificazione APERTA (numeri sotto):
+      (a) **guardia falsi-riposi ATTIVA**: i gap tra turni che attraversano giornate LAVORATE senza
+      orari (servizio numerico/D, centinaia nel roster: 19 e 22/01/2011 ecc.) NON sono più riposi
+      → correzione di correttezza, +1 warning aggregato; (b) **tempestività art. 8 §6 OPT-IN**
+      (termineRiposoSettimanale, default OFF): riposo iniziato oltre 144h → 45h piene, dedup con
+      alternanza. Configurazioni misurate sul dato reale (soloCEE, coeff 1, curva derivata):
+      vecchio motore €11.620 (143 viol) · con guardia €21.785 (249) · guardia+144h €75.182 (277,
+      timing 114 vs 82 eventi CEE del perito → sovra-spara, finestra da rifinire se si adotta).
+      Fonte/perito CEE = €66.360. Reverse-engineering del trigger perito: miglior modello 86-89/103
+      (festività lavorate trattate diversamente) — criterio esatto non estraibile con certezza.
+- [x] 5. UI selettore 3 opzioni + banner/relazione/Excel aggiornati (danno vs maggiorazione).
+- [ ] 6. Riconciliazione coi conteggi del perito per Viterbo FSE (15__conteggi.pdf,
+      RiepilogoGenerale, Interessi e Rivalutazioni) — rinviata a sessione dedicata.
+
+### Review — sessione riposi 11/07
+- Gate: tsc 0 · vitest 278/278 (4 test nuovi tempestività) · build ok. Nessun tocco a migration/DB.
+- La banda dei chiarimenti ha retto TUTTA alla prova dei dati: GRO, 45h piene, paga×parametro,
+  maggiorazione — ogni affermazione di Vincenzo trova riscontro esatto nel PDF/buste.
+- Il numero in produzione NON è cambiato finché l'utente non sceglie la configurazione serie B
+  (il refresh col nuovo build porta la guardia → €21.785; la tempestività resta spenta).
+
+---
+
 # Todo — Sessione 11/07: parser di verità FSE + MERCITALIA (prova d'accuratezza)
 
 > **Contesto:** estendere la feature "Verifica accuratezza (dal disco)" — oggi solo RFI/Trenitalia

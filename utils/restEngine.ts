@@ -41,10 +41,12 @@ export interface RestParams {
    *  Se assente (o anno mancante) si usa `tariffaOraria`. La curva si ricava dalla
    *  fonte con `deriveTariffePerAnno`, oppure è un override confermato dall'avvocato. */
   tariffePerAnno?: Record<string, number>;
-  /** Coefficiente sul valore del riposo perso (default 1 = valore pieno). Metodo
-   *  dell'avvocato: il danno è il 20% del valore → `0.20`. (In alternativa una
-   *  maggiorazione +20% sarebbe `1.20`.) Si applica come fattore globale, separato
-   *  dalla tariffa: indennità = ore mancanti × tariffa dell'anno × coefficiente. */
+  /** Coefficiente sul valore del riposo perso (default 1 = valore pieno). Chiarimento
+   *  11/07: il «20%» dell'avvocato è una MAGGIORAZIONE (`1.20`) — ma la tariffa effettiva
+   *  derivata dalla fonte la incorpora GIÀ (paga oraria × 1,20 verificata al centesimo
+   *  sulle buste 2023-24) → con la curva derivata il coefficiente corretto è `1`.
+   *  Il «danno = 20%» (`0.20`) resta un'interpretazione alternativa del legale. Fattore
+   *  globale, separato dalla tariffa: indennità = ore mancanti × tariffa × coefficiente. */
   coefficiente?: number;
   /** Soglie in ore (decimali). I default sono quelli del Reg. (CE) 561/2006. */
   riposoGiornalieroRegolare?: number;   // default 11
@@ -53,6 +55,16 @@ export interface RestParams {
   riposoSettimanaleRidotto?: number;    // default 24
   /** Numero massimo di riposi giornalieri ridotti tra due riposi settimanali. */
   maxRidottiGiornalieri?: number;       // default 3
+  /** Termine (ore) entro cui deve INIZIARE il riposo settimanale successivo, dalla fine
+   *  del precedente (art. 8 §6: sei periodi di 24h → 144). Oltre → violazione con le 45h
+   *  PIENE (regola del perito confermata da Vincenzo l'11/07: "entro il 6° giorno, il 7°
+   *  riposo; se riconosciuto dopo vanno riconosciute tutte le 45 ore" — nel PDF fonte 103
+   *  righe settimanali da 45:00 esatte hanno tutte il riposo fatto VUOTO).
+   *  ⚠️ DEFAULT: DISATTIVA (Infinity). Sul roster Viterbo la regola a 144h produce PIÙ
+   *  eventi del perito (114 vs 82 CEE) e porta la serie B CEE a ~€75k (> fonte €66k):
+   *  la forma esatta della finestra e il cumulo con l'alternanza sono una scelta di
+   *  quantificazione che spetta all'avvocato — si attiva passando 144. */
+  termineRiposoSettimanale?: number;    // default: disattivata (Infinity)
   /** Sotto questa quota di riduzione il riposo settimanale è "grave" ai fini sanzionatori. */
   sogliaRiduzioneGrave?: number;        // default 10 (%) — gravità, NON trigger dell'illecito
   /** Se true, conta SOLO le violazioni attribuite a giorni marcati CEE (servizio in
@@ -67,6 +79,7 @@ export const DEFAULT_REST_PARAMS: Required<Omit<RestParams, 'tariffaOraria' | 'f
   riposoSettimanaleRegolare: 45,
   riposoSettimanaleRidotto: 24,
   maxRidottiGiornalieri: 3,
+  termineRiposoSettimanale: Number.POSITIVE_INFINITY,
   sogliaRiduzioneGrave: 10,
 };
 
@@ -173,6 +186,53 @@ export function classifyDailyRest(ore: number, p: RestParams = { tariffaOraria: 
   return 'insufficiente';
 }
 
+// ─── Tempestività del riposo settimanale (art. 8 §6, prima frase) ─────────────
+
+/**
+ * Il riposo settimanale successivo deve INIZIARE entro `termineRiposoSettimanale` ore
+ * (default 144 = sei periodi di 24h) dalla fine del precedente. Se inizia oltre, il
+ * riposo non è stato riconosciuto in tempo utile → violazione con le 45h PIENE
+ * (quantificazione del perito, confermata da Vincenzo l'11/07 e riscontrata nel PDF
+ * fonte: le righe settimanali "in ritardo" valgono 45:00 esatte col riposo fatto vuoto).
+ * Il riposo arrivato in ritardo NON genera anche la violazione di durata (dedup: le
+ * 45h piene la assorbono) ma resta nella catena di alternanza della two-week rule.
+ */
+export function applyWeeklyTimingRule(
+  riposiSettimanali: Riposo[],
+  p: RestParams,
+): { violazioni: Violazione[]; inRitardo: Set<number> } {
+  const out: Violazione[] = [];
+  const inRitardo = new Set<number>();
+  const reg = p.riposoSettimanaleRegolare ?? DEFAULT_REST_PARAMS.riposoSettimanaleRegolare;
+  const termine = p.termineRiposoSettimanale ?? DEFAULT_REST_PARAMS.termineRiposoSettimanale;
+
+  for (let i = 1; i < riposiSettimanali.length; i++) {
+    const prev = riposiSettimanali[i - 1];
+    const cur = riposiSettimanali[i];
+    const attesa = durationHours(prev.fine, cur.inizio);
+    if (attesa <= termine) continue;
+    inRitardo.add(i);
+    const scadenza = new Date(prev.fine.getTime() + termine * 3_600_000);
+    const valorePieno = round2(reg * rateFor(scadenza, p));
+    out.push({
+      tipo: 'riposo_settimanale',
+      rifNormativo: 'Reg. (CE) n. 561/2006, art. 8 §6 (inizio entro sei periodi di 24h); art. 4 lett. h',
+      inizio: scadenza.toISOString(),
+      fine: cur.inizio.toISOString(),
+      ore: 0, // nessun riposo settimanale riconosciuto entro il termine
+      soglia: reg,
+      oreMancanti: reg,
+      valorePieno,
+      indennita: round2(valorePieno * (p.coefficiente ?? 1)),
+      gravita: 'grave',
+      cee: cur.cee ?? false,
+      dataTurno: cur.dataTurno,
+      motivo: `Riposo settimanale iniziato oltre il termine di sei periodi di 24h dal precedente (dopo ${formatHm(attesa)}): si riconoscono per intero le ${reg}h`,
+    });
+  }
+  return { violazioni: out, inRitardo };
+}
+
 // ─── Regola delle due settimane (art. 8 §6) ───────────────────────────────────
 
 /**
@@ -181,14 +241,18 @@ export function classifyDailyRest(ore: number, p: RestParams = { tariffaOraria: 
  * In pratica: due riposi settimanali ridotti consecutivi → il secondo è illecito.
  * La riduzione >10% rispetto alle 45h è criterio di GRAVITÀ (Reg. UE 2016/403),
  * NON il trigger dell'illecito (che è la mancata alternanza con un regolare).
+ * `skip` = indici dei riposi già colpiti dalla violazione di tempestività (45h piene):
+ * per quelli non si emette anche la violazione di durata, ma lo stato di alternanza
+ * avanza comunque (il riposo, pur tardivo, c'è stato).
  */
-export function applyTwoWeekRule(riposiSettimanali: Riposo[], p: RestParams): Violazione[] {
+export function applyTwoWeekRule(riposiSettimanali: Riposo[], p: RestParams, skip?: Set<number>): Violazione[] {
   const out: Violazione[] = [];
   const reg = p.riposoSettimanaleRegolare ?? DEFAULT_REST_PARAMS.riposoSettimanaleRegolare;
   const sogliaGrave = (p.sogliaRiduzioneGrave ?? DEFAULT_REST_PARAMS.sogliaRiduzioneGrave) / 100;
   let prevRidotto = false;
 
-  for (const r of riposiSettimanali) {
+  for (let idx = 0; idx < riposiSettimanali.length; idx++) {
+    const r = riposiSettimanali[idx];
     if (r.esito === 'regolare') {
       prevRidotto = false;
       continue;
@@ -196,7 +260,7 @@ export function applyTwoWeekRule(riposiSettimanali: Riposo[], p: RestParams): Vi
     // ridotto o insufficiente
     const oreMancanti = Math.max(0, reg - r.ore);
     const grave = r.ore < reg * (1 - sogliaGrave) || r.esito === 'insufficiente';
-    const isViolazione = r.esito === 'insufficiente' || prevRidotto;
+    const isViolazione = (r.esito === 'insufficiente' || prevRidotto) && !skip?.has(idx);
 
     if (isViolazione) {
       const valorePieno = round2(oreMancanti * rateFor(r.inizio, p));
@@ -233,6 +297,30 @@ interface Duty {
   tipo?: string;   // marcatore della giornata (es. 'CEE'), informativo per il filtro soloCEE
 }
 
+/** Giornate NON lavorate: riposi, festività non lavorate e assenze. Tutto il resto
+ *  (codici linea/turno numerici, 'D' = a disposizione, turni alfanumerici) è LAVORO.
+ *  Serve a distinguere i giorni lavorati SENZA orari (nel roster reale sono centinaia):
+ *  un intervallo tra turni che li attraversa NON è riposo — è tempo di lavoro non
+ *  misurabile — e senza questa guardia diventa un falso riposo settimanale ≥24h. */
+export function isGiornoNonLavorato(servizio?: string): boolean {
+  const s = (servizio || '').trim().toUpperCase();
+  if (!s || s === 'R') return true;
+  return ['FESTIVO', 'FERIE', 'MALAT', 'P.RETR', 'PERM', 'VM', 'INF', 'ASP', '104'].some((p) => s.startsWith(p));
+}
+
+const dayKey = (d: Date) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+
+/** true se tra la fine di un turno e l'inizio del successivo (giorni STRETTAMENTE in
+ *  mezzo) cade almeno una giornata lavorata senza orari → l'intervallo non è riposo. */
+function gapSpansLavoroSenzaOrari(fine: Date, inizio: Date, lavoratiSenzaOrari: Set<string>): boolean {
+  const d = new Date(fine.getFullYear(), fine.getMonth(), fine.getDate() + 1);
+  const limite = new Date(inizio.getFullYear(), inizio.getMonth(), inizio.getDate());
+  for (; d.getTime() < limite.getTime(); d.setDate(d.getDate() + 1)) {
+    if (lavoratiSenzaOrari.has(dayKey(d))) return true;
+  }
+  return false;
+}
+
 /** Costruisce i turni (giorni con inizio E termine), gestendo i turni a cavallo di mezzanotte. */
 export function buildDuties(giornate: GiornataInput[], warnings: string[] = []): Duty[] {
   const duties: Duty[] = [];
@@ -267,6 +355,17 @@ export function computeRestViolations(giornate: GiornataInput[], params: RestPar
   const warnings: string[] = [];
   const duties = buildDuties(giornate, warnings);
 
+  // Giornate LAVORATE senza orari (codice servizio presente, ore assenti): l'intervallo
+  // tra i turni che le contiene non è riposo. Senza questa guardia diventano falsi
+  // riposi settimanali che azzerano la tempestività (es. 19 e 22/01/2011 del roster
+  // Viterbo: servizio "41"/"2057" senza orari dentro una settimana lavorata di fila).
+  const lavoratiSenzaOrari = new Set<string>();
+  for (const g of giornate) {
+    if (g.inizio && g.termine) continue;
+    if (!isGiornoNonLavorato(g.servizio)) lavoratiSenzaOrari.add(dayKey(parseDateTime(g.data, '0')));
+  }
+  let intervalliNonValutabili = 0;
+
   const violazioni: Violazione[] = [];
   const riposiSettimanali: Riposo[] = [];
   let nRidottiLeciti = 0;
@@ -280,6 +379,10 @@ export function computeRestViolations(giornate: GiornataInput[], params: RestPar
     const fine = duties[i + 1].start;
     const ore = durationHours(inizio, fine);
     if (ore <= 0) continue; // turni sovrapposti/duplicati → ignorati
+    if (gapSpansLavoroSenzaOrari(inizio, fine, lavoratiSenzaOrari)) {
+      intervalliNonValutabili++;
+      continue; // tempo di lavoro non misurabile, NON riposo: niente classificazione
+    }
 
     if (ore >= p.riposoSettimanaleRidotto) {
       // contesto RIPOSO SETTIMANALE
@@ -323,7 +426,13 @@ export function computeRestViolations(giornate: GiornataInput[], params: RestPar
     }
   }
 
-  violazioni.push(...applyTwoWeekRule(riposiSettimanali, p));
+  if (intervalliNonValutabili > 0) {
+    warnings.push(`${intervalliNonValutabili} intervalli tra turni NON valutati come riposo: contengono giornate lavorate senza orari (codice servizio presente, ore assenti)`);
+  }
+
+  const timing = applyWeeklyTimingRule(riposiSettimanali, p);
+  violazioni.push(...timing.violazioni);
+  violazioni.push(...applyTwoWeekRule(riposiSettimanali, p, timing.inRitardo));
 
   // Filtro "solo giorni CEE" (Reg. 561/2006, art. 3: si applica al servizio di linea
   // regolare >50 km). Confermato dall'avvocato per Viterbo: ai fini del calcolo contano

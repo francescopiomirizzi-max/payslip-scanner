@@ -18,6 +18,14 @@ const tariffaLabel = (rates: Record<string, number>): string => {
 };
 /** Suffisso coefficiente danno (es. " × 20%") quando attivo; vuoto se valore pieno. */
 const coeffSuffix = (coeff: number): string => (coeff !== 1 ? ` × ${Math.round(coeff * 100)}%` : '');
+// Valorizzazioni del riposo perso proposte dal selettore. Il "+20%" è la MAGGIORAZIONE sul
+// totale chiarita da Vincenzo l'11/07 (Cass. 14940/2014: 20% = maggiorazione straordinario
+// festivo); il "danno 20%" resta selezionabile come interpretazione alternativa del legale.
+const VALORIZZAZIONI = [
+    { v: 1, label: 'Valore pieno · 100%' },
+    { v: 1.20, label: 'Maggiorazione · +20%' },
+    { v: 0.20, label: 'Danno · 20%' },
+];
 const dmy = (iso: string) => new Date(iso).toLocaleDateString('it-IT');
 const GIORNI = ['Dom', 'Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab'];
 const weekday = (data: string) => { const [d, m, y] = data.split('/').map(Number); return GIORNI[new Date(y, m - 1, d).getDay()]; };
@@ -336,23 +344,23 @@ const RiposiPraticaDetail: React.FC<Props> = ({ pratica, onBack, onUpdate }) => 
                 {/* Banner onestà dati */}
                 <div className="flex items-start gap-2 rounded-2xl bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 px-4 py-3 text-sm text-amber-800 dark:text-amber-200">
                     <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
-                    <span>Giornate dal <strong>PDF sorgente</strong> («Mancati riposi»), parsato in modo deterministico e quadrato al centesimo coi totali del documento. La tariffa è <strong>ricavata anno per anno</strong> dal documento sorgente ({tariffaLabel(rates)}, cresce per anzianità di servizio); la valorizzazione segue la disciplina contrattuale (riposo periodico trattato come festivo, art. 14 CCNL 25/07/1997), confermabile con l'avvocato.{coeff !== 1 && <> L'indennità è calcolata come <strong>danno = {Math.round(coeff * 100)}% del valore</strong> del riposo perso.</>}</span>
+                    <span>Giornate dal <strong>PDF sorgente</strong> («Mancati riposi»), parsato in modo deterministico e quadrato al centesimo coi totali del documento. La tariffa è <strong>ricavata anno per anno</strong> dal documento sorgente ({tariffaLabel(rates)}, cresce per anzianità di servizio); la valorizzazione segue la disciplina contrattuale (riposo periodico trattato come festivo, art. 14 CCNL 25/07/1997), confermabile con l'avvocato.{coeff < 1 && <> L'indennità è calcolata come <strong>danno = {Math.round(coeff * 100)}% del valore</strong> del riposo perso.</>}{coeff > 1 && <> Il valore del riposo perso è <strong>maggiorato del {Math.round((coeff - 1) * 100)}%</strong> (maggiorazione confermata dal legale).</>}</span>
                 </div>
 
-                {/* Parametri di calcolo — owner: valorizzazione serie B + tariffa €/h per anno in un unico
-                    pannello coerente (stile glass come il resto del dettaglio). Persistono `coefficiente` e
-                    `tariffePerAnno`; l'override tariffe è COMPLETO (rateFor fa cadere gli anni mancanti sul flat). */}
-                {canManage && (
-                    <div className="rounded-3xl bg-white/60 dark:bg-slate-800/60 backdrop-blur-2xl border border-white/60 dark:border-slate-700/60 p-5 space-y-4">
+                {/* Parametri di calcolo — owner: controlli attivi; viewer: SOLA LETTURA (parità di
+                    vista con l'account consultazione, 11/07 — vede valorizzazione applicata e curva
+                    €/h, senza editor). Persistono `coefficiente` e `tariffePerAnno`; l'override
+                    tariffe è COMPLETO (rateFor fa cadere gli anni mancanti sul flat). */}
+                <div className="rounded-3xl bg-white/60 dark:bg-slate-800/60 backdrop-blur-2xl border border-white/60 dark:border-slate-700/60 p-5 space-y-4">
                         <div className="flex items-center gap-2">
                             <Calculator className="w-4 h-4 text-indigo-500 dark:text-indigo-400" />
                             <h3 className="text-[11px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">Parametri di calcolo</h3>
                         </div>
 
-                        {/* Valorizzazione serie B (coefficiente danno) */}
+                        {/* Valorizzazione serie B (coefficiente sul valore del riposo perso) */}
                         <div className="flex flex-wrap items-center gap-2">
                             <span className="text-sm font-semibold text-slate-700 dark:text-slate-200 mr-1">Valorizzazione serie B</span>
-                            {([{ v: 1, label: 'Valore pieno · 100%' }, { v: 0.20, label: 'Danno · 20%' }]).map(({ v, label }) => {
+                            {canManage ? VALORIZZAZIONI.map(({ v, label }) => {
                                 const active = Math.abs((pratica.coefficiente ?? 1) - v) < 1e-9;
                                 return (
                                     <button
@@ -363,8 +371,12 @@ const RiposiPraticaDetail: React.FC<Props> = ({ pratica, onBack, onUpdate }) => 
                                         {label}
                                     </button>
                                 );
-                            })}
-                            <span className="text-[11px] text-slate-400 dark:text-slate-500 w-full sm:w-auto sm:ml-auto">Scelta del legale · ricalcola tutto, nessun dato perso</span>
+                            }) : (
+                                <span className="px-3 py-1.5 rounded-xl text-xs font-bold bg-indigo-600 text-white shadow-sm">
+                                    {VALORIZZAZIONI.find(o => Math.abs(coeff - o.v) < 1e-9)?.label ?? `× ${coeff}`}
+                                </span>
+                            )}
+                            <span className="text-[11px] text-slate-400 dark:text-slate-500 w-full sm:w-auto sm:ml-auto">Scelta del legale{canManage && ' · ricalcola tutto, nessun dato perso'}</span>
                         </div>
 
                         {/* Tariffa €/h per anno (override CCNL) */}
@@ -376,6 +388,7 @@ const RiposiPraticaDetail: React.FC<Props> = ({ pratica, onBack, onUpdate }) => 
                                     {hasTariffeOverride
                                         ? <span className="px-2 py-0.5 rounded-lg text-[10px] font-bold uppercase tracking-wide bg-amber-100 dark:bg-amber-500/15 text-amber-700 dark:text-amber-300">Personalizzata</span>
                                         : <span className="text-[11px] text-slate-400 dark:text-slate-500">derivata dalla fonte</span>}
+                                    {canManage && (
                                     <button
                                         onClick={() => { if (tariffeOpen) { setTariffeOpen(false); setTariffeDraft(null); } else { setTariffeDraft(tariffeToDraft(rates)); setTariffeOpen(true); } }}
                                         className="ml-auto inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold border bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-indigo-400 transition-colors"
@@ -383,8 +396,9 @@ const RiposiPraticaDetail: React.FC<Props> = ({ pratica, onBack, onUpdate }) => 
                                         {tariffeOpen ? 'Chiudi' : 'Personalizza'}
                                         <ChevronDown className={`w-3.5 h-3.5 transition-transform ${tariffeOpen ? 'rotate-180' : ''}`} />
                                     </button>
+                                    )}
                                 </div>
-                                {tariffeOpen && tariffeDraft && (
+                                {canManage && tariffeOpen && tariffeDraft && (
                                     <div className="mt-3">
                                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
                                             {Object.keys(tariffeDraft).sort().map((y) => {
@@ -434,8 +448,7 @@ const RiposiPraticaDetail: React.FC<Props> = ({ pratica, onBack, onUpdate }) => 
                                 )}
                             </div>
                         )}
-                    </div>
-                )}
+                </div>
 
                 {/* Tabs — pill attivo colorato (gradiente tema) */}
                 <div className="inline-flex gap-1 p-1 rounded-2xl bg-white/60 dark:bg-slate-800/60 backdrop-blur border border-white/60 dark:border-slate-700/60 shadow-sm">
@@ -704,7 +717,7 @@ const RelazioneRiposiModal: React.FC<RelazioneRiposiModalProps> = ({ isOpen, onC
                                     <div className="flex items-center justify-between border-t border-indigo-200/60 dark:border-indigo-500/20 pt-1.5"><span>Ore mancanti</span><span className="font-bold tabular-nums text-slate-800 dark:text-slate-100">{esempio.soglia} h − {formatHm(esempio.ore)} = {formatHm(esempio.oreMancanti)}</span></div>
                                     <div className="flex items-center justify-between"><span className="font-semibold text-indigo-700 dark:text-indigo-300">Indennità</span><span className="font-black tabular-nums text-indigo-700 dark:text-indigo-300">{formatHm(esempio.oreMancanti)} × {euro(rateEsempio)}/h{coeffSuffix(coeff)} = {euro(esempio.indennita)}</span></div>
                                 </div>
-                                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-3">La tariffa è quella del {esempio.inizio.slice(0, 4)} ({euro(rateEsempio)}/h): cresce per anzianità di servizio, quindi ogni anno è valorizzato alla sua.{coeff !== 1 && ` Sul valore si applica il ${Math.round(coeff * 100)}% (danno).`} Lo stesso procedimento è applicato a ogni riposo non conforme e sommato per anno.</p>
+                                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-3">La tariffa è quella del {esempio.inizio.slice(0, 4)} ({euro(rateEsempio)}/h): cresce per anzianità di servizio, quindi ogni anno è valorizzato alla sua.{coeff < 1 ? ` Sul valore si applica il ${Math.round(coeff * 100)}% (danno).` : coeff > 1 ? ` Il valore è maggiorato del ${Math.round((coeff - 1) * 100)}%.` : ''} Lo stesso procedimento è applicato a ogni riposo non conforme e sommato per anno.</p>
                             </>
                         ) : (
                             <p>Nessuna violazione rilevata nel periodo analizzato.</p>
@@ -725,7 +738,7 @@ const RelazioneRiposiModal: React.FC<RelazioneRiposiModalProps> = ({ isOpen, onC
                         <h3 className="font-bold text-slate-700 dark:text-slate-200 mb-2">Riserve</h3>
                         <ul className="space-y-1.5 pl-1 text-[13px]">
                             <li className="flex gap-2"><span className="text-amber-500">•</span><span><b>Tariffa</b>: ricavata <b>anno per anno</b> dal documento sorgente ({tariffaLabel(rates)}, cresce per anzianità di servizio); la fonte CCNL (tabellare o con maggiorazione) è confermabile con l'avvocato e, alla conferma, l'indennità si ricalcola.</span></li>
-                            <li className="flex gap-2"><span className="text-amber-500">•</span><span><b>Coefficiente danno</b>: {coeff !== 1 ? <>l'indennità è il <b>{Math.round(coeff * 100)}% del valore</b> del riposo perso (metodo dell'avvocato).</> : <>è applicato il <b>valore pieno</b> (100%); l'eventuale «danno = 20% del valore» va confermato dall'avvocato e si attiva senza ricalcoli manuali.</>}</span></li>
+                            <li className="flex gap-2"><span className="text-amber-500">•</span><span><b>Valorizzazione (coefficiente)</b>: {coeff < 1 ? <>l'indennità è il <b>{Math.round(coeff * 100)}% del valore</b> del riposo perso (danno, criterio del legale).</> : coeff > 1 ? <>il valore del riposo perso è <b>maggiorato del {Math.round((coeff - 1) * 100)}%</b> (maggiorazione, criterio del legale).</> : <>è applicato il <b>valore pieno</b> (100%); la maggiorazione +20% (o il «danno = 20%») va confermata dal legale e si attiva senza ricalcoli manuali.</>}</span></li>
                             <li className="flex gap-2"><span className="text-amber-500">•</span><span><b>Due serie</b>: l'indennità «motore» (Reg. 561/2006) e quella «PDF» (criteri di chi ha prodotto il documento) si <b>affiancano, non si sommano</b>.</span></li>
                             <li className="flex gap-2"><span className="text-amber-500">•</span><span><b>Pausa di guida (art. 7)</b>: richiede il cronotachigrafo, non presente nei turni → fuori perimetro.</span></li>
                             <li className="flex gap-2"><span className="text-amber-500">•</span><span><b>Codici di servizio</b>: la legenda dei turni va richiesta all'azienda.</span></li>

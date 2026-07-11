@@ -324,3 +324,63 @@ describe('buildConfronto', () => {
     expect(c.soloNostro).toBe(0);
   });
 });
+
+// ─── Tempestività del riposo settimanale (art. 8 §6, prima frase) — regola 11/07 ─
+
+describe('applyWeeklyTimingRule (riposo settimanale oltre il termine → 45h piene; OPT-IN via termineRiposoSettimanale)', () => {
+  const PT: RestParams = { ...P, termineRiposoSettimanale: 144 };
+  // 9 turni consecutivi 06.00-15.00 tra due riposi settimanali: il secondo riposo
+  // inizia ~201h dopo la fine del primo (> 144h = sei periodi di 24h) → in ritardo.
+  const turno = (data: string): GiornataInput => ({ data, inizio: '6.00', termine: '15.00' });
+  const giornateRitardo: GiornataInput[] = [
+    turno('01/03/2023'),
+    // 02-03/03 riposo → settimanale #1: 01/03 15:00 → 04/03 06:00 (63h, regolare)
+    ...['04/03/2023', '05/03/2023', '06/03/2023', '07/03/2023', '08/03/2023', '09/03/2023', '10/03/2023', '11/03/2023', '12/03/2023'].map(turno),
+    // 13-14/03 riposo → settimanale #2: 12/03 15:00 → 15/03 06:00 (63h, regolare ma TARDIVO)
+    turno('15/03/2023'),
+  ];
+
+  it('riposo iniziato oltre 144h dal precedente → violazione con TUTTE le 45 ore (fonte: righe 45:00 con riposo fatto vuoto)', () => {
+    const r = computeRestViolations(giornateRitardo, PT);
+    const sett = r.violazioni.filter((v) => v.tipo === 'riposo_settimanale');
+    expect(sett).toHaveLength(1);
+    expect(sett[0].oreMancanti).toBe(45);
+    expect(sett[0].valorePieno).toBe(450); // 45h × 10 €/h
+    expect(sett[0].motivo).toContain('oltre il termine');
+    expect(r.nViolazioniGiornaliere).toBe(0); // i riposi giornalieri da 15h sono regolari
+  });
+
+  it('dedup: il riposo tardivo E ridotto genera SOLO le 45h piene, non anche la quota di durata', () => {
+    // settimanale #1 ridotto (39h: solo 02/03 di riposo), poi 9 turni, poi #2 ridotto (39h) e tardivo:
+    // senza dedup sarebbe anche "secondo ridotto consecutivo" (45−39 = 6h) → doppio conteggio.
+    const giornate: GiornataInput[] = [
+      turno('01/03/2023'),
+      // 02/03 riposo → settimanale #1: 01/03 15:00 → 03/03 06:00 (39h, ridotto)
+      ...['03/03/2023', '04/03/2023', '05/03/2023', '06/03/2023', '07/03/2023', '08/03/2023', '09/03/2023', '10/03/2023', '11/03/2023', '12/03/2023'].map(turno),
+      // 13/03 riposo → settimanale #2: 12/03 15:00 → 14/03 06:00 (39h, ridotto e TARDIVO)
+      turno('14/03/2023'),
+    ];
+    const r = computeRestViolations(giornate, PT);
+    const sett = r.violazioni.filter((v) => v.tipo === 'riposo_settimanale');
+    expect(sett).toHaveLength(1);
+    expect(sett[0].oreMancanti).toBe(45); // le 45 piene assorbono la quota (6h) del ridotto consecutivo
+  });
+
+  it('riposo entro il termine: nessuna violazione di tempestività (comportamento invariato)', () => {
+    const giornate: GiornataInput[] = [
+      turno('01/03/2023'),
+      // 02-03/03 riposo → settimanale #1 regolare
+      ...['04/03/2023', '05/03/2023', '06/03/2023', '07/03/2023', '08/03/2023'].map(turno),
+      // 09-10/03 riposo → settimanale #2: 08/03 15:00 → 11/03 06:00, inizia 105h dopo il #1 → in tempo
+      turno('11/03/2023'),
+    ];
+    const r = computeRestViolations(giornate, PT);
+    expect(r.violazioni.filter((v) => v.motivo.includes('oltre il termine'))).toHaveLength(0);
+    expect(r.nViolazioniSettimanali).toBe(0);
+  });
+
+  it('default: la regola è DISATTIVATA (scelta di quantificazione per l\'avvocato) — stessi dati in ritardo, nessuna violazione di tempestività', () => {
+    const r = computeRestViolations(giornateRitardo, P);
+    expect(r.violazioni.filter((v) => v.motivo.includes('oltre il termine'))).toHaveLength(0);
+  });
+});
