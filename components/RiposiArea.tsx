@@ -9,6 +9,8 @@ import { DevBadge } from './ui/DevBadge';
 import { useIsReadOnly } from '../lib/readonly';
 import { RIPOSI_THEME, riposiHeaderBand, STATO_HEX } from './riposi/riposiTheme';
 import { SindacatoTag } from './ui/SindacatoTag';
+import { aziendaToProfilo } from '../config/profiles';
+import { CompanyLogo } from './ui/CompanyLogo';
 
 /** Statistiche per pratica, calcolate una volta a livello area e passate alle card + all'hero. */
 type PraticaStats = { tot: number; indennita: number; perAnno: Record<string, { n: number; indennita: number }> };
@@ -424,8 +426,12 @@ const PraticaCard: React.FC<{ pratica: PraticaRiposi; stats?: PraticaStats; onOp
                         <div className="relative shrink-0">
                             {/* Alone iridescente dietro l'avatar */}
                             <div className="absolute -inset-1 rounded-2xl bg-gradient-to-br from-fuchsia-400 via-indigo-400 to-cyan-400 opacity-60 blur-md group-hover:opacity-90 transition-opacity duration-300" />
-                            <div className="relative w-14 h-14 rounded-2xl flex items-center justify-center bg-white/85 dark:bg-slate-900/70 backdrop-blur border border-white/70 dark:border-slate-700 shadow-md transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3">
-                                <BusFront className="w-7 h-7 text-indigo-600 dark:text-indigo-300" strokeWidth={1.8} />
+                            <div className="relative w-14 h-14 rounded-2xl flex items-center justify-center bg-white/85 dark:bg-slate-900/70 backdrop-blur border border-white/70 dark:border-slate-700 shadow-md transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3" title={pratica.azienda ?? undefined}>
+                                {aziendaToProfilo(pratica.azienda) ? (
+                                    <CompanyLogo profilo={aziendaToProfilo(pratica.azienda)} h={26} />
+                                ) : (
+                                    <BusFront className="w-7 h-7 text-indigo-600 dark:text-indigo-300" strokeWidth={1.8} />
+                                )}
                             </div>
                         </div>
                         <div className="min-w-0 flex-1">

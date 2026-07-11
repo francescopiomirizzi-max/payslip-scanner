@@ -48,6 +48,26 @@
 - [x] 5. UI selettore 3 opzioni + banner/relazione/Excel aggiornati (danno vs maggiorazione).
 - [ ] 6. Riconciliazione coi conteggi del perito per Viterbo FSE (15__conteggi.pdf,
       RiepilogoGenerale, Interessi e Rivalutazioni) — rinviata a sessione dedicata.
+- [x] 7a. Azienda + logo (richiesta 11/07 pomeriggio): `azienda='Ferrovie del Sud Est'` in DB
+      (UPDATE verificato), helper `aziendaToProfilo` in profiles.ts, logo FSE nel header del
+      dettaglio e nell'avatar card (fallback BusFront per aziende ignote), azienda nel sottotitolo.
+- [x] 7b. **Leggibilità calendari per Vincenzo** FATTA (approvata con enfasi su "al click la
+      spiegazione dettagliata + riferimento giuridico"). In più, scoperto in review: i giorni
+      lavorati SENZA orari apparivano come "riposo" grigio → ora stile dedicato "turno senza
+      orari nel PDF" (coerente con la guardia del motore), in celle, tabella e legende. Dettaglio:
+      1. Sigle decodificate ovunque: D = A disposizione (riserva) · VM = Visita medica ·
+         Malato = Malattia · P.retr = Permesso retribuito (oggi "sigla da decodificare").
+      2. Elenco violazioni: mostrare il `motivo` del motore (frase completa già calcolata, mai
+         renderizzata) + chip CEE sulla riga; click = apre il mese (invariato).
+      3. Prospetto turni, griglia anni: pallino sui giorni CEE + voce in legenda; click sul
+         giorno apre il mese CON quel giorno selezionato.
+      4. Prospetto turni, vista mese: colonna CEE + colonne "Mancato G/S (PDF)"; card
+         "Violazioni del mese" nell'aside con spiegazione completa per ognuna (tipo, motivo,
+         gravità, riferimento); riga violata cliccabile → evidenzia la spiegazione.
+      5. Confronto PDF: click sul giorno → pannello dettaglio in parole (cosa dice il PDF:
+         mancato+indennità; cosa dice il motore: violazione+motivo; se non la contiamo, perché
+         quando determinabile) + legenda arricchita.
+      Vincoli: nessun controllo rimosso, tema chiaro/scuro, viewer = stessa leggibilità.
 
 ### Review — sessione riposi 11/07
 - Gate: tsc 0 · vitest 278/278 (4 test nuovi tempestività) · build ok. Nessun tocco a migration/DB.

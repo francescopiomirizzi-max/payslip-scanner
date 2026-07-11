@@ -392,6 +392,21 @@ export const getCompanyLogo = (
 export const getCompanyLogoScale = (profilo?: string | null): number =>
   (profilo && COMPANY_LOGOS[profilo]?.scale) || 1;
 
+/** Mappa il campo azienda a TESTO LIBERO (es. `pratiche_riposi.azienda`) sulla chiave
+ *  profilo che ha il logo. Le pratiche riposi non hanno un profilo cedolino: l'azienda
+ *  è una stringa (es. "Ferrovie del Sud Est") e da qui si aggancia il logo ufficiale. */
+export const aziendaToProfilo = (azienda?: string | null): string | null => {
+  const a = (azienda || '').toLowerCase();
+  if (!a) return null;
+  if (a.includes('sud est') || a === 'fse') return 'FSE';
+  if (a.includes('mercitalia')) return 'MERCITALIA';
+  if (a.includes('trenitalia')) return 'TRENITALIA';
+  if (a.includes('rete ferroviaria') || a === 'rfi') return 'RFI';
+  if (a.includes('elior')) return 'ELIOR';
+  if (a.includes('clean service')) return 'CLEAN_SERVICE';
+  return null;
+};
+
 // ── Colore-azienda: linguaggio cromatico unico in tutta l'app ────────────────
 // La famiglia Tailwind di ogni azienda (card, header dettaglio, modali, stats):
 // RFI blu, Trenitalia rosso, Elior arancio, Clean Service smeraldo, Mercitalia
