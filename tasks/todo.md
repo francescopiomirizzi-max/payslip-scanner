@@ -160,13 +160,20 @@
       nel footer della sezione); stessi numeri dei documenti (buildRivalutazioneModel), viewer invariato.
 - [x] 6. Verifica: 20 test nuovi rivalutazione (6 pagine reali del perito al centesimo, riepilogo 165
       mesi, edge copertura/clamp/serie) + 5 test documenti (cornice formale, sezione in docx E html,
-      base-100, scadenza limitata dichiarata) → **342/342** · tsc 0 · build ok; end-to-end Node su
+      base-100, scadenza limitata dichiarata) → **322/322** · tsc 0 · build ok; end-to-end Node su
       dati reali: serie B €21.784,85 invariata, serie A rivalutata 31/10/2024 = 122.959,63 (|Δ perito|
       = 4,84 < 5), documenti reali rigenerati su ~/Desktop (viterbo-relazione.docx + conteggi.html,
       scadenza 31/05/2026 dichiarata «ultimo indice»). Collaudo visivo all'utente.
 
 ### Review — sessione 12/07
-- Gate: tsc 0 · vitest 342/342 (25 nuovi) · build ok. Nessun tocco a migration/DB, nessun push.
+- Gate: tsc 0 · vitest 322/322 (25 nuovi; il 342 scritto in prima battuta era un errore di conteggio) · build ok.
+  Nessun tocco a migration/DB, nessun push.
+- **Fix istatService (stessa sessione, richiesta utente)**: tasso legale 2025 2,50→2,00 (DM 10/12/2024),
+  +2026 = 1,60 (DM 10/12/2025), +FOI 2026 = 124,8 (ultimo indice mag 2026 ×1,214; prima il fallback stale
+  fermava la rivalutazione all'indice 2024 e gli interessi 2026 usavano il default 2,50). Solo DATI, zero
+  logica. Impatto su €1.000 origine 2020 a oggi: 1.319,85 → 1.356,65 (+riv per l'indice vero, −int per i
+  tassi veri). Test-guardrail __tests__/istatService.test.ts (fallisce a inizio anno se le tabelle non
+  vengono aggiornate) → 325/325.
 - La riconciliazione ha chiuso ANCHE la parte interessi/rivalutazione della fase 6 (riconciliazione
   conteggi perito): capitali 165/165, metodo identico, scarto +0,004% documentato e spiegato.
 - A oggi (31/05/2026): serie A rivalutata € 130.957,68 · serie B € 28.719,09 (cap 21.784,85 +

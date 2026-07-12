@@ -53,9 +53,13 @@ round3 dei rapporti pubblicati. Conclusione: **stesso metodo, scarto da arrotond
 - **FOI mensile nov 2024 → mag 2026** (ultimo pubblicato; prossimo indice il 16/07/2026): serie in
   [utils/rivalutazione.ts](../utils/rivalutazione.ts). Dal gen 2026 nuova base 2025=100, raccordo ufficiale **1,214**.
 - **Tassi legali**: 2025 = **2,00%** (DM 10/12/2024) · 2026 = **1,60%** (DM 10/12/2025, GU n. 289 del 13/12/2025).
-- ⚠️ **Finding fuori scope, NON corretto**: `LEGAL_INTEREST_RATES` in [istatService.ts](../istatService.ts)
-  (motore Incidenze) riporta 2025 = 2,50 «provvisorio» → il valore vero è 2,00. Gli interessi 2025 delle
-  Incidenze sono quindi leggermente sovrastimati. Decidere se correggerlo in una sessione Incidenze.
+- ⚠️ **Finding istatService — CORRETTO stessa sessione (richiesta utente)**: il motore Incidenze aveva
+  tasso 2025 = 2,50 «provvisorio» (vero: **2,00**, DM 10/12/2024) e NIENTE 2026 → il loop usava il default
+  2,50 invece di **1,60** e la rivalutazione a oggi era ferma all'indice 2024 (fallback stale). Fix SOLO DATI
+  in [istatService.ts](../istatService.ts): 2025→2,00, +2026=1,60, +FOI 2026=124,8 (mag 2026 ×1,214).
+  Impatto su €1.000 origine 2020 a oggi: 1.319,85 → 1.356,65 (+45,94 rivalutazione, −9,14 interessi).
+  Test-guardrail [__tests__/istatService.test.ts](../__tests__/istatService.test.ts): fallisce a inizio anno
+  nuovo finché le tabelle non sono aggiornate coi valori ufficiali.
 
 ## 5. Numeri di produzione (config DB: coeff 1, tempestività OFF, solo CEE, curva derivata)
 

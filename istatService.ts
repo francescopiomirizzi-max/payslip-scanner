@@ -5,7 +5,8 @@ export const LEGAL_INTEREST_RATES: Record<number, number> = {
     2007: 2.50, 2008: 3.00, 2009: 3.00, 2010: 1.00, 2011: 1.50, 2012: 2.50,
     2013: 2.50, 2014: 1.00, 2015: 0.50, 2016: 0.20, 2017: 0.10, 2018: 0.30,
     2019: 0.80, 2020: 0.05, 2021: 0.01, 2022: 1.25, 2023: 5.00, 2024: 2.50,
-    2025: 2.50 // Provvisorio
+    2025: 2.00, // DM 10/12/2024 (GU n. 294 del 16/12/2024)
+    2026: 1.60  // DM 10/12/2025 (GU n. 289 del 13/12/2025)
 };
 
 // 2. DATABASE INTERNO DI EMERGENZA (Indici ISTAT FOI - Base 2015=100)
@@ -14,7 +15,8 @@ export const FOI_ANNUAL_INDICES: Record<number, number> = {
     2007: 87.7, 2008: 90.5, 2009: 91.2, 2010: 92.6, 2011: 95.2, 2012: 98.1,
     2013: 99.2, 2014: 99.4, 2015: 100.0, 2016: 99.9, 2017: 101.0, 2018: 102.1,
     2019: 102.6, 2020: 102.3, 2021: 104.2, 2022: 112.6, 2023: 118.9, 2024: 120.1,
-    2025: 121.5 // Stima provvisoria per l'anno in corso
+    2025: 121.5, // dicembre 2025, definitivo (base 2015=100)
+    2026: 124.8  // ULTIMO indice disponibile (mag 2026: 102,8 base 2025 × raccordo 1,214) — aggiornare alle prossime pubblicazioni
 };
 
 // 3. ✨ CONNESSIONE API UFFICIALE ISTAT ✨
