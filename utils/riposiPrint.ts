@@ -15,17 +15,29 @@ import { causaleSintetica, tariffaRange, formatHm, type RestResult } from './res
 import {
     euro, intIT, tariffaLabel, coeffSuffix, dmyhm, buildDocModel,
     fonteDatiBullets, metodoFonteBullets, metodoMotorePassi, tariffaSpiegazione,
-    divarioBullets, riserveBullets, AVVERTENZA_SERIE, QUALIFICAZIONE_SERIE, DISCLAIMER, RIF_PERIMETRO_CEE, type Bullet,
+    divarioBullets, riserveBullets, buildRivalutazioneModel, rivalutazioneBullets,
+    AVVERTENZA_SERIE, QUALIFICAZIONE_SERIE, DISCLAIMER, RIF_PERIMETRO_CEE, type Bullet,
 } from './riposiDocText';
+import type { RivalutazioneResult } from './rivalutazione';
 import type { PraticaRiposi } from '../hooks/usePraticheRiposi';
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 /** Punto elenco dal nucleo: lead in grassetto + testo (escapato). */
 const li = (bl: Bullet) => `<li><strong>${esc(bl.lead)}</strong> — ${esc(bl.testo)}</li>`;
 
-export function buildConteggiRiposiHtml(pratica: PraticaRiposi, result: RestResult): string {
+/** Tabella HTML dell'analitico per annualità di una serie rivalutata. */
+const tabellaAnnualitaHtml = (r: RivalutazioneResult): string => `<table>
+        <thead><tr><th>Anno</th><th class="num">Capitale</th><th class="num">Rivalutazione</th><th class="num">Interessi</th><th class="num">Totale</th></tr></thead>
+        <tbody>
+            ${r.perAnno.map((a) => `<tr><td>${a.anno}</td><td class="num">${euro(a.capitale)}</td><td class="num">${euro(a.rivalutazione)}</td><td class="num">${euro(a.interessi)}</td><td class="num"><strong>${euro(a.totale)}</strong></td></tr>`).join('')}
+            <tr class="totale"><td>Totale</td><td class="num">${euro(r.totCapitale)}</td><td class="num">${euro(r.totRivalutazione)}</td><td class="num">${euro(r.totInteressi)}</td><td class="num">${euro(r.totale)}</td></tr>
+        </tbody>
+    </table>`;
+
+export function buildConteggiRiposiHtml(pratica: PraticaRiposi, result: RestResult, scadenzaRivalutazione?: string): string {
     const model = buildDocModel(pratica, result);
     const { coeff, val, rates, fonte, violazioni, righeAnno, totViol } = model;
+    const riv = buildRivalutazioneModel(pratica, result, scadenzaRivalutazione);
     const mostraVP = coeff !== 1;
     const oggi = new Date().toLocaleDateString('it-IT');
 
@@ -146,11 +158,26 @@ export function buildConteggiRiposiHtml(pratica: PraticaRiposi, result: RestResu
     </table>
     ${mostraVP ? `<p class="nota"><strong>Come si arriva al totale:</strong> il valore pieno (ore mancanti × tariffa €/h dell'anno) è ${euro(totali.vp)}; su ciascuna violazione si applica la valorizzazione (${esc(val.riga)}) e si arrotonda al centesimo, quindi si somma → indennità complessiva <strong>${euro(totali.ind)}</strong>. Ogni colonna quadra per somma.</p>` : ''}
 
-    <h2>3. Perché le due serie differiscono</h2>
+    <h2>3. Rivalutazione monetaria e interessi legali</h2>
+    <p class="nota">Art. 429, comma 3, c.p.c.: rivalutazione ISTAT FOI e interessi legali «tempo per tempo», per ciascuna mensilità di maturazione sino alla scadenza comune del <strong>${riv.scadenzaLabel}</strong>. Criteri:</p>
+    <ul class="blocco">${rivalutazioneBullets(riv).map(li).join('')}</ul>
+    <p class="nota" style="margin-top:8pt"><strong>Riepilogo economico.</strong></p>
+    <table>
+        <thead><tr><th>Serie</th><th class="num">Capitale</th><th class="num">Rivalutazione</th><th class="num">Interessi</th><th class="num">Totale (cap. rivalutato + interessi)</th></tr></thead>
+        <tbody>
+            ${riv.serieA ? `<tr><td><strong>A — documento sorgente</strong></td><td class="num">${euro(riv.serieA.totCapitale)}</td><td class="num">${euro(riv.serieA.totRivalutazione)}</td><td class="num">${euro(riv.serieA.totInteressi)}</td><td class="num"><strong>${euro(riv.serieA.totale)}</strong></td></tr>` : ''}
+            <tr><td><strong>B — motore Reg. 561/2006</strong></td><td class="num">${euro(riv.serieB.totCapitale)}</td><td class="num">${euro(riv.serieB.totRivalutazione)}</td><td class="num">${euro(riv.serieB.totInteressi)}</td><td class="num"><strong>${euro(riv.serieB.totale)}</strong></td></tr>
+        </tbody>
+    </table>
+    ${riv.serieA ? `<p class="nota" style="margin-top:8pt"><strong>Analitico per annualità — serie A (documento sorgente).</strong></p>${tabellaAnnualitaHtml(riv.serieA)}` : ''}
+    <p class="nota" style="margin-top:8pt"><strong>Analitico per annualità — serie B (motore Reg. 561/2006).</strong></p>
+    ${tabellaAnnualitaHtml(riv.serieB)}
+
+    <h2>4. Perché le due serie differiscono</h2>
     <ul class="blocco">${divarioBullets(model, result).map(li).join('')}</ul>
     <p class="nota" style="margin-top:6pt"><strong>Qualificazione delle due serie.</strong> ${esc(QUALIFICAZIONE_SERIE.replace('Qualificazione delle due serie: ', ''))}</p>
 
-    <h2>4. Elenco delle violazioni rilevate dal motore (${intIT(totViol)})</h2>
+    <h2>5. Elenco delle violazioni rilevate dal motore (${intIT(totViol)})</h2>
     <table>
         <thead><tr><th>Riposo dal</th><th>al</th><th>Tipo</th><th class="num">Fruito</th><th class="num">Mancante</th><th class="num">Tariffa €/h</th>${mostraVP ? '<th class="num">Valore pieno</th>' : ''}<th class="num">Indennità</th><th>Gravità</th><th>Causale</th></tr></thead>
         <tbody>${elencoRows}</tbody>
@@ -159,7 +186,7 @@ export function buildConteggiRiposiHtml(pratica: PraticaRiposi, result: RestResu
     &#178; Riposo settimanale: Reg. (CE) n. 561/2006, art. 8 §6; art. 4 lett. h — minimo 45h, da iniziare entro sei periodi di 24h dal precedente; riducibile a 24h con alternanza obbligatoria con un riposo regolare.<br>
     Gravità «grave»: riduzione superiore al 10% della soglia (criterio Reg. (UE) 2016/403) o riposo inferiore al minimo ridotto; criterio di classificazione, non trigger dell'illecito.</p>
 
-    <h2>5. Nota metodologica</h2>
+    <h2>6. Nota metodologica</h2>
     <p class="nota"><strong>Fonte dei dati.</strong></p>
     <ul class="blocco">${fonteDatiBullets(model, pratica).map(li).join('')}</ul>
     <p class="nota" style="margin-top:6pt"><strong>Criteri del documento sorgente (serie A).</strong></p>

@@ -14,6 +14,11 @@ import {
     computeSerieFonte, tariffaRange, formatHm, isGiornoNonLavorato, hasCEEDays,
     type RestResult, type Violazione, type GiornataInput,
 } from './restEngine';
+import {
+    buildRivalutazione, capitaliMensiliSerieA, capitaliMensiliSerieB,
+    ultimoGiornoDelMese, ymCorrente, RACCORDO_2015_SU_2010, RACCORDO_2025_SU_2015,
+    type RivalutazioneResult,
+} from './rivalutazione';
 import { groupThousandsIT } from './formatters';
 import type { PraticaRiposi } from '../hooks/usePraticheRiposi';
 
@@ -256,6 +261,67 @@ export function riserveBullets(model: DocModel, pratica: PraticaRiposi, result: 
     out.push({ lead: 'Cumulo delle serie', testo: 'le serie A e B quantificano i medesimi riposi non fruiti con criteri diversi: NON si sommano. La scelta della base di quantificazione — e la verifica che le indennità della serie A non risultino già corrisposte in busta paga — spettano al legale incaricato.' });
     return out;
 }
+
+// ─── Rivalutazione monetaria e interessi legali (art. 429 c.p.c.) ─────────────
+
+/** Modello della sezione rivalutazione: ENTRAMBE le serie rivalutate alla stessa
+ *  scadenza (default: mese corrente, limitato all'ultimo indice FOI pubblicato).
+ *  Come i capitali, le serie rivalutate si AFFIANCANO e non si sommano. */
+export interface RivalutazioneDocModel {
+    /** Scadenza effettiva del calcolo ('YYYY-MM') e sua etichetta 'DD/MM/YYYY'. */
+    scadenzaEffettiva: string;
+    scadenzaLabel: string;
+    /** true = la scadenza richiesta superava l'ultimo indice FOI pubblicato. */
+    scadenzaLimitata: boolean;
+    serieA: RivalutazioneResult | null;
+    serieB: RivalutazioneResult;
+}
+
+export function buildRivalutazioneModel(pratica: PraticaRiposi, result: RestResult, scadenza: string = ymCorrente()): RivalutazioneDocModel {
+    const capA = capitaliMensiliSerieA(pratica.giornate);
+    const serieA = Object.keys(capA).length > 0 ? buildRivalutazione(capA, scadenza) : null;
+    const serieB = buildRivalutazione(capitaliMensiliSerieB(result.violazioni), scadenza);
+    return {
+        scadenzaEffettiva: serieB.scadenzaEffettiva,
+        scadenzaLabel: ultimoGiornoDelMese(serieB.scadenzaEffettiva),
+        scadenzaLimitata: serieB.scadenzaLimitata,
+        serieA,
+        serieB,
+    };
+}
+
+/** Metodo della rivalutazione, passo per passo (stessa fonte per docx e stampa). */
+export function rivalutazioneBullets(riv: RivalutazioneDocModel): Bullet[] {
+    const out: Bullet[] = [
+        { lead: 'Base normativa', testo: 'art. 429, comma 3, c.p.c.: ai crediti di lavoro spettano gli interessi nella misura legale e il maggior danno da diminuzione di valore del credito (rivalutazione monetaria), dal giorno di maturazione del diritto.' },
+        { lead: 'Indici', testo: `indice ISTAT FOI generale (famiglie di operai e impiegati, al netto dei tabacchi), valori MENSILI come pubblicati in Gazzetta Ufficiale; i cambi di base (2010→2015→2025) sono gestiti con i coefficienti di raccordo ufficiali ISTAT (${RACCORDO_2015_SU_2010.toLocaleString('it-IT')} e ${RACCORDO_2025_SU_2015.toLocaleString('it-IT')}).` },
+        { lead: 'Decorrenza', testo: `ogni mese con danno è rivalutato autonomamente dall'ultimo giorno del mese di maturazione sino alla scadenza comune del ${riv.scadenzaLabel}.` },
+        { lead: 'Rivalutazione', testo: 'concatenata per anno solare: ad ogni fine anno (e alla scadenza per l\'ultimo periodo) il capitale è moltiplicato per il coefficiente di variazione dell\'indice, arrotondato alla terza cifra decimale; la rivalutazione complessiva non è mai negativa.' },
+        { lead: 'Interessi legali', testo: 'calcolati «tempo per tempo» ai tassi fissati dai decreti ministeriali annuali (art. 1284 c.c.), sul capitale via via rivalutato, in ragione dei giorni effettivi di ciascun periodo (base 365).' },
+    ];
+    if (riv.scadenzaLimitata) {
+        out.push({ lead: 'Ultimo indice disponibile', testo: `il calcolo è aggiornato al ${riv.scadenzaLabel}, ultimo mese con indice FOI pubblicato alla data di generazione del documento: nessun indice è stimato. Gli importi maturano ulteriormente sino al soddisfo.` });
+    }
+    const fuori = (riv.serieA?.mesiFuoriCopertura ?? 0) + riv.serieB.mesiFuoriCopertura;
+    if (fuori > 0) {
+        out.push({ lead: 'Mesi fuori copertura', testo: `${intIT(fuori)} mensilità precedono la copertura della serie indici caricata: il loro capitale è incluso nei totali SENZA rivalutazione né interessi (criterio prudenziale, integrabile).` });
+    }
+    out.push({ lead: 'Avvertenza', testo: 'le due serie rivalutate quantificano lo stesso pregiudizio con criteri diversi e NON si sommano, al pari dei rispettivi capitali.' });
+    return out;
+}
+
+/** Schema delle maggiorazioni contrattuali su base 100 (un'ora di retribuzione
+ *  normale con i ratei di 13ª e 14ª = 100). Fonte: artt. 11 A.N. 12/03/1980 e
+ *  14 CCNL 25/07/1997 (v. quadro contrattuale). */
+export const MAGGIORAZIONI_BASE_100: Array<{ tipologia: string; trattamento: string }> = [
+    { tipologia: 'Ora di retribuzione normale (con ratei 13ª e 14ª)', trattamento: '100' },
+    { tipologia: 'Straordinario diurno', trattamento: '110 (+10%)' },
+    { tipologia: 'Lavoro festivo e mancato riposo', trattamento: '120 (+20%)' },
+    { tipologia: 'Notturno in turni avvicendati (22:00–05:00)', trattamento: '120 (+20%)' },
+    { tipologia: 'Straordinario notturno', trattamento: '130 (110 + 20)' },
+    { tipologia: 'Straordinario festivo', trattamento: '130 (110 + 20)' },
+    { tipologia: 'Straordinario festivo notturno', trattamento: '150 (110 + 20 + 20)' },
+];
 
 /** Qualificazione giuridica delle due serie: chiude la sezione «Perché le due serie
  *  differiscono» spiegando COSA rappresenta legalmente ciascuna. Volutamente neutra:

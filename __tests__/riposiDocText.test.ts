@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
     valorizzazioneInfo, coeffSuffix, buildDocModel,
     divarioBullets, riserveBullets, metodoMotorePassi, tariffaSpiegazione,
+    buildRivalutazioneModel, rivalutazioneBullets,
 } from '../utils/riposiDocText';
 import { computeRestViolations, type GiornataInput } from '../utils/restEngine';
 import { buildRelazioneRiposiDoc } from '../utils/riposiRelazione';
@@ -170,6 +171,59 @@ describe('con la tempestività ATTIVA i documenti cambiano dichiarazione', () =>
     it('la violazione di tempestività ha la causale giusta nei documenti', () => {
         const html = buildConteggiRiposiHtml(p, r);
         expect(html).toContain('Settimanale oltre il termine: 45h intere');
+    });
+});
+
+describe('rivalutazione monetaria e interessi legali (nucleo + entrambi i documenti)', () => {
+    // Scadenza FISSA per determinismo (le violazioni della fixture sono di fine 2023).
+    const SCAD = '2024-10';
+    const riv = buildRivalutazioneModel(basePratica, result, SCAD);
+
+    it('modello: entrambe le serie rivalutate, capitali = capitali delle serie', () => {
+        expect(riv.serieA).not.toBeNull();
+        expect(riv.serieA!.totCapitale).toBe(35.5);       // 25,50 + 10,00 (fonte)
+        expect(riv.serieB.totCapitale).toBe(result.totIndennita);
+        expect(riv.scadenzaLabel).toBe('31/10/2024');
+        expect(riv.scadenzaLimitata).toBe(false);
+        // il totale rivalutato non è mai sotto il capitale
+        expect(riv.serieA!.totale).toBeGreaterThan(riv.serieA!.totCapitale);
+        expect(riv.serieB.totale).toBeGreaterThan(riv.serieB.totCapitale);
+    });
+    it('bullets: base normativa, indici con raccordi, tempo per tempo, avvertenza', () => {
+        const txt = rivalutazioneBullets(riv).map((b) => b.lead + ' ' + b.testo).join('\n');
+        expect(txt).toContain('art. 429, comma 3, c.p.c.');
+        expect(txt).toContain('FOI');
+        expect(txt).toContain('coefficienti di raccordo');
+        expect(txt).toContain('tempo per tempo');
+        expect(txt).toContain('NON si sommano');
+        expect(txt).not.toContain('Ultimo indice disponibile'); // scadenza dentro la copertura
+    });
+    it('scadenza oltre l\'ultimo indice → dichiarata nei bullets', () => {
+        const r2 = buildRivalutazioneModel(basePratica, result, '2099-12');
+        expect(r2.scadenzaLimitata).toBe(true);
+        const txt = rivalutazioneBullets(r2).map((b) => b.lead).join('|');
+        expect(txt).toContain('Ultimo indice disponibile');
+    });
+    it('relazione .docx: cornice formale + sezione rivalutazione con i numeri', async () => {
+        const buffer = await Packer.toBuffer(buildRelazioneRiposiDoc(basePratica, result, SCAD));
+        const xml = strFromU8(unzipSync(new Uint8Array(buffer))['word/document.xml']);
+        for (const s of [
+            'Oggetto', 'Premessa e incarico', 'Il/La sottoscritto/a', 'Luogo e data',
+            'Rivalutazione monetaria e interessi legali', 'art. 429, comma 3, c.p.c.',
+            'Analitico per annualità — serie B (motore Reg. 561/2006)',
+            'Schema riepilogativo delle maggiorazioni (base 100)',
+            'Straordinario festivo notturno', '150 (110 + 20 + 20)',
+            'Conclusioni', 'Firma', '31/10/2024',
+        ]) expect(xml).toContain(s);
+    });
+    it('conteggi stampabili: stessa sezione, stessi numeri', () => {
+        const html = buildConteggiRiposiHtml(basePratica, result, SCAD);
+        for (const s of [
+            'Rivalutazione monetaria e interessi legali', 'art. 429, comma 3, c.p.c.',
+            'Analitico per annualità — serie B (motore Reg. 561/2006)', '31/10/2024',
+        ]) expect(html).toContain(s);
+        // parità dei totali tra i due documenti: stesso nucleo, stessi importi
+        expect(html).toContain(riv.serieB.totale.toLocaleString('it-IT', { minimumFractionDigits: 2 }));
     });
 });
 

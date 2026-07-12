@@ -4,6 +4,7 @@ import { ArrowLeft, AlertTriangle, Moon, CalendarClock, Euro, CheckCircle2, Sear
 import { RIPOSI_THEME, riposiHeaderBand } from './riposi/riposiTheme';
 import { computeRestViolations, computeSerieFonte, resolveTariffePerAnno, buildConfronto, tariffaRange, formatHm, parseHmm, hasCEEDays, isGiornoNonLavorato, type Violazione, type GiornataInput, type RestResult, type ConfrontoResult, type ConfrontoStato } from '../utils/restEngine';
 import { printConteggiRiposi } from '../utils/riposiPrint';
+import { buildRivalutazioneModel } from '../utils/riposiDocText';
 import { AnimatedCounter } from './ui/AnimatedCounter';
 import { STATO_META, type PraticaRiposi, type PraticaRiposiUpdate, type StatoPratica } from '../hooks/usePraticheRiposi';
 import { useIsReadOnly, canExportForViewer } from '../lib/readonly';
@@ -170,6 +171,10 @@ const RiposiPraticaDetail: React.FC<Props> = ({ pratica, onBack, onUpdate }) => 
 
     /** Confronto giorno-per-giorno PDF ↔ nostro metodo (per il tab Confronto). */
     const confronto = useMemo(() => buildConfronto(pratica.giornate, result), [pratica, result]);
+
+    /** Rivalutazione ISTAT FOI + interessi legali di entrambe le serie, alla data
+     *  odierna (limitata all'ultimo indice pubblicato). Stessi numeri dei documenti. */
+    const riv = useMemo(() => buildRivalutazioneModel(pratica, result), [pratica, result]);
 
     const perAnnoRows = useMemo(() => {
         const m = new Map(perAnno.map((a) => [a.y, a]));
@@ -526,6 +531,11 @@ const RiposiPraticaDetail: React.FC<Props> = ({ pratica, onBack, onUpdate }) => 
                                         </div>
                                         <p className="text-3xl font-black tabular-nums text-sky-700 dark:text-sky-300"><AnimatedCounter value={fonte.ind} isCurrency /></p>
                                         <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">{groupThousandsIT(fonte.gg.toLocaleString('it-IT'))} giornate indennizzate · {groupThousandsIT(Math.round(fonte.ore).toLocaleString('it-IT'))} h mancanti · criteri del documento sorgente (valorizzazione contrattuale: riposo periodico = festivo)</p>
+                                        {riv.serieA && (
+                                            <p className="text-[11px] font-semibold text-sky-700 dark:text-sky-300 mt-2 pt-2 border-t border-sky-200/70 dark:border-sky-500/20 tabular-nums">
+                                                Rivalutato al {riv.scadenzaLabel}: <span className="font-black">{euro(riv.serieA.totale)}</span> <span className="font-normal text-slate-500 dark:text-slate-400">(+{euro(riv.serieA.totRivalutazione)} ISTAT, +{euro(riv.serieA.totInteressi)} interessi)</span>
+                                            </p>
+                                        )}
                                     </div>
                                     <div className="rounded-2xl border border-indigo-200 dark:border-indigo-500/30 bg-indigo-50/70 dark:bg-indigo-500/10 p-4">
                                         <div className="flex items-center gap-2 mb-2">
@@ -534,9 +544,12 @@ const RiposiPraticaDetail: React.FC<Props> = ({ pratica, onBack, onUpdate }) => 
                                         </div>
                                         <p className="text-3xl font-black tabular-nums text-indigo-700 dark:text-indigo-300"><AnimatedCounter value={result.totIndennita} isCurrency /></p>
                                         <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">{totViol} violazioni · {groupThousandsIT(Math.round(result.totOreMancanti).toLocaleString('it-IT'))} h mancanti · tariffa per anno {tariffaLabel(rates)}{coeffSuffix(coeff)}</p>
+                                        <p className="text-[11px] font-semibold text-indigo-700 dark:text-indigo-300 mt-2 pt-2 border-t border-indigo-200/70 dark:border-indigo-500/20 tabular-nums">
+                                            Rivalutato al {riv.scadenzaLabel}: <span className="font-black">{euro(riv.serieB.totale)}</span> <span className="font-normal text-slate-500 dark:text-slate-400">(+{euro(riv.serieB.totRivalutazione)} ISTAT, +{euro(riv.serieB.totInteressi)} interessi)</span>
+                                        </p>
                                     </div>
                                 </div>
-                                <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-3 leading-relaxed">Criteri di calcolo diversi: la fonte applica le proprie regole, il motore le soglie del Reg. (CE) 561/2006 sui soli orari di turno. Le due serie si affiancano, non si sommano — confronto neutro per l'avvocato.</p>
+                                <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-3 leading-relaxed">Criteri di calcolo diversi: la fonte applica le proprie regole, il motore le soglie del Reg. (CE) 561/2006 sui soli orari di turno. Le due serie si affiancano, non si sommano — confronto neutro per l'avvocato. Rivalutazione ISTAT FOI e interessi legali «tempo per tempo» (art. 429 c.p.c.){riv.scadenzaLimitata ? ` calcolati sino all'ultimo indice pubblicato (${riv.scadenzaLabel})` : ''}: stessi criteri e numeri della relazione e dei conteggi.</p>
                             </section>
                         )}
 

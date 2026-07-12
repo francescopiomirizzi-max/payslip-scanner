@@ -23,8 +23,10 @@ import {
     euro, intIT, tariffaLabel, coeffSuffix, dmyhm, buildDocModel,
     quadroNormativoBullets, quadroContrattualeBullets, fonteDatiBullets, metodoFonteBullets,
     metodoMotorePassi, tariffaSpiegazione, divarioBullets, riserveBullets,
-    QUALIFICAZIONE_SERIE, DISCLAIMER, type Bullet,
+    buildRivalutazioneModel, rivalutazioneBullets, MAGGIORAZIONI_BASE_100,
+    QUALIFICAZIONE_SERIE, DISCLAIMER, type Bullet, type RivalutazioneDocModel,
 } from './riposiDocText';
+import type { RivalutazioneResult } from './rivalutazione';
 import type { PraticaRiposi } from '../hooks/usePraticheRiposi';
 
 // ─── Mattoni docx (stesso linguaggio visivo di reportGenerator) ───────────────
@@ -77,9 +79,33 @@ const bordered = (rows: TableRow[]): Table =>
 
 // ─── Contenuto ────────────────────────────────────────────────────────────────
 
-export function buildRelazioneRiposiDoc(pratica: PraticaRiposi, result: RestResult): Document {
+/** Tabella dell'analitico per annualità di una serie rivalutata (capitale,
+ *  rivalutazione, interessi, totale per anno di maturazione + riga totale). */
+const tabellaAnnualita = (r: RivalutazioneResult): Table =>
+    bordered([
+        new TableRow({ tableHeader: true, children: [headerCell('Anno'), headerCell('Capitale'), headerCell('Rivalutazione'), headerCell('Interessi'), headerCell('Totale')] }),
+        ...r.perAnno.map((a) => new TableRow({
+            children: [
+                dataCell(a.anno), dataCell(euro(a.capitale), { right: true }),
+                dataCell(euro(a.rivalutazione), { right: true }), dataCell(euro(a.interessi), { right: true }),
+                dataCell(euro(a.totale), { right: true, bold: true }),
+            ],
+        })),
+        new TableRow({
+            children: [
+                dataCell('Totale', { bold: true, fill: 'F2F2F2' }),
+                dataCell(euro(r.totCapitale), { right: true, bold: true, fill: 'F2F2F2' }),
+                dataCell(euro(r.totRivalutazione), { right: true, bold: true, fill: 'F2F2F2' }),
+                dataCell(euro(r.totInteressi), { right: true, bold: true, fill: 'F2F2F2' }),
+                dataCell(euro(r.totale), { right: true, bold: true, fill: 'F2F2F2' }),
+            ],
+        }),
+    ]);
+
+export function buildRelazioneRiposiDoc(pratica: PraticaRiposi, result: RestResult, scadenzaRivalutazione?: string): Document {
     const model = buildDocModel(pratica, result);
     const { coeff, val, rates, fonte, violazioni, righeAnno, totViol } = model;
+    const riv: RivalutazioneDocModel = buildRivalutazioneModel(pratica, result, scadenzaRivalutazione);
     const oggi = new Date().toLocaleDateString('it-IT', { day: '2-digit', month: 'long', year: 'numeric' });
     const mostraVP = coeff !== 1; // colonna "valore pieno" solo quando c'è un coefficiente
 
@@ -101,11 +127,32 @@ export function buildRelazioneRiposiDoc(pratica: PraticaRiposi, result: RestResu
         }),
         new Paragraph({
             alignment: AlignmentType.CENTER,
-            spacing: { after: 280 },
+            spacing: { after: 60 },
             children: [new TextRun({ text: `Generata il ${oggi}`, italics: true, color: '666666' })],
         }),
+        new Paragraph({
+            alignment: AlignmentType.CENTER,
+            spacing: { after: 280 },
+            children: [new TextRun({ text: 'Luogo e data: ____________________________', color: '666666' })],
+        }),
 
-        heading('1. Dati della pratica'),
+        heading('Oggetto'),
+        para([
+            'La presente relazione ha ad oggetto il conteggio delle differenze retributive connesse alla violazione del ',
+            b('Regolamento (CE) n. 561/2006'),
+            ', con particolare riferimento ai mancati riposi giornalieri e ai mancati riposi settimanali, la relativa quantificazione economica, nonché la rivalutazione monetaria e gli interessi legali maturati.',
+        ]),
+
+        heading('1. Premessa e incarico'),
+        para([
+            'Il/La sottoscritto/a ……………………………………………………………………, in qualità di ……………………………………………, è stato/a incaricato/a di verificare e rielaborare i conteggi relativi alle ore di riposo giornaliero e settimanale non fruite, conseguenti a violazioni del Reg. (CE) n. 561/2006, riguardanti il sig. ',
+            b(`${pratica.cognome} ${pratica.nome}`), '.',
+        ]),
+        para([
+            `Il lavoratore risulta inserito in un rapporto di lavoro subordinato${pratica.mansione ? ` con mansione di ${pratica.mansione}` : ''}${pratica.azienda ? ` presso ${pratica.azienda}` : ''}.`,
+        ]),
+
+        heading('2. Dati della pratica'),
         bordered([
             new TableRow({ children: [dataCell('Lavoratore'), dataCell(`${pratica.cognome} ${pratica.nome}`, { bold: true })] }),
             new TableRow({ children: [dataCell('Mansione'), dataCell(pratica.mansione ?? '—')] }),
@@ -117,10 +164,10 @@ export function buildRelazioneRiposiDoc(pratica: PraticaRiposi, result: RestResu
             new TableRow({ children: [dataCell('Valorizzazione della serie B'), dataCell(val.riga)] }),
         ]),
 
-        heading('2. Fonte dei dati e affidabilità'),
+        heading('3. Fonte dei dati e affidabilità'),
         ...fonteDatiBullets(model, pratica).map(bulletB),
 
-        heading('3. Quadro normativo e contrattuale'),
+        heading('4. Quadro normativo e contrattuale'),
         para([
             'La disciplina dei tempi di guida e di riposo del personale viaggiante su strada è dettata dal ',
             b('Reg. (CE) n. 561/2006'), ', attuato nell\'ordinamento interno dal ', b('D.Lgs. n. 234/2007'), '. In particolare:',
@@ -133,18 +180,26 @@ export function buildRelazioneRiposiDoc(pratica: PraticaRiposi, result: RestResu
             b('25/07/1997'), ' art. 14) — letta insieme alla ', b('L. n. 138/1958'), ' e al ', b('D.Lgs. n. 66/2003'), '. In sintesi:',
         ]),
         ...quadroContrattualeBullets().map(bulletB),
+        para([b('Schema riepilogativo delle maggiorazioni (base 100)')], { after: 60 }),
+        para('Assumendo come base 100 l\'importo di un\'ora di retribuzione normale aumentata dei ratei di 13ª e 14ª mensilità:', { after: 60 }),
+        bordered([
+            new TableRow({ tableHeader: true, children: [headerCell('Tipologia su base oraria'), headerCell('Trattamento (base 100)')] }),
+            ...MAGGIORAZIONI_BASE_100.map((m) => new TableRow({
+                children: [dataCell(m.tipologia), dataCell(m.trattamento, { right: true })],
+            })),
+        ]),
 
-        heading('4. Criteri del documento sorgente (serie A)'),
+        heading('5. Criteri del documento sorgente (serie A)'),
         para('Per trasparenza del confronto si descrivono i criteri applicati dal compilatore del prospetto, come risultano dal documento stesso:'),
         ...metodoFonteBullets(model).map(bulletB),
 
-        heading('5. Metodo di calcolo del motore (serie B)'),
+        heading('6. Metodo di calcolo del motore (serie B)'),
         para([
             'Sui dati del prospetto il calcolo procede per i passaggi seguenti, tutti verificabili e riproducibili:',
         ]),
         ...metodoMotorePassi(model, pratica, result).map(bulletB),
         para([b('Tariffa oraria'), ` — ${tariffaSpiegazione(model, pratica)}`]),
-        para(['In formula: ', b(val.formula), '. Il dettaglio per violazione è nella sezione 8, il riepilogo per anno nella sezione 6.']),
+        para(['In formula: ', b(val.formula), '. Il dettaglio per violazione è nella sezione 10, il riepilogo per anno nella sezione 7.']),
 
         ...(esempio ? [
             para([b('Esempio di calcolo')], { after: 60 }),
@@ -158,7 +213,7 @@ export function buildRelazioneRiposiDoc(pratica: PraticaRiposi, result: RestResu
             ]),
         ] : []),
 
-        heading('6. Risultanze — le due serie a confronto'),
+        heading('7. Risultanze — le due serie a confronto'),
         para([
             'Sono disponibili due quantificazioni dello stesso pregiudizio, costruite con criteri diversi: ',
             b('non si sommano'), '.',
@@ -168,7 +223,7 @@ export function buildRelazioneRiposiDoc(pratica: PraticaRiposi, result: RestResu
             new TableRow({
                 children: [
                     dataCell('A — documento sorgente', { bold: true }),
-                    dataCell(fonte.gg > 0 ? `${intIT(fonte.gg)} giornate indennizzate · ${intIT(fonte.ore)} ore · criteri del compilatore (sezione 4)` : 'serie non presente nei dati'),
+                    dataCell(fonte.gg > 0 ? `${intIT(fonte.gg)} giornate indennizzate · ${intIT(fonte.ore)} ore · criteri del compilatore (sezione 5)` : 'serie non presente nei dati'),
                     dataCell(fonte.gg > 0 ? euro(fonte.ind) : '—', { right: true, bold: true }),
                 ],
             }),
@@ -219,13 +274,50 @@ export function buildRelazioneRiposiDoc(pratica: PraticaRiposi, result: RestResu
             `: il valore pieno (ore mancanti × tariffa €/h dell'anno) ammonta a ${euro(result.totValorePieno)}; su ciascuna violazione si applica la valorizzazione (${val.riga}) e si arrotonda al centesimo, quindi si somma → indennità complessiva ${euro(result.totIndennita)}. Ogni colonna quadra per somma.`,
         ], { after: 60 })] : []),
 
-        heading('7. Perché le due serie differiscono'),
+        heading('8. Perché le due serie differiscono'),
         para('Le ragioni del divario, dichiarate e quantificate dove possibile:'),
         ...divarioBullets(model, result).map(bulletB),
         para([b('Qualificazione delle due serie'), ` — ${QUALIFICAZIONE_SERIE.replace('Qualificazione delle due serie: ', '')}`]),
 
-        heading(`8. Elenco delle violazioni rilevate (${intIT(totViol)})`),
-        para('Ogni riga è un riposo fruito in misura inferiore alle soglie del Reg. (CE) n. 561/2006 (riferimenti normativi in sezione 3).', { italics: true }),
+        heading('9. Rivalutazione monetaria e interessi legali'),
+        para([
+            'Ai sensi dell\'art. 429, comma 3, c.p.c., gli importi sono assistiti dalla rivalutazione monetaria (indici ISTAT FOI) e dagli interessi legali «tempo per tempo» vigenti, calcolati per ciascuna mensilità di maturazione sino alla scadenza comune del ',
+            b(riv.scadenzaLabel), '. Criteri applicati:',
+        ]),
+        ...rivalutazioneBullets(riv).map(bulletB),
+        para([b('Riepilogo economico')], { after: 60 }),
+        bordered([
+            new TableRow({ tableHeader: true, children: [headerCell('Serie'), headerCell('Capitale'), headerCell('Rivalutazione'), headerCell('Interessi'), headerCell('Totale (capitale rivalutato + interessi)')] }),
+            ...(riv.serieA ? [new TableRow({
+                children: [
+                    dataCell('A — documento sorgente', { bold: true }),
+                    dataCell(euro(riv.serieA.totCapitale), { right: true }),
+                    dataCell(euro(riv.serieA.totRivalutazione), { right: true }),
+                    dataCell(euro(riv.serieA.totInteressi), { right: true }),
+                    dataCell(euro(riv.serieA.totale), { right: true, bold: true }),
+                ],
+            })] : []),
+            new TableRow({
+                children: [
+                    dataCell('B — motore Reg. 561/2006', { bold: true }),
+                    dataCell(euro(riv.serieB.totCapitale), { right: true }),
+                    dataCell(euro(riv.serieB.totRivalutazione), { right: true }),
+                    dataCell(euro(riv.serieB.totInteressi), { right: true }),
+                    dataCell(euro(riv.serieB.totale), { right: true, bold: true }),
+                ],
+            }),
+        ]),
+        para('', { after: 120 }),
+        ...(riv.serieA ? [
+            para([b('Analitico per annualità — serie A (documento sorgente)')], { after: 60 }),
+            tabellaAnnualita(riv.serieA),
+            para('', { after: 120 }),
+        ] : []),
+        para([b('Analitico per annualità — serie B (motore Reg. 561/2006)')], { after: 60 }),
+        tabellaAnnualita(riv.serieB),
+
+        heading(`10. Elenco delle violazioni rilevate (${intIT(totViol)})`),
+        para('Ogni riga è un riposo fruito in misura inferiore alle soglie del Reg. (CE) n. 561/2006 (riferimenti normativi in sezione 4).', { italics: true }),
         para(mostraVP
             ? `Per ogni violazione: ore mancanti × tariffa €/h dell'anno = valore pieno; valorizzazione (${val.riga}) = indennità.`
             : 'Per ogni violazione: ore mancanti × tariffa €/h dell\'anno = indennità.', { italics: true }),
@@ -252,7 +344,7 @@ export function buildRelazioneRiposiDoc(pratica: PraticaRiposi, result: RestResu
             })),
         ]),
 
-        heading('9. Riserve e limiti'),
+        heading('11. Riserve e limiti'),
         ...riserveBullets(model, pratica, result).map(bulletB),
         ...(result.warnings.length
             ? [
@@ -260,6 +352,26 @@ export function buildRelazioneRiposiDoc(pratica: PraticaRiposi, result: RestResu
                 ...result.warnings.map((w) => bullet([w])),
             ]
             : []),
+
+        heading('12. Conclusioni'),
+        para('La presente relazione:', { after: 60 }),
+        bullet(['ricostruisce i riposi giornalieri e settimanali effettivamente fruiti sulla base delle risultanze di servizio (prospetto turni), individuando le violazioni del Reg. (CE) n. 561/2006 (serie B) e affiancandole alla quantificazione del documento sorgente (serie A);']),
+        bullet([`valorizza le ore di mancato riposo alla tariffa oraria contrattuale dell'anno di maturazione (${tariffaLabel(rates)}), secondo il criterio: ${val.riga};`]),
+        bullet([`calcola la rivalutazione monetaria ISTAT FOI e gli interessi legali «tempo per tempo» sino al ${riv.scadenzaLabel}${riv.scadenzaLimitata ? ' (ultimo indice pubblicato; gli importi maturano ulteriormente sino al soddisfo)' : ''};`]),
+        bullet([`quantifica: serie A ${riv.serieA ? `${euro(riv.serieA.totale)} (capitale ${euro(riv.serieA.totCapitale)} + rivalutazione ${euro(riv.serieA.totRivalutazione)} + interessi ${euro(riv.serieA.totInteressi)})` : 'non presente nei dati'}; serie B ${euro(riv.serieB.totale)} (capitale ${euro(riv.serieB.totCapitale)} + rivalutazione ${euro(riv.serieB.totRivalutazione)} + interessi ${euro(riv.serieB.totInteressi)}). Le due serie non si sommano;`]),
+        bullet(['evidenzia le componenti non applicate per scelta cautelativa (maggiorazioni notturne, integrazione del 50% per servizio ridotto nel giorno di riposo' + (model.nTiming === 0 ? ', tempestività del riposo settimanale' : '') + ') e le riserve di cui alla sezione 11;']),
+        bullet(['rimette al legale incaricato la scelta della base di quantificazione e ogni valutazione sull\'azionabilità delle pretese.']),
+
+        new Paragraph({
+            spacing: { before: 480 },
+            alignment: AlignmentType.RIGHT,
+            children: [new TextRun({ text: 'Firma' })],
+        }),
+        new Paragraph({
+            spacing: { before: 120 },
+            alignment: AlignmentType.RIGHT,
+            children: [new TextRun({ text: '______________________________' })],
+        }),
 
         new Paragraph({
             spacing: { before: 400 },

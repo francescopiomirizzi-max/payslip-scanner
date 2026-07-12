@@ -126,6 +126,56 @@
       riscontro tariffa (fonte_tariffa aggiornata in DB) citato nel testo. Gate 292/292 · build ok.
       Copie reali su ~/Desktop (viterbo-relazione.docx + viterbo-conteggi.html) per il collaudo visivo.
 
+# Todo — Sessione 12/07: rivalutazione ISTAT + interessi riposi + cornice formale relazione
+
+> **Contesto:** punto 10 dell'11/07. Bersaglio di riconciliazione = «Viterbo (Interessi e
+> Rivalutazioni).pdf» (166 pagg. testuali: 1 pagina per mese di danno, serie A intera 98.732,03,
+> scadenza comune 31/10/2024; Riepilogo Generale: riv 14.475,09 + int 9.747,67 = 122.954,79).
+> Metodo perito: FOI MENSILE alla decorrenza (fine mese), capitale progressivamente rivalutato,
+> interessi legali pro-rata GIORNI. Il motore Incidenze (istatService) è annuale/approssimato →
+> NON si tocca; modulo nuovo puro. Decisioni utente: rivalutare ENTRAMBE le serie (A e B) nei
+> documenti + riga del totale rivalutato anche in UI. Piano: ~/.claude/plans/pure-hatching-swan.md
+
+- [x] 0. Calibrazione FATTA — metodo del perito DECIFRATO sui dati: FOI mensile 1 decimale (identico
+      alle tavole ufficiali), rivalutazione CONCATENATA per anno con coefficienti round-3-decimali,
+      interessi base 365 FISSA su giorni di calendario tra confini di segmento. Riprodotte 153/165
+      pagine al centesimo (1.184/1.184 righe interessi), riepilogo Δ +4,84 € su 122.954,79 (+0,004%,
+      arrotondamenti interni del suo software non riproducibili da indici pubblicati); capitali
+      mensili = serie A dal seed **165/165 al centesimo** (il perito rivaluta la serie A INTERA).
+      Report: [riconciliazione-rivalutazione-viterbo-2026-07-12.md](riconciliazione-rivalutazione-viterbo-2026-07-12.md)
+- [x] 1. `utils/rivalutazione.ts` FATTO (puro): FOI mensile 2011→mag 2026 (2025-26 verificati su
+      DUE fonti ufficiali; raccordi 1,071 e 1,214), tassi legali propri 2011-2026 (2025=2,00%,
+      2026=1,60% da DM — ⚠️ istatService ha 2025=2,50 ERRATO, segnalato e NON toccato),
+      calcolaRivalutazioneMese/buildRivalutazione + helper capitali serie A/B; scadenza limitata
+      all'ultimo indice pubblicato e DICHIARATA; mesi pre-2011 inclusi col solo capitale, flaggati.
+- [x] 2. Nucleo: buildRivalutazioneModel (entrambe le serie), rivalutazioneBullets (429 c.p.c.,
+      indici+raccordi, tempo per tempo, ultimo indice, «non si sommano»), MAGGIORAZIONI_BASE_100.
+- [x] 3. Relazione .docx: Oggetto · 1 Premessa e incarico (firmatario in bianco, Luogo e data in
+      testata) · … · 9 Rivalutazione (riepilogo economico A+B + analitico per annualità per serie) ·
+      12 Conclusioni a punti coi totali rivalutati · riga Firma; tabella maggiorazioni base-100 nel
+      quadro contrattuale; sezioni rinumerate e riferimenti incrociati aggiornati.
+- [x] 4. Conteggi stampa: sezione 3 «Rivalutazione monetaria e interessi legali» (stessi bullets +
+      riepilogo + analitici per serie dal nucleo), sezioni rinumerate.
+- [x] 5. UI: totale rivalutato in ENTRAMBE le card «Le due serie a confronto» (+ nota metodo/scadenza
+      nel footer della sezione); stessi numeri dei documenti (buildRivalutazioneModel), viewer invariato.
+- [x] 6. Verifica: 20 test nuovi rivalutazione (6 pagine reali del perito al centesimo, riepilogo 165
+      mesi, edge copertura/clamp/serie) + 5 test documenti (cornice formale, sezione in docx E html,
+      base-100, scadenza limitata dichiarata) → **342/342** · tsc 0 · build ok; end-to-end Node su
+      dati reali: serie B €21.784,85 invariata, serie A rivalutata 31/10/2024 = 122.959,63 (|Δ perito|
+      = 4,84 < 5), documenti reali rigenerati su ~/Desktop (viterbo-relazione.docx + conteggi.html,
+      scadenza 31/05/2026 dichiarata «ultimo indice»). Collaudo visivo all'utente.
+
+### Review — sessione 12/07
+- Gate: tsc 0 · vitest 342/342 (25 nuovi) · build ok. Nessun tocco a migration/DB, nessun push.
+- La riconciliazione ha chiuso ANCHE la parte interessi/rivalutazione della fase 6 (riconciliazione
+  conteggi perito): capitali 165/165, metodo identico, scarto +0,004% documentato e spiegato.
+- A oggi (31/05/2026): serie A rivalutata € 130.957,68 · serie B € 28.719,09 (cap 21.784,85 +
+  ISTAT 4.076,78 + interessi 2.857,46). I documenti dichiarano scadenza e criteri.
+- Fuori scope dichiarato: Excel riposi senza rivalutazione; istatService (bug tasso 2025) intatto;
+  restano del punto 10 originario SOLO gli altri PDF del perito (15__conteggi/RiepilogoGenerale).
+
+---
+
 ## 10. PROSSIMA SESSIONE — allineamento al modello di relazione + rivalutazione/interessi riposi
 
 > Confronto (11/07 notte) con «IMPORTANTE Relazione_tecnica_mancati_riposi_.docx» (il modello che
