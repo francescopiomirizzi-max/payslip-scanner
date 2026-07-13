@@ -63,8 +63,11 @@ export function mergeFixedVociIntoAnni(
 
 /**
  * Deriva (anno, indice mese 0-11) per una busta caricata da FILE (non dall'archivio, dove il
- * periodo è nei metadati). Priorità: periodo letto dall'AI dalla testata (`aiMonth` 1-12,
- * `aiYear` 4 cifre); fallback sul nome del file (es. "Gennaio 2013.PDF", "01_GENNAIO_..._2019").
+ * periodo è nei metadati). Priorità: se il NOME FILE contiene un periodo completo (mese
+ * testuale + anno, es. "Gennaio 2013.PDF") vince il nome — è la stessa politica del batch
+ * scan e dell'audit archivio: un nome curato è verità verificata, la testata AI può sbagliare.
+ * Per i nomi non-standard (foto, export vari) vale il periodo letto dall'AI dalla testata
+ * (`aiMonth` 1-12, `aiYear` 4 cifre), con fallback sui pezzi riconoscibili del nome.
  * Restituisce null se non identificabile → il chiamante salta la busta senza indovinare il mese.
  */
 export function deriveFixedVociPeriod(
@@ -73,19 +76,24 @@ export function deriveFixedVociPeriod(
   fileName: string
 ): { year: number; monthIdx: number } | null {
   const name = typeof fileName === 'string' ? fileName : '';
+  const abbr = ['gen', 'feb', 'mar', 'apr', 'mag', 'giu', 'lug', 'ago', 'set', 'ott', 'nov', 'dic'];
+  const fn = name.toLowerCase();
+  const nameMonthIdx = abbr.findIndex(a => fn.includes(a));
+  const nameYearMatch = name.match(/(20\d{2})/);
+
+  // Nome file con periodo COMPLETO → vince il nome.
+  if (nameMonthIdx >= 0 && nameYearMatch) {
+    return { year: parseInt(nameYearMatch[1], 10), monthIdx: nameMonthIdx };
+  }
+
   let year = parseInt(String(aiYear ?? '').replace(/[^\d]/g, ''), 10);
   if (!(year >= 2000 && year <= 2100)) {
-    const m = name.match(/(20\d{2})/);
-    year = m ? parseInt(m[1], 10) : NaN;
+    year = nameYearMatch ? parseInt(nameYearMatch[1], 10) : NaN;
   }
   let monthIdx = -1;
   const mNum = parseInt(String(aiMonth ?? '').replace(/[^\d]/g, ''), 10);
   if (mNum >= 1 && mNum <= 12) monthIdx = mNum - 1;
-  if (monthIdx < 0) {
-    const abbr = ['gen', 'feb', 'mar', 'apr', 'mag', 'giu', 'lug', 'ago', 'set', 'ott', 'nov', 'dic'];
-    const fn = name.toLowerCase();
-    monthIdx = abbr.findIndex(a => fn.includes(a));
-  }
+  if (monthIdx < 0) monthIdx = nameMonthIdx;
   if (!(year >= 2000 && year <= 2100) || monthIdx < 0 || monthIdx > 11) return null;
   return { year, monthIdx };
 }

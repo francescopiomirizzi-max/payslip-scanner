@@ -20,10 +20,23 @@ residenza di lavoro. Due misure: **servizi SENZA riposo fuori residenza** e **se
   fino a luglio 2023**; da **agosto 2023** paga la misura piena.
 - **Credito** = differenze sul periodo **novembre 2017 – luglio 2023**.
 
-## Dove sta il dato in busta (RailFlow) — ⚠️ DATI VIAGGIANTE INCOMPLETI
-Le voci sono **definite** (`INDENNITA_ELIOR` in `types.ts`):
+## Dove sta il dato in busta (RailFlow) — ⚠️ AGGIORNATO col censimento 13/07/2026
+Le voci **assunte** dal ricorso (definite in `INDENNITA_ELIOR`, `types.ts`):
 - **`4300` — "Ass. Res. No RS"** = assenza residenza **senza** riposo (pagata €0,75, dovuta €1,30).
 - **`4305` — "Ass. Res. RS"** = assenza residenza **con** riposo (pagata €1,00, dovuta €2,20).
+
+### 🔴 Riscontro sulle buste REALI (censimento Vision su tutte le 676 buste, 13/07/2026)
+- **4300 e 4305 NON compaiono MAI** nelle buste Feb 2020 → Dic 2025 dei 10 viaggiante
+  (4 righe spurie nel vecchio gestionale; 0 nelle scansioni).
+- La voce effettiva è **`4301` — "FUORI SEDE ITA TURNI RFR"** (RFR = riposo fuori residenza):
+  **€ 1,00/ora**, presente in 572/676 buste, tariffa **COSTANTE fino a Dic 2025** —
+  ⚠️ in contrasto con l'affermazione del ricorso «da agosto 2023 misura piena»
+  (verificato con terne per mese; conferma indipendente Gemini su Ott 2023).
+- Nessuna voce a € 0,75 («senza riposo») in tutto il corpus; nessuna voce a € 1,30/€ 2,20.
+- Se la 4301 è qualificata come misura «con riposo», la differenza = € 1,00 → € 2,20/ora
+  su TUTTO il periodo osservato (non solo fino a lug 2023). **Qualificazione e periodo →
+  quesito per l'avv. Celentano.**
+- Dettagli e tariffe complete: `tasks/censimento-elior-viaggiante-2026-07-13.md`.
 
 **MA i dati Elior viaggiante NON sono pronti** (verificato sul DB il 30/06):
 - Le buste viaggiante **non sono in archivio** (`payslip_metadata`): analizzate dal **vecchio gestionale**,

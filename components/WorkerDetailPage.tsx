@@ -385,6 +385,10 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
     setMonthlyInputs,
     setCurrentYear,
     onArchive: async (file, year, month, monthIndex, extractedData) => {
+      // Dedup come nel flusso voci-fisse (riga sopra): l'insert metadati non è
+      // idempotente e ri-scansionare mesi già archiviati creava righe doppie.
+      // La griglia si aggiorna comunque; in archivio resta il file già presente.
+      if (archiveEntries[`${year}-${monthIndex}`]) return;
       await addPayslip(worker.id, file, year, month, monthIndex, extractedData);
       setArchiveCount(n => n + 1);
     },

@@ -1,3 +1,159 @@
+# Todo — Sessione 13/07: ELIOR VIAGGIANTE — carico + scansione con controlli OCR cartacee
+
+> **Richiesta:** caricare le 676 buste splittate (Desktop) nell'archivio e scansionarle con TUTTE
+> le voci (4300/4305 + fisse) applicando il **piano controlli OCR cartacee ratificato l'11/07**
+> (terne qty×tariffa×importo + validatore client deterministico + verify AI + campione umano).
+> Sblocca l'area Indennità (vertenza assenza residenza, ricorso Celentano Trib. Lecce).
+
+**Fatti verificati (13/07):**
+- 676 PDF al loro posto in `<LAVORATORE>/buste paga/<ANNO>/<Mese ANNO>.pdf` (conteggio `find` = 676).
+- Busta reale (Boriglione Mar 2021) CONFERMA l'applicabilità del piano: la tabella voci ha le terne
+  `VALORE UNITARIO × ORE/GG/MESI = COMPETENZE` per riga, e il cedolino stampa **TOTALE COMPETENZE**
+  (Σ voci = 2.360,67 quadrata al centesimo a mano), TOTALE TRATTENUTE e NETTO → il `reconOk` del
+  parser è trasponibile all'OCR.
+- ⚠️ In quella busta NON ci sono 4300/4305 ma c'è **4301 FUORI SEDE ITA TURNI RFR a €1,00 × 151,43h**:
+  la mappa voci reale del viaggiante va CENSITA prima di fissare prompt e tabella tariffe (non fidarsi
+  della lista codici del prompt attuale — lezione 20/05: mai scrivere un prompt OCR senza i documenti).
+- Nota in calce al cedolino: «gli elementi variabili sono riferiti al mese precedente» → rilevante per
+  la mappatura competenza/cassa della vertenza (da riportare in knowledge, non tocca l'estrazione).
+- Prompt Elior attuale (`getEliorPrompt`): estrae solo importi Competenze, nessuna terna, nessun
+  totale di controllo. `verify-payslip.ts` ha già il ramo ELIOR (da tenere in coppia col prompt).
+
+## Piano (approvato 13/07: merge anni SÌ · tutte le 676 · consenso solo su flaggate)
+- [x] 0. Verifiche preliminari FATTE: i 10 viaggiante avevano `elior_type=NULL` → **UPDATE a
+      'viaggiante'** (RETURNING verificato; senza fix l'area Indennità non trovava pratiche);
+      colonne griglia e prompt cadevano già sul ramo giusto per fortuna (`null !== 'magazzino'`).
+      41 buste sparse già in archivio (Pierro 10, Gregorio/Nitti/Paglionico 8…) → attenzione
+      doppioni al carico.
+- [x] 1. **Censimento FATTO su TUTTE le 676 buste** (non solo campione): Vision locale, 416/676
+      riconciliate al centesimo, 186 codici censiti → report in
+      [tasks/censimento-elior-viaggiante-2026-07-13.md](censimento-elior-viaggiante-2026-07-13.md),
+      dataset consenso accanto alle buste sul Desktop. **🔴 FINDING: 4300/4305 NON ESISTONO nelle
+      buste; la voce della vertenza è la 4301 «FUORI SEDE ITA TURNI RFR» a €1,00/h COSTANTE fino
+      a Dic 2025** (contraddice «da ago 2023 misura piena» del ricorso) → quesito per l'avvocato;
+      knowledge aggiornata.
+- [x] 2. **Prompt v2 FATTO** (`getEliorPrompt`): sezione 3-bis terne (trascrizione integrale voci)
+      + 3-ter totali di controllo (ggInps, totaleRetribuzione, totaleCompetenze, totaleTrattenute,
+      netto) + codici mancanti dal censimento (1129, 4053, 4340, 0214); `codes` invariato.
+      Fix robustezza: il modello troncava il JSON con `voci` in coda → ordine chiavi nell'esempio
+      + riparazione graffe in `cleanAndParseJSON` + merge multi-pagina voci/totali in `mergeBlocks`
+      (cedolini a 2 fogli). Verifica: **prova end-to-end 5/5 buste perfette** (terne tutte ok,
+      recon Δ=0,00; incluse scansione storta e cedolino 2 fogli).
+- [x] 3. **Validatore FATTO**: `utils/eliorScanValidator.ts` (7 famiglie di controlli, tabella
+      tariffe dal censimento) + 13 test (`__tests__/eliorScanValidator.test.ts`) sul caso reale
+      pilota + errori sintetici. Solo FLAG, mai correzione.
+- [x] 4. **verify-payslip** ramo ELIOR aggiornato in coppia (struttura colonne esatta,
+      anti-scivolamento, avviso skew, terna come autodiagnosi).
+- [x] 5. Wiring FATTO in `usePayslipUpload` (batch/single/folder): `aiResult.ocrChecks` persistito
+      con l'archivio, nota `[⚠️ OCR: …]` sul mese, sezione dedicata nel riepilogo batch.
+      Gate: tsc 0 · **338/338 test** · build ok.
+- [~] 6. Caricamento 676 in archivio — **giro 2 (13/07 pomeriggio), decisioni utente:**
+      Supabase ora è PRO (100 GB, pagato da Vincenzo) · carica l'UTENTE dall'app · annuncio
+      a Vincenzo CON il finding 4301.
+      - [x] 6a. Compressione 676 → 150 DPI grigio q68 (qualità OCR verificata: recon Vision
+            Δ=0,00 su 3/3; a 120 DPI degrada → scartato). Motivo: limite payload ~6 MB delle
+            Netlify Functions (le buste 5-10 MB fallirebbero la scansione) + egress 10×.
+            Output: `ELIOR VIAGGIANTE/_archivio-150dpi/<LAV>/` (flat per lavoratore, 1 selezione
+            per lavoratore col picker). Originali INTATTI sul Desktop.
+      - [x] 6b. Fix dedup archivio nel batch scan (`WorkerDetailPage` onArchive: skip mesi già
+            archiviati — l'insert non è idempotente, evita righe doppie alla riscansione v2).
+      - [x] 6c. Fix priorità periodo in `deriveFixedVociPeriod`: nome file con mese+anno COMPLETO
+            vince sull'AI (politica batch/audit; i nomi sono verificati 676/676); AI resta per i
+            nomi non-standard. Test aggiornati (22/22).
+      - [x] 6d. **Annuncio in bacheca a Vincenzo PUBBLICATO** (id dd132b91: buste organizzate,
+            controlli qualità, finding 4301, buco nov2017–gen2020, prossimi passi).
+      - [ ] 6e. UTENTE: carico dall'app per i 10 lavoratori (tab Archivio → «Carica buste → solo
+            voci fisse» → selezionare tutti i PDF di `_archivio-150dpi/<LAVORATORE>/`) — archivia
+            con dedup + estrae voce 1000 (Function fixed-voci GIÀ live, non serve deploy).
+      - [ ] 6f. Commit + push (=deploy Netlify) DOPO il carico (ordine chiesto dall'utente).
+      - [ ] 6g. Scansione batch v2 con controlli (post-deploy) + report validatore.
+- [ ] 7. Doppia scansione mirata sulle flaggate + **campione umano al centesimo**
+      (1 busta/lavoratore + tutte le flaggate) documentato in tasks/.
+- [ ] 8. Review + memoria + roadmap vault + promemoria a Vincenzo del buco nov2017–gen2020.
+
+**Decisioni prese (13/07):** merge `anni` SÌ (riscrittura voluta) · perimetro = tutte le 676 ·
+consenso doppia scansione solo sulle flaggate.
+**Decisioni ancora aperte:**
+- (d) **Colonna 1129 in griglia?** Il prompt v2 ora la estrae (il gestionale la estraeva: 588
+  righe) ma senza colonna non entra nei totali ferie; aggiungerla muove i totali di TUTTE le
+  pratiche ferie viaggiante → decidere con l'avvocato (set voci Elior).
+- (e) **Quando deployare** scan-payslip v2 (serve per il carico; c'è la coda deploy-unico).
+- (f) Quesito avvocato: qualificazione 4301 (misura «con riposo»?) e periodo del credito
+  (fino a Dic 2025, non lug 2023, se la tariffa resta 1,00).
+
+---
+
+# Todo — Sessione 12/07 sera: split buste ELIOR VIAGGIANTE (10 lavoratori) per mese/anno
+
+> **Richiesta:** organizzare le buste della cartella Desktop `…/ELIOR/ELIOR VIAGGIANTE` come già
+> fatto per ELIOR MAGAZZINO (Ghiro/Mastropasqua, 13/06): split dei PDF scansionati multi-pagina
+> in un PDF per mese, cartelle per anno, **tredicesime SCARTATE** (e 14e, stessa logica).
+> Questo sblocca poi caricamento+scansione nell'app (sessione Elior fissata, area Indennità).
+
+**Materiale censito:** 10 lavoratori (Boriglione, Cautilli, De Biasio, Gregorio, Martinelli,
+Montanaro, Nitti, Paglionico, Pierro, Schingaro), 25 PDF scansionati in `<NOME> BUSTE PAGA/`,
+**935 pagine totali (~2 GB)**, 1 pagina = 1 cedolino (layout Elior identico al magazzino,
+box PERIODO DI PAGA in basso). Il corpus arriva almeno a metà 2024 (Pierro 1 = Gen–Giu 2024+).
+Ogni lavoratore ha già `buste paga/` (vuota, tranne Boriglione: 20 JPG fotografati) e
+`conteggi/` del perito (NON si tocca).
+
+**Metodo (= magazzino + Clarino, con OCR automatizzato):**
+- Lettura periodo di OGNI pagina (lezione 13/06: mai inferire dalla sequenza): fascia bassa
+  relativa [0.78, 0.995] renderizzata a 150 DPI e letta con **OCR macOS Vision** (pyobjc,
+  pilota su Pierro 1 pp.1-8: 8/8 leggibili, doppione Aprile già intercettato).
+- Classificazione per pagina → manifest: `main` / `tred` (TREDICESIMA/13.MA/14.MA → SCARTATO) /
+  `dup` (stesso mese ripetuto, scarto il doppione dopo confronto visivo) / `suppl` (secondo
+  cedolino DIVERSO dello stesso mese → unito al main) / pagina bianca (retro).
+- Pagine senza periodo riconosciuto → render pagina intera → **verifica visiva mia** (no guess,
+  cfr. `ocr-ambiguity-flag-policy`).
+- Split **lossless** con `pdfseparate`+`pdfunite` (zero ricompressione) in scratchpad, poi copia
+  in `<LAVORATORE>/buste paga/<ANNO>/<Mese> <ANNO>.pdf` + `manifest.csv` (formato magazzino).
+
+## Piano
+- [x] 1. Script OCR batch su tutti i 25 PDF → manifest grezzo per pagina
+      → verifica: 935/935 pagine classificate (866 main, 61 tred, 6 ambigue, 2 blank; 0 discrepanze
+      col conteggio pdfinfo). OCR = Vision macOS, 3 processi paralleli, render solo-fascia.
+- [x] 2. Revisione a vista FATTA: 8 ambigue/blank risolte (5 identificate, 2 bianche vere, 1 retro
+      in trasparenza); **scoperta chiave: i "mesi doppi" sono quasi tutti CEDOLINI SU 2 FOGLI**
+      (foglio voci + foglio totali, stesso timestamp di stampa al secondo) → UNITI, non scartati.
+      164 continuazioni (campione 8/8 ok) + 11 dup veri (11/11 verificati, stesso netto) + 6 gruppi
+      da 4 = cedolino 2-fogli scansionato 2 volte (tengo una coppia) + 1 continuazione Nitti.
+- [x] 3. Manifest finale: 935 righe = 676 buste (main) + 172 fogli-voci uniti (suppl) +
+      61 tredicesime + 23 dup + 3 blank SCARTATI.
+- [x] 4. Split lossless (pdfseparate 1-passata/sorgente + pdfunite) → 676 PDF in scratchpad
+      (Boriglione 70, Cautilli 70, De Biasio 71, Gregorio 64, Martinelli 71, Montanaro 71,
+      Nitti 64, Paglionico 63, Pierro 61, Schingaro 71)
+- [x] 5. **Verifica post-split doppia FATTA**: (a) OCR automatico su TUTTE le 848 pagine dei
+      676 file → 6 flake OCR (mese non letto a 120 DPI), tutti risolti a vista = corretti;
+      (b) 30 griglie visive lette una per una → **676/676 periodo = nome file** ✓
+- [x] 6. Copia su Desktop FATTA (13/07 notte): 676 PDF + 10 manifest.csv in
+      `<LAVORATORE>/buste paga/<ANNO>/`; `diff -rq` contro split_out = copie identiche;
+      Boriglione `_jpg originali/` (21 JPG) preservata; spazio finale in "SCHINGARO … " gestito.
+- [x] 7. Review finale + aggiornamento memoria/roadmap
+
+## Review (13/07 notte)
+
+**Risultato:** 935 pagine → **676 buste mensili** (Feb 2020 → Dic 2025 per tutti), scartate
+61 tredicesime + 23 dup + 3 blank; 172 fogli-voci uniti al proprio foglio-totali (cedolino
+Elior = 2 fogli). Verifica doppia al 100% (OCR 848 pagine + 30 griglie visive).
+
+**Copertura per lavoratore (mesi | buchi nel range):**
+- Boriglione 70 (manca Feb 2023) · Cautilli 70 (manca Gen 2024) · De Biasio 71 (pieno)
+- Gregorio 64 (manca Gen–Ago 2025 tranne Mar) · Martinelli 71 (pieno) · Montanaro 71 (pieno)
+- Nitti 64 (manca Gen–Lug 2025) · Paglionico 63 (Lug 2023 + Gen–Lug 2025)
+- Pierro 61 (manca Feb–Nov 2025) · Schingaro 71 (pieno)
+I buchi 2025 (Gregorio/Nitti/Paglionico/Pierro) sono assenze nel materiale consegnato, non
+errori di split — probabile cessazione/aspettativa, da verificare con Vincenzo se servono.
+
+**Note a margine (non tocco senza ok):** Gregorio e Nitti hanno conteggi duplicati alla
+radice (.doc vecchio + copia in conteggi/). JPG Boriglione spostati in
+`buste paga/_jpg originali/` (nulla cancellato).
+
+**Prossimo passo (sessione successiva):** caricamento+scansione nell'app coi controlli OCR
+cartacee (piano ratificato 11/07) → sblocca l'area Indennità.
+
+---
+
 # Todo — Sessione 11/07 (pomeriggio): Riposi — parità vista viewer + chiarimenti Vincenzo su Viterbo
 
 > **Contesto:** (1) Vincenzo non vede alcune cose nell'area Turni & Riposi dal suo account viewer →
@@ -490,3 +646,43 @@
   Ora le colonne = esattamente ciò che il perito somma, dimostrato al centesimo su tutti i mesi 2021-2024.
 - Restano per le prossime sessioni: caricamento Clarino + confronto totale 8.170,94 (serve deploy),
   era 2011-2016 da censire via OCR, i 3 quesiti per l'avvocato (ricostruzioni 2017-2020, era vecchia, 2025-26).
+# Audit tecnico progetto — 12/07/2026
+
+> **Obiettivo:** analizzare architettura, qualità del codice, test, sicurezza e manutenibilità
+> senza modificare il comportamento dell'applicazione; produrre osservazioni verificabili e una
+> roadmap ordinata per impatto/rischio.
+
+- [x] 1. Mappare struttura, dipendenze, flussi principali e confini frontend/backend.
+- [x] 2. Valutare qualità TypeScript/React, complessità, duplicazioni e debito tecnico.
+- [x] 3. Verificare test, type-check, build e segnali quantitativi (dimensioni/moduli critici).
+- [x] 4. Auditare autenticazione, Supabase/RLS, segreti, funzioni server e trattamento documenti.
+- [x] 5. Sintetizzare punti di forza, criticità e miglioramenti prioritizzati con evidenze.
+- [x] 6. Aggiungere una review finale con verifiche eseguite e limiti dell'analisi.
+
+### Review — audit tecnico 12/07/2026
+
+- Gate locali: `npx tsc --noEmit` **OK** · Vitest **325/325** (23 file) · build Vite **OK**.
+- Struttura: ~45k righe TS/TSX/SQL, 136 sorgenti TS/TSX; motori di dominio puri e ben testati,
+  profili centralizzati, demo isolata e code splitting già efficace. Chunk App sceso a 882 kB
+  (227 kB gzip), ma restano warning >500 kB e CSS da 467 kB.
+- Priorità critica di correttezza: l'auto-sync debounce di `useWorkers` aggiorna il ref prima del
+  flush e cancella il timer precedente; modifiche rapide a worker diversi possono lasciare il primo
+  cambiamento solo in memoria. Serve dirty queue per id + retry/feedback, con test di regressione.
+- Priorità critica di sicurezza/costi: tutte le Netlify Functions AI sono prive di autenticazione;
+  CORS è `*`, il rate limit è best-effort in-memory e `ask-ai`/`verify-payslip` non lo applicano.
+  `verify-payslip` effettua inoltre `fetch(pdfUrl)` su input arbitrario (SSRF/download senza cap).
+- Privacy: la UI dichiara «Nessun dato viene ceduto a terzi», ma cedolini/anagrafiche sono inviati
+  a Gemini; alcuni log duplicano dati personali. Informativa e minimizzazione vanno riallineate.
+- Supabase: RLS generalmente ben documentata, incluso hardening del QR; restano accessi viewer
+  globali per UID, scoping organizzazione fail-open lato client e policy Storage principali non
+  ricostruibili interamente dalle migration. Il canale QR consente SELECT anon del payload (incluso
+  base64) a chi conosce un session id attivo.
+- Manutenibilità: 25 file oltre 500 righe; picchi `DynamicIsland` 2329, `MonthlyDataGrid` 1922,
+  `DashboardPage` 1649. Circa 280 `any` in 60 file, TypeScript non-strict, nessun ESLint/coverage/E2E.
+  La CI esegue type-check+test ma, nonostante il nome, non `npm run build`.
+- Prodotto: Incidenza e Riposi sono maturi; Indennità è ancora un prototipo con seed/placeholder e
+  stato/coefficiente solo in memoria, mentre la migration 021 è dichiarata non applicata.
+- Limiti: audit statico + gate locali; nessun accesso al DB live/advisor Supabase, ai log Netlify,
+  alle metriche real-user o ai flussi autenticati owner/viewer. Nessuna modifica funzionale eseguita.
+
+---

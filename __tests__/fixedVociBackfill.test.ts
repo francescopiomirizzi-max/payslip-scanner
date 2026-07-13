@@ -163,9 +163,16 @@ describe('deriveFixedVociPeriod — periodo per buste caricate da file', () => {
     expect(deriveFixedVociPeriod(undefined, undefined, 'Dicembre 2014.PDF')).toEqual({ year: 2014, monthIdx: 11 });
   });
 
-  it('preferisce il periodo AI al nome file se entrambi presenti', () => {
-    // AI dice maggio 2020, il nome dice gennaio 2013 → vince l'AI
-    expect(deriveFixedVociPeriod(5, 2020, 'Gennaio 2013.PDF')).toEqual({ year: 2020, monthIdx: 4 });
+  it('nome file con periodo COMPLETO (mese+anno) → vince il nome, anche contro l\'AI', () => {
+    // Politica del batch/audit archivio: il nome curato è verità verificata,
+    // la testata AI può sbagliare (es. "elementi variabili riferiti al mese precedente").
+    expect(deriveFixedVociPeriod(5, 2020, 'Gennaio 2013.PDF')).toEqual({ year: 2013, monthIdx: 0 });
+  });
+
+  it('nome file senza periodo completo → vince l\'AI (foto/nomi non-standard)', () => {
+    expect(deriveFixedVociPeriod(5, 2020, 'IMG_4211.jpg')).toEqual({ year: 2020, monthIdx: 4 });
+    // solo l'anno nel nome, niente mese testuale: vale il periodo AI
+    expect(deriveFixedVociPeriod(5, 2020, 'payslip_2013.pdf')).toEqual({ year: 2020, monthIdx: 4 });
   });
 
   it('restituisce null se il periodo non è identificabile (niente da indovinare)', () => {

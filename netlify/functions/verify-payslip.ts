@@ -57,6 +57,18 @@ export function buildVerifyPrompt(company: string, eliorType?: string, customCol
     companyRules = `
 ### REGOLE DI CALCOLO AZIENDALI — ELIOR ${eliorType ? `(${eliorType.toUpperCase()})` : ""}
 
+**STRUTTURA DELLA TABELLA VOCI (scansioni di carta, spesso storte):**
+Le colonne sono, in quest'ordine ESATTO:
+VOCE | DESCRIZIONE | S | F | VALORE UNITARIO | ORE/GG/MESI | TRATTENUTE | COMPETENZE
+- Gli importi delle indennità in "codes" vanno confrontati SOLO con la colonna COMPETENZE
+  (l'ultima a destra). MAI con VALORE UNITARIO (tariffa) né con ORE/GG/MESI (quantità).
+- ⚠️ La scansione può essere RUOTATA: i numeri di una riga possono apparire leggermente più
+  in alto o in basso del testo della voce. Segui l'ordine delle righe, non l'allineamento.
+- Verifica aritmetica utile: per le righe con tutti e tre i valori,
+  VALORE UNITARIO × ORE/GG/MESI ≈ COMPETENZE (tolleranza di qualche centesimo).
+  Se il valore estratto non coincide col PDF ma rispetta questo prodotto, rileggi il PDF:
+  probabilmente hai letto tu la cella sbagliata.
+
 **daysWorked — CAMPO CALCOLATO, NON VISIBILE SUL PDF:**
 Il valore "daysWorked" NON è stampato esplicitamente sul cedolino ELIOR.
 Viene calcolato matematicamente: daysWorked = [GG INPS] − [daysVacation].

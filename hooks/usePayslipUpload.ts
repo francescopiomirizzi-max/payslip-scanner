@@ -3,6 +3,7 @@ import { useIsland } from '../IslandContext';
 import { Worker, AnnoDati, getColumnsByProfile, MONTH_NAMES } from '../types';
 import { isSystemProfile } from '../config/profiles';
 import { parseLocalFloat } from '../utils/formatters';
+import { validateEliorScan } from '../utils/eliorScanValidator';
 import { IS_DEMO } from '../config/demo';
 import { buildDemoExtraction } from '../fixtures/demoScan';
 
@@ -324,6 +325,7 @@ export function usePayslipUpload({
     let lastDetectedYear = null;
     const failedFiles: string[] = []; // feedback per-file: quali buste paga non sono passate
     const mismatchFiles: string[] = []; // buste col periodo della testata (AI) diverso dal nome file → da verificare
+    const ocrFlaggedFiles: string[] = []; // buste ELIOR bocciate dal validatore aritmetico (terne/totali) → da ricontrollare
 
     // --- MISURA BATCH (passo 1: tempi reali + throttle, per dimensionare chiavi/pool) ---
     const batchT0 = performance.now();
@@ -636,6 +638,24 @@ export function usePayslipUpload({
           });
         }
 
+        // VALIDATORE OCR CARTACEE (ELIOR): controlli aritmetici deterministici
+        // sul JSON estratto (terne unit×qty=competenze, Σ voci vs totale stampato,
+        // triangolo dei totali, giorni, tariffe note). Esito = FLAG in nota + nel
+        // riepilogo batch, MAI correzione automatica. L'esito viaggia anche
+        // dentro aiResult → persistito in archivio con extracted_data.
+        if (!IS_DEMO && worker.profilo === 'ELIOR') {
+          const checks = validateEliorScan(aiResult);
+          aiResult.ocrChecks = checks;
+          if (!checks.ok) {
+            ocrFlaggedFiles.push(`${label}: ${checks.flags.join('; ')}`);
+            if (!row.note?.includes('⚠️ OCR:')) {
+              const shown = checks.flags.slice(0, 3).join('; ');
+              const nota = `[⚠️ OCR: ${shown}${checks.flags.length > 3 ? ` (+${checks.flags.length - 3})` : ''}]`;
+              row.note = row.note ? `${row.note}${sep}${nota}` : nota;
+            }
+          }
+        }
+
         currentAnni[rowIndex] = row;
         successCount++;
 
@@ -755,6 +775,13 @@ export function usePayslipUpload({
     if (mismatchFiles.length > 0) {
       segments.push(
         `⚠️ ${mismatchFiles.length} busta/e da verificare: archiviata col mese/anno del nome file, ma il cedolino sembra di un altro periodo:\n${formatList(mismatchFiles)}`
+      );
+    }
+
+    if (ocrFlaggedFiles.length > 0) {
+      if (notifType === 'success') notifType = 'warning';
+      segments.push(
+        `🔎 ${ocrFlaggedFiles.length} busta/e NON superano i controlli aritmetici OCR (terne/totali): i valori sono importati ma vanno ricontrollati sul PDF:\n${formatList(ocrFlaggedFiles)}`
       );
     }
 

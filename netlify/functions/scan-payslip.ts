@@ -34,7 +34,7 @@ const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-3.5-flash";
 const THINKING_BUDGET = Number(process.env.GEMINI_THINKING_BUDGET) || 1024;
 
 // --- HELPER PULIZIA E UNIONE JSON (V20 - Somma Automatica Pagine) ---
-function cleanAndParseJSON(text: string): any {
+export function cleanAndParseJSON(text: string): any {
   try {
     let clean = text.replace(/```json/g, "").replace(/```/g, "").trim();
 
@@ -45,12 +45,23 @@ function cleanAndParseJSON(text: string): any {
       // Trasferta 0AA1: il modello TRASCRIVE ogni riga qui (una per giornata), la somma la fa il codice.
       finalData.trasferta_esente_righe = Array.isArray(blocks[0].trasferta_esente_righe)
         ? [...blocks[0].trasferta_esente_righe] : [];
+      // ELIOR cartacee: le terne per la verifica aritmetica si CONCATENANO tra le pagine
+      // (cedolino su 2 fogli: voci sul primo, totali sul secondo); i totali di controllo
+      // si prendono dalla pagina che li stampa (primo valore non-null).
+      finalData.voci = Array.isArray(blocks[0].voci) ? [...blocks[0].voci] : [];
 
       if (!finalData.aiWarning) finalData.aiWarning = "Nessuna anomalia";
 
       for (let i = 1; i < blocks.length; i++) {
         const nextPage = blocks[i];
         finalData.arretrati = (finalData.arretrati || 0) + (nextPage.arretrati || 0);
+
+        if (Array.isArray(nextPage.voci)) finalData.voci.push(...nextPage.voci);
+        for (const k of ["ggInps", "totaleRetribuzione", "totaleCompetenze", "totaleTrattenute", "netto"]) {
+          if (finalData[k] === null || finalData[k] === undefined) {
+            if (nextPage[k] !== null && nextPage[k] !== undefined) finalData[k] = nextPage[k];
+          }
+        }
 
         if (nextPage.eventNote && !finalData.eventNote.includes(nextPage.eventNote)) {
           finalData.eventNote = finalData.eventNote ? `${finalData.eventNote} + ${nextPage.eventNote}` : nextPage.eventNote;
@@ -106,6 +117,15 @@ function cleanAndParseJSON(text: string): any {
           startIndex = -1;
         }
       }
+    }
+
+    // Riparazione graffe mancanti: con l'array "voci" in coda il modello a volte
+    // chiude l'array ma NON l'oggetto esterno (finishReason STOP, "}" finali assenti,
+    // osservato sulle buste Elior 13/07). Se lo scan a profondità non ha chiuso
+    // l'ultimo blocco, si tenta il parse aggiungendo le graffe che mancano.
+    if (startIndex !== -1 && depth > 0) {
+      const repaired = clean.substring(startIndex).replace(/,\s*$/, "") + "}".repeat(depth);
+      jsonBlocks.push(JSON.parse(repaired));
     }
 
     if (jsonBlocks.length > 0) return mergeBlocks(jsonBlocks);
@@ -1073,18 +1093,21 @@ export const getEliorPrompt = (eliorType = 'viaggiante') => {
   - 4275 (Ind. Sottosuolo)
   - 4285 (26/MI Retribuzione)`
     : `- 1126 (Ind. Cassa)
+  - 1129 (Ind. Turno non cadenzati)
   - 1130 (Lav. Nott. / Magg. Notturna)
   - 1131 (Lav. Domenicale)
   - 2018, 2020, 2035 (Straordinari)
   - 2235 (Maggiorazione 35%)
+  - 4053 (Spett. Var.)
   - 4133 (Funz. Diverse)
   - 4254 (RFR Pasti < 8h)
   - 4255, 4256 (Pernottamento / Pernottazione)
   - 4300, 4305 (Ass. Res. No RS / RS)
-  - 4301 (Fuori Sede / Trasferta)
+  - 4301 (Fuori Sede ITA turni RFR)
   - 4320 (Diaria Scorta)
   - 4325, 4330 (Flex Oraria / Residenza)
-  - 4345 (Riserva Pres.)
+  - 4340 (Disposizione media presidio)
+  - 4345 (Riserva media presidio)
   - 5655 (26/MI Retribuzione)`;
 
   const codiciTicket = isMagazzino
@@ -1124,6 +1147,30 @@ export const getEliorPrompt = (eliorType = 'viaggiante') => {
   ### 3. MAPPATURA CODICI SPECIFICI (Solo colonna COMPETENZE)
   Cerca l'intero documento e somma gli importi POSITIVI della colonna "COMPETENZE" per questi codici:
   ${codiciRicerca}
+
+  ### 3-bis. TRASCRIZIONE INTEGRALE DELLE VOCI ("voci") — PER LA VERIFICA ARITMETICA
+  La tabella centrale ha queste colonne, in quest'ordine ESATTO:
+  VOCE | DESCRIZIONE | S | F | VALORE UNITARIO | ORE/GG/MESI | TRATTENUTE | COMPETENZE
+  TRASCRIVI OGNI riga della tabella (TUTTE, anche quelle non presenti nella lista del punto 3,
+  incluse trattenute, addizionali, TFR, detrazioni) come oggetto dell'array "voci":
+  { "code": "1130", "desc": "LAVORO NOTTURNO", "unit": 2.40, "qty": 64.00, "competenze": 153.60, "trattenute": null }
+  - "unit" = colonna VALORE UNITARIO; "qty" = colonna ORE/GG/MESI; se una cella è VUOTA scrivi null.
+  - NON calcolare, NON correggere, NON inventare: trascrivi ESATTAMENTE i numeri stampati.
+    La quadratura (unit × qty = competenze) la verifica il sistema, NON tu: se i numeri non
+    ti sembrano coerenti, trascrivili comunque così come sono.
+  - ⚠️ Le scansioni sono spesso STORTE: i numeri di una riga possono apparire leggermente più in
+    alto o più in basso del testo della voce. Associa i numeri alla riga giusta seguendo l'ORDINE
+    delle righe, non l'allineamento perfetto.
+  - Se lo stesso codice compare su più righe, trascrivi una voce per OGNI riga (niente somme qui;
+    la somma va solo in "codes").
+
+  ### 3-ter. TOTALI DI CONTROLLO (leggili, non calcolarli)
+  - "ggInps": il numero grezzo del campo GG INPS in alto a sinistra (null se illeggibile).
+  - "totaleRetribuzione": valore del riquadro TOTALE RETRIBUZIONE sopra la tabella voci.
+  - "totaleCompetenze": valore stampato TOTALE COMPETENZE nel piè di pagina (in basso a destra).
+  - "totaleTrattenute": valore stampato TOTALE TRATTENUTE nel piè di pagina.
+  - "netto": il NETTO stampato in basso a destra.
+  Se un totale non è leggibile scrivi null. NON ricavarlo sommando le voci.
 
   ### 4. MALATTIA, SCIOPERO E ARRETRATI (CRITICO)
   - Se trovi i codici 2600, 2650, 3100, 3150, 3232, 3262 (Integrazioni o Trattenute Assenza/Malattia), aggiungi "[Malattia/Assenza]" in "eventNote".
@@ -1180,11 +1227,22 @@ export const getEliorPrompt = (eliorType = 'viaggiante') => {
     "aiWarning": "Nessuna anomalia",
     "fondo_pregresso_31_12": 1500.50,
     "imponibile_tfr_mensile": 1850.00,
+    "ggInps": 26,
+    "totaleRetribuzione": 1912.49,
+    "voci": [
+      { "code": "1000", "desc": "RETRIBUZIONE/STIPENDIO", "unit": 73.56, "qty": 26.00, "competenze": 1912.49, "trattenute": null },
+      { "code": "1130", "desc": "LAVORO NOTTURNO", "unit": 2.40, "qty": 64.00, "competenze": 153.60, "trattenute": null },
+      { "code": "9300", "desc": "TRATTENUTA SINDACALE", "unit": null, "qty": null, "competenze": null, "trattenute": 7.00 }
+    ],
     "codes": {
       "1130": 0.0,
       "4301": 0.0
-    }
+    },
+    "totaleCompetenze": 2360.67,
+    "totaleTrattenute": 476.48,
+    "netto": 1884.19
   }
+  ⚠️ Rispetta QUESTO ordine di chiavi ("voci" PRIMA di "codes" e dei totali) e chiudi SEMPRE l'oggetto JSON con la graffa finale.
   `;
 }
 // ==========================================
