@@ -274,8 +274,8 @@ export const SindacatiDashboard: React.FC<{
                                 <div className="relative flex items-center justify-between gap-4 px-6 pt-5 pb-4 border-b border-slate-100 dark:border-slate-800 overflow-hidden">
                                     <div aria-hidden className="absolute inset-0 bg-gradient-to-r from-teal-500/[0.08] via-transparent to-transparent pointer-events-none" />
                                     <div className="relative flex items-center gap-4 min-w-0">
-                                        <div className="flex items-center h-12 shrink-0 dark:bg-white dark:rounded-xl dark:px-2 dark:py-1 dark:shadow-sm">
-                                            <img src={open.logo} alt={open.nome} className="max-h-12 w-auto object-contain" draggable={false} />
+                                        <div className="flex items-center h-12 shrink-0">
+                                            <img src={open.logo} alt={open.nome} className="max-h-12 w-auto object-contain dark:brightness-0 dark:invert" draggable={false} />
                                         </div>
                                         <div className="min-w-0">
                                             <p className="font-black text-slate-800 dark:text-slate-100 leading-tight truncate">{open.nome}</p>
@@ -336,16 +336,14 @@ export const SindacatiDashboard: React.FC<{
     );
 };
 
-/** Card-logo di un'organizzazione: logo fuso (trasparente in light, alone morbido in dark). */
+/** Card-logo di un'organizzazione: logo nudo, colorato in light e bianco in dark. */
 const OrgCard: React.FC<{ org: OrganizzazioneInfo; onOpen: (id: string) => void }> = ({ org, onOpen }) => (
     <button
         onClick={() => onOpen(org.id)}
         title={`Apri ${org.nome}`}
         className="group relative flex items-center justify-center h-24 rounded-2xl border border-slate-200/70 dark:border-slate-700/50 transition-all duration-300 hover:-translate-y-1 hover:border-teal-300 dark:hover:border-teal-500/50 hover:shadow-[0_18px_40px_-20px_rgba(13,148,136,0.5)]"
     >
-        {/* Alone morbido dietro il logo SOLO in dark (nessuna pastiglia netta): fonde il logo col fondo scuro */}
-        <div className="absolute inset-3 rounded-2xl blur-xl dark:bg-white/85 transition-opacity" />
-        <img src={org.logo} alt={org.nome} className="relative max-h-16 w-auto object-contain px-3 select-none transition-transform duration-300 group-hover:scale-105" draggable={false} />
+        <img src={org.logo} alt={org.nome} className="relative max-h-16 w-auto object-contain px-3 select-none transition-transform duration-300 group-hover:scale-105 dark:brightness-0 dark:invert" draggable={false} />
     </button>
 );
 
@@ -377,8 +375,7 @@ const CategoriaPanel: React.FC<{ tipo: 'sindacato' | 'caf'; orgs: Organizzazione
                         <span className="neon-bracket absolute left-[8%] top-8 bottom-8 w-6 border-l-[3px] border-t-[3px] border-b-[3px] rounded-l-xl" />
                         <span className="neon-bracket absolute right-[8%] top-8 bottom-8 w-6 border-r-[3px] border-t-[3px] border-b-[3px] rounded-r-xl" />
                         <div className="relative">
-                            <div className="absolute inset-2 rounded-2xl blur-2xl dark:bg-white/85" />
-                            <img src={principale.logo} alt={principale.nome} className="relative max-h-32 w-auto object-contain px-6 select-none" draggable={false} />
+                            <img src={principale.logo} alt={principale.nome} className="relative max-h-32 w-auto object-contain px-6 select-none dark:brightness-0 dark:invert" draggable={false} />
                         </div>
                     </div>
                     <button

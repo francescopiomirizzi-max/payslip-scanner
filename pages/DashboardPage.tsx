@@ -618,10 +618,8 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
 
     return (
         <div className="relative max-w-screen-2xl mx-auto px-6 py-10" style={{ display: viewMode === 'home' ? 'block' : 'none' }}>
-            {/* Riga alta: solo il committente (Ufficio Vertenze + FAST-CONFSAL) a destra — dentro la
-                sezione del sindacato il brand ValOra non compare (vive nella dashboard d'ingresso e nel
-                login). Il centro resta libero per la Dynamic Island (fissa al centro-alto). */}
-            <div className="flex items-start justify-end gap-6 mb-6">
+            {/* Fascia istituzionale condivisa con Turni & Riposi e Indennità. */}
+            <div className="mb-6 pt-10">
                 <SindacatoTag />
             </div>
 
@@ -1119,10 +1117,10 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
                 )}
             </AnimatePresence>
             {/* --- SEARCH COMMAND CENTER (HOVER ACTIVATION EDITION) --- */}
-            <div className="relative w-full max-w-4xl mx-auto mb-10 z-20">
+            <div className="relative w-full mx-auto mb-10 z-20">
 
                 {/* 1. LA BARRA DI RICERCA (CAPSULA ATTIVA) */}
-                <div className="relative group cursor-text">
+                <div className="relative group cursor-text w-full max-w-4xl mx-auto">
 
                     {/* AURA DI SFONDO (Si attiva all'hover e al focus) */}
                     {/* A riposo: invisibile. Hover: 30% opacità. Focus: 60% opacità */}
@@ -1172,31 +1170,34 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
 
                 {/* 2. FILTRI AZIENDA — i filtri stato sono sostituiti dai cassetti sotto.
                     ELIOR si sdoppia: pillola viaggianti (rosa) + pillola magazzino (bisonte),
-                    stessa famiglia arancio — il colore resta linguaggio dell'azienda. */}
-                <div className="mt-6 flex justify-center gap-3 flex-wrap items-center">
-                    {['ALL', ...SYSTEM_PROFILE_KEYS.flatMap(k => k === 'ELIOR' ? [k, 'ELIOR_MAGAZZINO'] : [k]), ...customFilters].map((filterId) => {
-                        const isActive = activeFilter === filterId;
-                        const isEliorMag = filterId === 'ELIOR_MAGAZZINO';
-                        const logoProfilo = isEliorMag ? 'ELIOR' : filterId;
-                        return (
-                            <button
-                                key={filterId}
-                                onClick={() => setActiveFilter(filterId)}
-                                className={`px-6 py-2 rounded-2xl font-black text-xs uppercase tracking-widest transition-all duration-300 backdrop-blur-md flex items-center gap-2 ${getFilterStyle(filterId, isActive)}`}
-                            >
-                                {filterId === 'ALL'
-                                    ? 'Tutti'
-                                    : getCompanyLogo(logoProfilo)
-                                        ? <CompanyLogo profilo={logoProfilo} eliorType={isEliorMag ? 'magazzino' : undefined} h={20} forceWhite={isActive} title={isEliorMag ? 'Elior Magazzino' : filterId.replace(/_/g, ' ')} />
-                                        : filterId.replace(/_/g, ' ')}
-                                {filterId !== 'ALL' && (
-                                    <span className="opacity-70 font-mono text-[10px]">
-                                        ({workers.filter(w => matchesCompanyFilter(w, filterId)).length})
-                                    </span>
-                                )}
-                            </button>
-                        );
-                    })}
+                    stessa famiglia arancio — il colore resta linguaggio dell'azienda.
+                    Una sola riga: quando non entra, scorre orizzontalmente senza tagliare i loghi. */}
+                <div className="mt-6 w-full min-w-0 overflow-x-auto no-scrollbar py-2 -my-2">
+                    <div className="flex w-max min-w-full items-center justify-center gap-3 px-1">
+                        {['ALL', ...SYSTEM_PROFILE_KEYS.flatMap(k => k === 'ELIOR' ? [k, 'ELIOR_MAGAZZINO'] : [k]), ...customFilters].map((filterId) => {
+                            const isActive = activeFilter === filterId;
+                            const isEliorMag = filterId === 'ELIOR_MAGAZZINO';
+                            const logoProfilo = isEliorMag ? 'ELIOR' : filterId;
+                            return (
+                                <button
+                                    key={filterId}
+                                    onClick={() => setActiveFilter(filterId)}
+                                    className={`shrink-0 px-5 py-2 rounded-2xl font-black text-xs uppercase tracking-widest transition-all duration-300 backdrop-blur-md flex items-center gap-2 ${getFilterStyle(filterId, isActive)}`}
+                                >
+                                    {filterId === 'ALL'
+                                        ? 'Tutti'
+                                        : getCompanyLogo(logoProfilo)
+                                            ? <CompanyLogo profilo={logoProfilo} eliorType={isEliorMag ? 'magazzino' : undefined} h={20} forceWhite={isActive} title={isEliorMag ? 'Elior Magazzino' : filterId.replace(/_/g, ' ')} />
+                                            : filterId.replace(/_/g, ' ')}
+                                    {filterId !== 'ALL' && (
+                                        <span className="opacity-70 font-mono text-[10px]">
+                                            ({workers.filter(w => matchesCompanyFilter(w, filterId)).length})
+                                        </span>
+                                    )}
+                                </button>
+                            );
+                        })}
+                    </div>
                 </div>
             </div>
             {/* --- 3. NO RESULTS STATE (MESSAGGIO VUOTO) --- */}

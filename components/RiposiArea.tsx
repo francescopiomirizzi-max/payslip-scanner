@@ -92,12 +92,10 @@ const RiposiArea: React.FC<{ sindacatoId?: string | null }> = ({ sindacatoId = n
 
     return (
         <div className="min-h-screen px-6 py-12">
+            <div className="max-w-screen-2xl mx-auto mb-6 pt-8">
+                <SindacatoTag />
+            </div>
             <div className="max-w-5xl mx-auto space-y-8">
-                {/* Committente delle pratiche: "Ufficio Vertenze" + logo FAST-CONFSAL, in alto a destra. */}
-                <div className="flex justify-end">
-                    <SindacatoTag />
-                </div>
-
                 {/* Header hero — identità dell'area + numeri aggregati a colpo d'occhio */}
                 <header className="relative overflow-hidden rounded-[2rem] border border-white/60 dark:border-slate-700/60 bg-white/70 dark:bg-slate-800/70 backdrop-blur-2xl p-7 shadow-xl">
                     <div className="absolute inset-x-0 top-0 h-40 pointer-events-none" style={{ background: riposiHeaderBand }} />

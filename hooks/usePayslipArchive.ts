@@ -31,11 +31,11 @@ export function usePayslipArchive() {
         month: string,
         monthIndex: number,
         extractedData: any
-    ): Promise<void> => {
+    ): Promise<boolean> => {
         // In demo il client punta a un host morto: archivio vuoto, nessuna chiamata.
-        if (IS_DEMO) return;
+        if (IS_DEMO) return true;
         const { data: { user }, error: authError } = await supabase.auth.getUser();
-        if (authError || !user) return;
+        if (authError || !user) return false;
 
         const safeFilename = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
         const paddedMonth = String(monthIndex).padStart(2, '0');
@@ -47,7 +47,7 @@ export function usePayslipArchive() {
 
         if (uploadError) {
             console.error('[Archive] Upload fallito:', uploadError.message);
-            return;
+            return false;
         }
 
         // Non persistere il base64 dell'immagine (fileData/mimeType) dentro la riga:
@@ -72,7 +72,10 @@ export function usePayslipArchive() {
         if (insertError) {
             console.error('[Archive] Insert metadati fallito:', insertError.message);
             await supabase.storage.from(BUCKET).remove([storagePath]);
+            return false;
         }
+
+        return true;
     };
 
     const getPayslipsByWorker = async (workerId: string): Promise<PayslipRecord[]> => {

@@ -1,3 +1,247 @@
+# Todo — Sessione 14/07: restyling desktop Archivio Buste Paga
+
+> **Scope approvato:** restyling completo della pagina Archivio per uso esclusivamente desktop.
+> Conservare tutti i controlli e i flussi esistenti; nessun investimento specifico sulla resa mobile.
+
+## Piano
+- [x] 1. Trasformare il corpo a tre colonne in un unico workspace documentale arrotondato, mantenendo
+      larghezze, scroll interni e `h-screen` funzionali.
+- [x] 2. Introdurre intestazioni “Lavoratori / Periodi / Documento” e migliorare gerarchia di ricerca,
+      gruppi azienda e stati vuoti senza rinominare o rimuovere comandi.
+- [x] 3. Aggiungere una legenda persistente dei quattro stati mese e rendere il drag&drop visibile
+      prima dell'interazione.
+- [x] 4. Coerentemente con “Sola consultazione”, impedire che il viewer apra il flusso upload tramite
+      drag&drop e non mostrare l'affordance di caricamento.
+- [x] 5. Verificare selezione gruppo/lavoratore/anno/mese, viewer PDF, upload, light/dark e gate completi.
+- [x] 6. Documentare diff, prove e risultato.
+
+## Review (14/07)
+
+- La pagina è ora un workspace documentale unico, arrotondato e scandito in tre aree numerate:
+  **Lavoratori**, **Periodi** e **Documento**. Le larghezze operative e gli scroll interni sono rimasti
+  invariati, con spazio inferiore riservato alla navigazione globale.
+- Il titolo include il logo FAST-CONFSAL; la top bar, il fondo ambientale e le superfici delle colonne
+  costruiscono una gerarchia visiva riconoscibile senza appesantire la consultazione.
+- Aggiunta la legenda persistente dei quattro stati mensili (PDF presente, solo dati, mancante, da
+  sistemare) e resa esplicita la possibilità di trascinare uno o più PDF.
+- Il drag&drop e la modale upload non sono più disponibili in sola lettura. Inoltre `addPayslip`
+  restituisce l'esito reale: in caso di errore la modale resta aperta, mostra il problema e consente
+  di riprovare, eliminando il precedente falso feedback positivo.
+- QA browser desktop: verificati ricerca, apertura azienda, selezione lavoratore, toggle anno e resa
+  populated/empty in light e dark mode. Tutti i comandi preesistenti sono conservati.
+- Gate finali: `npx tsc --noEmit` superato, **339/339 test** passati, build produzione riuscita
+  (solo warning chunk-size preesistente), `git diff --check` pulito.
+
+---
+
+# Todo — Sessione 14/07: logo FAST-CONFSAL nell'Archivio Buste Paga + audit visivo
+
+> **Richiesta:** aggiungere il logo FAST-CONFSAL accanto al titolo “Archivio Buste Paga”; valutare
+> poi un eventuale restyling della pagina, oggi percepita come anonima, senza applicarlo finché non
+> viene approvato.
+
+## Piano
+- [x] 1. Inserire il logo ufficiale nudo nel gruppo titolo della top bar, colorato in light e bianco
+      in dark, mantenendo l'icona Archivio come identificatore funzionale.
+- [x] 2. Proteggere il layout mobile della top bar senza modificare i controlli o la struttura a tre
+      colonne dell'archivio.
+- [x] 3. Verificare desktop/mobile, typecheck, test e build.
+- [x] 4. Inventariare i controlli reali e preparare una proposta di restyling prioritizzata, separata
+      dalla modifica approvata.
+- [x] 5. Documentare implementazione, prove e raccomandazioni.
+
+## Review (14/07)
+
+- Aggiunto il logo ufficiale subito dopo “Archivio Buste Paga”, accanto all'icona funzionale
+  Archivio: nudo, 44 px visivi su desktop, colori originali in light e bianco in dark.
+- La top bar desktop resta compatta (73 px). Sotto 640 px il testo del pulsante Dashboard e il
+  contatore lavoratori vengono nascosti; un padding superiore dedicato evita la sovrapposizione
+  con la Dynamic Island.
+- Verifica browser a 1280, 390 e 320 px: titolo completo, logo visibile, zero overflow pagina;
+  nessuna modifica al workspace a tre colonne o ai suoi controlli.
+- Controlli reali inventariati per il futuro restyling: ricerca/clear, cassetti azienda e lavoratore,
+  anni e 12 mesi con quattro stati, PDF precedente/successivo, download condizionale, drag&drop
+  multiplo e relativa modale.
+- Direzione raccomandata, non implementata: workspace documentale più riconoscibile con micro-header
+  delle tre colonne, legenda mesi, upload più scopribile e master-detail responsive.
+- Gate finali: `npx tsc --noEmit` superato, **339/339 test** passati, build produzione riuscita
+  (solo warning chunk-size preesistente), `git diff --check` pulito.
+
+---
+
+# Todo — Sessione 14/07: filtri azienda Incidenza su una sola riga
+
+> **Richiesta:** disporre tutte le pillole azienda sotto la ricerca sulla stessa riga per recuperare
+> spazio verticale. La ricerca e tutti gli altri controlli restano invariati.
+
+## Piano
+- [x] 1. Lasciare la ricerca nell'attuale `max-w-4xl`, dando alla sola riga filtri tutta la larghezza
+      disponibile della dashboard.
+- [x] 2. Rendere le pillole `nowrap` e non comprimibili; sui viewport stretti usare scroll orizzontale
+      senza scrollbar invece di tornare su una seconda riga.
+- [x] 3. Verificare allineamento, loghi non tagliati e assenza di overflow pagina su desktop/mobile.
+- [x] 4. Eseguire typecheck, test, build e documentare l'esito.
+
+## Review (14/07)
+
+- La capsula di ricerca mantiene l'attuale `max-w-4xl`; solo il contenitore dei filtri usa tutta la
+  larghezza disponibile di Incidenza.
+- Le 8 pillole sono ora in un flex `nowrap`, `shrink-0`, con padding orizzontale leggermente ridotto
+  (`px-5`) per farle entrare tutte anche a 1280 px senza ridurre loghi o altezza.
+- Verifica browser a 1280 px: 8/8 filtri sulla stessa riga, `scrollWidth = clientWidth = 1217`, ultima
+  pillola entro il viewport e zero overflow pagina.
+- A 390 px la riga resta alta 44 px e non va a capo; il contenitore scorre orizzontalmente
+  (`327 px` visibili su `1201 px`), sempre con zero overflow del documento.
+- Gate finali: `npx tsc --noEmit` superato, **339/339 test** passati, build produzione riuscita
+  (solo warning chunk-size preesistente), `git diff --check` pulito.
+
+---
+
+# Todo — Sessione 14/07: fascia organizzativa speculare nelle tre aree
+
+> **Scope confermato dall'utente:** implementare per ora soltanto la fascia superiore del mockup
+> con “Ufficio Vertenze”, logo FAST-CONFSAL e “Segreteria Regionale Puglia e Basilicata”. La fascia
+> deve essere identica in Incidenza, Turni & Riposi e Indennità; tutto il resto resta invariato.
+
+## Piano
+- [x] 1. Convertire `SindacatoTag` in una fascia istituzionale a tutta larghezza, mantenendo logo
+      ufficiale trasparente, colori originali in light e silhouette bianca in dark.
+- [x] 2. Montare la fascia con lo stesso contenitore nelle tre aree, senza cambiare hero, KPI,
+      filtri, card o navigazione.
+- [x] 3. Verificare desktop/mobile, assenza di overflow e parità strutturale tra le tre sezioni.
+- [x] 4. Eseguire typecheck, test, build e documentare il risultato.
+
+## Review (14/07)
+
+- `SindacatoTag` è ora una fascia unica a tre colonne su desktop e due righe su mobile: Ufficio a
+  sinistra, logo ufficiale centrato, Segreteria a destra. Gradiente tenue pesca→bianco→azzurro,
+  raggio 36 px mobile / 44 px desktop, senza bordo, ombra o badge aggiuntivi.
+- Il logo conserva il box di layout precedente ma viene scalato visivamente: a 1280 px misura circa
+  120×120 dentro una fascia alta 144 px, quindi è più presente senza aumentare l'altezza della barra.
+- Incidenza, Turni & Riposi e Indennità misurano tutte: fascia `x=24, y=80, w=1217, h=144`, logo
+  `x=572, y=92, w=120, h=120`, hero a `y=248`; un solo blocco istituzionale per area e zero overflow.
+- Responsive verificato a 390 e 320 px: logo centrato sulla prima riga, testi sulla seconda, nessun
+  taglio orizzontale; il filtro dark del logo resta `brightness-0 invert`.
+- Scope rispettato: nessuna modifica a hero, KPI, filtri, card o navigazione; nelle due aree più
+  strette è stata estratta soltanto la fascia nel wrapper comune `max-w-screen-2xl`.
+- Gate finali: `npx tsc --noEmit` superato, **339/339 test** passati, build produzione riuscita
+  (solo warning chunk-size preesistente), `git diff --check` pulito.
+
+---
+
+# Todo — Sessione 14/07: FAST-CONFSAL — colori pieni e co-brand più autorevole
+
+> **Correzione utente:** il logo trasparente appare leggermente desaturato; nelle testate di
+> Incidenza, Turni & Riposi e Indennità deve essere più grande. Anche “Ufficio Vertenze” e
+> “Segreteria Regionale Puglia e Basilicata” vanno rese più curate e adeguate al ruolo istituzionale.
+
+## Piano
+- [x] 1. Misurare l'alpha e i colori del PNG attuale contro il JPG ufficiale; ricostruire un asset
+      trasparente con interni realmente opachi, senza alterare geometria o colori originali.
+- [x] 2. Ridisegnare `SindacatoTag` come piccolo blocco istituzionale: logo più grande, gerarchia
+      tipografica leggibile e allineamento equilibrato, senza badge/pastiglie.
+- [x] 3. Verificare il blocco nelle tre aree, in light/dark e a viewport desktop/compatto; controllare
+      che il nuovo ingombro non interferisca con Dynamic Island o header.
+- [x] 4. Eseguire test/build, review del diff e documentare prove e risultato.
+
+## Review (14/07)
+
+- Root cause colore: il viola del PNG era RGB-identico al JPG ufficiale (mediana `49,44,128`),
+  ma l'interno restava a circa alpha 210/255. Rimappato l'alpha: **22.715 pixel interni opachi**
+  (prima 197), semitrasparenza conservata solo sui bordi. Asset finale 512×511 RGBA, 66 KB.
+- La prova built-in `imagegen` su chroma key è stata scartata perché alterava leggermente forma e
+  riempimento del lettering; la correzione finale agisce solo sull'alpha dell'asset fedele.
+- `SindacatoTag`: logo 96 px da `sm` (80 px mobile), separatore verticale leggero, “Ufficio” e
+  “Segreteria Regionale” come sovratitoli, “Vertenze” e “Puglia e Basilicata” in evidenza.
+- Verifica browser: Incidenza, Turni & Riposi e Indennità montano un solo logo; light `filter:none`,
+  dark `brightness(0) invert(1)`. Viewport 1280, 768 e 390 px: nessun overflow orizzontale;
+  su mobile blocco 254 px entro i 390 px e padding superiore anticollisione con Dynamic Island.
+- Gate: **339/339 test** passati; build produzione riuscita (solo warning chunk-size preesistente);
+  `git diff --check` incluso nella review finale.
+- Follow-up modale lavoratore: logo FAST-CONFSAL portato da 64 px a 96 px su desktop (80 px su
+  viewport stretti), coerente con la nuova scala delle testate e senza cambiare il layout del titolo.
+
+---
+
+# Todo — Sessione 14/07: logo FAST-CONFSAL trasparente e adattivo al tema
+
+> **Richiesta:** sostituire il logo FAST-CONFSAL attuale con il file ufficiale indicato
+> dall'utente, rimuovere il fondo bianco/grigio incorporato e uniformarlo ai loghi aziendali:
+> colori originali in light mode, silhouette bianca in dark mode, senza badge o pastiglie.
+
+## Piano
+- [x] 1. Preparare dal JPG ufficiale un PNG con alpha reale, preservando esattamente simbolo,
+      scritte, stelle e tricolore; verificare trasparenza, bordi e assenza di alone chiaro.
+- [x] 2. Applicare il filtro tema (`dark:brightness-0 dark:invert`) in tutti i punti che mostrano
+      FAST-CONFSAL, mantenendo dimensioni e layout esistenti.
+- [x] 3. Verificare asset e UI con controlli automatici, test/build e ispezione visiva light/dark.
+- [x] 4. Documentare esito e prove nella Review di questa sezione.
+
+## Review (14/07)
+
+- Sostituito `public/logos/fast-confsal.png` col logo ufficiale fornito dall'utente: PNG RGBA
+  512×511, 82 KB, fondo bianco/grigio rimosso e geometria originale preservata. La prova
+  generativa chroma-key della skill `imagegen` non è stata adottata perché introduceva minime
+  variazioni nel lettering/colore; usato l'helper ufficiale di estrazione alpha direttamente sul
+  JPG sorgente, quindi ridimensionamento ottimizzato per l'uso UI.
+- Filtro tema applicato ai 5 render effettivi: tag in alto nelle aree, modale lavoratore e tre
+  varianti della dashboard sindacati. Rimossi anche i tre workaround `dark:bg-white`/aloni della
+  vecchia immagine: nessuna pastiglia residua. Light = colori originali; dark = silhouette bianca.
+- Verifica browser locale finale sulla dashboard: asset 512×511 caricato, nessun antenato con
+  fondo bianco, light `filter: none`, dark `filter: brightness(0) invert(1)`; controllo precedente
+  dello stesso filtro superato anche nel tag in alto dell'area Incidenza.
+- Gate finali: **339/339 test** passati; `npm run build` riuscita (solo warning chunk-size già
+  esistente); controllo visivo dell'asset finale dopo downscale, alpha confermato da `sips`.
+
+---
+
+# Todo — Sessione 14/07: ELIOR VIAGGIANTE — controllo via incrocio col censimento Vision
+
+> **Contesto (verificato dal vivo oggi):** le voci fisse SONO inserite (griglia `anni` dei 10
+> viaggiante, 4301 mese-per-mese con valori veri, es. Boriglione 190,43 / 226,35 / 146,73) ma
+> provengono da un OCR **v1 mai verificato aritmeticamente**: nessuna delle 10 pratiche ha una
+> nota `⚠️ OCR`, le 668 buste caricate il 13/07 hanno `extracted_data` VUOTO e zero `ocrChecks`,
+> e il codice dei controlli (validatore + terne v2) è **23 commit avanti a `origin/main`** → NON
+> in produzione. Non si può retro-eseguire il validatore sul DB (mancano le terne). Scelta utente:
+> **strada rapida = incrociare la griglia col censimento Vision già fatto** (zero deploy, zero costi).
+
+**Fatti verificati (14/07):**
+- Dataset censimento: `.../ELIOR VIAGGIANTE/censimento-vision-buste-2026-07-13.json` = **676 record**,
+  ognuno con `worker`, `year`, `month` (num), `rows[{code,competenze,...}]`, `totComp`, `ggInps`,
+  `reconDelta` (0.0 = busta riconciliata al centesimo, 416/676).
+- Griglia `anni` in `worker_profiles` (jsonb): il 4301 è un importo €/mese (= ore × €1,00).
+- Il 4301 è **la voce della vertenza** → è il fulcro del confronto.
+
+## Piano (ESEGUITO 14/07) — SOLO letture + 1 correzione verificata su PDF
+- [x] 1-4. Incrocio griglia↔censimento (436 buste riconciliate) sulla voce 4301, al centesimo,
+      via join in SQL (censimento iniettato come VALUES, griglia dal DB). Script in scratchpad.
+- [x] 5-6. Report → [tasks/controllo-vision-elior-viaggiante-2026-07-14.md](controllo-vision-elior-viaggiante-2026-07-14.md).
+
+### Review (14/07)
+- **Risultato:** su 401 buste confrontabili → **248 CONCORDI** (doppia lettura Gemini+Vision al
+  centesimo = confermate), 153 divergenti, +261 non confrontabili (censimento non riconciliato),
+  +3 solo-censimento. % conferma sul confrontabile = 62%.
+- **Il censimento NON è una fonte per correggere:** il suo `reconOk` garantisce Σ=totale, non la
+  corretta attribuzione per-voce; su scansioni ruotate Vision aggancia la riga sbagliata. Prova:
+  Cautilli Ott 2023 (griglia 194,05 = verità Gemini verificata; censimento 16,80 = errato). Copiarlo
+  avrebbe distrutto ~150 valori buoni. → NON fatto (coerente con `ocr-ambiguity-flag-policy`).
+- **Subagente pilota (batch_01, 15 buste Boriglione, lettura alla cieca):** coincide con la griglia
+  in 11/15; 4 discordanze = errori v1 REALI (verificati poi da me sui PDF). Scoperta classe d'errore:
+  la griglia a volte ha salvato la voce **4285** (73,56 = paga base/26) al posto della 4301.
+- **5 correzioni applicate (tutte verificate su PDF, terna quadrata, RETURNING ok):**
+  Schingaro Mag2024 277,71→121,08 · Boriglione Ago2020 assente→271,18 · Dic2021 190,43→150,43 ·
+  Gen2022 73,56→190,88 · Lug2022 73,56→155,70. ⚠️ hard-refresh app prima di riaprire Boriglione/Schingaro.
+- **Scelta utente sul grosso:** NON sweep coi subagenti (~1,3M token) ma **ri-scansione v2 in LOCALE**
+  (`netlify dev`, no deploy prod) sulle ~368 buste non confermate → validatore terne automatico.
+- **Artefatti:** manifest 416 buste + 26 batch + pilota in scratchpad (`master.csv`, `batches/`,
+  `results/batch_01.json`), riutilizzabili se si vuole comunque un secondo occhio coi subagenti.
+
+**Garanzie:** il censimento è un *secondo occhio*, non la verità assoluta (Vision su scansioni deboli
+riconcilia solo 416/676); dove diverge NON si corregge — si segnala per la revisione dell'avvocato
+(policy `ocr-ambiguity-flag-policy` + `ruolo-prepariamo-avvocato-decide`). Output lungo → su file.
+
+---
+
 # Todo — Sessione 13/07: ELIOR VIAGGIANTE — carico + scansione con controlli OCR cartacee
 
 > **Richiesta:** caricare le 676 buste splittate (Desktop) nell'archivio e scansionarle con TUTTE

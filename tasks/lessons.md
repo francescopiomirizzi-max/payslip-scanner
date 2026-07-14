@@ -3,6 +3,65 @@
 > Pattern e errori da evitare nelle prossime sessioni.
 > Aggiornato dopo ogni correzione utente.
 
+## 2026-07-14 — Se il prodotto è desktop-only, investire la QA dove viene davvero usato
+
+**Contesto:** durante il restyling dell'Archivio avevo continuato a trattare la resa mobile come un
+vincolo prioritario; l'utente ha chiarito che, in questa fase, il sito viene usato esclusivamente da desktop.
+
+**Lezione:**
+1. Registrare subito il target di utilizzo dichiarato e concentrare layout, densità e prove sui viewport reali.
+2. Non introdurre regressioni gratuite sui breakpoint piccoli, ma non sacrificare qualità desktop né tempo di
+   rifinitura per un supporto mobile che non fa parte dello scope approvato.
+3. Nei report finali distinguere tra “non rotto incidentalmente” e “supportato/verificato”: qui la garanzia è desktop.
+
+## 2026-07-14 — La fascia deve appartenere alla pagina: raggio e scala percepita si valutano nel contesto
+
+**Contesto:** la prima versione della nuova fascia istituzionale, pur coerente col ritaglio del mockup,
+risultava troppo spigolosa dentro la pagina reale. L'utente ha inoltre chiesto più presenza al logo
+senza aumentare l'altezza della barra.
+
+**Lezione:**
+1. Non trasferire meccanicamente il bordo di un ritaglio: confrontare il raggio con le card e le hero
+   circostanti, perché una fascia rettangolare può stonare in un sistema molto arrotondato.
+2. Per ingrandire un logo senza alterare il ritmo verticale, separare **box di layout** e **scala visiva**:
+   mantenere la stessa altezza intrinseca e applicare una scala moderata, verificando che l'overflow
+   del contenitore non tagli stelle, archi o tricolore.
+3. La QA deve misurare sia l'altezza della fascia prima/dopo sia il bounding box visivo del logo: “più
+   grande” non deve trasformarsi accidentalmente in “più spazio vuoto sopra la dashboard”.
+
+## 2026-07-14 — Un mockup ampio non autorizza un restyling ampio: implementare per tranche
+
+**Contesto:** dopo aver mostrato una proposta completa per la dashboard, l'utente ha scelto di
+realizzare per ora soltanto la fascia organizzativa superiore e di lasciare invariato tutto il
+resto. La stessa fascia deve essere speculare nelle tre sezioni operative.
+
+**Lezione:**
+1. Il mockup serve a scegliere una direzione, non amplia automaticamente lo scope di implementazione:
+   modificare esclusivamente la zona esplicitamente approvata.
+2. Quando una porzione deve essere “speculare” in più viste, cercare prima un componente condiviso e
+   intervenire lì; nei call site limitarsi all'allineamento indispensabile.
+3. La verifica del diff deve dimostrare anche ciò che **non** è cambiato: hero, KPI, filtri, card e
+   navigazione restano fuori dallo scope finché l'utente non approva la tranche successiva.
+
+## 2026-07-14 — Un PNG “trasparente” non è riuscito se gli interni restano semitrasparenti
+
+**Contesto:** il logo FAST-CONFSAL sembrava corretto nell'anteprima su fondo neutro e il file aveva
+un canale alpha valido, ma nell'app l'utente ha notato colori leggermente desaturati. Il ritaglio
+aveva lasciato molti pixel interni parzialmente trasparenti: sui pannelli chiari il colore si
+miscelava col fondo. Inoltre il blocco istituzionale era stato verificato come funzionante, ma non
+abbastanza rifinito per scala e gerarchia tipografica.
+
+**Lezione:**
+1. Per un logo opaco, `hasAlpha=yes` e angoli trasparenti NON bastano: verificare l'istogramma alpha
+   e pretendere interni a 255; la semitrasparenza deve restare solo sul bordo antialias.
+2. Comporre il PNG su almeno un fondo bianco, uno colorato chiaro e uno scuro: un ritaglio può
+   sembrare fedele su bianco ma perdere saturazione su vetro/gradienti.
+3. La QA del brand include l'intero blocco nel contesto reale: dimensione percepita, gerarchia delle
+   diciture e rapporto con gli header. “Presente e leggibile” non equivale a “adeguato e autorevole”.
+4. Quando si uniforma un logo in tutti i render, verificare **anche la scala percepita di ciascun
+   contesto**: la stessa altezza non è equivalente accanto a un titolo da 36 px, dentro una card o
+   in una testata isolata. Inventario = asset, filtro tema, contenitore e dimensione, non solo `src`.
+
 ## 2026-07-11 — Parser FSE/Mercitalia: riconcilia ogni documento col SUO totale stampato; e ri-misura le conclusioni dei report passati
 
 **Contesto:** parser di verità FSE + Mercitalia. Il report Clarino (§4.3) prescriveva "banda GG LAV

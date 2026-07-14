@@ -116,6 +116,7 @@ const ArchivePage: React.FC<ArchivePageProps> = ({ workers, onBack, initialWorke
   const [uploadMonthIndex, setUploadMonthIndex] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadDone, setUploadDone] = useState(false);
+  const [uploadFailed, setUploadFailed] = useState(false);
   const [uploadAutoDetected, setUploadAutoDetected] = useState(false);
 
   const currentFile = pendingQueue[queueIndex] ?? null;
@@ -270,15 +271,17 @@ const ArchivePage: React.FC<ArchivePageProps> = ({ workers, onBack, initialWorke
   // --- DRAG & DROP HANDLERS ---
   const handleDragEnter = useCallback((e: React.DragEvent) => {
     e.preventDefault();
+    if (isReadOnly) return;
     dragCounter.current++;
     if (dragCounter.current === 1) setIsDraggingOver(true);
-  }, []);
+  }, [isReadOnly]);
 
   const handleDragLeave = useCallback((e: React.DragEvent) => {
     e.preventDefault();
+    if (isReadOnly) return;
     dragCounter.current--;
     if (dragCounter.current === 0) setIsDraggingOver(false);
-  }, []);
+  }, [isReadOnly]);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -291,10 +294,12 @@ const ArchivePage: React.FC<ArchivePageProps> = ({ workers, onBack, initialWorke
     setUploadMonthIndex(parsed.monthIndex ?? 0);
     setUploadAutoDetected(parsed.autoDetected);
     setUploadDone(false);
+    setUploadFailed(false);
   }, []);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
+    if (isReadOnly) return;
     dragCounter.current = 0;
     setIsDraggingOver(false);
     const files = Array.from(e.dataTransfer.files).filter(f => f.type === 'application/pdf');
@@ -304,7 +309,7 @@ const ArchivePage: React.FC<ArchivePageProps> = ({ workers, onBack, initialWorke
     setQueueIndex(0);
     initModalForFile(files[0], defaultWorkerId);
     setShowUploadModal(true);
-  }, [selectedWorkerId, workers, initModalForFile]);
+  }, [isReadOnly, selectedWorkerId, workers, initModalForFile]);
 
   const handleDismissModal = useCallback(() => {
     if (isUploading) return;
@@ -312,13 +317,20 @@ const ArchivePage: React.FC<ArchivePageProps> = ({ workers, onBack, initialWorke
     setPendingQueue([]);
     setQueueIndex(0);
     setUploadDone(false);
+    setUploadFailed(false);
   }, [isUploading]);
 
   const handleUploadConfirm = useCallback(async () => {
-    if (!currentFile || !uploadWorkerId) return;
+    if (isReadOnly || !currentFile || !uploadWorkerId) return;
     setIsUploading(true);
+    setUploadFailed(false);
     const monthName = MONTH_NAMES[uploadMonthIndex];
-    await addPayslip(uploadWorkerId, currentFile, uploadYear, monthName, uploadMonthIndex, {});
+    const uploaded = await addPayslip(uploadWorkerId, currentFile, uploadYear, monthName, uploadMonthIndex, {});
+    if (!uploaded) {
+      setIsUploading(false);
+      setUploadFailed(true);
+      return;
+    }
     setPayslipCache(prev => {
       const next = { ...prev };
       delete next[uploadWorkerId];
@@ -346,7 +358,7 @@ const ArchivePage: React.FC<ArchivePageProps> = ({ workers, onBack, initialWorke
         setUploadDone(false);
       }, 1200);
     }
-  }, [currentFile, uploadWorkerId, uploadYear, uploadMonthIndex, addPayslip, selectedWorkerId, getPayslipsByWorker, queueIndex, pendingQueue, workers, initModalForFile]);
+  }, [isReadOnly, currentFile, uploadWorkerId, uploadYear, uploadMonthIndex, addPayslip, selectedWorkerId, getPayslipsByWorker, queueIndex, pendingQueue, workers, initModalForFile]);
 
   // Build year/month tree for selected worker
   const yearTree = useMemo((): YearEntry[] => {
@@ -407,47 +419,79 @@ const ArchivePage: React.FC<ArchivePageProps> = ({ workers, onBack, initialWorke
 
   return (
     <div
-      className="flex flex-col h-screen bg-slate-50 dark:bg-slate-950 overflow-hidden relative"
+      className="relative flex h-screen flex-col overflow-hidden bg-slate-100 dark:bg-slate-950"
       onDragEnter={handleDragEnter}
       onDragLeave={handleDragLeave}
       onDragOver={handleDragOver}
       onDrop={handleDrop}
     >
 
+      {/* Fondo ambientale calmo: il workspace resta il protagonista. */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 bg-gradient-to-br from-indigo-50/90 via-slate-50 to-cyan-50/70 dark:from-slate-950 dark:via-slate-950 dark:to-indigo-950/35"
+      />
+
       {/* TOP BAR */}
-      <div className="flex-none flex items-center gap-4 px-6 py-4 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-b border-slate-200/60 dark:border-slate-700/60 z-10">
+      <div className="relative z-10 flex flex-none items-center gap-2 border-b border-white/70 bg-white/75 px-3 pb-4 pt-16 shadow-[0_8px_30px_-24px_rgba(15,23,42,0.65)] backdrop-blur-2xl dark:border-slate-800/80 dark:bg-slate-900/75 sm:gap-4 sm:px-6 sm:py-4">
         <button
           onClick={onBack}
-          className="flex items-center gap-2 px-3 py-2 rounded-xl text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors group"
+          aria-label="Torna alla dashboard"
+          title="Torna alla dashboard"
+          className="flex items-center gap-2 px-2 py-2 rounded-xl text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors group sm:px-3"
         >
           <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-0.5" />
-          <span className="text-sm font-bold">Dashboard</span>
+          <span className="hidden text-sm font-bold sm:inline">Dashboard</span>
         </button>
         <div className="w-px h-5 bg-slate-200 dark:bg-slate-700" />
-        <div className="flex items-center gap-2">
-          <Archive className="w-5 h-5 text-indigo-500" />
-          <h1 className="text-lg font-black text-slate-800 dark:text-white">Archivio Buste Paga</h1>
+        <div className="flex min-w-0 items-center gap-2.5">
+          <Archive className="w-5 h-5 shrink-0 text-indigo-500" />
+          <h1 className="truncate text-base font-black text-slate-800 dark:text-white sm:text-lg">Archivio Buste Paga</h1>
+          <img
+            src="/logos/fast-confsal.png"
+            alt="FAST-CONFSAL"
+            className="h-9 w-auto shrink-0 origin-center scale-110 object-contain select-none dark:brightness-0 dark:invert sm:h-10"
+            draggable={false}
+          />
         </div>
-        <div className="ml-auto text-xs font-medium text-slate-400">
-          {workers.length} {workers.length === 1 ? 'lavoratore' : 'lavoratori'}
+        <div className="ml-auto hidden items-center gap-3 md:flex">
+          {!isReadOnly && (
+            <div className="hidden items-center gap-2 rounded-full border border-indigo-200/70 bg-indigo-50/80 px-3 py-1.5 text-[10px] font-bold text-indigo-600 shadow-sm dark:border-indigo-500/25 dark:bg-indigo-500/10 dark:text-indigo-300 lg:flex">
+              <UploadCloud className="h-3.5 w-3.5" />
+              Trascina qui i PDF
+            </div>
+          )}
+          <div className="shrink-0 text-xs font-medium text-slate-400">
+            {workers.length} {workers.length === 1 ? 'lavoratore' : 'lavoratori'}
+          </div>
         </div>
+        <div aria-hidden="true" className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-indigo-400/50 to-transparent dark:via-indigo-500/40" />
       </div>
 
-      {/* 3-COLUMN BODY */}
-      <div className="flex flex-1 min-h-0">
+      {/* 3-COLUMN WORKSPACE */}
+      <div className="relative z-[1] flex min-h-0 flex-1 p-4 pt-3">
+        <div className="isolate flex min-h-0 flex-1 overflow-hidden rounded-[2rem] border border-white/80 bg-white/75 shadow-[0_30px_80px_-42px_rgba(15,23,42,0.55)] [clip-path:inset(0_round_2rem)] dark:border-slate-800/80 dark:bg-slate-900/70">
 
         {/* ── COL 1: WORKERS ── */}
-        <div className="w-72 flex-none flex flex-col border-r border-slate-200/60 dark:border-slate-700/60 bg-white/60 dark:bg-slate-900/60">
+        <div className="w-72 flex-none flex flex-col border-r border-slate-200/70 bg-white/75 dark:border-slate-800/80 dark:bg-slate-900/70">
+          <div className="flex h-16 flex-none flex-col justify-center border-b border-slate-100/90 bg-white/45 px-4 dark:border-slate-800/80 dark:bg-slate-900/35">
+            <div className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400">
+              <FolderOpen className="h-4 w-4" />
+              <p className="text-[10px] font-black uppercase tracking-[0.2em]">01 · Lavoratori</p>
+            </div>
+            <p className="mt-1 text-xs font-medium text-slate-500 dark:text-slate-400">Scegli la pratica da consultare</p>
+          </div>
+
           {/* Search */}
-          <div className="flex-none p-3 border-b border-slate-100 dark:border-slate-800">
-            <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-100/80 dark:bg-slate-800/80 border border-slate-200/60 dark:border-slate-700/60">
-              <Search className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+          <div className="flex-none border-b border-slate-100 p-3 dark:border-slate-800">
+            <div className="flex items-center gap-2 rounded-xl border border-slate-200/70 bg-slate-100/80 px-3 py-2.5 shadow-inner shadow-slate-200/30 transition-colors focus-within:border-indigo-300 focus-within:bg-white dark:border-slate-700/70 dark:bg-slate-800/80 dark:shadow-none dark:focus-within:border-indigo-500/60 dark:focus-within:bg-slate-800">
+              <Search className="h-4 w-4 shrink-0 text-slate-400" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
                 placeholder="Cerca lavoratore..."
-                className="flex-1 bg-transparent text-[11px] font-medium text-slate-700 dark:text-slate-300 placeholder:text-slate-400 outline-none"
+                className="flex-1 bg-transparent text-xs font-medium text-slate-700 outline-none placeholder:text-slate-400 dark:text-slate-300"
               />
               {searchQuery && (
                 <button onClick={() => setSearchQuery('')} className="text-slate-400 hover:text-slate-600">
@@ -458,7 +502,7 @@ const ArchivePage: React.FC<ArchivePageProps> = ({ workers, onBack, initialWorke
           </div>
 
           {/* Workers list */}
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 overflow-y-auto pb-16">
             {filteredWorkers.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-slate-400 gap-2">
                 <FolderOpen className="w-8 h-8 opacity-40" />
@@ -566,7 +610,15 @@ const ArchivePage: React.FC<ArchivePageProps> = ({ workers, onBack, initialWorke
         </div>
 
         {/* ── COL 2: YEAR/MONTH TREE ── */}
-        <div className="w-80 flex-none flex flex-col border-r border-slate-200/60 dark:border-slate-700/60 bg-white/40 dark:bg-slate-900/40">
+        <div className="w-80 flex-none flex flex-col border-r border-slate-200/70 bg-slate-50/75 dark:border-slate-800/80 dark:bg-slate-900/55">
+          <div className="flex h-16 flex-none flex-col justify-center border-b border-slate-200/70 bg-white/60 px-5 dark:border-slate-800/80 dark:bg-slate-900/45">
+            <div className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400">
+              <Calendar className="h-4 w-4" />
+              <p className="text-[10px] font-black uppercase tracking-[0.2em]">02 · Periodi</p>
+            </div>
+            <p className="mt-1 text-xs font-medium text-slate-500 dark:text-slate-400">Anni e copertura mese per mese</p>
+          </div>
+
           {!selectedWorker ? (
             <div className="flex flex-col items-center justify-center h-full text-slate-400 gap-4">
               <div className="relative">
@@ -583,7 +635,7 @@ const ArchivePage: React.FC<ArchivePageProps> = ({ workers, onBack, initialWorke
           ) : (
             <>
               {/* Worker header — logo azienda (fallback testuale per le custom) */}
-              <div className="flex-none px-5 py-4 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex-none border-b border-slate-200/70 bg-white/45 px-5 py-4 dark:border-slate-800 dark:bg-slate-900/30">
                 {getCompanyLogo(selectedWorker.profilo) ? (
                   <CompanyLogo profilo={selectedWorker.profilo} eliorType={selectedWorker.eliorType} h={16} className="mb-1" title={getProfiloBadgeLabel(selectedWorker.profilo, selectedWorker.eliorType)} />
                 ) : (
@@ -600,8 +652,28 @@ const ArchivePage: React.FC<ArchivePageProps> = ({ workers, onBack, initialWorke
                 </p>
               </div>
 
+              {/* Legenda: riflette esattamente i quattro stati della griglia mensile. */}
+              <div className="grid flex-none grid-cols-2 gap-x-3 gap-y-2 border-b border-slate-200/70 bg-white/35 px-5 py-3 dark:border-slate-800 dark:bg-slate-900/20">
+                <span className="flex items-center gap-2 text-[10px] font-semibold text-slate-500 dark:text-slate-400">
+                  <span className="h-3 w-3 rounded-[4px] shadow-sm" style={{ background: `linear-gradient(135deg, ${gradStart}, ${gradEnd})` }} />
+                  PDF presente
+                </span>
+                <span className="flex items-center gap-2 text-[10px] font-semibold text-slate-500 dark:text-slate-400">
+                  <span className="h-3 w-3 rounded-[4px] border" style={{ borderColor: `${companyHex}88`, backgroundColor: `${companyHex}16` }} />
+                  Solo dati
+                </span>
+                <span className="flex items-center gap-2 text-[10px] font-semibold text-slate-500 dark:text-slate-400">
+                  <span className="h-3 w-3 rounded-[4px] border border-dashed border-slate-300 dark:border-slate-600" />
+                  Mancante
+                </span>
+                <span className="flex items-center gap-2 text-[10px] font-semibold text-slate-500 dark:text-slate-400">
+                  <span className="relative h-3 w-3 rounded-[4px] border border-red-400 ring-1 ring-red-400/50"><span className="absolute -right-1 -top-1 h-1.5 w-1.5 rounded-full bg-red-500" /></span>
+                  Da sistemare
+                </span>
+              </div>
+
               {/* Tree */}
-              <div className="flex-1 overflow-y-auto py-2">
+              <div className="flex-1 overflow-y-auto pb-16 pt-2">
                 {loadingWorker === selectedWorker.id ? (
                   <div className="flex items-center justify-center h-full gap-2 text-slate-400">
                     <Loader2 className="w-5 h-5 animate-spin" />
@@ -725,7 +797,17 @@ const ArchivePage: React.FC<ArchivePageProps> = ({ workers, onBack, initialWorke
         </div>
 
         {/* ── COL 3: PDF VIEWER ── */}
-        <div className="flex-1 flex flex-col min-w-0 bg-slate-100/50 dark:bg-slate-950/50">
+        <div className="flex min-w-0 flex-1 flex-col bg-slate-100/45 dark:bg-slate-950/45">
+          <div className="flex h-16 flex-none items-center border-b border-slate-200/70 bg-white/55 px-5 dark:border-slate-800/80 dark:bg-slate-900/40">
+            <div>
+              <div className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400">
+                <File className="h-4 w-4" />
+                <p className="text-[10px] font-black uppercase tracking-[0.2em]">03 · Documento</p>
+              </div>
+              <p className="mt-1 text-xs font-medium text-slate-500 dark:text-slate-400">Anteprima e navigazione del PDF</p>
+            </div>
+          </div>
+
           {!selectedPayslip && !loadingPdf ? (
             <div className="flex flex-col items-center justify-center h-full gap-4 text-slate-400">
               <div className="relative">
@@ -739,6 +821,12 @@ const ArchivePage: React.FC<ArchivePageProps> = ({ workers, onBack, initialWorke
                 <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
                   {selectedWorker ? 'Clicca un mese pieno nella griglia, poi scorri con ‹ › o le frecce' : 'Seleziona prima un lavoratore'}
                 </p>
+                {!isReadOnly && (
+                  <div className="mt-4 inline-flex items-center gap-2 rounded-2xl border border-dashed border-indigo-300/80 bg-indigo-50/70 px-4 py-2.5 text-xs font-bold text-indigo-600 dark:border-indigo-500/40 dark:bg-indigo-500/10 dark:text-indigo-300">
+                    <UploadCloud className="h-4 w-4" />
+                    Trascina qui uno o più PDF
+                  </div>
+                )}
               </div>
             </div>
           ) : (
@@ -823,11 +911,12 @@ const ArchivePage: React.FC<ArchivePageProps> = ({ workers, onBack, initialWorke
           )}
         </div>
 
+        </div>
       </div>
 
       {/* ── DRAG OVERLAY ── */}
       <AnimatePresence>
-        {isDraggingOver && (
+        {!isReadOnly && isDraggingOver && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -855,7 +944,7 @@ const ArchivePage: React.FC<ArchivePageProps> = ({ workers, onBack, initialWorke
 
       {/* ── UPLOAD MODAL ── */}
       <AnimatePresence>
-        {showUploadModal && (
+        {!isReadOnly && showUploadModal && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -909,6 +998,13 @@ const ArchivePage: React.FC<ArchivePageProps> = ({ workers, onBack, initialWorke
                     <div className="flex items-center gap-1.5 mb-4 px-3 py-2 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-700/40">
                       <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" strokeWidth={3} />
                       <span className="text-[10px] font-black text-emerald-700 dark:text-emerald-400 uppercase tracking-wide">Rilevato automaticamente dal nome file</span>
+                    </div>
+                  )}
+
+                  {uploadFailed && (
+                    <div className="mb-4 flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-xs font-semibold text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
+                      <X className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                      Caricamento non riuscito. Il file non è stato registrato: puoi riprovare senza chiudere questa finestra.
                     </div>
                   )}
 
