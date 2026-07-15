@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Mail, X, Loader2, Inbox } from 'lucide-react';
-import { useMessages, MessageRecord } from '../hooks/useMessages';
+import { Mail, X, Loader2, Inbox, AlertCircle } from 'lucide-react';
+import { useMessages, MessageRecord, CATEGORY_BUSTE_MANCANTI } from '../hooks/useMessages';
 
 interface MessagesInboxProps {
   onClose: () => void;
@@ -37,6 +37,25 @@ const MessagesInbox: React.FC<MessagesInboxProps> = ({ onClose }) => {
     document.body.style.overflow = 'hidden';
     return () => { window.removeEventListener('keydown', onKey); document.body.style.overflow = prev; };
   }, [onClose]);
+
+  const pinned = messages.filter(m => m.category === CATEGORY_BUSTE_MANCANTI);
+  const rest = messages.filter(m => m.category !== CATEGORY_BUSTE_MANCANTI);
+
+  const renderCard = (m: MessageRecord, i: number, isPinned: boolean) => (
+    <motion.div
+      key={m.id}
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: Math.min(i * 0.04, 0.2) }}
+      className={`rounded-2xl border p-4 ${isPinned
+        ? 'border-amber-300/70 dark:border-amber-500/40 bg-amber-50/70 dark:bg-amber-500/10'
+        : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/60'}`}
+    >
+      {m.title && <p className="font-black text-slate-900 dark:text-white text-sm">{m.title}</p>}
+      {m.body && <p className="text-sm text-slate-600 dark:text-slate-300 mt-1 whitespace-pre-wrap leading-relaxed">{m.body}</p>}
+      <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mt-2">{fmtDate(m.created_at)}</p>
+    </motion.div>
+  );
 
   return (
     <motion.div
@@ -90,19 +109,26 @@ const MessagesInbox: React.FC<MessagesInboxProps> = ({ onClose }) => {
               <p className="text-sm font-medium">Nessuna comunicazione al momento.</p>
             </div>
           ) : (
-            messages.map((m, i) => (
-              <motion.div
-                key={m.id}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: Math.min(i * 0.04, 0.2) }}
-                className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/60 p-4"
-              >
-                {m.title && <p className="font-black text-slate-900 dark:text-white text-sm">{m.title}</p>}
-                {m.body && <p className="text-sm text-slate-600 dark:text-slate-300 mt-1 whitespace-pre-wrap leading-relaxed">{m.body}</p>}
-                <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mt-2">{fmtDate(m.created_at)}</p>
-              </motion.div>
-            ))
+            <>
+              {/* Sezione dedicata "in evidenza": buste paga mancanti (sempre in cima). */}
+              {pinned.length > 0 && (
+                <div className="space-y-3">
+                  <p className="text-[10px] font-black uppercase tracking-wider text-amber-600 dark:text-amber-400 px-1 flex items-center gap-1.5">
+                    <AlertCircle className="w-3.5 h-3.5" /> Buste paga mancanti
+                  </p>
+                  {pinned.map((m, i) => renderCard(m, i, true))}
+                </div>
+              )}
+              {/* Comunicazioni generiche. */}
+              {rest.length > 0 && (
+                <div className="space-y-3">
+                  {pinned.length > 0 && (
+                    <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 px-1 pt-1">Comunicazioni</p>
+                  )}
+                  {rest.map((m, i) => renderCard(m, i, false))}
+                </div>
+              )}
+            </>
           )}
         </div>
       </motion.div>

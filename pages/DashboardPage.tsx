@@ -36,7 +36,8 @@ import {
 } from 'lucide-react';
 import WorkerCard from '../components/WorkerCard';
 import MessagesInbox from '../components/MessagesInbox';
-import { useUnreadMessages } from '../hooks/useMessages';
+import EntryAnnouncements from '../components/EntryAnnouncements';
+import { useUnreadMessages, MessageRecord } from '../hooks/useMessages';
 import { groupThousandsIT, sedeFromRuolo } from '../utils/formatters';
 import { AnimatedCounter } from '../components/ui/AnimatedCounter';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
@@ -310,8 +311,19 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
     const viewerName = useReadOnlyViewerName();
     // Bacheca annunci di sistema (sola lettura): la vedono solo i viewer (es. Vincenzo),
     // non l'owner. I messaggi li pubblica l'amministrazione, non l'app.
-    const { unread, markAllRead } = useUnreadMessages(isReadOnly);
+    const { unread, unreadMessages, markAllRead } = useUnreadMessages(isReadOnly);
     const [isInboxOpen, setIsInboxOpen] = useState(false);
+    // Spotlight d'ingresso: alla prima comparsa di messaggi non letti li mostra in
+    // primo piano (card affiancate). Catturati una volta sola per sessione.
+    const [entryMsgs, setEntryMsgs] = useState<MessageRecord[] | null>(null);
+    const entryShownRef = useRef(false);
+    useEffect(() => {
+        if (isReadOnly && !entryShownRef.current && unreadMessages.length > 0) {
+            entryShownRef.current = true;
+            setEntryMsgs(unreadMessages);
+        }
+    }, [isReadOnly, unreadMessages]);
+    const dismissEntry = () => { markAllRead(); setEntryMsgs(null); };
     type SortKey = 'cognome' | 'credito' | 'status' | 'data';
     const [sortBy, setSortBy] = useState<SortKey>('cognome');
     const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
@@ -1641,6 +1653,13 @@ const DashboardPage: React.FC<DashboardPageProps> = ({
             <AnimatePresence>
                 {isInboxOpen && (
                     <MessagesInbox onClose={() => setIsInboxOpen(false)} />
+                )}
+            </AnimatePresence>
+
+            {/* Spotlight d'ingresso: comunicazioni nuove in primo piano (solo viewer) */}
+            <AnimatePresence>
+                {entryMsgs && entryMsgs.length > 0 && (
+                    <EntryAnnouncements messages={entryMsgs} onDismiss={dismissEntry} />
                 )}
             </AnimatePresence>
         </div>

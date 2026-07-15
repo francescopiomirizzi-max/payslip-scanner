@@ -6,7 +6,12 @@ export interface MessageRecord {
   title: string;
   body: string;
   created_at: string;
+  /** NULL = comunicazione generica; 'buste_mancanti' = sezione dedicata in evidenza. */
+  category: string | null;
 }
+
+/** Categoria degli annunci "in evidenza" (sezione dedicata + persistente). */
+export const CATEGORY_BUSTE_MANCANTI = 'buste_mancanti';
 
 const LAST_SEEN_KEY = 'messages_last_seen_at';
 
@@ -20,7 +25,7 @@ export const useMessages = () => {
   const listMessages = useCallback(async (): Promise<MessageRecord[]> => {
     const { data, error } = await supabase
       .from('messages')
-      .select('id, title, body, created_at')
+      .select('id, title, body, created_at, category')
       .order('created_at', { ascending: false });
     if (error) {
       console.error('listMessages', error);
@@ -40,22 +45,22 @@ export const useMessages = () => {
  */
 export const useUnreadMessages = (enabled: boolean = true) => {
   const { listMessages } = useMessages();
-  const [unread, setUnread] = useState(0);
+  const [unreadMessages, setUnreadMessages] = useState<MessageRecord[]>([]);
 
   const refresh = useCallback(async () => {
-    if (!enabled) { setUnread(0); return; }
+    if (!enabled) { setUnreadMessages([]); return; }
     const msgs = await listMessages();
     const lastSeen = localStorage.getItem(LAST_SEEN_KEY);
     const lastSeenT = lastSeen ? Date.parse(lastSeen) : 0;
-    setUnread(msgs.filter(m => Date.parse(m.created_at) > lastSeenT).length);
+    setUnreadMessages(msgs.filter(m => Date.parse(m.created_at) > lastSeenT));
   }, [enabled, listMessages]);
 
   useEffect(() => { refresh(); }, [refresh]);
 
   const markAllRead = useCallback(() => {
     localStorage.setItem(LAST_SEEN_KEY, new Date().toISOString());
-    setUnread(0);
+    setUnreadMessages([]);
   }, []);
 
-  return { unread, refresh, markAllRead };
+  return { unread: unreadMessages.length, unreadMessages, refresh, markAllRead };
 };
