@@ -129,6 +129,49 @@ describe('validateEliorScan — errori intercettati', () => {
   });
 });
 
+describe('validateEliorScan — falsi positivi corretti (triage Boriglione 15/07)', () => {
+  it('voce TFR/fiscale con importo nella colonna quantità: NON è "quantità implausibile"', () => {
+    // Boriglione 2025: 7310 T.F.R. BASE IMPONIBILE e 83xx addizionali stampano un
+    // IMPORTO in ORE/GG/MESI e non hanno competenze → non è una quantità oraria.
+    const r = validateEliorScan({
+      month: 12, year: 2025,
+      voci: [
+        { code: '7310', desc: 'T.F.R. BASE IMPONIBILE', unit: null, qty: 2908.71, competenze: null },
+        { code: '8310', desc: 'ADDIZIONALE FISCALE', unit: null, qty: 466.47, competenze: null },
+      ],
+    });
+    expect(r.flags.some(f => f.includes('quantità implausibile'))).toBe(false);
+  });
+
+  it('voce oraria vera (con competenze) con quantità >320: resta flaggata', () => {
+    const r = validateEliorScan({
+      month: 3, year: 2021,
+      voci: [
+        { code: '4301', desc: 'FUORI SEDE ITA TURNI RFR', unit: 1.0, qty: 1514.3, competenze: 1514.3 },
+      ],
+    });
+    expect(r.flags.some(f => f.includes('quantità implausibile'))).toBe(true);
+  });
+
+  it('tariffe rinnovo CCNL 2025 (1129=2,45 · 1130=2,50 · 1131=23,50) non sono "tariffa inattesa"', () => {
+    // Letti dal PDF reale Boriglione Settembre 2025.
+    const r = validateEliorScan({
+      month: 9, year: 2025,
+      voci: [
+        { code: '1129', desc: 'IND.TURNO NON CADENZATI', unit: 2.45, qty: 9.0, competenze: 22.05 },
+        { code: '1130', desc: 'LAVORO NOTTURNO', unit: 2.5, qty: 48.0, competenze: 120.0 },
+        { code: '1131', desc: 'LAVORO DOMENICALE OLTRE 2 HH', unit: 23.5, qty: 1.0, competenze: 23.5 },
+      ],
+    });
+    expect(r.flags.some(f => f.includes('tariffa inattesa'))).toBe(false);
+  });
+
+  it('le vecchie tariffe pre-2025 restano valide (nessuna regressione)', () => {
+    const r = validateEliorScan(boriglioneMar2021()); // 1129=2,25 · 1130=2,40 · 1131=20,00
+    expect(r.flags.some(f => f.includes('tariffa inattesa'))).toBe(false);
+  });
+});
+
 describe('validateEliorScan — robustezza input', () => {
   it('senza voci/totali (risposta vecchio formato): nessun flag, nessun crash', () => {
     const r = validateEliorScan({ month: 3, year: 2021, daysWorked: 26, daysVacation: 0, codes: { '1130': 10 } });
@@ -148,5 +191,11 @@ describe('validateEliorScan — robustezza input', () => {
     expect(TARIFFE_NOTE_ELIOR['4301']).toEqual([1.0]);
     expect(TARIFFE_NOTE_ELIOR['4300']).toContain(0.75);
     expect(TARIFFE_NOTE_ELIOR['4305']).toContain(2.2);
+  });
+
+  it('la tabella tariffe accetta sia le voci pre-2025 sia il rinnovo CCNL 2025', () => {
+    expect(TARIFFE_NOTE_ELIOR['1129']).toEqual([2.25, 2.45]);
+    expect(TARIFFE_NOTE_ELIOR['1130']).toEqual([2.4, 2.5]);
+    expect(TARIFFE_NOTE_ELIOR['1131']).toEqual([20.0, 23.5]);
   });
 });

@@ -45,9 +45,9 @@ export interface EliorScanValidation {
  */
 export const TARIFFE_NOTE_ELIOR: Record<string, number[]> = {
   '1126': [2.20],        // Indennità di cassa (oraria)
-  '1129': [2.25],        // Ind. turno non cadenzato (oraria)
-  '1130': [2.40],        // Lavoro notturno (oraria)
-  '1131': [20.00],       // Lavoro domenicale oltre 2HH (per domenica)
+  '1129': [2.25, 2.45],  // Ind. turno non cadenzato (oraria; 2,45 dal rinnovo CCNL 2025)
+  '1130': [2.40, 2.50],  // Lavoro notturno (oraria; 2,50 dal 2025)
+  '1131': [20.00, 23.50],// Lavoro domenicale oltre 2HH (per domenica; 23,50 dal 2025)
   '2000': [5.20, 7.20],  // Ticket pers. viaggiante (7.20 dal 2025)
   '2001': [5.20, 7.20],  // Ticket supplementare PV
   '4255': [2.80],        // Ind. giorn. pernottamento
@@ -131,7 +131,12 @@ export function validateEliorScan(aiResult: any): EliorScanValidation {
     flags.push(`ferie fuori range: ${daysVacation}`);
   for (const v of voci) {
     const qty = toNum(v.qty);
-    if (qty !== null && Math.abs(qty) > 320)
+    const comp = toNum(v.competenze);
+    // Solo sulle voci che concorrono alle COMPETENZE (come il check delle terne):
+    // le voci TFR/fiscali (7310 T.F.R. BASE IMPONIBILE, 83xx addizionali…) stampano un
+    // IMPORTO nella colonna ORE/GG/MESI e non hanno competenze → quel numero non è una
+    // quantità oraria e non va giudicato implausibile (falso positivo ricorrente).
+    if (qty !== null && comp !== null && comp !== 0 && Math.abs(qty) > 320)
       flags.push(`voce ${v.code}: quantità implausibile ${qty}`);
   }
 
