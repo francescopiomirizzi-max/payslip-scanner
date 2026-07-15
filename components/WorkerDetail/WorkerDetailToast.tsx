@@ -43,7 +43,7 @@ const WorkerDetailToast: React.FC = () => {
             transition={FRAMER_PHYSICS.smooth}
             className="fixed bottom-8 right-8 z-[250] flex flex-col gap-2"
           >
-            <div className={`relative flex items-start gap-3 p-4 pr-12 w-80 rounded-2xl shadow-2xl backdrop-blur-2xl border border-white/10 overflow-hidden
+            <div className={`relative flex items-start gap-3 p-4 pr-12 w-96 max-w-[calc(100vw-4rem)] rounded-2xl shadow-2xl backdrop-blur-2xl border border-white/10 overflow-hidden
               ${batchNotification.type === 'success' ? 'bg-slate-900/90 shadow-[0_10px_40px_-10px_rgba(16,185,129,0.3)]' :
                 batchNotification.type === 'warning' ? 'bg-slate-900/90 shadow-[0_10px_40px_-10px_rgba(245,158,11,0.3)]' :
                   'bg-slate-900/90 shadow-[0_10px_40px_-10px_rgba(239,68,68,0.3)]'}`}>
@@ -63,7 +63,7 @@ const WorkerDetailToast: React.FC = () => {
                   {batchNotification.type === 'success' ? 'Completato' :
                     batchNotification.type === 'warning' ? 'Attenzione' : 'Errore'}
                 </h4>
-                <p className="text-[11px] text-slate-300 font-medium leading-relaxed whitespace-pre-line">
+                <p className="text-[11px] text-slate-300 font-medium leading-relaxed whitespace-pre-line max-h-[60vh] overflow-y-auto pr-1">
                   {batchNotification.msg}
                 </p>
               </div>

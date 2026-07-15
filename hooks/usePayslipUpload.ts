@@ -56,10 +56,11 @@ export function usePayslipUpload({
   const scanRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (batchNotification) {
-      // Errori/avvisi restano più a lungo: l'utente deve leggere la lista dei file falliti.
-      const ms = batchNotification.type === 'success' ? 4000 : 8000;
-      const timer = setTimeout(() => setBatchNotification(null), ms);
+    // Solo i "success" si auto-chiudono. Gli avvisi/errori (report anomalie OCR,
+    // file falliti) restano aperti finché l'utente non li chiude con la X: la lista
+    // può avere molte righe e va letta con calma, senza corse contro il timer.
+    if (batchNotification && batchNotification.type === 'success') {
+      const timer = setTimeout(() => setBatchNotification(null), 4000);
       return () => clearTimeout(timer);
     }
   }, [batchNotification]);
@@ -753,7 +754,9 @@ export function usePayslipUpload({
     // Feedback per-file a fine caricamento: errori (quali buste riprovare) e mismatch
     // mese/anno (quali buste verificare). I mismatch si mostrano anche sull'upload
     // singolo: un singolo file mal-nominato è proprio il caso tipico (vedi Mottola).
-    const MAX_LISTED = 6;
+    // Toast ora persistente e scrollabile → mostriamo l'intera lista di un lavoratore
+    // (fino a 30 righe); il troncamento resta solo per casi patologici.
+    const MAX_LISTED = 30;
     const formatList = (arr: string[]) => {
       const listed = arr.slice(0, MAX_LISTED).map(name => `•  ${name}`).join('\n');
       const extra = arr.length > MAX_LISTED ? `\n•  …e altri ${arr.length - MAX_LISTED}` : '';
