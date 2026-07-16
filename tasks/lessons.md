@@ -3,6 +3,37 @@
 > Pattern e errori da evitare nelle prossime sessioni.
 > Aggiornato dopo ogni correzione utente.
 
+## 2026-07-16 — Clampare il contenitore non rende responsive il contenuto; e una correzione di baseline va propagata alle conseguenze
+
+**Contesto:** tranche 1 mobile. Review Codex: due P1 su lavoro che avevo consegnato "a criteri
+soddisfatti". (a) AreaSwitch ≈406 px a 390: avevo CORRETTO io stesso la baseline del piano
+("le etichette sono sempre visibili, non solo sull'attiva") ma non ho mai ricalcolato la
+larghezza totale che ne discende — ho sistemato i target touch e dichiarato la pillola ok.
+(b) DynamicIsland: `maxWidth` conteneva il guscio, ma il menu interno (~415 px) veniva
+tagliato da `overflow:hidden` — contenere ≠ rendere responsive, l'avevo perfino scritto io
+nella valutazione ("CSS non basta per le viste dense") senza applicarlo al mio stesso fix.
+
+**Aggravante scoperta col fix:** il primo tentativo (`flex-wrap` incondizionato) avrebbe
+spezzato la riga del menu ANCHE a 420 px desktop: il contenuto chiede 369 px contro ~365
+disponibili — oggi la differenza è clippata invisibilmente, il wrap l'avrebbe resa visibile.
+Trovato solo MISURANDO il DOM reale (harness con i componenti veri in iframe a larghezza
+esatta), non dall'aritmetica delle classi. Fix giusto: wrap gated alla soglia del clamp
+(`max-[444px]:flex-wrap`, 444 = 420 + margine 24).
+
+**Lezione:**
+1. Quando correggi un'assunzione di baseline (qui: "etichetta solo sull'attiva" → "sempre
+   tutte"), rifai i conti di TUTTO ciò che vi poggiava, non solo del punto in discussione.
+2. Un clamp/contenimento sul contenitore va sempre verificato aprendo gli stati LARGHI del
+   contenuto (menu, pannelli, mode espansi): se dentro c'è una riga progettata al pixel,
+   contenerla = tagliarla.
+3. Le righe flex "giuste al pixel" possono già essere in overflow clippato di pochi px su
+   main: un `flex-wrap` aggiunto lì cambia il desktop. Gate del wrap alla larghezza in cui
+   serve davvero, e SEMPRE misura prima/dopo alla larghezza desktop di riferimento.
+4. Per misurare componenti dietro login senza credenziali: harness temporaneo che monta i
+   componenti REALI + iframe same-origin a larghezza esatta (le media query rispondono alla
+   larghezza dell'iframe). Chrome headless ignora `--window-size` sotto ~500 px: non è la
+   strada. Eliminare l'harness a fine giro.
+
 ## 2026-07-14 — Se il prodotto è desktop-only, investire la QA dove viene davvero usato
 
 **Contesto:** durante il restyling dell'Archivio avevo continuato a trattare la resa mobile come un

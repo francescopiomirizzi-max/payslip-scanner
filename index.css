@@ -185,6 +185,29 @@
 }
 
 /* ========================================
+   MOBILE / TOUCH (tranche 1 PWA)
+   Tailwind v4 copre già `dvh` (h-dvh, min-h-dvh) e le varianti
+   `pointer-coarse:`/`pointer-fine:`. Qui solo gli offset con safe area
+   iOS/Android per i widget fissi: env() vale 0 su desktop e nel browser
+   mobile normale → resa invariata, conta solo in PWA standalone.
+   ======================================== */
+@utility top-safe-6 {
+  top: max(1.5rem, env(safe-area-inset-top, 0px));
+}
+@utility bottom-safe-4 {
+  bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+}
+@utility left-safe-4 {
+  left: calc(1rem + env(safe-area-inset-left, 0px));
+}
+/* Larghezza massima utile per i widget fissi/flottanti: viewport meno margini (2rem)
+   meno gli inset LATERALI. Senza viewport-fit=cover gli inset valgono 0 (nessun effetto
+   oggi); se una tranche futura abilita edge-to-edge sono già sottratti. */
+@utility max-w-safe-viewport {
+  max-width: calc(100vw - 2rem - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px));
+}
+
+/* ========================================
    UTILITY GLOBALI
    ======================================== */
 

@@ -699,7 +699,7 @@ const DynamicIsland = ({ workers = [] }: { workers?: { id: string | number; nome
     const calcBtnClass = "relative overflow-hidden h-12 rounded-xl font-bold text-lg transition-[transform,background-color,color] active:scale-95 flex items-center justify-center shadow-sm";
 
     return (
-        <div ref={islandRef} className="fixed top-6 left-1/2 -translate-x-1/2 z-[9999] flex flex-col items-center pointer-events-none group/island print:hidden">
+        <div ref={islandRef} className="fixed top-safe-6 left-1/2 -translate-x-1/2 z-[9999] flex flex-col items-center pointer-events-none group/island print:hidden">
             {/* Glow blob esterno: ambient (idle, dropzone). In idle fa COLOR DRIFT aurora-style. */}
             <motion.div
                 className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full blur-[50px] -z-10 pointer-events-none"
@@ -745,6 +745,12 @@ const DynamicIsland = ({ workers = [] }: { workers?: { id: string | number; nome
                 }}
                 className={getIslandStyles(mode, isUploadExpanded, uploadState)}
                 style={{
+                    // Viewport-bound: Framer anima `width` come property inline, il max-width
+                    // CSS la clampa sui telefoni (ai/menu chiedono 500/420px). Su desktop
+                    // 100vw − 24px supera ogni width dei mode → nessun effetto. Gli inset
+                    // laterali contano solo con viewport-fit=cover (oggi 0), ma sottrarli
+                    // già ora evita regressioni se una tranche futura abilita edge-to-edge.
+                    maxWidth: 'calc(100vw - 24px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px))',
                     minHeight: (mode === 'idle' || mode === 'notify' || mode === 'ticker' || mode === 'quick_actions' || (mode === 'uploading' && !isUploadExpanded)) ? '40px' : 'auto',
                     cursor: mode === 'idle' ? 'pointer' : (mode === 'ai' || mode === 'ai_cloud') ? 'text' : 'default',
                     willChange: 'width, border-radius, transform',
@@ -1493,7 +1499,12 @@ const DynamicIsland = ({ workers = [] }: { workers?: { id: string | number; nome
                             variants={{ show: { transition: { staggerChildren: 0.08 } } }}
                             className="p-2 w-full flex items-center justify-between gap-2"
                         >
-                            <div className="flex items-center gap-2 pl-2">
+                            {/* Wrap SOLO quando il clamp del guscio morde (100vw−24 < 420 ⇔
+                                viewport < 444px): sul telefono i bottoni vanno a capo invece di
+                                essere tagliati dall'overflow:hidden; a ≥444px resa identica a oggi
+                                (il contenuto chiede ~369px: con wrap incondizionato andrebbe a capo
+                                anche a 420px, cambiando il desktop). */}
+                            <div className="flex items-center max-[444px]:flex-wrap gap-2 pl-2">
                                 {/* Tema — Sun: rotate-180 + scale + glow ambra · Moon: rotate-negative + scale + glow indigo */}
                                 <motion.button variants={{ hidden: { scale: 0, opacity: 0 }, show: { scale: 1, opacity: 1 } }} onClick={() => { window.dispatchEvent(new Event('island-theme')); setMode('idle'); }} className="group/btn p-2.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 rounded-xl transition-[transform,background-color,box-shadow] duration-300 hover:scale-110 text-amber-500 dark:text-amber-400 hover:shadow-[0_0_12px_rgba(245,158,11,0.5)] dark:hover:shadow-[0_0_12px_rgba(129,140,248,0.5)]" title="Tema Chiaro/Scuro">
                                     <Sun className="w-4 h-4 dark:hidden block group-hover/btn:rotate-180 group-hover/btn:scale-110 transition-transform duration-500 ease-out drop-shadow-[0_0_3px_currentColor]" />

@@ -25,7 +25,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ loginEmail, setLoginEmail, loginP
     }, [loginError]);
 
     return (
-        <div className="min-h-screen flex items-center justify-center relative overflow-hidden font-sans bg-slate-900">
+        <div className="min-h-dvh flex items-center justify-center relative overflow-hidden font-sans bg-slate-900">
             <div className="absolute inset-0 z-0 bg-slate-900">
                 <video
                     autoPlay

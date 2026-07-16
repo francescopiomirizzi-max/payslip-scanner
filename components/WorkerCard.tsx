@@ -522,8 +522,9 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
                     <div className="flex items-center gap-0.5 shrink-0">
                       <button
                         onClick={() => setIsFlipped(true)}
-                        className="p-2 rounded-xl opacity-0 group-hover:opacity-60 hover:!opacity-100 hover:bg-slate-100 dark:hover:bg-slate-700/60 transition-all duration-200 hover:rotate-180"
+                        className="p-2 pointer-coarse:p-[13px] rounded-xl opacity-0 group-hover:opacity-60 pointer-coarse:opacity-60 focus:outline-none focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-teal-500/50 hover:!opacity-100 hover:bg-slate-100 dark:hover:bg-slate-700/60 transition-all duration-200 hover:rotate-180"
                         title="Ruota card"
+                        aria-label="Ruota card"
                       >
                         <RotateCw className="w-[18px] h-[18px] text-slate-500 dark:text-slate-400 transition-transform duration-500" />
                       </button>
@@ -531,7 +532,10 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
                     <div className="relative" ref={actionsMenuRef}>
                       <button
                         onClick={(e) => { e.stopPropagation(); setIsActionsOpen(prev => !prev); }}
-                        className={`p-2 rounded-xl transition-all duration-200 ${isActionsOpen ? 'bg-slate-100 dark:bg-slate-700 opacity-100' : 'opacity-0 group-hover:opacity-60 hover:!opacity-100 hover:bg-slate-100 dark:hover:bg-slate-700/60'}`}
+                        aria-label="Azioni pratica"
+                        aria-expanded={isActionsOpen}
+                        aria-controls={isActionsOpen ? `worker-actions-${worker.id}` : undefined}
+                        className={`p-2 pointer-coarse:p-[13px] rounded-xl focus:outline-none focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-teal-500/50 transition-all duration-200 ${isActionsOpen ? 'bg-slate-100 dark:bg-slate-700 opacity-100' : 'opacity-0 group-hover:opacity-60 pointer-coarse:opacity-60 hover:!opacity-100 hover:bg-slate-100 dark:hover:bg-slate-700/60'}`}
                       >
                         <MoreHorizontal className="w-[18px] h-[18px] text-slate-500 dark:text-slate-400" />
                       </button>
@@ -539,6 +543,7 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
                       <AnimatePresence>
                         {isActionsOpen && (
                           <motion.div
+                            id={`worker-actions-${worker.id}`}
                             initial={{ opacity: 0, scale: 0.88, y: -8 }}
                             animate={{ opacity: 1, scale: 1, y: 0 }}
                             exit={{ opacity: 0, scale: 0.88, y: -8 }}

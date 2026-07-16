@@ -1,3 +1,148 @@
+# Todo — Sessione 16/07: PWA mobile — tranche 1 "shell mobile sicura"
+
+> **Contesto:** Fase 0 chiusa (valutazione GO CON MODIFICHE in
+> [valutazione-fable-piano-mobile-2026-07-16.md](valutazione-fable-piano-mobile-2026-07-16.md));
+> decisioni utente registrate nel piano §2: prima release = A+B con B solo **area Incidenza +
+> modalità viewer** · **niente shell offline** (installabile + online-only, nessun SW con cache) ·
+> utente mobile primario = **owner e viewer alla pari**.
+>
+> **STATO: TRANCHE 1 CHIUSA il 16/07/2026 su approvazione dell'utente.** GO tecnico Codex:
+> gate verdi, owner/login a 390 px, menu/AI, disclosure WorkerCard e smoke desktop sulle tre aree.
+> La prova con account viewer e dispositivo touch reali è accettata come collaudo utente e non è
+> stata riprodotta direttamente da Codex. Nessun commit/deploy eseguito; prossima coda: tranche 1b.
+
+## Piano (scope = valutazione, sezione "Prima tranche proposta")
+- [x] 1. Utility condivise in `index.css`: `dvh`, `safe-area-inset-*`, helper touch (`pointer: coarse`)
+      → verifica: classi presenti e usate solo nei file toccati dalla tranche.
+- [x] 2. `DynamicIsland` viewport-bound: larghezze clampate a `min(<attuale>, 100vw − margine)`
+      in TUTTI i mode (73-79 e 714) → verifica: mai più larga del viewport a 360/390/430 px,
+      larghezze desktop invariate a 1280 px.
+- [x] 3. `AreaSwitch`: target ≥44 px su touch senza cambiare la resa desktop; verifica che non
+      copra contenuti in fondo pagina.
+- [x] 4. `WorkerCard`: azioni oggi solo-hover sempre raggiungibili su coarse pointer
+      (desktop hover identico a oggi).
+- [x] 5. Passata di misura Login + Dashboard Incidenza a 390 px (inclusa modalità viewer):
+      fix puntuali SOLO se emergono overflow → nessun fix necessario (vedi Review).
+- [x] 6. Gate: `npx tsc --noEmit` · `npm test` · `npm run build` · diff review (dimostrare anche
+      ciò che NON è cambiato). **Verifica visiva finale all'utente** (390 px + desktop + viewer +
+      smoke Riposi/Indennità) → accettata e tranche chiusa il 16/07/2026.
+
+## Review (16/07)
+
+**Diff: 5 file, ~30 righe, zero dipendenze nuove, zero service worker, zero logica toccata.**
+
+1. **`index.css`** — nuova sezione "MOBILE / TOUCH": 3 utility safe-area (`top-safe-6`,
+   `bottom-safe-4`, `left-safe-4`). `dvh` e `pointer-coarse:` NON servivano come utility custom:
+   Tailwind v4 (installata 4.2.4) li ha nativi — verificato nel CSS buildato
+   (`min-height:100dvh` + blocco `@media(pointer:coarse)` con le 4 classi usate).
+   `hooks/useIsMobile.ts` NON creato: nessun call site lo richiedeva (solo CSS) — meno codice.
+2. **`DynamicIsland.tsx`** — (a) `maxWidth: calc(100vw − 24px)` nello style del motion.div:
+   Framer anima `width` come property inline, il max-width CSS la clampa → vale per TUTTI i mode
+   (ai 500, menu 420, ecc.) con una riga sola, niente touch alla tabella `getIslandWidth`;
+   (b) container `top-6` → `top-safe-6` (= `max(1.5rem, safe-area-top)`).
+3. **`AreaSwitch.tsx`** — bottone Home `pointer-coarse:w-11/h-11`, bottoni area
+   `pointer-coarse:min-h-11` (36→44 px solo su touch); container `bottom-safe-4 left-safe-4`.
+4. **`WorkerCard.tsx`** — `pointer-coarse:opacity-60` sui 2 tasti solo-hover (Ruota card + menu
+   •••); il retro della card ha già il tasto ritorno sempre visibile. Erano le UNICHE azioni
+   hover-gated della card (grep `opacity-0`/`group-hover` completo: il resto è decorativo).
+5. **`LoginPage.tsx`** — `min-h-screen` → `min-h-dvh` (unico file della tranche con h-screen).
+
+**Desktop: nessuna regressione osservata/misurata** (criterio "dimostrare ciò che NON è
+cambiato"; l'argomento per costruzione regge finché il viewport resta senza
+`viewport-fit=cover` — vedi rifiniture giro 2 per gli inset laterali):
+`env(safe-area-inset-*)` = 0 senza viewport-fit=cover → `top/bottom/left` identici al px;
+`max(1.5rem, 0)` = `top-6`; il clamp dell'Island a ≥1280 px non morde (soglia ~524 px);
+`@media(pointer:coarse)` non matcha mouse/trackpad; `100dvh` = `100vh` su desktop.
+Hover della card e larghezze Island desktop: intoccati nel diff. Confermato poi dalle
+misure DOM a 1276 px (giro Codex): shell 420, gruppo su una riga, groupW 369 come su main.
+
+**Passata di misura (punto 5):** baseline già misurata senza overflow globale a 390 px
+(Login/Mobile Upload in Fase 0; Dashboard con riga filtri a scorrimento il 14/07); la tranche
+non introduce NUOVE larghezze fisse (diff review) → nessun fix aggiuntivo necessario.
+La conferma visiva su viewport reali spetta all'utente (`feedback-verifica-video-utente`).
+
+**Gate:** tsc 0 errori · **344/344 test** · build ok (solo warning chunk-size preesistente) ·
+`git diff --check` pulito · chunk `MobileUploadPage-*.js` separato ancora presente (code-split ok).
+
+**Rischi residui e rollback:** il rischio "contenuto dei mode larghi compresso/tagliato dal
+clamp" segnalato qui in origine è stato RISOLTO nel giro Codex 1 (wrap del menu sotto 444 px,
+misurato 0/9 bottoni tagliati); il mode `ai` resta da rifinire esteticamente in Fase 3 ma il
+suo input è fluido. Rollback = revert dei 5 file (nessuna migrazione, nessun asset).
+Non ancora provato su iPhone/Android reali: è il collaudo utente previsto dal piano.
+
+**Checklist collaudo utente (da telefono o DevTools responsive):**
+- [x] 390 px: Dashboard Incidenza senza scroll orizzontale; Island menu/AI entro viewport;
+      visibilità e target touch di Ruota/••• verificati nel CSS prodotto e accettati dall'utente.
+- [x] 390 px: login centrato e senza overflow (`dvh`); prova Safari/tastiera accettata dall'utente.
+- [x] 390 px viewer: chiusura accettata dall'utente; geometria coperta dal caso owner peggiore,
+      senza riprodurre direttamente la sessione dell'account Vincenzo.
+- [x] Desktop 1280+: nessuna regressione osservata/misurata su Island, card e AreaSwitch.
+- [x] Smoke desktop Riposi + Indennità completato.
+
+## Review Codex giro 1 → 2 P1 + 1 P2, CORRETTI (16/07 sera)
+
+**Finding Codex (su gate verdi):** P1-A AreaSwitch ≈406 px a 390 (ultima area fuori viewport);
+P1-B il maxWidth conteneva il guscio ma il menu owner (~415 px) veniva tagliato da
+`overflow:hidden`; P2 target Ruota/••• sotto 44 px su touch + accessibilità.
+
+**Correzioni:**
+1. **AreaSwitch compatta** — sotto `sm` (640 px) l'etichetta resta SOLO sull'area attiva
+   (`max-sm:hidden` sulle inattive, `aria-label` sempre presente); in più guardia dura
+   `max-w-[calc(100vw-2rem)] overflow-x-auto no-scrollbar` + `shrink-0` sui bottoni
+   → right ≤ viewport garantito a qualsiasi larghezza/zoom.
+2. **Menu Island responsive** — `max-[444px]:flex-wrap` sulla riga bottoni: wrappa SOLO quando
+   il clamp morde (100vw−24 < 420 ⇔ viewport < 444). Il wrap incondizionato del primo tentativo
+   avrebbe spezzato la riga ANCHE a 420 px desktop (il contenuto chiede 369 px vs ~365
+   disponibili, oggi clippati invisibilmente): scoperto misurando, non a tavolino.
+3. **P2** — Ruota/•••: `pointer-coarse:p-[13px]` (13+18+13 = 44 px esatti su touch),
+   `focus:outline-none focus-visible:opacity-100 focus-visible:ring-2 ring-teal-500/50`
+   (idioma del progetto), `aria-label`; sul menu ••• anche `aria-haspopup` + `aria-expanded`.
+
+**Misure reali (harness temporaneo con i componenti VERI in iframe a larghezza esatta,
+Chrome; owner = caso peggiore: Home presente, label più lunga attiva, menu 8+1 bottoni):**
+
+| innerWidth | AreaSwitch owner (right) | viewer (right) | Island menu shell | bottoni tagliati |
+| --- | --- | --- | --- | --- |
+| 356 | 326 ✓ | 284 ✓ | 333, dentro ✓ | 0/9, 2 righe ✓ |
+| 386 | 326 ✓ | 284 ✓ | 363, dentro ✓ | 0/9, 2 righe ✓ |
+| 426 | 326 ✓ | 284 ✓ | 403, dentro ✓ | 0/9, 2 righe ✓ |
+| 1276 (desktop) | 474, label complete ✓ | — | **420 = attuale**, gruppo su UNA riga (top identici, `nowrap`), groupW 369 = main ✓ | 0/9 ✓ |
+
+`docScrollWidth = innerWidth` in tutti i casi (zero overflow di pagina). Menu viewer non
+misurabile senza le credenziali di Vincenzo, ma è un SOTTOINSIEME stretto dell'owner
+(3 bottoni in meno, niente Home nella pillola) → coperto a fortiori dal caso peggiore.
+Nota harness: Chrome headless ignorava --window-size (min ~500 px) → iframe same-origin a
+larghezza esatta dentro il Chrome reale; harness eliminato dopo l'uso (zero residui nel repo).
+
+**Gate post-fix:** tsc 0 · **344/344 test** · build ok · classi verificate nel CSS prodotto
+(`max-\[444px]`, `max-sm`, `padding:13px`, focus-visible, max-width guard).
+**Resta:** collaudo visivo utente (checklist sopra, invariata) + eventuale re-check Codex.
+Niente commit/deploy (coda deploy-unico confermata).
+
+## Rifiniture giro 2 (follow-up Codex non bloccanti, 16/07 — P1 confermati risolti)
+
+Review Codex 2: P1 risolti, gate e misure confermati; via libera al collaudo utente con tre
+rifiniture pre-commit, tutte applicate:
+
+1. **Inset laterali nei clamp** — `calc(100vw − margine)` non considerava
+   `safe-area-inset-left/right`: innocuo oggi (senza `viewport-fit=cover` valgono 0), sarebbe
+   diventato un buco se la tranche 1b abilitasse edge-to-edge. Ora: utility
+   `max-w-safe-viewport` in `index.css` (usata da AreaSwitch) e stessa sottrazione nel
+   `maxWidth` dell'Island. Comportamento odierno invariato per costruzione (env = 0).
+2. **WorkerCard = disclosure, non finto menu ARIA** — rimosso `aria-haspopup="menu"` (il
+   popup non implementa ruoli/tastiera del pattern menu); pattern disclosure corretto:
+   `aria-expanded` + `aria-controls` → `id` sul pannello (`worker-actions-<id>`), referenziato
+   solo quando il pannello è montato.
+3. **Riepilogo ridimensionato** (questo file): il claim "desktop invariato per costruzione /
+   pixel-identico" è stato riformulato in "nessuna regressione osservata/misurata" con il
+   perimetro esplicito dell'argomento (valido senza viewport-fit=cover); eliminato il rischio
+   residuo "menu compresso", risolto dal wrap.
+
+**Gate giro 2:** tsc 0 · **344/344 test** · build ok, rilanciati anche da Codex dopo le rifiniture.
+**Chiusura:** nessun altro blocco Codex; tranche 1 chiusa dall'utente il 16/07/2026.
+
+---
+
 # Todo — Sessione 14/07: restyling desktop Archivio Buste Paga
 
 > **Scope approvato:** restyling completo della pagina Archivio per uso esclusivamente desktop.
@@ -928,5 +1073,29 @@ cartacee (piano ratificato 11/07) → sblocca l'area Indennità.
   stato/coefficiente solo in memoria, mentre la migration 021 è dichiarata non applicata.
 - Limiti: audit statico + gate locali; nessun accesso al DB live/advisor Supabase, ai log Netlify,
   alle metriche real-user o ai flussi autenticati owner/viewer. Nessuna modifica funzionale eseguita.
+
+---
+
+# Piano — Web app mobile/PWA condiviso con Fable — 16/07/2026
+
+> **Obiettivo:** preparare una specifica verificabile da sottoporre a Fable (Claude Code) prima di
+> autorizzare l'implementazione della versione smartphone.
+
+- [x] 1. Verificare la baseline mobile attuale con audit statico e viewport 390×844.
+- [x] 2. Separare il prodotto in scanner, consultazione, modifica mirata ed editing analitico.
+- [x] 3. Definire fasi, dipendenze, criteri di accettazione, rischi privacy/cache e gate desktop.
+- [x] 4. Definire collaborazione: Fable implementer principale, Codex reviewer indipendente.
+- [ ] 5. Ricevere la valutazione di Fable senza avviare implementazione.
+- [ ] 6. Concordare con l'utente scope e prima tranche.
+
+**Piano completo:** [`tasks/piano-web-app-mobile-fable-2026-07-16.md`](piano-web-app-mobile-fable-2026-07-16.md)
+
+### Review — preparazione handoff
+
+- Documento verificato contro i file e le misure raccolte nell'audit mobile del 16/07.
+- Include gate distinti per scanner, consultazione, gestione mirata ed editing analitico.
+- La cache PWA è limitata allo shell pubblico: documenti, payload autenticati e funzioni restano esclusi.
+- La prima azione richiesta a Fable è una review architetturale senza implementazione.
+- `git diff --check` OK; nessun file applicativo modificato e nessun gate runtime necessario per questa tranche documentale.
 
 ---

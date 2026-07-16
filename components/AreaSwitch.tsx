@@ -42,14 +42,18 @@ const ORDER: AppArea[] = ['incidenza', 'riposi', 'indennita'];
  */
 const AreaSwitch: React.FC<AreaSwitchProps> = ({ area, onChange, onHome }) => {
     return (
-        <div className="fixed bottom-4 left-4 z-[60] print:hidden">
-            <div className="flex items-center gap-1 p-1.5 rounded-full bg-white/75 dark:bg-slate-800/75 backdrop-blur-2xl border border-white/60 dark:border-slate-700/60 shadow-xl shadow-slate-900/10">
+        <div className="fixed bottom-safe-4 left-safe-4 z-[60] print:hidden">
+            {/* max-w (viewport − margini − inset laterali) + scroll interno = garanzia
+                right ≤ area utile a qualsiasi larghezza/zoom, anche edge-to-edge;
+                sotto `sm` le etichette delle aree non attive spariscono (variante compatta). */}
+            <div className="flex items-center gap-1 p-1.5 rounded-full bg-white/75 dark:bg-slate-800/75 backdrop-blur-2xl border border-white/60 dark:border-slate-700/60 shadow-xl shadow-slate-900/10 max-w-safe-viewport overflow-x-auto no-scrollbar">
                 {onHome && (
                     <button
                         type="button"
                         onClick={onHome}
                         title="Cambia organizzazione"
-                        className="flex items-center justify-center w-9 h-9 rounded-full text-slate-500 dark:text-slate-400 hover:text-teal-600 dark:hover:text-teal-400 hover:bg-slate-100 dark:hover:bg-slate-700/60 transition-colors mr-0.5"
+                        aria-label="Cambia organizzazione"
+                        className="flex items-center justify-center shrink-0 w-9 h-9 pointer-coarse:w-11 pointer-coarse:h-11 rounded-full text-slate-500 dark:text-slate-400 hover:text-teal-600 dark:hover:text-teal-400 hover:bg-slate-100 dark:hover:bg-slate-700/60 transition-colors mr-0.5"
                     >
                         <Building2 className="w-4 h-4" />
                     </button>
@@ -63,7 +67,8 @@ const AreaSwitch: React.FC<AreaSwitchProps> = ({ area, onChange, onHome }) => {
                             type="button"
                             onClick={() => onChange(id)}
                             aria-pressed={isActive}
-                            className={`relative flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold transition-colors ${
+                            aria-label={label}
+                            className={`relative flex items-center shrink-0 gap-2 px-4 py-2 pointer-coarse:min-h-11 rounded-full text-sm font-bold transition-colors ${
                                 isActive ? 'text-white' : `text-slate-500 dark:text-slate-400 ${hoverText}`
                             }`}
                         >
@@ -75,7 +80,7 @@ const AreaSwitch: React.FC<AreaSwitchProps> = ({ area, onChange, onHome }) => {
                                 />
                             )}
                             <Icon className="relative w-4 h-4" />
-                            <span className="relative">{label}</span>
+                            <span className={`relative ${isActive ? '' : 'max-sm:hidden'}`}>{label}</span>
                         </button>
                     );
                 })}
