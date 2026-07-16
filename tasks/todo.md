@@ -1099,3 +1099,58 @@ cartacee (piano ratificato 11/07) → sblocca l'area Indennità.
 - `git diff --check` OK; nessun file applicativo modificato e nessun gate runtime necessario per questa tranche documentale.
 
 ---
+
+# Todo — Sessione 16/07 (sera): PWA mobile — tranche 1b "manifest e install"
+
+> **Contesto:** tranche 1 chiusa e committata (`b3dfde3`, locale). Scope 1b dal piano §Fase 1:
+> normalizzare manifest/icone, decidere l'install dall'entry QR, nessun service worker
+> (default confermato, nessun requisito emerso).
+>
+> **Stato ricognizione (fatti misurati):**
+> - `manifest.json`: icone 192/512 con `purpose: "any maskable"` COMBINATO; le PNG sono
+>   trasparenti con simbolo a tutto canvas (bbox orizzontale 0→512, zero safe-zone) → come
+>   maskable Android ritaglia il simbolo e il fondo è indefinito.
+> - `apple-touch-icon.png` (180×180): 74% pixel trasparenti → iOS compone su NERO, il navy
+>   dell'anello quasi sparisce. Va rigenerata opaca (lezione 14/07: alpha interni a 255).
+> - Nessuna gestione `beforeinstallprompt` nel codice (grep completo).
+> - `start_url: "./"` con manifest in root → risolve su `/` (login/app completa).
+
+## Piano (approvato dall'utente il 16/07 sera; decisioni: icona = logo BIANCO su navy #1E3A5F,
+## install da QR = accettare documentando)
+
+- [x] 1. **Icone maskable dedicate** generate da `icon-512.png`: `icon-maskable-512.png` +
+      `icon-maskable-192.png`, sfondo pieno navy `#1E3A5F`, simbolo BIANCO centrato nella
+      safe-zone (cerchio Ø 80%). → verificato: script numerico (mode RGB = 0 trasparenze;
+      peggior angolo del bbox 200.3 vs limite 204.8 a 512px, 75.5/76.8 a 192) + anteprima
+      composta su bianco/chiaro/scuro con maschera circolare e angoli iOS (lezione 14/07).
+- [x] 2. **`apple-touch-icon.png` rigenerata opaca** (180×180, stesso design; prima 74%
+      trasparente → iOS componeva su nero). → verificato: stesso script (71.0/72.0).
+- [x] 3. **Manifest normalizzato**: `purpose` separati (`any` = PNG trasparenti esistenti,
+      `maskable` = nuove), aggiunti `id: "/"`, `lang: "it"`, `description`; `background_color`
+      invariato `#f0fdfa`. → JSON valido, riletto da `dist/` dopo il build.
+- [x] 4. **Install da entry QR**: ACCETTATA DOCUMENTANDO (decisione utente, 0 righe) —
+      motivazione registrata nel piano §Fase 1 tranche 1b.
+- [x] 5. **Gate**: tsc pulito · vitest 344/344 · build ok con icone+manifest in `dist/` ·
+      review Codex indipendente = **GO con follow-up, nessun P0/P1** (2 P2: collaudo standalone
+      posticiato per scelta; registro sessione da aggiornare → fatto con questo edit).
+- [ ] 6. **Collaudo standalone reale** (nome/icona/colori all'avvio installato): richiede HTTPS
+      → POSTICIPATO al prossimo deploy batched (follow-up Codex, resta il criterio di chiusura
+      finale della Fase 1 lato utente).
+
+**Fuori scope (rispettato):** service worker (anche pass-through), modifiche a viste/CSS,
+`viewport-fit=cover`. Diff applicativo = solo `public/` (manifest + 3 PNG): zero TS/TSX toccati.
+
+## Review tranche 1b (16/07 sera)
+
+**Diff: 1 file di testo (`public/manifest.json`) + 3 PNG rigenerati/nuovi in `public/`.
+Zero codice applicativo, zero dipendenze, zero service worker.**
+
+- Icone generate con script deterministico (PIL) da `icon-512.png`: versione bianca del
+  simbolo = riempimento bianco sull'alpha originale (stesso principio del pattern CSS
+  `brightness-0 invert` già usato in-app per il logo su fondo scuro).
+- Verifica anti-lezione-14/07: nessun pixel semitrasparente interno (canvas RGB opaco),
+  resa controllata su tre fondi + maschera circolare Android + angoli arrotondati iOS.
+- `index.html` invariato: già puntava a `/apple-touch-icon.png` e `/manifest.json`; le favicon
+  browser restano le trasparenti (corretto: lì il fondo lo dà la tab del browser).
+- Rischio residuo: resa reale su launcher iOS/Android verificabile solo dopo deploy HTTPS
+  (item 6). Rollback: revert di 4 file in `public/`.

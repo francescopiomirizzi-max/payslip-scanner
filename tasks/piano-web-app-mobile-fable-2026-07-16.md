@@ -132,12 +132,19 @@ gate e collaudo Codex verdi; chiusura approvata dall'utente. Vedi `tasks/todo.md
 - [x] Conservare lazy loading e code splitting dell'entrypoint mobile (chunk `MobileUploadPage-*`
   verificato nel build).
 
-**Tranche 1b — manifest e install:**
+**Tranche 1b — manifest e install:** *implementata 16/07/2026, in attesa di review Codex + collaudo.*
 
-- [ ] Normalizzare manifest e icone, verificando separatamente resa `any` e `maskable`.
-- [ ] Decidere l'install dall'entry QR (`?mobile=true` con `start_url: "./"`): sopprimere, scope
-  dedicato o accettare documentando.
-- [ ] Eventuale SW pass-through senza cache SOLO se emerge un requisito concreto (default: nessun SW).
+- [x] Normalizzare manifest e icone, verificando separatamente resa `any` e `maskable`:
+  split `purpose` (le PNG trasparenti esistenti restano `any`; nuove `icon-maskable-192/512.png`
+  = simbolo BIANCO su navy `#1E3A5F` centrato nella safe-zone Ø80%, decisione utente 16/07);
+  `apple-touch-icon.png` rigenerata OPACA (era 74% trasparente → iOS componeva su nero);
+  aggiunti `id`, `lang`, `description`. Verifica numerica: 0 trasparenze, bbox dentro safe-zone.
+- [x] Decidere l'install dall'entry QR (`?mobile=true` con `start_url: "./"`): **ACCETTATA
+  documentando (decisione utente 16/07, zero codice)** — owner e viewer sono alla pari (§2.3):
+  chi installa dalla pagina QR ottiene l'app completa che apre al login, comportamento corretto
+  per la release 1; l'install non interrompe la sessione di upload in corso.
+- [x] Eventuale SW pass-through senza cache SOLO se emerge un requisito concreto (default: nessun SW)
+  → nessun requisito emerso: **nessun service worker**, Cache Storage vuota per costruzione.
 
 **Criteri di accettazione:**
 
