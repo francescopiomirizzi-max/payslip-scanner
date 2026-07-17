@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useCallback, useRef, ReactNode } from 'react';
 
 // ✨ FIX: Aggiunto 'quick_actions'
 export type IslandMode = 'idle' | 'notification' | 'stats' | 'calc_history' | 'uploading' | 'quick_actions';
@@ -85,7 +85,16 @@ export const IslandProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   }, []);
 
   // --- MOTORE DEI CARICAMENTI ---
+  // Timer del completamento: se un nuovo upload parte prima che scatti (retry
+  // rapido dal telefono), va annullato — altrimenti riporterebbe l'isola a idle
+  // e mostrerebbe l'esito del giro PRECEDENTE a upload nuovo in corso.
+  const finishTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const startUpload = useCallback((type: 'single' | 'batch' | 'mobile' | 'folder', total: number) => {
+    if (finishTimer.current) {
+      clearTimeout(finishTimer.current);
+      finishTimer.current = null;
+    }
     setUploadState({ isUploading: true, isFinishing: false, isError: false, type, progress: 0, total, minimized: false });
     setMode('uploading');
   }, []);
@@ -109,7 +118,8 @@ export const IslandProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     // Restore implicito così il completion è visibile sull'isola principale (non sulla pill).
     setUploadState(prev => ({ ...prev, isFinishing: true, isError, progress: prev.total, minimized: false }));
 
-    setTimeout(() => {
+    finishTimer.current = setTimeout(() => {
+      finishTimer.current = null;
       setUploadState(prev => ({ ...prev, isUploading: false, isFinishing: false, minimized: false }));
       setMode('idle');
 

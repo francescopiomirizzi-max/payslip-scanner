@@ -1154,3 +1154,99 @@ Zero codice applicativo, zero dipendenze, zero service worker.**
   browser restano le trasparenti (corretto: lì il fondo lo dà la tab del browser).
 - Rischio residuo: resa reale su launcher iOS/Android verificabile solo dopo deploy HTTPS
   (item 6). Rollback: revert di 4 file in `public/`.
+
+---
+
+# Todo — Sessione 16/07 (notte): PWA mobile — Fase 2 "consolidamento scanner"
+
+> **Contesto:** tranche 1 (`b3dfde3`) e 1b (`3ce8d0d`) chiuse, locali. Scope Fase 2 dal piano:
+> rendere production-ready il flusso QR→telefono→upload. Vincoli architetturali da memoria
+> `qr-scanner-architecture`: NON tornare al polling, payload via INSERT su `scan_results`,
+> mode deciso dal telefono, fetch con AbortController+timeout, RLS strict intoccabile.
+>
+> **Ricognizione (fatti dal codice, `pages/MobileUploadPage.tsx` 681 righe):**
+> - GIÀ a posto: compressione con cap documentati (1100×1500 q0.55; stitch max 1100×4200),
+>   wake lock con avviso se non supportato, timeout client 55s + 1 retry di rete, batch id
+>   collision-safe, fine-batch onesto (0 successi ≠ "completato"), object URL con revoke.
+> - BUCHI vs criteri Fase 2:
+>   (a) fascicoli FALLITI CANCELLATI a fine giro (`setDocuments([])` a riga ~456/468/474
+>       anche con failCount>0) → l'utente perde le foto e deve rifarle;
+>   (b) nessuno stato per-fascicolo: impossibile sapere QUALI sono riusciti/falliti/da inviare;
+>   (c) sessione assente/invalida/scaduta/chiusa: nessuna schermata esplicita (con `!sessionId`
+>       il tasto Invia semplicemente non fa nulla; su sessione morta errori criptici per file);
+>   (d) nessun indicatore online/offline prima dell'invio;
+>   (e) touch target sotto 44px: cestino 32×32, "aggiungi pagina" ~15px di altezza;
+>   (f) `min-h-screen` (non dvh) e bottom bar fissa senza padding safe-area.
+> - Lato PC (`QRScannerModal`): status gestiti `waiting/processing/file_done/all_done/error`;
+>   alla chiusura la riga viene CANCELLATA; TTL 2h; RLS UPDATE anon `USING expires_at>now()`.
+
+## Piano (approvato; ESEGUITO col percorso reale sotto — lo scope è cresciuto su
+## evidenza: 2 decisioni utente in corsa per RLS/migration)
+
+- [x] 1. **Stato sessione esplicito** (`checking → valid | dead`): probe al mount via RPC
+      `is_active_scan_session` (read-only, zero eventi Realtime); `!sessionId` → schermata
+      subito. Sentinella a metà giro = ritorno FOUND della RPC `touch_scan_session` +
+      classificazione 42501 sull'INSERT. *(Il design originale UPDATE+count è stato
+      SCARTATO in review: vedi Review, P0 RLS.)*
+- [x] 2. **Stato per-fascicolo** (`ready | sending | sent | failed`+`errorMsg`): badge per
+      riga, retry naturale, `setDocuments([])` eliminato dai percorsi con falliti; il timer
+      del successo rimuove SOLO i `sent`. In più (review): handshake `all_done` verificato
+      con ack + stato `handshakePending {sent,failed}` e bottone "Conferma invio al PC".
+- [x] 3. **Online/offline**: listener + banner ambra `role=status` + Invia disabilitato.
+- [x] 4. **Touch target ≥44px su coarse**: cestino 44px, "aggiungi pagina" `min-h-11`
+      (niente margini negativi: overlap con l'input), input titolo `min-h-11` +
+      `focus-visible:outline`.
+- [x] 5. **dvh + safe-area**: `min-h-dvh` (pagina, readonly, schermata dead) + utility
+      `pb-safe-6` sulla bottom bar.
+- [x] 6. **Compressione**: nessun cambio, cap già documentati (1100×1500 q0.55; stitch
+      1100×4200) — criterio già soddisfatto; stitch però ora revoca gli object URL in
+      `finally` e "aggiungi pagina" è nascosto sui fascicoli PDF (stitching Image-only).
+- [x] 7. **Gate**: tsc pulito · vitest 344/344 · build ok, ad OGNI giro (6 giri).
+      Review Codex: 6 giri, chiusa dall'utente al 6° («basta chiedere a codex»).
+- [ ] 8. **Collaudo utente su telefono reale** (fotocamera posteriore, galleria, PDF,
+      batch, retry, sessione scaduta) — DA FARE (deploy o LAN).
+
+## Review Fase 2 (16-17/07, notte)
+
+**Diff finale: `MobileUploadPage.tsx` + `QRScannerModal.tsx` + `IslandContext.tsx` +
+`index.css` (1 utility) + migrations `027` e `028` (APPLICATE al DB live, decisione utente).**
+
+**Il percorso (6 giri di review, 2 scoperte grosse):**
+1. Giro 1-2 — Codex boccia il probe UPDATE+count (P0): "serve la SELECT policy". La mia
+   verifica EMPIRICA sul DB live (riga di test + client anon reale) gli dà ragione e
+   scopre di più: **il canale di stato telefono→PC era GIÀ ROTTO in produzione** da
+   migration 012 (30/05) — UPDATE anon = 0 righe silenziose (204). Mascherato perché: i
+   payload viaggiano su INSERT (funzionante) e un telefono loggato come owner passa dalla
+   SELECT owner-scoped. Regola Postgres: un UPDATE con WHERE legge le righe → serve ANCHE
+   visibilità SELECT oltre alla USING dell'UPDATE.
+2. Migration **027** (policy SELECT anon gated da `is_active_scan_session(id)`) applicata
+   e SUBITO superata: giro 3 Codex — la USING per-riga non prova la conoscenza dell'id →
+   **enumerazione di tutte le sessioni vive** + stessa falla nella policy della 010 sui
+   payload (`scan_results`). Migration **028**: RPC `touch_scan_session` SECURITY DEFINER
+   (status/mode whitelistati, p_id esplicito, RETURN FOUND = sentinella), revoca
+   SELECT/UPDATE anon su scan_sessions (chiude anche il blanket-update della 008), DROP
+   della SELECT anon sui payload (js v2 = INSERT minimal). Test empirico 9/9 post-028.
+3. Giri 4-6 — protocollo terminale PC: dedup all_done (guard con evidenza batch),
+   serializzazione dei due canali Realtime (coda promise), attesa bounded del conteggio
+   `sent` dichiarato dal telefono + riconciliazione dalla tabella al timeout, snapshot
+   spostato DOPO la subscribe (duplicati deduplicati invece di buchi), finishTimer
+   dell'Island annullato da startUpload, startUpload immediato (l'animazione resta
+   ritardata), CAS sui reset (`.eq('status', <terminale>)`), guard `isClosing` dedicato
+   in triggerClose (prima watchdog/X non chiudevano MAI a upload in corso — bug
+   pre-esistente).
+
+**Limiti accettati (documentati, non fix):** doppio all_done nella finestra 2s pre-reset
+(richiede commit+risposta persa+tap conferma <2s; esito = doppio toast, CAS protegge il
+DB); X nascosta durante l'upload (design: la superficie di controllo è l'Island).
+
+**Bug pre-esistenti risolti di passaggio:** canale stato anon rotto (012), blanket-update
+anon possibile (008), enumerazione payload anon (010), watchdog/X che non chiudevano il
+modal a upload in corso, Island inchiodata su batch <500ms, leak object URL nello stitch
+fallito, "aggiungi pagina" su fascicoli PDF (stitch impossibile).
+
+**Fuori scope rispettato:** niente persistenza offline, niente polling, niente service
+worker. QRScannerModal/RLS SONO stati toccati — scope ampliato con decisione utente
+esplicita (fix RLS) e su requisito del piano (retry ⇒ esito non terminale lato PC).
+
+**Rischio residuo:** collaudo su telefono reale mancante (item 8); rollback codice =
+revert 4 file; rollback DB = ripristino policy 008/010 (sconsigliato: riaprirebbe i buchi).

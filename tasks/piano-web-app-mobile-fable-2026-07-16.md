@@ -163,14 +163,26 @@ gate e collaudo Codex verdi; chiusura approvata dall'utente. Vedi `tasks/todo.md
 
 **Obiettivo:** trasformare il flusso già valido nella prima feature mobile production-ready.
 
-- [ ] Gestire session id assente, invalido, scaduto o già chiuso con schermata esplicita.
-- [ ] Verificare fotocamera posteriore, galleria, PDF singolo e batch su iOS Safari e Android Chrome.
-- [ ] Usare safe area e viewport dinamico per header e action bar fissa.
-- [ ] Portare ogni controllo interattivo essenziale ad almeno 44 × 44 px.
-- [ ] Mostrare stato online/offline prima dell'invio e preservare la selezione se la rete cade.
-- [ ] Definire retry per singolo fascicolo, evitando di cancellare quelli riusciti o quelli ancora da inviare.
-- [ ] Comprimere immagini con limite dimensionale/memoria documentato e testare file grandi.
-- [ ] Non introdurre persistenza offline dei cedolini senza una review privacy/security dedicata.
+*Implementata 16-17/07/2026 (6 giri review Codex; dettagli e percorso in `tasks/todo.md`).
+Durante la review è emerso e stato risolto un bug di PRODUZIONE: canale di stato
+telefono→PC rotto per i telefoni anon dalla migration 012 → migrations 027+028 applicate
+(canale via RPC `touch_scan_session` whitelistata + hardening enumerazione sessioni/payload).*
+
+- [x] Gestire session id assente, invalido, scaduto o già chiuso con schermata esplicita
+  (probe RPC al mount + sentinella FOUND per fascicolo + classificazione 42501).
+- [ ] Verificare fotocamera posteriore, galleria, PDF singolo e batch su iOS Safari e Android Chrome
+  → collaudo utente su dispositivo reale, DA FARE (deploy o LAN).
+- [x] Usare safe area e viewport dinamico per header e action bar fissa (`min-h-dvh` + `pb-safe-6`).
+- [x] Portare ogni controllo interattivo essenziale ad almeno 44 × 44 px (coarse-only).
+- [x] Mostrare stato online/offline prima dell'invio e preservare la selezione se la rete cade
+  (banner + Invia disabilitato; i falliti restano SEMPRE in lista con errore e retry).
+- [x] Definire retry per singolo fascicolo, evitando di cancellare quelli riusciti o quelli ancora
+  da inviare (stato per-fascicolo ready/sending/sent/failed + handshake all_done verificato
+  con conferma dedicata; lato PC esito `error` retryable NON chiude più la sessione).
+- [x] Comprimere immagini con limite dimensionale/memoria documentato (già a norma: 1100×1500
+  q0.55, stitch 1100×4200; aggiunto revoke in `finally` + guardia PDF) — test file grandi nel collaudo.
+- [x] Non introdurre persistenza offline dei cedolini senza una review privacy/security dedicata
+  (rispettato: nessuna persistenza, nessun service worker).
 
 **Criteri di accettazione:**
 

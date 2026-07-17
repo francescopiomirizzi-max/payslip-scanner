@@ -3,6 +3,37 @@
 > Pattern e errori da evitare nelle prossime sessioni.
 > Aggiornato dopo ogni correzione utente.
 
+## 2026-07-17 — RLS anon: tre regole pagate care (Fase 2 scanner mobile, 6 giri di review)
+
+**Contesto:** consolidamento scanner QR. Il mio probe "sessione viva" via UPDATE+count è
+stato bocciato in review; la verifica empirica sul DB live ha dato ragione al reviewer e
+scoperto che il canale di stato telefono→PC era GIÀ rotto in produzione da un mese e
+mezzo. Il primo fix (policy SELECT anon, migration 027) era a sua volta una falla di
+enumerazione, superata dalla 028 (RPC whitelistata + revoca superficie diretta).
+
+**Le tre regole:**
+1. **Un UPDATE con WHERE sotto RLS richiede ANCHE visibilità SELECT** sulle righe, oltre
+   alla USING della policy UPDATE (il WHERE "legge"). Senza, l'update tocca 0 righe IN
+   SILENZIO (PostgREST 204, error null). Corollario: droppare una policy SELECT
+   permissiva (qui la 012) può rompere gli UPDATE di un altro ruolo senza alcun errore.
+2. **Una policy USING con `funzione(id)` è valutata PER RIGA: non prova che il chiamante
+   conosca l'id** → SELECT senza filtro = enumerazione completa (qui: tutte le sessioni
+   vive e, peggio, i payload dei cedolini via la gemella della 010). Il canale giusto per
+   un client anonimo che "conosce un segreto" è una **RPC SECURITY DEFINER con il segreto
+   come parametro esplicito e transizioni/campi whitelistati** — mai una policy per-riga.
+3. **"La feature funziona in prod" non prova che OGNI canale funzioni.** Qui il canale
+   rotto era mascherato da due fallback involontari (payload via INSERT funzionante +
+   telefono loggato come owner che passa dalla SELECT owner-scoped). Prima di costruire
+   sopra un canale esistente, testarlo ISOLATO con il ruolo reale (client anon vero
+   contro il DB live, verifica server-side che la scrittura sia atterrata) — è lo stesso
+   principio dell'autovalidazione dei parser (11/07), applicato all'infrastruttura.
+
+**Bonus di metodo:** la review avversaria (Codex) ha reso 2 P0 veri su 2 — ma al 6° giro
+proponeva ancora hardening da sistema distribuito su un tool interno single-user: i
+finding si INCORPORANO finché violano i criteri di accettazione, si CONTESTANO con
+motivazione quando il costo supera il rischio (doppio toast in una finestra di 2s ≠ P1).
+L'utente ha chiuso il loop esplicitamente («basta chiedere a codex»).
+
 ## 2026-07-16 — Clampare il contenitore non rende responsive il contenuto; e una correzione di baseline va propagata alle conseguenze
 
 **Contesto:** tranche 1 mobile. Review Codex: due P1 su lavoro che avevo consegnato "a criteri

@@ -54,6 +54,12 @@ const QRScannerModal: React.FC<QRScannerModalProps> = ({
     const latestOnClose = useRef(onClose);
     const inactivityTimer = useRef<NodeJS.Timeout | null>(null);
     const watchdogTimer = useRef<NodeJS.Timeout | null>(null);
+    // Timer del reset post-esito (all_done/errore retryable): va annullato se il
+    // telefono riparte prima che scatti, o riscriverebbe 'waiting' sopra il nuovo
+    // 'processing' e azzererebbe i contatori del giro in corso.
+    const pendingResetTimer = useRef<NodeJS.Timeout | null>(null);
+    // Guard di chiusura (vedi triggerClose): separato dai flag visivi.
+    const isClosing = useRef(false);
     const lastProgressAt = useRef<number>(0);
     const [currentTime, setCurrentTime] = useState('');
 
@@ -112,9 +118,15 @@ const QRScannerModal: React.FC<QRScannerModalProps> = ({
     };
 
     const triggerClose = async () => {
-        if (isPoweringOff || isDropping) return;
+        // Guard dedicato: prima il check era su isPoweringOff/isDropping, ma
+        // isDropping è anche il flag VISIVO acceso durante l'upload → il watchdog
+        // e la X non riuscivano a chiudere il modale a upload in corso (no-op
+        // silenzioso, sessione lasciata aperta).
+        if (isClosing.current) return;
+        isClosing.current = true;
         if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
         if (watchdogTimer.current) clearTimeout(watchdogTimer.current);
+        if (pendingResetTimer.current) clearTimeout(pendingResetTimer.current);
 
         if (globalSessionId && !IS_DEMO) await supabase.from('scan_sessions').delete().eq('id', globalSessionId);
 
@@ -131,6 +143,7 @@ const QRScannerModal: React.FC<QRScannerModalProps> = ({
                 setStatus('waiting');
                 setScannedCount(0);
                 setSyncProgress({ current: 0, total: 0 });
+                isClosing.current = false;
             }, 300);
         }, 200);
     };
@@ -152,6 +165,7 @@ const QRScannerModal: React.FC<QRScannerModalProps> = ({
 
     useEffect(() => {
         if (!isOpen) return;
+        isClosing.current = false;
 
         if (!globalSessionId) {
             hasStartedUpload.current = false;
@@ -208,6 +222,36 @@ const QRScannerModal: React.FC<QRScannerModalProps> = ({
             }, 800);
         };
 
+        // Sessione persistente: dopo aver mostrato l'esito (Fatto/errore retryable),
+        // torniamo in waiting SENZA chiudere e SENZA cancellare la riga DB. L'utente
+        // può scattare altre buste dal telefono e inviarle sullo stesso QR. La
+        // chiusura/cleanup avviene solo su X esplicito o expires_at.
+        const scheduleBatchReset = (fromStatus: 'all_done' | 'error', delayMs: number) => {
+            pendingResetTimer.current = setTimeout(async () => {
+                pendingResetTimer.current = null;
+                if (!isActive) return;
+                globalProcessedIds.clear();
+                hasStartedUpload.current = false;
+                setScannedCount(0);
+                setSyncProgress({ current: 0, total: 0 });
+                setIsScreenOff(false);
+                setIsDropping(false);
+                setStatus('waiting');
+                lastProgressAt.current = 0;
+                resetInactivityTimer();
+                try {
+                    // Compare-and-set: se il telefono ha già riscritto 'processing'
+                    // (retry partito dopo l'ingresso in questo callback), NON
+                    // sovrascrivere il nuovo giro con 'waiting'.
+                    await supabase
+                        .from('scan_sessions')
+                        .update({ status: 'waiting', data: null })
+                        .eq('id', currentSession)
+                        .eq('status', fromStatus);
+                } catch (e) { console.error('QRScanner: reset sessione fallito', e); }
+            }, delayMs);
+        };
+
         const onSessionUpdate = (session: any) => {
             if (!session || !isActive) return;
 
@@ -218,50 +262,110 @@ const QRScannerModal: React.FC<QRScannerModalProps> = ({
             }
 
             if (session.status === 'all_done') {
-                setStatus('all_done');
-                playFinalSuccessChime();
-                finishUpload(globalProcessedIds.size, 0, 'mobile');
-                // Sessione persistente: dopo aver mostrato "Fatto", torniamo in waiting
-                // SENZA chiudere e SENZA cancellare la riga DB. L'utente può scattare
-                // altre buste paga dal telefono e inviarle subito, sullo stesso QR.
-                // La chiusura/cleanup avviene solo su X esplicito o expires_at.
-                setTimeout(async () => {
+                // Dedup: un all_done SENZA alcuna evidenza di batch (né processing
+                // visto, né risultati arrivati) è un duplicato post-reset (retry
+                // della sola conferma quando questo PC ha già finalizzato) o un
+                // evento stale: ignorarlo evita "Scansione Fallita" fantasma.
+                // La condizione sui risultati copre il fail-open del telefono: se
+                // le RPC 'processing' non sono atterrate ma gli INSERT sì, il
+                // batch è reale e va finalizzato.
+                if (!hasStartedUpload.current && globalProcessedIds.size === 0) return;
+
+                // Esito parziale onesto: il telefono passa in data.failed i fascicoli
+                // NON consegnati (restano sul telefono per il retry, stesso QR) e in
+                // data.sent quanti ne ha consegnati DAVVERO in questo giro.
+                let failedOnPhone = 0;
+                let sentOnPhone: number | null = null;
+                try {
+                    const p = typeof session.data === 'string' ? JSON.parse(session.data) : session.data;
+                    if (p?.failed) failedOnPhone = p.failed;
+                    if (typeof p?.sent === 'number' && p.sent > 0) sentOnPhone = p.sent;
+                } catch { /* data assente o malformato: esito pieno */ }
+
+                const finalizeAllDone = () => {
                     if (!isActive) return;
-                    globalProcessedIds.clear();
-                    hasStartedUpload.current = false;
-                    setScannedCount(0);
-                    setSyncProgress({ current: 0, total: 0 });
-                    setIsScreenOff(false);
-                    setIsDropping(false);
-                    setStatus('waiting');
-                    lastProgressAt.current = 0;
-                    resetInactivityTimer();
-                    try {
-                        await supabase
-                            .from('scan_sessions')
-                            .update({ status: 'waiting', data: null })
-                            .eq('id', currentSession);
-                    } catch (e) { console.error('QRScanner: reset sessione fallito', e); }
-                }, 2000);
+                    setStatus('all_done');
+                    playFinalSuccessChime();
+                    finishUpload(globalProcessedIds.size, failedOnPhone, 'mobile',
+                        failedOnPhone > 0 ? `${failedOnPhone} fascicoli falliti sul telefono: riprovali da lì, la sessione resta aperta.` : undefined);
+                    scheduleBatchReset('all_done', 2000);
+                };
+
+                // Al timeout NON si finalizza alla cieca: si riconcilia dalla tabella
+                // (stesso pattern dello snapshot iniziale; onPhoneFileReady deduplica
+                // per _batchId), così un INSERT perso dal canale non perde il payload.
+                const finalizeWithReconcile = async () => {
+                    if (!isActive) return;
+                    if (sentOnPhone !== null && globalProcessedIds.size < sentOnPhone) {
+                        try {
+                            const { data: rows } = await supabase
+                                .from('scan_results').select('*')
+                                .eq('session_id', currentSession)
+                                .order('id', { ascending: true });
+                            rows?.forEach((row: any) => onPhoneFileReady(row.payload, scanModeRef.current));
+                        } catch (e) { console.error('QRScanner: riconciliazione risultati fallita', e); }
+                    }
+                    finalizeAllDone();
+                };
+
+                // I risultati viaggiano su un canale Realtime diverso: se l'all_done
+                // sorpassa gli ultimi INSERT ancora in elaborazione, aspetta (bounded)
+                // che il conteggio dichiarato dal telefono sia raggiunto.
+                if (sentOnPhone !== null && globalProcessedIds.size < sentOnPhone) {
+                    const t0 = Date.now();
+                    const waitForResults = () => {
+                        if (!isActive) return;
+                        if (globalProcessedIds.size >= (sentOnPhone as number)) {
+                            finalizeAllDone();
+                            return;
+                        }
+                        if (Date.now() - t0 > 8000) {
+                            finalizeWithReconcile();
+                            return;
+                        }
+                        setTimeout(waitForResults, 250);
+                    };
+                    waitForResults();
+                    return;
+                }
+                finalizeAllDone();
                 return;
             }
 
             if (session.status === 'processing') {
+                // Un nuovo giro è partito prima che scattasse il reset del giro
+                // precedente (retry rapido dal telefono): esegui SUBITO la parte
+                // locale del reset e annulla il timer, che avrebbe riscritto
+                // 'waiting' sopra il 'processing' del telefono e azzerato i
+                // contatori a giro in corso.
+                if (pendingResetTimer.current) {
+                    clearTimeout(pendingResetTimer.current);
+                    pendingResetTimer.current = null;
+                    globalProcessedIds.clear();
+                    hasStartedUpload.current = false;
+                    setScannedCount(0);
+                    setSyncProgress({ current: 0, total: 0 });
+                    // Senza il timer nessuno riporterebbe lo status da 'all_done' a
+                    // 'waiting': si passa direttamente al nuovo giro.
+                    setStatus('processing');
+                }
                 setStatus(prev => prev === 'all_done' ? 'all_done' : 'processing');
                 lastProgressAt.current = Date.now();
 
                 if (!hasStartedUpload.current) {
                     hasStartedUpload.current = true;
                     setIsScreenOff(true);
-                    setTimeout(() => {
-                        setIsDropping(true);
-                        let totalFiles = 1;
-                        try {
-                            const p = typeof session.data === 'string' ? JSON.parse(session.data) : session.data;
-                            if (p?.total) totalFiles = p.total;
-                        } catch (e) { /* data malformato: parto con 1 */ }
-                        startUpload('mobile', totalFiles);
-                    }, 500);
+                    // startUpload SUBITO: se il batch è rapidissimo (1 file archive),
+                    // l'all_done può arrivare entro 500ms — uno start ritardato
+                    // cancellerebbe il finishTimer appena armato e l'Island
+                    // resterebbe su 'uploading' per sempre. Ritardata solo l'animazione.
+                    let totalFiles = 1;
+                    try {
+                        const p = typeof session.data === 'string' ? JSON.parse(session.data) : session.data;
+                        if (p?.total) totalFiles = p.total;
+                    } catch (e) { /* data malformato: parto con 1 */ }
+                    startUpload('mobile', totalFiles);
+                    setTimeout(() => setIsDropping(true), 500);
                 }
 
                 try {
@@ -276,17 +380,27 @@ const QRScannerModal: React.FC<QRScannerModalProps> = ({
 
             if (session.status === 'error') {
                 let errorReason = "Immagine illeggibile o sfocata.";
+                let retryable = false;
+                let failedOnPhone = 1;
                 try {
                     const parsed = typeof session.data === 'string' ? JSON.parse(session.data) : session.data;
                     if (parsed?.error) errorReason = parsed.error;
                     else if (typeof session.data === 'string') errorReason = session.data;
+                    if (parsed?.retryable) retryable = true;
+                    if (parsed?.failed) failedOnPhone = parsed.failed;
                 } catch { /* fallback al default */ }
 
                 setErrorMessage(errorReason);
                 setStatus('error');
                 playErrorBuzz();
 
-                if (hasStartedUpload.current) {
+                if (hasStartedUpload.current && retryable) {
+                    // Il telefono tiene i fascicoli falliti e può riprovare sullo stesso
+                    // QR: mostriamo l'errore ma NON chiudiamo (triggerClose cancellerebbe
+                    // la riga → retry impossibile). Reset a waiting come dopo all_done.
+                    finishUpload(0, failedOnPhone, 'mobile', errorReason);
+                    scheduleBatchReset('error', 2500);
+                } else if (hasStartedUpload.current) {
                     finishUpload(0, 1, 'mobile', errorReason);
                     setTimeout(() => triggerClose(), 2000);
                 } else {
@@ -321,28 +435,46 @@ const QRScannerModal: React.FC<QRScannerModalProps> = ({
                 console.error('QRScanner: errore upsert scan_session', err);
             }
 
-            // Snapshot iniziale (riconnessione/refresh: recupera tutto ciò che è già successo).
-            try {
-                const [{ data: sessionData }, { data: resultsData }] = await Promise.all([
-                    supabase.from('scan_sessions').select('*').eq('id', currentSession).maybeSingle(),
-                    supabase.from('scan_results').select('*').eq('session_id', currentSession).order('id', { ascending: true }),
-                ]);
-                const sessionMode = sessionData?.mode ?? null;
-                if (resultsData?.length) {
-                    resultsData.forEach((row: any) => onPhoneFileReady(row.payload, sessionMode));
-                }
-                if (sessionData) onSessionUpdate(sessionData);
-            } catch (e) { console.error('QRScanner: snapshot iniziale fallito', e); }
+            // Snapshot iniziale (riconnessione/refresh: recupera tutto ciò che è già
+            // successo). Viene eseguito DOPO l'attivazione del canale risultati (vedi
+            // subscribe sotto): l'overlap produce duplicati — deduplicati per _batchId
+            // da onPhoneFileReady — invece di buchi tra snapshot e sottoscrizione.
+            let snapshotDone = false;
+            const runSnapshot = async () => {
+                if (snapshotDone || !isActive) return;
+                snapshotDone = true;
+                try {
+                    const [{ data: sessionData }, { data: resultsData }] = await Promise.all([
+                        supabase.from('scan_sessions').select('*').eq('id', currentSession).maybeSingle(),
+                        supabase.from('scan_results').select('*').eq('session_id', currentSession).order('id', { ascending: true }),
+                    ]);
+                    const sessionMode = sessionData?.mode ?? null;
+                    if (resultsData?.length) {
+                        resultsData.forEach((row: any) => onPhoneFileReady(row.payload, sessionMode));
+                    }
+                    if (sessionData) onSessionUpdate(sessionData);
+                } catch (e) { console.error('QRScanner: snapshot iniziale fallito', e); }
+            };
 
             if (!isActive) return;
 
             // Realtime: niente più polling. Push diretti.
+            // Coda di serializzazione: il callback dei risultati è async (SELECT mode)
+            // e i due canali sono indipendenti — senza coda un all_done può sorpassare
+            // l'elaborazione degli ultimi INSERT e finalizzare con conteggi parziali.
+            let eventQueue: Promise<void> = Promise.resolve();
+            const enqueue = (fn: () => void | Promise<void>) => {
+                eventQueue = eventQueue
+                    .then(fn)
+                    .catch(e => console.error('QRScanner: evento Realtime fallito', e));
+            };
+
             sessionChannel = supabase
                 .channel(`scan_session:${currentSession}`)
                 .on('postgres_changes', {
                     event: 'UPDATE', schema: 'public', table: 'scan_sessions',
                     filter: `id=eq.${currentSession}`,
-                }, (payload: any) => onSessionUpdate(payload.new))
+                }, (payload: any) => enqueue(() => onSessionUpdate(payload.new)))
                 .subscribe();
 
             resultsChannel = supabase
@@ -350,7 +482,7 @@ const QRScannerModal: React.FC<QRScannerModalProps> = ({
                 .on('postgres_changes', {
                     event: 'INSERT', schema: 'public', table: 'scan_results',
                     filter: `session_id=eq.${currentSession}`,
-                }, async (payload: any) => {
+                }, (payload: any) => enqueue(async () => {
                     // Per la modalità ne abbiamo bisogno coerente con quello che il mobile
                     // ha appena scritto su scan_sessions. Una select singola è economica.
                     let sessionMode: string | null = null;
@@ -359,8 +491,17 @@ const QRScannerModal: React.FC<QRScannerModalProps> = ({
                         sessionMode = sess?.mode ?? null;
                     } catch { /* fallback su scanModeRef */ }
                     onPhoneFileReady(payload.new?.payload, sessionMode);
-                })
-                .subscribe();
+                }))
+                .subscribe((status: string) => {
+                    // Snapshot ad canale ATTIVO: ciò che è arrivato prima viene
+                    // recuperato dalla tabella, ciò che arriva dopo dal canale.
+                    if (status === 'SUBSCRIBED') enqueue(runSnapshot);
+                });
+
+            // Fallback: se la conferma di sottoscrizione non arriva (rete lenta,
+            // Realtime degradato), lo snapshot parte comunque: meglio un duplicato
+            // deduplicato che un modal vuoto dopo un refresh.
+            setTimeout(() => enqueue(runSnapshot), 3000);
         };
 
         // Watchdog: se siamo in processing e non vediamo update per > WATCHDOG_MS,

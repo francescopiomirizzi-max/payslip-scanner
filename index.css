@@ -200,6 +200,9 @@
 @utility left-safe-4 {
   left: calc(1rem + env(safe-area-inset-left, 0px));
 }
+@utility pb-safe-6 {
+  padding-bottom: max(1.5rem, env(safe-area-inset-bottom, 0px));
+}
 /* Larghezza massima utile per i widget fissi/flottanti: viewport meno margini (2rem)
    meno gli inset LATERALI. Senza viewport-fit=cover gli inset valgono 0 (nessun effetto
    oggi); se una tranche futura abilita edge-to-edge sono già sottratti. */
