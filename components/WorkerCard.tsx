@@ -228,7 +228,7 @@ const YearTimeline = ({ worker, startClaimYear, onOpenYear }: {
             onClick={(e) => { e.stopPropagation(); onOpenYear(y.year); }}
             title={segTitle(y)}
             aria-label={segTitle(y)}
-            className={`flex-1 min-w-0 h-4 rounded-[3px] transition-all duration-150 hover:scale-y-125 hover:shadow-sm cursor-pointer ${segColor(y.filledMonths)}`}
+            className={`relative flex-1 min-w-0 h-4 rounded-[3px] transition-all duration-150 hover:scale-y-125 hover:shadow-sm cursor-pointer pointer-coarse:before:content-[''] pointer-coarse:before:absolute pointer-coarse:before:-inset-y-3.5 pointer-coarse:before:inset-x-0 ${segColor(y.filledMonths)}`}
           />
         ))}
       </div>
@@ -318,6 +318,8 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
 
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!divRef.current) return;
+    // Su touch (mousemove emulato al tap) il tilt 3D non ha senso e costa jank.
+    if (window.matchMedia('(pointer: coarse)').matches) return;
     const rect = divRef.current.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
@@ -327,7 +329,10 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
       y:  ((x / rect.width)  - 0.5) * 18,
     });
   };
-  const handleMouseEnter = () => setOpacity(1);
+  const handleMouseEnter = () => {
+    if (window.matchMedia('(pointer: coarse)').matches) return; // niente spotlight su touch
+    setOpacity(1);
+  };
   const handleMouseLeave = () => { setOpacity(0); setTilt({ x: 0, y: 0 }); };
 
   const RoleIcon = useMemo(() => {
@@ -583,7 +588,7 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
                                   animate={{ opacity: 1, x: 0 }}
                                   transition={{ delay: i * 0.04, type: 'spring', stiffness: 400, damping: 28 }}
                                   onClick={item.onClick}
-                                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all duration-150 group/item ${item.hoverBg}`}
+                                  className={`w-full flex items-center gap-3 px-3 py-2.5 pointer-coarse:min-h-11 rounded-xl text-left transition-all duration-150 group/item ${item.hoverBg}`}
                                 >
                                   <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 shadow-sm ${item.iconBg} transition-transform duration-200 group-hover/item:scale-110`}>
                                     {item.icon}
@@ -602,7 +607,7 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
                                 animate={{ opacity: 1, x: 0 }}
                                 transition={{ delay: (onOpenArchive ? 2 : 1) * 0.04, type: 'spring', stiffness: 400, damping: 28 }}
                                 onClick={(e) => { e.stopPropagation(); onDelete(); setIsActionsOpen(false); }}
-                                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all duration-150 hover:bg-red-50 dark:hover:bg-red-950/40 group/del"
+                                className="w-full flex items-center gap-3 px-3 py-2.5 pointer-coarse:min-h-11 rounded-xl text-left transition-all duration-150 hover:bg-red-50 dark:hover:bg-red-950/40 group/del"
                               >
                                 <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 bg-red-500 shadow-sm transition-transform duration-200 group-hover/del:scale-110">
                                   <Trash2 className="w-4 h-4 text-white" />
@@ -638,11 +643,12 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
                           e.stopPropagation();
                           if (!isStatusOpen && statusBtnRef.current) {
                             const r = statusBtnRef.current.getBoundingClientRect();
-                            setStatusPortalPos({ top: r.bottom + 6, left: r.left });
+                            // Clamp al bordo destro: il picker (min-w 160) non deve uscire dal viewport.
+                            setStatusPortalPos({ top: r.bottom + 6, left: Math.max(8, Math.min(r.left, window.innerWidth - 176)) });
                           }
                           setIsStatusOpen(prev => !prev);
                         }}
-                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border shadow-sm w-fit backdrop-blur-md transition-all hover:opacity-80 ${statusConfig.color}`}
+                        className={`relative inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border shadow-sm w-fit backdrop-blur-md transition-all hover:opacity-80 pointer-coarse:before:content-[''] pointer-coarse:before:absolute pointer-coarse:before:-inset-y-[7px] pointer-coarse:before:inset-x-0 ${statusConfig.color}`}
                       >
                         <span className="w-2 h-2 rounded-full shadow-[0_0_8px_currentColor]" style={{ backgroundColor: statusConfig.dot }} />
                         <StatusIcon className="w-3.5 h-3.5" />
@@ -663,7 +669,7 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
                               <button
                                 key={opt.value}
                                 onClick={(e) => { e.stopPropagation(); onStatusChange?.(worker.id, opt.value); setIsStatusOpen(false); }}
-                                className={`w-full flex items-center gap-2.5 px-3.5 py-2.5 text-[11px] font-bold text-left transition-colors ${isCurrent ? 'bg-slate-50 dark:bg-slate-700/50' : 'hover:bg-slate-50 dark:hover:bg-slate-700/30'}`}
+                                className={`w-full flex items-center gap-2.5 px-3.5 py-2.5 pointer-coarse:min-h-11 text-[11px] font-bold text-left transition-colors ${isCurrent ? 'bg-slate-50 dark:bg-slate-700/50' : 'hover:bg-slate-50 dark:hover:bg-slate-700/30'}`}
                               >
                                 <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: opt.dot }} />
                                 <span className="text-slate-700 dark:text-slate-300 uppercase tracking-wide">{opt.label}</span>
@@ -734,7 +740,7 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
                       whileTap="tap"
                       variants={{ idle: { scale: 1 }, hover: { scale: 1.05 }, tap: { scale: 0.95 } }}
                       onClick={() => onOpenComplex(worker.id)}
-                      className="flex items-center justify-center gap-2 px-6 py-3 rounded-2xl bg-white/40 dark:bg-slate-900/40 border border-white/60 dark:border-slate-700/50 text-slate-500 dark:text-slate-300 text-[9px] font-black tracking-widest shadow-sm hover:shadow-lg hover:border-white dark:hover:border-slate-500 hover:bg-white/80 dark:hover:bg-slate-800/80 backdrop-blur-md transition-all group"
+                      className="flex items-center justify-center gap-2 px-6 py-3 pointer-coarse:min-h-11 rounded-2xl bg-white/40 dark:bg-slate-900/40 border border-white/60 dark:border-slate-700/50 text-slate-500 dark:text-slate-300 text-[9px] font-black tracking-widest shadow-sm hover:shadow-lg hover:border-white dark:hover:border-slate-500 hover:bg-white/80 dark:hover:bg-slate-800/80 backdrop-blur-md transition-all group"
                     >
                       <motion.div variants={{ idle: { rotate: 0, scale: 1 }, hover: { rotate: 90, scale: 1.2 } }} transition={{ type: "spring", stiffness: 350, damping: 30 }}>
                         <LayoutGrid className="w-4 h-4" />
@@ -748,7 +754,7 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
                       whileTap="tap"
                       variants={{ idle: { scale: 1, boxShadow: "0 0 0px 0px rgba(0,0,0,0)" }, hover: { scale: 1.05, boxShadow: `0 0 25px -5px ${theme.rawColor.glow}` }, tap: { scale: 0.95 } }}
                       onClick={() => onOpenSimple(worker.id)}
-                      className="relative overflow-hidden flex items-center justify-center gap-2 px-6 py-3 rounded-2xl text-white text-[10px] font-black tracking-widest shadow-lg transition-all"
+                      className="relative overflow-hidden flex items-center justify-center gap-2 px-6 py-3 pointer-coarse:min-h-11 rounded-2xl text-white text-[10px] font-black tracking-widest shadow-lg transition-all"
                       style={theme.gradientStyle}
                     >
                       <motion.div variants={{ idle: { y: 0 }, hover: { y: [0, -4, 0], transition: { repeat: Infinity, duration: 0.6 } } }}>
@@ -774,7 +780,7 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
                       <div className="w-2 h-2 rounded-full shadow-[0_0_8px_currentColor]" style={{ backgroundColor: theme.rawColor.start }}></div>
                       <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Financial Overview</span>
                     </div>
-                    <button onClick={() => setIsFlipped(false)} className="group p-2 bg-white/60 dark:bg-slate-800/60 border border-white/50 dark:border-slate-700 rounded-full shadow-sm hover:scale-110 transition-all hover:bg-white dark:hover:bg-slate-700 text-slate-400 dark:text-slate-500 hover:text-indigo-600 dark:hover:text-cyan-400">
+                    <button onClick={() => setIsFlipped(false)} aria-label="Torna al fronte della card" className="group p-2 pointer-coarse:p-3 bg-white/60 dark:bg-slate-800/60 border border-white/50 dark:border-slate-700 rounded-full shadow-sm hover:scale-110 transition-all hover:bg-white dark:hover:bg-slate-700 text-slate-400 dark:text-slate-500 hover:text-indigo-600 dark:hover:text-cyan-400">
                       <ArrowLeft className="w-5 h-5 transition-transform group-hover:-translate-x-0.5" />
                     </button>
                   </div>
@@ -849,14 +855,17 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onOpenSimple, onOpenCom
 
                   {/* NOTE PRATICA */}
                   <div className="mt-3 pt-3 border-t border-slate-200/30 dark:border-slate-700/50">
+                    {/* In sola lettura le note sono consultabili ma non editabili: la RLS
+                        bloccherebbe comunque la scrittura, ma la UI non deve sembrarlo. */}
                     <textarea
                       value={localNotes}
                       onChange={e => setLocalNotes(e.target.value)}
-                      onBlur={() => onNotesChange?.(worker.id, localNotes)}
+                      onBlur={isReadOnly ? undefined : () => onNotesChange?.(worker.id, localNotes)}
                       onClick={e => e.stopPropagation()}
-                      placeholder="Note sulla pratica..."
+                      readOnly={isReadOnly}
+                      placeholder={isReadOnly ? 'Nessuna nota sulla pratica' : 'Note sulla pratica...'}
                       rows={2}
-                      className="w-full text-[10px] font-medium bg-transparent resize-none text-slate-500 dark:text-slate-400 placeholder:text-slate-300 dark:placeholder:text-slate-600 focus:outline-none focus:ring-0 leading-relaxed"
+                      className={`w-full text-[10px] font-medium bg-transparent resize-none text-slate-500 dark:text-slate-400 placeholder:text-slate-300 dark:placeholder:text-slate-600 focus:outline-none focus:ring-0 leading-relaxed ${isReadOnly ? 'cursor-default' : ''}`}
                     />
                   </div>
                 </div>

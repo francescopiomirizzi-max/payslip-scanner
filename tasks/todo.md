@@ -1,3 +1,162 @@
+# Todo — Sessione 18/07: PWA mobile — Fase 4 "scheda lavoratore mobile" (PIANO, in attesa di approvazione)
+
+> **Contesto:** Fase 3 implementata e verificata (sotto), NON committata: collaudo visivo
+> utente pendente. Fase 4 dal piano (`piano-web-app-mobile-fable-2026-07-16.md` §Fase 4):
+> consultare la pratica e fare le azioni frequenti senza esporre la griglia desktop intera.
+> Il piano la marca L, DA SPEZZARE. Inventario completo dal codice (metodo compose-file) in
+> `scratchpad/inventario-scheda-lavoratore-fase4.md`.
+>
+> **Ricognizione (fatti chiave):** composizione = WorkerDetailHeader (11 controlli, riga
+> `shrink-0` SENZA wrap → overflow certo a 390) → VertenzaTimeline (5 step + 3 toggle;
+> **ticker stats `hidden xl:flex` → sotto 1280 le statistiche NON ESISTONO**) → CommandBar
+> (4 azioni owner + 4 tab) → MonthlyDataGrid (1922 righe, ~25 tipi di controllo, minWidth
+> colonne×100, drag-fill/undo/context-menu solo mouse+tastiera; griglia GIÀ controllata:
+> `data`+`onDataChange` → debounce → `handleUpdateWorkerData`) → tab calc/pivot/tfr/archive
+> + SplitViewViewer (pan/sniper senza touch) + 7 modali.
+> **Sorprese:** scudo verify per-riga, "Accetta correzione/tutto" e **Start Year NON gated
+> per il viewer** (può consumare chiamate Gemini e scrivere; il batch "Verifica anno" invece
+> è gated); doppio toggle Ex-Festività indipendente (timeline vs Riepilogo Annuale); aria
+> quasi assente; provider context non memoizzato (re-render globale a ogni keystroke).
+
+## Tranche proposte (eseguirle una per sessione, gate pieno a ogni giro)
+
+- [ ] **T1 — Shell consultabile** (rischio basso, questa sessione se approvata):
+      header con wrap/compattazione max-sm (stessi 11 comandi), CommandBar e tab
+      raggiungibili su touch (≥44px), VertenzaTimeline fruibile a 390 (step + toggle),
+      **ticker stats reso accessibile sotto xl** (le card oggi spariscono: sostituto
+      compatto, non rimozione), gate viewer su scudo verify/accetta/Start Year
+      (stesso pattern useIsReadOnly di Fase 3 — decisione utente da confermare),
+      aria-label sui controlli senza nome. NIENTE griglia in T1.
+- [ ] **T2 — Vista mensile mobile** (rischio ALTO, da spezzare in T2a read-only →
+      T2b editing): componente NUOVO `MonthlyDataMobile` affiancato a MonthlyDataGrid
+      con le STESSE props (`data`+`onDataChange`+hook invariati, come chiede il piano);
+      elenco mesi → dettaglio mese → voci; il sync scroll a 3 vie del monolite NON si
+      porta su mobile (lì visse il re-render loop storico, MonthlyDataGrid:506);
+      tabella completa resta come modalità desktop/tablet.
+- [ ] **T3 — Tab Riepilogo/Pivot/TFR mobile** (basso-medio, CSS-mostly: scroll confinato
+      + prima colonna sticky come da piano Fase 5-report).
+- [ ] **T4 — Archivio tab + visore touch** (medio; lo "sniper"/pan del SplitViewViewer è
+      rimandabile, il viewer a pagina intera è Fase 5).
+
+**Criteri (dal piano §Fase 4):** nessun overflow globale della scheda; cambio anno +
+lettura mese + aggiornamento semplice completabili su touch; stessi risultati di calcolo
+mobile/desktop sullo stesso fixture; nessuna regressione autosave.
+**Verifica:** protocollo demo+iframe (funziona: la scheda è raggiungibile in demo?
+da verificare al primo giro — altrimenti misure su main + collaudo utente) + gate
+tsc/vitest/build + diff review.
+
+---
+
+# Todo — Sessione 17/07: PWA mobile — Fase 3 "dashboard e consultazione mobile"
+
+> **Contesto:** Fase 2 scanner COMMITTATA (`d22fb6d`, locale; 3 commit avanti a origin,
+> push=deploy da decidere; resta il collaudo telefono reale dell'item 8). Da questa sessione
+> **niente più Codex** (direttiva utente): verifiche e review le fa Fable coi gate del
+> progetto. Scope Fase 3 dal piano (`piano-web-app-mobile-fable-2026-07-16.md` §Fase 3):
+> trovare e aprire una pratica con una mano, su Dashboard Incidenza, owner E viewer alla pari.
+> Desktop invariato (gate `pointer-coarse:` / `max-sm:` come nelle tranche 1/2).
+>
+> **Ricognizione (inventario completo dal codice in
+> `scratchpad/inventario-dashboard-fase3.md`, metodo compose-file):** blocchi = SindacatoTag →
+> hero+azioni (6 controlli + menu Dati 5 voci) → striscia KPI ↔ 3 card statistiche → ricerca +
+> filtri azienda (già scrollabili, 14/07) → control bar (4 sort + Urgenze + Ticket + Seleziona)
+> → 5 cassetti con chip per lavoratore → WorkerCard (fronte 10 controlli, retro note; flip via
+> bottone dedicato) → overlay fissi (floating bar selezione ~700px nowrap, pill export,
+> scroll-top, modale statistiche, MessagesInbox, EntryAnnouncements).
+> **Rischi 390px:** 🔴 striscia KPI clippata senza scroll · 🔴 floating bar selezione ~700px
+> fixed · 🔴 tacche YearTimeline 16px (unico accesso per-anno) · 🟠 congestione fascia bassa
+> (AreaSwitch+bar+pill+scroll-top) · 🟠 target 28-36px sul flusso ricerca→apertura · 🟠 tilt 3D
+> mousemove su touch · 🟠 zero `prefers-reduced-motion` in dashboard.
+> **Finding fuori scope (da decisione utente):** «Ticket ON/OFF» globale e textarea note del
+> retro NON gated per il viewer (la scrittura la ferma solo RLS → UI che sembra editabile).
+
+## Piano (APPROVATO 17/07 — decisioni: flip resta via bottone · finding viewer gated DENTRO
+## la tranche (Ticket+note read-only col pattern useIsReadOnly) · KPI = scroll orizzontale+fade)
+
+- [x] 1. **Striscia KPI responsive**: sotto 640px scroll orizzontale con fade (`max-sm:
+      overflow-x-auto` + utility `scroll-hint-x`); chip azienda ORA VISIBILI anche su mobile
+      (prima `hidden sm:` senza sostituto); Espandi `pointer-coarse:p-[14px]` = 44px, fuori
+      dallo scroller → sempre visibile. Verificato: scroller attivo a 356/390/430, 5 chip
+      presenti, Espandi dentro il viewport; a 1276 nessuno scroll (1122=1122), invariata.
+- [x] 2. **Hero header compatto su mobile**: `max-sm:` p-5, icona 48px, titolo 2xl,
+      sottotitolo sm, gap azioni 2 — stessi comandi e label, zero rimozioni. Fix in corsa:
+      menu Dati era right-0 sul bottone → **usciva di 62px a sinistra a 390 (misurato)** →
+      `max-sm:left-0` + origin coerente; a 1276 resta allineato a destra (verificato).
+- [x] 3. **Flusso ricerca→apertura su touch**: `pointer-coarse:min-h-11` su sort, Urgenze,
+      Ticket, Seleziona, pill filtri, chip cassetti, voci menu Dati/•••/picker stato,
+      "Vedi Report" del modale; X ricerca `p-3` + aria-label; fade sui filtri (`max-sm:
+      scroll-hint-x`); capsula ricerca compattata sotto sm (py-4, text-base).
+- [x] 4. **WorkerCard touch**: tilt 3D + spotlight disattivati su coarse (guard matchMedia);
+      tacche YearTimeline con hit-area estesa a 44px verticali su coarse (pseudo `before:`,
+      resa visiva h-4 invariata — larghezza per-tacca resta fluida: l'apertura pratica ha
+      comunque i CTA grandi); chip stato con hit-area estesa; portal picker stato ora
+      CLAMPATO al bordo destro del viewport; CTA `pointer-coarse:min-h-11`; back retro con
+      aria-label + p-3 coarse. Desktop misurato invariato: tacca 16px, sort 28px, flip
+      opacity 0 (hover-gated come prima).
+- [x] 5. **Overlay fissi**: floating bar selezione `max-w-safe-viewport` +
+      `max-[1060px]:flex-wrap` + `max-sm:bottom-24` (sopra l'AreaSwitch) — vedi Review per
+      il P1 shrink-to-fit trovato misurando; pill export idem (bottom-24 mobile); badge DEMO
+      `max-sm:top-[4.75rem]` = sotto l'Island (76 > 64 misurato); modale statistiche
+      z-60→**z-80** (copriva/era coperta dall'AreaSwitch a pari z); hint tastiera
+      `pointer-coarse:hidden` (scorciatoie ⌘ inutili senza tastiera fisica).
+- [x] 6. **A11y + reduced-motion**: aria-label su X selezione, back retro, scroll-top,
+      X ricerca, X modale statistiche; `MotionConfig reducedMotion="user"` a livello App
+      (spegne transform/layout animation di TUTTI i motion con "riduci movimento" attivo);
+      `useReducedMotion` in AnimatedCounter (jump al valore); CSS: `animate-pulse/ping`
+      fermati sotto `prefers-reduced-motion` (animate-spin sui loader resta: comunica stato).
+- [x] 6-bis. **Gate viewer (decisione b)**: Ticket ON/OFF → pillola statica informativa per
+      il viewer; textarea note retro → readOnly + placeholder "Nessuna nota" (scrittura già
+      bloccata da RLS, ora la UI non mente più).
+- [x] 7. **Gate**: tsc 0 · **344/344 test** · build ok (solo warning chunk preesistente);
+      classi verificate nel CSS prodotto; misure DOM reali (vedi Review).
+- [ ] 8. **Collaudo visivo utente** (390px + desktop + viewer) → chiusura tranche.
+
+## Review Fase 3 giro 1 (17/07)
+
+**Diff: 6 file** (DashboardPage, WorkerCard, AnimatedCounter, KeyboardShortcutsHint, App,
+index.css), ~130 righe nette, zero dipendenze nuove, zero logica di calcolo toccata.
+
+**Verifica = misure DOM reali** sulla dashboard VERA montata in **modalità demo**
+(`npm run dev:demo`, auto-auth con fixtures, zero credenziali) dentro iframe same-origin a
+larghezza esatta (protocollo tranche 1), Chrome reale:
+
+| Misura | 356 | 390 | 430 | 1276 |
+| --- | --- | --- | --- | --- |
+| Overflow documento (sw ≤ iw) | ✓ | ✓ | ✓ | ✓ |
+| Striscia KPI scorre / chip visibili | ✓ / 5 | ✓ / 5 | ✓ / 5 | no scroll (=main) / 5 |
+| Espandi dentro viewport | ✓ | ✓ | ✓ | ✓ |
+| Header padding | 20px (p-5) | 20px | 20px | **28px = p-7 invariato** |
+| Badge DEMO vs Island | 76>64 ✓ | ✓ | ✓ | top-3 (preesistente, solo demo) |
+| Barra selezione (in viewport / righe) | — | ✓ / wrap, bottom 95px | — | ✓ / **1 riga, w=1002, bottom 23px** |
+| Menu Dati in viewport | — | ✓ (fix) | — | ✓ allineato dx (=main) |
+| Mask fade filtri | — | attiva | — | **none** |
+| Modale statistiche | — | z-80 sopra AreaSwitch(60) ✓ | — | — |
+| Card: tacca anno / sort / flip | — | — | — | **16px / 28px / opacity 0 = main** |
+
+**P1 trovato e corretto MISURANDO (non a tavolino):** il primo tentativo di responsive
+della barra selezione usava `flex-wrap` incondizionato → a 1276 la riga si spezzava
+comunque (h 103 vs 60): un elemento `position:fixed` con `left:50%` in shrink-to-fit,
+appena il wrap è permesso, riceve come larghezza disponibile solo la metà destra del
+viewport (min-content < available < max-content). Fix: wrap gated a `max-[1060px]`
+(riga intera misurata 1002px + margini 2rem). Conferme post-fix: 1276 = 1 riga (h 60),
+1024 = wrap centrato in viewport, 390 = wrap sopra l'AreaSwitch.
+
+**Limiti dichiarati (non bug):**
+- Le verifiche `pointer-coarse:` sono provate nel CSS prodotto + demo, non su un vero
+  touch (il Chrome desktop ha pointer fine): è il collaudo utente su telefono (item 8).
+- Tacche YearTimeline: hit-area 44px in VERTICALE; in orizzontale restano fluide
+  (~14-20px con range lunghi) — vincolo del design a striscia; l'apertura della pratica
+  ha sempre i due CTA grandi come percorso principale.
+- Viewer non misurabile in demo (demo = mai readonly): geometricamente coperto dal caso
+  owner (più controlli, bottone più grande); gating verificato a codice.
+- Banda 640–1060 con selection bar: wrap su 2-3 righe centrato (su main la riga unica
+  usciva dal viewport già sotto ~1034: era rotto anche prima).
+- Badge DEMO a desktop resta top-3 sotto l'Island (preesistente, solo build demo).
+
+**Rollback:** revert dei 6 file; nessuna migrazione, nessun asset.
+
+---
+
 # Todo — Sessione 16/07: PWA mobile — tranche 1 "shell mobile sicura"
 
 > **Contesto:** Fase 0 chiusa (valutazione GO CON MODIFICHE in

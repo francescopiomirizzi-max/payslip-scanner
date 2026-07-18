@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { AnimatePresence } from 'framer-motion';
+import { AnimatePresence, MotionConfig } from 'framer-motion';
 
 // UI Components
 import DynamicIsland from './components/DynamicIsland';
@@ -346,10 +346,15 @@ const App: React.FC = () => {
     if (viewerBlocked) return <ViewerPaymentBlock amount={viewerBlockAmount} onLogout={handleLogout} />;
 
     return (
+        // reducedMotion="user": con "riduci movimento" attivo nel sistema, framer-motion
+        // disattiva le animazioni transform/layout (flip, tilt, cascate) mantenendo
+        // opacità/colore. Copre tutta l'app con una riga (Fase 3 mobile).
+        <MotionConfig reducedMotion="user">
         <div className="min-h-screen font-sans selection:bg-indigo-100 dark:selection:bg-indigo-900/50 relative overflow-hidden transition-colors duration-500">
-            {/* Badge DEMO top-center: a sinistra coprirebbe il wordmark ValOra della topbar */}
+            {/* Badge DEMO top-center: a sinistra coprirebbe il wordmark ValOra della topbar.
+                Sotto sm scende sotto la Dynamic Island (top-safe-6 + ~44px): stesso slot. */}
             {IS_DEMO && (
-                <div className="fixed top-3 left-1/2 -translate-x-1/2 z-[60] px-3 py-1 rounded-full bg-amber-500 text-white text-[11px] font-bold tracking-wide shadow-lg pointer-events-none">
+                <div className="fixed top-3 max-sm:top-[4.75rem] left-1/2 -translate-x-1/2 z-[60] px-3 py-1 rounded-full bg-amber-500 text-white text-[11px] font-bold tracking-wide shadow-lg pointer-events-none">
                     DEMO · dati di esempio
                 </div>
             )}
@@ -482,6 +487,7 @@ const App: React.FC = () => {
             <ChangePasswordModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
             <CompanyBuilder isOpen={isCompanyBuilderOpen} onClose={() => setIsCompanyBuilderOpen(false)} />
         </div>
+        </MotionConfig>
     );
 };
 

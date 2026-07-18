@@ -16,7 +16,9 @@ export const KeyboardShortcutsHint = () => {
     const [open, setOpen] = useState(false);
 
     return (
-        <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-2 print:hidden">
+        // pointer-coarse:hidden — le scorciatoie richiedono una tastiera fisica:
+        // su touch il bottone è solo rumore nella fascia bassa già affollata.
+        <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-2 print:hidden pointer-coarse:hidden">
             <AnimatePresence>
                 {open && (
                     <motion.div

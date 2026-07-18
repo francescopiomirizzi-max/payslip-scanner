@@ -209,6 +209,23 @@
 @utility max-w-safe-viewport {
   max-width: calc(100vw - 2rem - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px));
 }
+/* Indizio visivo di scroll orizzontale (Fase 3): dissolvenza ai bordi del
+   contenitore che scorre. Da usare con variante (es. max-sm:scroll-hint-x)
+   solo dove lo scroll è la modalità mobile. */
+@utility scroll-hint-x {
+  -webkit-mask-image: linear-gradient(to right, transparent, black 16px, black calc(100% - 16px), transparent);
+  mask-image: linear-gradient(to right, transparent, black 16px, black calc(100% - 16px), transparent);
+}
+
+/* Reduced motion: ferma le animazioni CSS continue (pulse/ping = decorazione).
+   animate-spin resta: sui loader comunica stato, non ornamento. Le animazioni
+   framer-motion sono gestite da MotionConfig reducedMotion="user" in App.tsx. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-pulse,
+  .animate-ping {
+    animation: none;
+  }
+}
 
 /* ========================================
    UTILITY GLOBALI

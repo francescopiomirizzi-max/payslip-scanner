@@ -1,5 +1,5 @@
 import React, { useRef, useEffect } from 'react';
-import { useSpring, useMotionValue } from 'framer-motion';
+import { useSpring, useMotionValue, useReducedMotion } from 'framer-motion';
 import { groupThousandsIT } from '../../utils/formatters';
 
 // --- COMPONENTE ANIMAZIONE NUMERI (CORRETTO CON DECIMALI) ---
@@ -7,10 +7,17 @@ export const AnimatedCounter = ({ value, isCurrency = false, fractionDigits = 2 
     const ref = useRef<HTMLSpanElement>(null);
     const motionValue = useMotionValue(0);
     const springValue = useSpring(motionValue, { damping: 30, stiffness: 100 });
+    // useSpring non è coperto da MotionConfig: con "riduci movimento" il numero
+    // salta subito al valore finale (jump aggiorna anche i subscriber).
+    const reduceMotion = useReducedMotion();
 
     useEffect(() => {
-        motionValue.set(value);
-    }, [value, motionValue]);
+        if (reduceMotion) {
+            springValue.jump(value);
+        } else {
+            motionValue.set(value);
+        }
+    }, [value, motionValue, springValue, reduceMotion]);
 
     useEffect(() => {
         return springValue.on("change", (latest) => {

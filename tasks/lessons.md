@@ -34,6 +34,32 @@ finding si INCORPORANO finché violano i criteri di accettazione, si CONTESTANO 
 motivazione quando il costo supera il rischio (doppio toast in una finestra di 2s ≠ P1).
 L'utente ha chiuso il loop esplicitamente («basta chiedere a codex»).
 
+## 2026-07-17 — Fixed + left:50% + flex-wrap = larghezza dimezzata (shrink-to-fit)
+
+**Contesto:** Fase 3 dashboard mobile, floating bar selezione. Ho reso il `flex-wrap`
+incondizionato ragionando "se il contenuto entra, il wrap è un no-op per costruzione".
+FALSO per gli elementi `position:fixed/absolute` con `left:50%`: la larghezza shrink-to-fit
+è `min(max(min-content, available), max-content)` e `available` si calcola DALL'OFFSET
+left → solo la metà destra del viewport. Con nowrap min-content=riga intera e vince;
+appena il wrap è permesso min-content crolla al singolo item → l'elemento si stringe a
+~50vw e wrappa ANCHE su desktop (misurato: h 103 vs 60 a 1276). Fix: wrap gated alla
+larghezza dove il clamp morde davvero (`max-[1060px]`, riga misurata 1002px + margini).
+
+**Regole:**
+1. "Il wrap non scatta se c'è spazio" vale per i flussi normali, NON per fixed/absolute
+   centrati con left+translate: lì il wrap cambia la larghezza stessa dell'elemento.
+2. Prima di gate-are, MISURARE la riga intera reale (qui 1002px, la mia stima era ~700):
+   la soglia del gate deriva dalla misura, non dall'inventario a occhio.
+3. Conferma su TRE viewport: sotto il gate (wrappa dentro il viewport), appena sopra
+   (riga unica), desktop di riferimento (identico a main). Cfr. lezione 16/07.
+
+**Bonus della stessa sessione:** la modalità demo (`npm run dev:demo`, auto-auth con
+fixtures) monta la dashboard REALE senza credenziali → è la strada per misurare col
+protocollo iframe le viste dietro login (limite: demo = mai readonly → viewer non
+misurabile, coperto dal caso owner). E il menu ancorato `right-0` a un bottone che su
+mobile sta a SINISTRA esce dal bordo (−62px a 390): gli anchor dei dropdown vanno
+ri-verificati a ogni breakpoint, non ereditati dal desktop.
+
 ## 2026-07-16 — Clampare il contenitore non rende responsive il contenuto; e una correzione di baseline va propagata alle conseguenze
 
 **Contesto:** tranche 1 mobile. Review Codex: due P1 su lavoro che avevo consegnato "a criteri
