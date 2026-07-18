@@ -1623,12 +1623,14 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
                                   <div className="text-xs font-bold uppercase tracking-wide truncate max-w-[70px]" title={note}>{MONTH_NAMES[rowIndex]}</div>
                                 </div>
 
-                                {/* Verify button — shown only when archive has a PDF for this row */}
+                                {/* Verify button — shown only when archive has a PDF for this row.
+                                    Gated in sola lettura: lancia una chiamata Gemini e scrive lo
+                                    stato verify (il semaforo-esito resta visibile al viewer). */}
                                 {(() => {
                                   const vKey = `${selectedYear}-${rowIndex}`;
                                   const hasArchive = !!archiveEntries[vKey];
                                   const vs = verifyStates[vKey];
-                                  if (!hasArchive || !onVerifyRequest) return null;
+                                  if (!hasArchive || !onVerifyRequest || isReadOnly) return null;
                                   const isLoading = vs?.status === 'loading';
                                   const btnColor = !vs
                                     ? 'text-slate-300 dark:text-slate-600 hover:text-violet-500 dark:hover:text-violet-400 hover:bg-violet-50 dark:hover:bg-slate-700'
@@ -1690,7 +1692,7 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
                                 {(() => {
                                   const vKey = `${selectedYear}-${rowIndex}`;
                                   const vs = verifyStates[vKey];
-                                  if (!vs || vs.status === 'loading' || vs.discrepancies.length === 0 || !onAcceptAllCorrections) return null;
+                                  if (!vs || vs.status === 'loading' || vs.discrepancies.length === 0 || !onAcceptAllCorrections || isReadOnly) return null;
                                   return (
                                     <button
                                       onClick={(e) => { e.stopPropagation(); onAcceptAllCorrections(selectedYear, rowIndex); }}

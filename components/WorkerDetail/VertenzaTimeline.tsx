@@ -18,6 +18,12 @@ const VertenzaTimeline: React.FC = () => {
   } = useWorkerDetail();
   const isReadOnly = useIsReadOnly();
 
+  // tickerItems è TRIPLICATO in useStatsData per il loop del marquee: per la riga
+  // di chip sotto xl serve una sola copia (dedupe per label).
+  const statChips = tickerItems.filter(
+    (s: any, i: number, arr: any[]) => arr.findIndex((x: any) => x.label === s.label) === i
+  );
+
   const TimelineStep = ({ step, label, icon: Icon, activeStatus }: any) => {
     const steps = ['analisi', 'pronta', 'inviata', 'trattativa', 'chiusa'];
     const isActive = step === activeStatus;
@@ -46,10 +52,10 @@ const VertenzaTimeline: React.FC = () => {
   return (
     <>
         <div className="lg:col-span-2 glass-panel px-6 py-4 shadow-sm dark:shadow-[0_0_20px_rgba(34,211,238,0.15)] border border-white/60 dark:border-cyan-400 relative overflow-hidden transition-all duration-300">
-          <div className="flex justify-between items-center">
+          <div className="flex flex-wrap justify-between items-center gap-y-2">
             <button
               onClick={onToggleTimeline}
-              className="group flex items-center gap-2 text-sm font-black text-slate-700 dark:text-cyan-400 hover:text-indigo-600 dark:hover:text-cyan-300 transition-colors focus:outline-none"
+              className="group flex items-center gap-2 text-sm font-black text-slate-700 dark:text-cyan-400 hover:text-indigo-600 dark:hover:text-cyan-300 transition-colors focus:outline-none pointer-coarse:min-h-11"
             >
               <div className="p-1.5 bg-indigo-100 dark:bg-cyan-900/40 rounded-lg group-hover:bg-indigo-200 dark:group-hover:bg-cyan-800/60 transition-colors">
                 <Gavel className="w-4 h-4 text-indigo-600 dark:text-cyan-400" />
@@ -97,18 +103,19 @@ const VertenzaTimeline: React.FC = () => {
             <div className="flex items-center p-1 bg-slate-100/50 dark:bg-slate-950/50 backdrop-blur-sm rounded-full border border-slate-200/80 dark:border-cyan-900/50 shadow-sm shrink-0 transition-colors">
               <button
                 onClick={onToggleExFest}
-                className={`group flex items-center gap-1.5 px-3 py-1.5 rounded-full font-bold text-xs transition-all duration-300 border ${includeExFest
+                className={`group flex items-center gap-1.5 px-3 py-1.5 pointer-coarse:min-h-11 rounded-full font-bold text-xs transition-all duration-300 border ${includeExFest
                   ? 'bg-gradient-to-r from-amber-100 to-orange-100 dark:from-amber-900/60 dark:to-orange-900/60 text-amber-800 dark:text-amber-300 border-amber-300/50 dark:border-amber-500/50 shadow-[0_1px_6px_rgba(251,191,36,0.2)] dark:shadow-[0_0_10px_rgba(245,158,11,0.3)]'
                   : 'bg-transparent text-slate-500 dark:text-slate-400 dark:text-slate-200 border-transparent hover:bg-white dark:hover:bg-slate-800 hover:border-amber-200/60 dark:hover:border-amber-700/50 hover:text-amber-600 dark:hover:text-amber-400'
                   }`}
                 title="Includi/Escludi Ex-Festività"
+                aria-label="Includi/Escludi Ex-Festività"
               >
                 <CalendarPlus size={14} className={`transition-transform duration-300 ${includeExFest ? 'rotate-0' : 'group-hover:rotate-12'}`} strokeWidth={2.5} />
                 <span>{includeExFest ? "32gg" : "28gg"}</span>
               </button>
               <button
                 onClick={onToggleTickets}
-                className={`group flex items-center gap-1.5 px-3 py-1.5 rounded-full font-bold text-xs transition-all duration-300 border ml-1 ${includeTickets
+                className={`group flex items-center gap-1.5 px-3 py-1.5 pointer-coarse:min-h-11 rounded-full font-bold text-xs transition-all duration-300 border ml-1 ${includeTickets
                   ? 'bg-gradient-to-r from-indigo-100 to-blue-100 dark:from-indigo-900/60 dark:to-blue-900/60 text-indigo-800 dark:text-indigo-300 border-indigo-300/50 dark:border-indigo-500/50 shadow-[0_1px_6px_rgba(99,102,241,0.2)] dark:shadow-[0_0_10px_rgba(99,102,241,0.3)]'
                   : 'bg-transparent text-slate-400 dark:text-slate-500 dark:text-slate-300 border-transparent hover:bg-white dark:hover:bg-slate-800 hover:border-indigo-200/60 dark:hover:border-indigo-700/50 hover:text-indigo-600 dark:hover:text-indigo-400 line-through opacity-70 hover:opacity-100 hover:no-underline'
                   }`}
@@ -119,7 +126,7 @@ const VertenzaTimeline: React.FC = () => {
               </button>
               <button
                 onClick={onTogglePaidLeave}
-                className={`group flex items-center gap-1.5 px-3 py-1.5 rounded-full font-bold text-xs transition-all duration-300 border ml-1 ${includePaidLeave
+                className={`group flex items-center gap-1.5 px-3 py-1.5 pointer-coarse:min-h-11 rounded-full font-bold text-xs transition-all duration-300 border ml-1 ${includePaidLeave
                   ? 'bg-gradient-to-r from-emerald-100 to-teal-100 dark:from-emerald-900/60 dark:to-teal-900/60 text-emerald-800 dark:text-emerald-300 border-emerald-300/50 dark:border-emerald-500/50 shadow-[0_1px_6px_rgba(16,185,129,0.2)] dark:shadow-[0_0_10px_rgba(16,185,129,0.3)]'
                   : 'bg-transparent text-slate-500 dark:text-slate-400 dark:text-slate-200 border-transparent hover:bg-white dark:hover:bg-slate-800 hover:border-emerald-200/60 dark:hover:border-emerald-700/50 hover:text-emerald-600 dark:hover:text-emerald-400'
                   }`}
@@ -130,6 +137,29 @@ const VertenzaTimeline: React.FC = () => {
               </button>
             </div>
           </div>
+
+          {/* STATISTICHE SOTTO XL — il ticker qui sopra è hidden xl:flex: sotto 1280px
+              le stesse card (stessi dati, stesso modal al tap) diventano una riga di
+              chip a scorrimento orizzontale con indizio di fade. Niente marquee. */}
+          {statChips.length > 0 && (
+            <div className="xl:hidden mt-3 overflow-x-auto no-scrollbar scroll-hint-x">
+              <div className="flex items-center gap-2 w-max">
+                {statChips.map((stat: any, idx: number) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => onSetActiveTickerModal({ title: stat.label, content: stat.tooltip })}
+                    title={stat.label}
+                    className={`shrink-0 flex items-center gap-2 px-3 py-1.5 pointer-coarse:min-h-11 rounded-xl border bg-white dark:bg-slate-900 shadow-sm transition-colors hover:bg-slate-50 dark:hover:bg-slate-800 ${stat.color}`}
+                  >
+                    <stat.icon className={`w-4 h-4 ${stat.textColor}`} strokeWidth={2.5} />
+                    <span className="text-[9px] font-black text-slate-400 dark:text-slate-400 uppercase tracking-widest leading-none">{stat.label}</span>
+                    <span className={`text-sm font-black leading-none ${stat.textColor}`}>{stat.value}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* TIMELINE A SCOMPARSA */}
           <AnimatePresence mode="wait">

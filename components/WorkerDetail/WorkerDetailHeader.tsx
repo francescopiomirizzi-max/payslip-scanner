@@ -70,9 +70,9 @@ const WorkerDetailHeader: React.FC = () => {
           initial={{ y: -50, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           transition={FRAMER_PHYSICS.smooth}
-          className="glass-panel max-w-[1800px] mx-auto rounded-3xl p-4 flex justify-between items-center gap-6"
+          className="glass-panel max-w-[1800px] mx-auto rounded-3xl p-4 max-sm:p-3 flex flex-wrap justify-between items-center gap-6 max-sm:gap-3"
         >
-          <div className="flex items-center gap-6 shrink-0">
+          <div className="flex items-center gap-6 shrink-0 max-sm:shrink max-sm:flex-wrap max-sm:gap-3 min-w-0">
             <div className="flex flex-col gap-3 w-44">
               {/* TASTO DASHBOARD */}
               <button
@@ -102,7 +102,9 @@ const WorkerDetailHeader: React.FC = () => {
                   <select
                     value={startClaimYear}
                     onChange={(e) => onStartClaimYearChange(Number(e.target.value))}
-                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
+                    disabled={isReadOnly}
+                    aria-label="Anno di inizio calcoli"
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-default z-20"
                   >
                     {YEARS.filter(y => y >= 2008 && y <= 2025).map(y => (
                       <option key={y} value={y} className="bg-slate-800 text-white py-2 font-bold">
@@ -115,7 +117,7 @@ const WorkerDetailHeader: React.FC = () => {
             </div>
 
             {/* USER INFO */}
-            <div className="flex items-center gap-5 border-l-2 border-slate-200/60 dark:border-slate-700/50 pl-8 h-20 transition-colors">
+            <div className="flex items-center gap-5 border-l-2 border-slate-200/60 dark:border-slate-700/50 pl-8 h-20 max-sm:border-l-0 max-sm:pl-0 max-sm:h-auto max-sm:gap-3 min-w-0 transition-colors">
               {/* Avatar nel colore-azienda (stesso linguaggio della card in dashboard) */}
               <div className="w-14 h-14 rounded-2xl flex items-center justify-center shadow-xl text-white shadow-indigo-200 dark:shadow-indigo-900/40 ring-4 ring-white dark:ring-slate-800 shrink-0 transition-all"
                 style={{ background: (() => {
@@ -124,9 +126,11 @@ const WorkerDetailHeader: React.FC = () => {
                 })() }}>
                 <User className="w-7 h-7" strokeWidth={2} />
               </div>
-              <div className="hidden md:block">
-                <div className="flex items-center gap-2">
-                  <h1 className="text-2xl font-black text-slate-800 dark:text-white tracking-tight leading-none transition-colors">
+              {/* Nome e metadati ora visibili anche sotto md (piano F4: non nasconderli):
+                  sotto sm testo più compatto e righe che wrappano. */}
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h1 className="text-2xl max-sm:text-xl font-black text-slate-800 dark:text-white tracking-tight leading-none transition-colors">
                     {worker.cognome} {worker.nome}
                   </h1>
                   <BadgeCheck className="w-6 h-6 text-blue-500 dark:text-cyan-400 transition-colors" />
@@ -172,7 +176,8 @@ const WorkerDetailHeader: React.FC = () => {
                                 })
                               }
                               title="Segna come sistemato (rimuove l'avviso)"
-                              className="ml-0.5 p-0.5 rounded-full hover:bg-red-200 dark:hover:bg-red-800/60 transition-colors"
+                              aria-label="Segna come sistemato"
+                              className="ml-0.5 p-0.5 pointer-coarse:p-2 pointer-coarse:-m-1.5 rounded-full hover:bg-red-200 dark:hover:bg-red-800/60 transition-colors"
                             >
                               <CheckCircle2 className="w-3.5 h-3.5" />
                             </button>
@@ -215,12 +220,15 @@ const WorkerDetailHeader: React.FC = () => {
             </div>
           </div>
 
-          <div className="flex items-center gap-3 shrink-0">
+          <div className="flex flex-wrap items-center gap-3 max-sm:gap-2 shrink-0 max-sm:shrink min-w-0">
             {/* DROPDOWN AZIONI (ISTAT + PEC) */}
             <div className="relative" ref={actionsMenuRef}>
               <button
                 onClick={() => setIsActionsOpen(v => !v)}
-                className="group relative px-5 py-2.5 rounded-xl font-bold text-white shadow-[0_0_15px_rgba(234,179,8,0.3)] hover:shadow-[0_0_25px_rgba(234,179,8,0.5)] hover:-translate-y-0.5 active:scale-95 transition-all duration-300 border border-white/20 overflow-hidden flex items-center gap-2"
+                title="Azioni"
+                aria-label="Azioni"
+                aria-expanded={isActionsOpen}
+                className="group relative px-5 py-2.5 pointer-coarse:min-h-11 rounded-xl font-bold text-white shadow-[0_0_15px_rgba(234,179,8,0.3)] hover:shadow-[0_0_25px_rgba(234,179,8,0.5)] hover:-translate-y-0.5 active:scale-95 transition-all duration-300 border border-white/20 overflow-hidden flex items-center gap-2"
                 style={{ background: 'linear-gradient(135deg, #eab308 0%, #d946ef 100%)' }}
               >
                 <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500 rotate-12" />
@@ -235,7 +243,7 @@ const WorkerDetailHeader: React.FC = () => {
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: -8, scale: 0.95 }}
                     transition={{ duration: 0.15 }}
-                    className="absolute right-0 top-full mt-2 z-50 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl overflow-hidden min-w-[210px]"
+                    className="absolute right-0 max-sm:right-auto max-sm:left-0 top-full mt-2 z-50 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl overflow-hidden min-w-[210px]"
                   >
                     <button
                       onClick={() => { onOpenIstat(); setIsActionsOpen(false); }}
@@ -270,7 +278,9 @@ const WorkerDetailHeader: React.FC = () => {
             {/* TASTO DOWNLOAD (Conteggi PDF) — visibile anche in sola lettura (scarica, non scrive) */}
             <button
               onClick={onPrintTables}
-              className="group relative px-6 py-2.5 rounded-xl font-bold text-white shadow-lg hover:shadow-xl hover:-translate-y-0.5 active:scale-95 transition-all duration-300 border border-white/10 overflow-hidden flex items-center gap-2"
+              title="Download conteggi (PDF)"
+              aria-label="Download conteggi (PDF)"
+              className="group relative px-6 py-2.5 pointer-coarse:min-h-11 rounded-xl font-bold text-white shadow-lg hover:shadow-xl hover:-translate-y-0.5 active:scale-95 transition-all duration-300 border border-white/10 overflow-hidden flex items-center gap-2"
               style={{ background: 'linear-gradient(90deg, #10b981 0%, #14b8a6 100%)' }}
             >
               <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500 rotate-12"></div>
@@ -281,7 +291,9 @@ const WorkerDetailHeader: React.FC = () => {
             {/* TASTO VAI AL REPORT — visibile anche in sola lettura (sola navigazione) */}
             <button
               onClick={onShowReport}
-              className="group relative px-6 py-2.5 rounded-xl font-bold text-white shadow-lg hover:shadow-xl hover:-translate-y-0.5 active:scale-95 transition-all duration-300 border border-white/10 overflow-hidden flex items-center gap-2"
+              title="Vai al Report"
+              aria-label="Vai al Report"
+              className="group relative px-6 py-2.5 pointer-coarse:min-h-11 rounded-xl font-bold text-white shadow-lg hover:shadow-xl hover:-translate-y-0.5 active:scale-95 transition-all duration-300 border border-white/10 overflow-hidden flex items-center gap-2"
               style={{ background: 'linear-gradient(90deg, #7c3aed 0%, #4f46e5 100%)' }}
             >
               <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500 rotate-12"></div>
@@ -292,7 +304,7 @@ const WorkerDetailHeader: React.FC = () => {
             {/* TASTO ARCHIVIO PDF */}
             <button
               onClick={() => onSetActiveTab(activeTab === 'archive' ? 'input' : 'archive')}
-              className={`group relative px-4 py-2.5 rounded-xl font-bold transition-all duration-300 border overflow-hidden flex items-center gap-2 hover:-translate-y-0.5 active:scale-95
+              className={`group relative px-4 py-2.5 pointer-coarse:min-h-11 rounded-xl font-bold transition-all duration-300 border overflow-hidden flex items-center gap-2 hover:-translate-y-0.5 active:scale-95
                 ${activeTab === 'archive'
                   ? 'text-white shadow-[0_0_20px_rgba(6,182,212,0.5)] border-white/20'
                   : 'text-slate-500 dark:text-slate-400 bg-white/40 dark:bg-slate-800/40 border-transparent hover:bg-white dark:hover:bg-slate-800 hover:text-cyan-600 dark:hover:text-cyan-400 hover:shadow-md'

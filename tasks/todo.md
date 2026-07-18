@@ -19,14 +19,9 @@
 > quasi assente; provider context non memoizzato (re-render globale a ogni keystroke).
 
 ## Tranche proposte (eseguirle una per sessione, gate pieno a ogni giro)
+## APPROVATO 18/07 (decisioni: T1 sì · gate viewer DENTRO T1 · F3 committata come checkpoint)
 
-- [ ] **T1 — Shell consultabile** (rischio basso, questa sessione se approvata):
-      header con wrap/compattazione max-sm (stessi 11 comandi), CommandBar e tab
-      raggiungibili su touch (≥44px), VertenzaTimeline fruibile a 390 (step + toggle),
-      **ticker stats reso accessibile sotto xl** (le card oggi spariscono: sostituto
-      compatto, non rimozione), gate viewer su scudo verify/accetta/Start Year
-      (stesso pattern useIsReadOnly di Fase 3 — decisione utente da confermare),
-      aria-label sui controlli senza nome. NIENTE griglia in T1.
+- [x] **T1 — Shell consultabile** — FATTA 18/07, vedi Review T1 sotto.
 - [ ] **T2 — Vista mensile mobile** (rischio ALTO, da spezzare in T2a read-only →
       T2b editing): componente NUOVO `MonthlyDataMobile` affiancato a MonthlyDataGrid
       con le STESSE props (`data`+`onDataChange`+hook invariati, come chiede il piano);
@@ -41,9 +36,43 @@
 **Criteri (dal piano §Fase 4):** nessun overflow globale della scheda; cambio anno +
 lettura mese + aggiornamento semplice completabili su touch; stessi risultati di calcolo
 mobile/desktop sullo stesso fixture; nessuna regressione autosave.
-**Verifica:** protocollo demo+iframe (funziona: la scheda è raggiungibile in demo?
-da verificare al primo giro — altrimenti misure su main + collaudo utente) + gate
-tsc/vitest/build + diff review.
+**Verifica:** protocollo demo+iframe (CONFERMATO: la scheda si apre in demo via
+cassetto→GESTIONE BUSTE PAGA) + gate tsc/vitest/build + diff review.
+
+## Review T1 (18/07)
+
+**Diff: 4 file** (WorkerDetailHeader, VertenzaTimeline, WorkerDetailLayout,
+MonthlyDataGrid — quest'ultimo SOLO 2 guard `isReadOnly`, zero layout), zero
+dipendenze nuove, zero logica di calcolo.
+
+1. **Header**: root e gruppi in `flex-wrap` (contenitore in flusso → no-op quando
+   entra, a differenza del caso fixed della lezione 17/07); nome+metadati ORA VISIBILI
+   anche sotto md (`hidden md:block` rimosso, `max-sm:text-xl`, righe wrap); Start Year
+   `disabled={isReadOnly}` + aria; Azioni/Download/Report con title+aria (sotto lg/xl
+   sono icon-only senza nome) + `pointer-coarse:min-h-11`; menu Azioni `max-sm:left-0`
+   (stesso bug del menu Dati F3); chip "sistemato" hit-area estesa.
+2. **VertenzaTimeline**: riga in wrap; 3 toggle + STATO VERTENZA `pointer-coarse:
+   min-h-11`; **nuova riga statistiche `xl:hidden`**: stessi dati/modal del ticker in
+   chip a scorrimento con fade (il ticker resta identico a ≥1280). Trappola trovata
+   misurando: `tickerItems` è TRIPLICATO in `useStatsData` per il marquee → dedupe per
+   label (6 chip, non 18).
+3. **Layout**: `max-sm:px-3` sui due wrapper (recupera 24px utili a 390).
+4. **Gate viewer** (decisione utente): scudo verify per-riga e "Accetta tutto" spenti
+   in sola lettura (il semaforo-esito resta visibile); Start Year bloccato. NOTA: i
+   3 toggle timeline (28gg/Ticket/Permessi) NON li ho gate-ati: per il viewer
+   funzionano client-side come esplorazione di scenario (il persist lo blocca RLS) —
+   diverso dal Ticket globale della dashboard che riscrive N pratiche. Da confermare
+   col collaudo.
+
+**Misure (demo+iframe, scheda REALE "Bianchi Giulia" aperta via cassetto→CTA):**
+390: doc overflow 0, header in viewport (wrap, h 307), nome visibile, 6 chip stats,
+menu Azioni in viewport (25..235), timeline step in viewport (37..333), command bar ok.
+1276 (sub-xl): chip visibili (prima: NIENTE statistiche sotto 1280), header 133.
+1440 (xl): ticker marquee INVARIATO, chip nascosti, doc ok.
+**Gate:** tsc 0 · **344/344** · build ok.
+
+**Resta:** collaudo visivo utente (390 + desktop + telefono per i target coarse);
+poi T2 (vista mensile mobile, sessione dedicata).
 
 ---
 

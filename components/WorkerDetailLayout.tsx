@@ -127,11 +127,11 @@ const WorkerDetailLayout: React.FC<{ children: React.ReactNode }> = ({ children 
 
       <MovingGrid />
 
-      <div className="relative z-50 pt-20 px-6 pb-2">
+      <div className="relative z-50 pt-20 px-6 max-sm:px-3 pb-2">
         <WorkerDetailHeader />
       </div>
 
-      <div className="relative z-10 flex-1 p-6 flex flex-col gap-6 max-w-[1800px] mx-auto w-full">
+      <div className="relative z-10 flex-1 p-6 max-sm:px-3 flex flex-col gap-6 max-w-[1800px] mx-auto w-full">
         <VertenzaTimeline />
         <WorkerDetailCommandBar />
         <WorkerDetailContent>{children}</WorkerDetailContent>
