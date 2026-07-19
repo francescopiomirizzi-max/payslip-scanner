@@ -86,7 +86,9 @@ const WorkerDetailContent: React.FC<{ children: React.ReactNode }> = ({ children
   return (
     <>
         <div className="flex flex-row gap-6 w-full items-stretch relative min-h-[calc(100vh-250px)]">
-          <div className="flex-1 bg-white/60 dark:bg-slate-950/80 backdrop-blur-md rounded-[2.5rem] border border-white/60 dark:border-cyan-400 shadow-2xl dark:shadow-[inset_0_0_50px_rgba(34,211,238,0.15),0_0_30px_rgba(34,211,238,0.3)] overflow-hidden flex flex-col relative min-h-0 transition-all duration-300">
+          {/* Su telefono, col visore aperto, il pannello tab si nasconde: il visore
+              diventa a pagina intera (il 55/45 affiancato a 390px è inutilizzabile) */}
+          <div className={`flex-1 bg-white/60 dark:bg-slate-950/80 backdrop-blur-md rounded-[2.5rem] border border-white/60 dark:border-cyan-400 shadow-2xl dark:shadow-[inset_0_0_50px_rgba(34,211,238,0.15),0_0_30px_rgba(34,211,238,0.3)] overflow-hidden flex flex-col relative min-h-0 transition-all duration-300 ${showSplit ? 'max-sm:hidden' : ''}`}>
             <div className="flex-1 p-2 sm:p-6 overflow-hidden relative">
               <AnimatePresence mode="wait">
                 {isExplainerOpen ? (

@@ -14,7 +14,15 @@ export const useIsMobile = (): boolean => {
     const mql = window.matchMedia(PHONE_QUERY);
     const onChange = (e: MediaQueryListEvent) => setIsMobile(e.matches);
     mql.addEventListener('change', onChange);
-    return () => mql.removeEventListener('change', onChange);
+    // Fallback: dentro un iframe Chromium NON recapita i change ai MediaQueryList
+    // creati prima del primo resize del frame (misurato col protocollo demo+iframe).
+    // Il resize copre quel caso; a parità di valore setState non re-renderizza.
+    const onResize = () => setIsMobile(window.matchMedia(PHONE_QUERY).matches);
+    window.addEventListener('resize', onResize);
+    return () => {
+      mql.removeEventListener('change', onChange);
+      window.removeEventListener('resize', onResize);
+    };
   }, []);
 
   return isMobile;

@@ -1,4 +1,55 @@
-# Todo — Sessione 19/07 (bis): Fase 4 T3 — tab Riepilogo/Analisi Voci/TFR su mobile (ESEGUITA)
+# Todo — Sessione 19/07 (ter): Fase 4 T4 — archivio tab + visore su mobile (ESEGUITA)
+
+> **Collaudo T2a+T3 CONFERMATO dall'utente il 19/07** («verificato ed è tutto ok») →
+> via libera a T4 e poi Fase 5 (richiesta esplicita utente).
+
+## Piano T4 (scope = tranche plan 18/07: archivio tab + visore; sniper touch rimandato)
+
+- [x] 1. **Visore a pagina intera su telefono**: col visore aperto e viewport <640 il
+      pannello tab si nasconde (`max-sm:hidden` condizionale su showSplit in
+      WorkerDetailContent) e il visore vince sull'inline width di Framer con
+      `max-sm:w-full!` → dal tab Archivio "Visualizza PDF" apre il documento a tutta
+      larghezza; Chiudi ripristina. Header e toolbar del visore in `max-sm:flex-wrap`.
+- [x] 2. **Sniper OCR nascosto su touch** (`pointer-coarse:hidden`): la selezione è
+      drag-del-mouse, su telefono era un tasto morto/confondente. Pan resta
+      mouse-only (limite; zoom ± e Centra funzionano).
+- [x] 3. **Target 44px + a11y visore**: frecce file, filtro, ruota, zoom ±, centra,
+      Elimina (ORA con title+aria-label, prima era muto — inventario §6.5), Chiudi
+      `pointer-coarse:p-3`; "Archivio", pillole anno, "Tutto l'anno" (×2 picker),
+      bottoni mese e righe-mese selezionabili `pointer-coarse:min-h-11`.
+- [x] 4. **Tab archivio + barra voci fisse**: barra voci fisse in `flex-wrap`
+      (overflowava certa a 390) + select/bottoni min-h-11; select "Vai all'anno",
+      "Torna alla griglia", "Scarica ZIP", azioni riga (Ri-analizza/Visualizza/
+      Elimina `pointer-coarse:p-3`) e conferma No/Sì a target touch.
+- [x] 5. **Fix vero scoperto misurando: quirk Chromium negli iframe** — i change dei
+      MediaQueryList creati PRIMA del primo resize del frame non vengono mai
+      recapitati (provato: listener iniettato al boot = 0 eventi, registrato dopo =
+      ok). Il hook `useIsMobile` era da manuale ma lo switch griglia↔mobile non
+      reagiva al resize nell'harness → aggiunto fallback `resize` (setState identico
+      = zero re-render). Su telefono reale (top-level, rotazione) il canale MQL è
+      comunque affidabile; ora lo è anche l'harness.
+- [x] 6. **Gate**: tsc 0 · **344/344** · build ok.
+- [ ] 7. **Collaudo visivo utente** (insieme a F5).
+
+## Review T4 (19/07)
+
+**Diff: 5 file** (WorkerDetailContent, SplitViewViewer, WorkerDetailPage barra voci
+fisse, PayslipArchiveTab, useIsMobile), zero dipendenze, zero logica di calcolo.
+
+**Misure (demo+iframe, harness ELIMINATO):**
+- 390 tab archivio: overflow 0; barra voci fisse wrappata (h 115, right 353 ≤ 390);
+  empty-state ok.
+- 1276 + visore aperto (occhio della griglia): visore 545px ≈ 45%, pannello tab
+  visibile, overflow 0 → **desktop invariato**.
+- Stesso iframe stretto a 390 col visore aperto: **pannello tab nascosto, visore
+  349px = pagina intera, overflow 0**.
+- Switch dinamico griglia↔mobile (post-fix hook): 390→mobile, 1276→griglia,
+  ritorno 390→mobile, overflow 0. Copre la rotazione del telefono.
+
+**Limiti dichiarati:** pan/pinch del visore restano mouse-only (zoom ± disponibile);
+righe archivio non esercitabili in demo (archivio fixtures vuoto) → target verificati
+nel CSS prodotto, collaudo su pratica reale; resa `<object>` PDF su iOS da collaudare
+sul telefono.
 
 > **Decisione utente (19/07, AskUserQuestion):** dopo la T2a si prosegue con la **T3**
 > (consultazione, basso rischio) e NON con la T2b: l'editing touch verrà progettato
@@ -1580,3 +1631,95 @@ esplicita (fix RLS) e su requisito del piano (retry ⇒ esito non terminale lato
 
 **Rischio residuo:** collaudo su telefono reale mancante (item 8); rollback codice =
 revert 4 file; rollback DB = ripristino policy 008/010 (sconsigliato: riaprirebbe i buchi).
+
+---
+
+# Todo - 19/07: kit schede informative ValOra
+
+> Obiettivo: creare materiale promozionale coerente con il brand e con le funzionalita
+> realmente presenti nel prodotto, pronto per stampa A4 e riuso digitale.
+
+- [x] 1. Inventario di brand, immagini, messaggi e contatti gia presenti in app/landing,
+      integrato con visione, diario storico e stato prodotto dal Vault Obsidian.
+- [x] 2. Definire sistema grafico e copy per 4 schede: panoramica, AI cedolini,
+      turni/riposi, metodo e deliverable.
+- [x] 3. Generare il PDF multipagina in `output/pdf/`, 4 PDF singoli e i PNG ad alta risoluzione.
+- [x] 4. Renderizzare e ispezionare ogni pagina; correggere clipping, leggibilita,
+      gerarchia e coerenza visiva.
+- [x] 5. Verificare testo estraibile, numero pagine, dimensioni A4 e completezza dei file.
+- [x] 6. Aggiungere qui una review finale con contenuti consegnati, prove e limiti.
+
+## Review finale
+
+- Kit master: `output/pdf/valora-kit-schede-informative.pdf`, 4 pagine A4.
+- Schede singole: panoramica, cedolini/AI, turni/riposi, servizio/consegne in
+  `output/pdf/schede/`; ciascun file e un A4 da 1 pagina.
+- Riutilizzo digitale: 4 PNG 1323x1871 in `output/promo/`.
+- Fonti del copy: app e landing locali + Vault Obsidian (`valora-visione`,
+  `diario-railflow`, `feature-set`, `review-valora`, `stack-tecnico`). La storia ha
+  cambiato il posizionamento: ValOra e presentato come motore LegalTech proprietario
+  dietro il servizio di perizia, non come SaaS generico; CAF resta prospettiva, non claim.
+- QA visiva: tre render; corretti CTA sovrapposta, microcopy/accenti e QR inizialmente
+  invisibile sul fondo scuro. Ultimo render ispezionato senza clipping o sovrapposizioni.
+- QA tecnica: master 4 pagine A4 595.276x841.89 pt; 4 singoli da 1 pagina; testo
+  estraibile verificato con `pdftotext`; `git diff --check` pulito. QR generato dal
+  mailto a `francescopiomirizzi@gmail.com` e visibile nel render finale.
+- Limite intenzionale: il dato `7.300+` e datato nel layout al 16/07/2026, per non
+  trasformare uno snapshot verificato in una metrica apparentemente eterna.
+
+---
+
+# Todo - 19/07: manuale operativo ValOra
+
+> Correzione di scope: le schede promozionali restano come sintesi; la consegna principale
+> diventa un vero manuale d'uso, con spiegazione tecnica accessibile del flusso dati e dei controlli.
+
+- [x] 1. Ricostruire dal codice il flusso completo: acquisizione PC/mobile, classificazione file,
+      parser deterministico, OCR/AI, validazioni, archivio, calcoli ed export.
+- [x] 2. Catturare schermate reali e sanificate dalla demo ValOra per i passaggi principali.
+- [x] 3. Scrivere la specifica del manuale (indice, pubblico, livelli di dettaglio, note e limiti).
+- [x] 4. Generare un DOCX editabile con preset `compact_reference_guide` e cover `editorial_cover`.
+- [x] 5. Renderizzare il DOCX in PNG/PDF, ispezionare tutte le pagine e correggere il layout.
+- [x] 6. Verificare contenuto tecnico contro codice/test/knowledge e documentare la review finale.
+
+## Review finale
+
+- Manuale editabile: `output/manual/Manuale-operativo-ValOra.docx`; versione PDF:
+  `output/pdf/Manuale-operativo-ValOra.pdf`.
+- Contenuto: 25 pagine A4, 22 sezioni e 2 appendici. Copre accessi, workflow, Dynamic Island, acquisizione
+  singola/multipla/cartella, scanner QR, profili AI, controlli deterministici, verifica locale,
+  anomalie, revisione mensile, archivio, incidenza, TFR/ISTAT, Turni & Riposi, report,
+  troubleshooting, checklist e glossario.
+- Correzione metodologica recepita anche nella scheda promozionale: l'import ordinario usa
+  l'estrazione AI per PDF e immagini; il parser deterministico e un controllo successivo e
+  separato sui PDF testuali supportati. Per le scansioni Elior sono documentati i controlli
+  aritmetici deterministici applicati all'output OCR.
+- Trasparenza funzionale: Indennita e indicata come anteprima; sono dichiarati i limiti su
+  import Turni & Riposi, coefficienti TFR successivi al 2024, indici ISTAT non real-time,
+  rianalisi archivio e PDF scansionati.
+- QA visiva: cinque render DOCX; tutte le 25 pagine ispezionate. Corretti lo spezzamento della
+  tabella di acquisizione, l'avvio della sezione sui casi di arresto, il glossario e la
+  numerazione progressiva che non ripartiva da 1.
+- QA tecnica: PDF A4 595.304 x 841.89 pt; testo estraibile verificato con `pdftotext`;
+  `git diff --check` pulito. Test mirati sui controlli: 3 file e 53 test passati
+  (`reconcileAttendance`, `eliorScanValidator`, `verify-payslip`).
+
+## Integrazione Dynamic Island
+
+- [x] 1. Ricostruire dal codice e dalla storia del progetto stati, eventi e responsabilita della Dynamic Island.
+- [x] 2. Aggiungere un capitolo autonomo al manuale e aggiornare indice, workflow, demo e glossario.
+- [x] 3. Integrare il valore distintivo della Dynamic Island nel kit promozionale.
+- [x] 4. Rigenerare DOCX/PDF e verificare tutte le pagine e il testo estraibile.
+
+### Review integrazione
+
+- Manuale aggiornato all'edizione 1.1: 25 pagine A4. Il nuovo capitolo 5 occupa due pagine e
+  documenta stati compatti/contestuali, Live Activity, upload singolo/batch/cartella/mobile,
+  minimizzazione, pill satellite, ETA, segnale di stallo, esiti, priorita e limiti.
+- Inserite due schermate reali e sanificate della demo: Island espansa con menu e ticker del netto
+  nella scheda lavoratore. Aggiornati anche copertina, indice, scanner QR, demo, glossario e note versione.
+- Kit promozionale riallineato: la panoramica presenta la Dynamic Island come lavorazione sempre
+  visibile; la scheda servizio cita avanzamento/esiti e la Live Activity. Rigenerati master,
+  quattro PDF singoli e quattro PNG 1323x1871.
+- QA: tutte le 25 pagine del DOCX/PDF ispezionate dopo il render finale; eliminata una pagina vuota
+  causata da un callout spezzato. PDF A4, testo estraibile e archivio DOCX verificati; `git diff --check` pulito.

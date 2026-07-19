@@ -147,7 +147,7 @@ const SplitViewViewer: React.FC<SplitViewViewerProps> = ({
     initial={{ width: 0, opacity: 0, x: -50 }}
     animate={{ width: '45%', opacity: 1, x: 0 }}
     exit={{ width: 0, opacity: 0, x: -50 }}
-    className="bg-slate-900 rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col border border-slate-700 shrink-0 z-40"
+    className="bg-slate-900 rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col border border-slate-700 shrink-0 z-40 max-sm:w-full!"
     onDragOver={isReadOnly ? undefined : onDragOver}
     onDrop={isReadOnly ? undefined : onDrop}
   >
@@ -162,13 +162,13 @@ const SplitViewViewer: React.FC<SplitViewViewerProps> = ({
     />
 
     {/* HEADER */}
-    <div className="p-4 bg-slate-800/80 backdrop-blur border-b border-slate-700 flex justify-between items-center z-20">
+    <div className="p-4 bg-slate-800/80 backdrop-blur border-b border-slate-700 flex justify-between items-center z-20 max-sm:flex-wrap gap-y-2">
       <div className="flex items-center gap-3">
         {/* VISORE: torna al picker dell'archivio per scegliere altre buste */}
         {payslipFiles.length > 0 && onBackToArchivePicker && (isReadOnly || hasArchive) && (
           <button
             onClick={() => { if (!isReadOnly) setEmptyMode('archive'); onBackToArchivePicker(); }}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-700 hover:bg-cyan-600 text-white transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 pointer-coarse:min-h-11 rounded-lg text-xs font-bold bg-slate-700 hover:bg-cyan-600 text-white transition-colors"
             title="Torna all'archivio per scegliere altre buste"
           >
             <ChevronLeft className="w-4 h-4" /> Archivio
@@ -177,11 +177,11 @@ const SplitViewViewer: React.FC<SplitViewViewerProps> = ({
         {/* File navigator or mode label */}
         {payslipFiles.length > 1 ? (
           <div className="flex items-center gap-2 bg-slate-950/50 rounded-lg p-1 border border-slate-700">
-            <button onClick={onPrevFile} disabled={currentFileIndex === 0} className="p-1.5 hover:bg-slate-700 rounded text-white disabled:opacity-30 transition-colors">
+            <button onClick={onPrevFile} disabled={currentFileIndex === 0} className="p-1.5 pointer-coarse:p-3 hover:bg-slate-700 rounded text-white disabled:opacity-30 transition-colors" title="File precedente">
               <ChevronLeft size={14} />
             </button>
             <span className="text-xs font-mono font-bold text-cyan-400 w-16 text-center">{currentFileIndex + 1} / {payslipFiles.length}</span>
-            <button onClick={onNextFile} disabled={currentFileIndex === payslipFiles.length - 1} className="p-1.5 hover:bg-slate-700 rounded text-white disabled:opacity-30 transition-colors">
+            <button onClick={onNextFile} disabled={currentFileIndex === payslipFiles.length - 1} className="p-1.5 pointer-coarse:p-3 hover:bg-slate-700 rounded text-white disabled:opacity-30 transition-colors" title="File successivo">
               <ChevronRight size={14} />
             </button>
           </div>
@@ -202,48 +202,51 @@ const SplitViewViewer: React.FC<SplitViewViewerProps> = ({
       </div>
 
       {/* Toolbar */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 max-sm:flex-wrap gap-y-2">
         {payslipFiles.length > 0 && (
           <>
+            {/* Cecchino OCR: selezione con drag del mouse → nascosto su touch */}
             <button
               onClick={onToggleSniper}
               disabled={isProcessing}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${isSniperMode ? 'bg-red-500 text-white shadow-[0_0_15px_rgba(239,68,68,0.6)]' : 'bg-slate-700 text-white hover:bg-slate-600'}`}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all pointer-coarse:hidden ${isSniperMode ? 'bg-red-500 text-white shadow-[0_0_15px_rgba(239,68,68,0.6)]' : 'bg-slate-700 text-white hover:bg-slate-600'}`}
             >
               {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <ScanEye className="w-4 h-4" />}
               {isSniperMode ? 'STOP' : 'OCR'}
             </button>
             <div className="h-6 w-px bg-slate-600 mx-2" />
 
-            <button onClick={onToggleFilter} className={`p-2 rounded-lg transition-colors ${imgFilter === 'contrast' ? 'bg-indigo-600 text-white' : 'bg-slate-700 hover:bg-slate-600 text-white'}`} title="Migliora Leggibilità">
+            <button onClick={onToggleFilter} className={`p-2 pointer-coarse:p-3 rounded-lg transition-colors ${imgFilter === 'contrast' ? 'bg-indigo-600 text-white' : 'bg-slate-700 hover:bg-slate-600 text-white'}`} title="Migliora Leggibilità">
               <Wand2 className="w-4 h-4" />
             </button>
-            <button onClick={onRotate} className="p-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-white transition-colors" title="Ruota Immagine">
+            <button onClick={onRotate} className="p-2 pointer-coarse:p-3 bg-slate-700 hover:bg-slate-600 rounded-lg text-white transition-colors" title="Ruota Immagine">
               <RotateCw className="w-4 h-4" />
             </button>
             <div className="h-6 w-px bg-slate-600 mx-1" />
 
-            <button onClick={() => onZoom(-0.1)} className="p-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-white transition-colors" title="Riduci Zoom">
+            <button onClick={() => onZoom(-0.1)} className="p-2 pointer-coarse:p-3 bg-slate-700 hover:bg-slate-600 rounded-lg text-white transition-colors" title="Riduci Zoom">
               <ZoomOut className="w-4 h-4" />
             </button>
-            <button onClick={onResetView} className="p-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-white transition-colors" title="Centra e Ripristina">
+            <button onClick={onResetView} className="p-2 pointer-coarse:p-3 bg-slate-700 hover:bg-slate-600 rounded-lg text-white transition-colors" title="Centra e Ripristina">
               <Maximize className="w-4 h-4" />
             </button>
-            <button onClick={() => onZoom(0.1)} className="p-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-white transition-colors" title="Aumenta Zoom">
+            <button onClick={() => onZoom(0.1)} className="p-2 pointer-coarse:p-3 bg-slate-700 hover:bg-slate-600 rounded-lg text-white transition-colors" title="Aumenta Zoom">
               <ZoomIn className="w-4 h-4" />
             </button>
 
             {!isReadOnly && (
             <button
               onClick={onDeleteCurrentFile}
-              className="p-2 bg-red-900/50 hover:bg-red-900/80 text-red-400 rounded-lg ml-2 transition-colors"
+              className="p-2 pointer-coarse:p-3 bg-red-900/50 hover:bg-red-900/80 text-red-400 rounded-lg ml-2 transition-colors"
+              title="Elimina file dal visore"
+              aria-label="Elimina file dal visore"
             >
               <Trash2 className="w-4 h-4" />
             </button>
             )}
           </>
         )}
-        <button onClick={onClose} className="p-2 hover:bg-slate-700 rounded-lg text-slate-400 dark:text-slate-200 hover:text-white ml-2" title="Chiudi Visore">
+        <button onClick={onClose} className="p-2 pointer-coarse:p-3 hover:bg-slate-700 rounded-lg text-slate-400 dark:text-slate-200 hover:text-white ml-2" title="Chiudi Visore">
           <X className="w-5 h-5" />
         </button>
       </div>
@@ -355,7 +358,7 @@ const SplitViewViewer: React.FC<SplitViewViewerProps> = ({
                   <button
                     key={year}
                     onClick={() => setSelectedYear(year)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-black tabular-nums transition-colors ${
+                    className={`px-3 py-1.5 pointer-coarse:min-h-11 rounded-lg text-xs font-black tabular-nums transition-colors ${
                       active
                         ? 'bg-cyan-500 text-white shadow-[0_0_12px_rgba(6,182,212,0.4)]'
                         : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700'
@@ -388,7 +391,7 @@ const SplitViewViewer: React.FC<SplitViewViewerProps> = ({
                     {yearPicks.length > 0 && (
                       <button
                         onClick={() => onOpenArchivedPicks?.(yearPicks.map(p => p.id))}
-                        className="px-2 py-1 rounded-md text-[10px] font-black uppercase tracking-wider bg-cyan-600/20 hover:bg-cyan-600 text-cyan-300 hover:text-white border border-cyan-500/40 hover:border-cyan-500 transition-colors"
+                        className="px-2 py-1 pointer-coarse:min-h-11 rounded-md text-[10px] font-black uppercase tracking-wider bg-cyan-600/20 hover:bg-cyan-600 text-cyan-300 hover:text-white border border-cyan-500/40 hover:border-cyan-500 transition-colors"
                         title={`Apri tutte le ${yearPicks.length} buste del ${effectiveYear}`}
                       >
                         Tutto l'anno
@@ -400,7 +403,7 @@ const SplitViewViewer: React.FC<SplitViewViewerProps> = ({
                       <button
                         key={m}
                         onClick={() => onOpenArchivedPicks?.(picks.map(p => p.id))}
-                        className="group flex items-center gap-2 px-3 py-2.5 rounded-xl bg-slate-800 hover:bg-cyan-600 border border-slate-700 hover:border-cyan-500 text-left transition-colors"
+                        className="group flex items-center gap-2 px-3 py-2.5 pointer-coarse:min-h-11 rounded-xl bg-slate-800 hover:bg-cyan-600 border border-slate-700 hover:border-cyan-500 text-left transition-colors"
                         title={picks.map(p => `${p.month} ${p.year} — ${p.filename}`).join('\n')}
                       >
                         <CalendarDays className="w-4 h-4 text-cyan-400 group-hover:text-white shrink-0" />
@@ -485,7 +488,7 @@ const SplitViewViewer: React.FC<SplitViewViewerProps> = ({
                         <button
                           key={year}
                           onClick={() => setSelectedYear(year)}
-                          className={`flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-bold transition-colors ${active ? 'bg-cyan-600 text-white' : 'text-slate-300 hover:bg-slate-800'}`}
+                          className={`flex items-center justify-between px-2.5 py-2 pointer-coarse:min-h-11 rounded-lg text-xs font-bold transition-colors ${active ? 'bg-cyan-600 text-white' : 'text-slate-300 hover:bg-slate-800'}`}
                         >
                           <span>{year}</span>
                           <span className={`text-[10px] tabular-nums ${active ? 'text-cyan-100' : 'text-slate-500'}`}>{count}</span>
@@ -503,7 +506,7 @@ const SplitViewViewer: React.FC<SplitViewViewerProps> = ({
                       {yearPicks.length > 0 && (
                         <button
                           onClick={() => onOpenArchivedPicks?.(yearPicks.map(p => p.id))}
-                          className="px-2 py-1 rounded-md text-[10px] font-black uppercase tracking-wider bg-cyan-600/20 hover:bg-cyan-600 text-cyan-300 hover:text-white border border-cyan-500/40 hover:border-cyan-500 transition-colors"
+                          className="px-2 py-1 pointer-coarse:min-h-11 rounded-md text-[10px] font-black uppercase tracking-wider bg-cyan-600/20 hover:bg-cyan-600 text-cyan-300 hover:text-white border border-cyan-500/40 hover:border-cyan-500 transition-colors"
                           title={`Apri tutte le ${yearPicks.length} buste del ${effectiveYear}`}
                         >
                           Tutto l'anno
@@ -531,7 +534,7 @@ const SplitViewViewer: React.FC<SplitViewViewerProps> = ({
                               picks.forEach(p => selected ? next.delete(p.id) : next.add(p.id));
                               return next;
                             })}
-                            className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg border text-left transition-colors ${selected ? 'bg-cyan-500/15 border-cyan-500/50' : 'bg-slate-800/60 border-slate-700 hover:border-cyan-500/40 hover:bg-slate-800'}`}
+                            className={`w-full flex items-center gap-2.5 px-2.5 py-2 pointer-coarse:min-h-11 rounded-lg border text-left transition-colors ${selected ? 'bg-cyan-500/15 border-cyan-500/50' : 'bg-slate-800/60 border-slate-700 hover:border-cyan-500/40 hover:bg-slate-800'}`}
                           >
                             <span className={`w-4 h-4 shrink-0 rounded flex items-center justify-center border ${selected ? 'bg-cyan-500 border-cyan-400' : 'border-slate-500'}`}>
                               {selected && <Check className="w-3 h-3 text-white" />}

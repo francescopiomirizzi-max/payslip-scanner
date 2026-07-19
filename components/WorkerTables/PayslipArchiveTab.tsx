@@ -344,7 +344,7 @@ export default function PayslipArchiveTab({ workerId, workerProfilo, workerElior
                         value=""
                         onChange={e => { const y = Number(e.target.value); if (y) jumpToYear(y); }}
                         title="Salta direttamente a un anno dell'archivio"
-                        className="px-2 py-1.5 rounded-xl text-xs font-bold bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 cursor-pointer hover:border-slate-400 dark:hover:border-slate-500 transition-colors"
+                        className="px-2 py-1.5 pointer-coarse:min-h-11 rounded-xl text-xs font-bold bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 cursor-pointer hover:border-slate-400 dark:hover:border-slate-500 transition-colors"
                     >
                         <option value="" disabled>Vai all'anno…</option>
                         {sortedYears.map(y => (
@@ -357,7 +357,7 @@ export default function PayslipArchiveTab({ workerId, workerProfilo, workerElior
                             whileTap={{ scale: 0.93 }}
                             onClick={onBackToGrid}
                             title="Torna alla tabella di inserimento mensile"
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold
+                            className="flex items-center gap-1.5 px-3 py-1.5 pointer-coarse:min-h-11 rounded-xl text-xs font-bold
                                 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600
                                 text-slate-700 dark:text-slate-200 shadow-sm transition-colors
                                 hover:border-blue-400 hover:text-blue-600 dark:hover:text-cyan-400 dark:hover:border-cyan-600"
@@ -370,7 +370,7 @@ export default function PayslipArchiveTab({ workerId, workerProfilo, workerElior
                     whileTap={{ scale: 0.93 }}
                     onClick={handleDownloadAllZip}
                     disabled={!!zipProgress}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold
+                    className="flex items-center gap-1.5 px-3 py-1.5 pointer-coarse:min-h-11 rounded-xl text-xs font-bold
                         bg-cyan-500 hover:bg-cyan-600 active:bg-cyan-700
                         text-white shadow-sm transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                     title="Scarica tutte le buste paga come ZIP suddiviso per anno"
@@ -530,7 +530,7 @@ export default function PayslipArchiveTab({ workerId, workerProfilo, workerElior
                                                             whileTap={{ scale: 0.9 }}
                                                             onClick={() => handleReanalyze(record)}
                                                             disabled={reanalyzingId === record.id || reanalyzedId === record.id}
-                                                            className={`p-1.5 rounded-lg transition-colors disabled:opacity-50 ${
+                                                            className={`p-1.5 pointer-coarse:p-3 rounded-lg transition-colors disabled:opacity-50 ${
                                                                 reanalyzeErrorId === record.id
                                                                     ? 'text-red-500 bg-red-50 dark:bg-red-900/20'
                                                                     : reanalyzedId === record.id
@@ -555,7 +555,7 @@ export default function PayslipArchiveTab({ workerId, workerProfilo, workerElior
                                                             whileTap={{ scale: 0.9 }}
                                                             onClick={() => handleView(record)}
                                                             disabled={openingId === record.id}
-                                                            className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 dark:hover:text-indigo-400 transition-colors disabled:opacity-50"
+                                                            className="p-1.5 pointer-coarse:p-3 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 dark:hover:text-indigo-400 transition-colors disabled:opacity-50"
                                                             title="Visualizza PDF"
                                                         >
                                                             {openingId === record.id
@@ -576,7 +576,7 @@ export default function PayslipArchiveTab({ workerId, workerProfilo, workerElior
                                                                 >
                                                                     <button
                                                                         onClick={() => setConfirmDeleteId(null)}
-                                                                        className="px-2 py-0.5 text-[11px] font-bold rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
+                                                                        className="px-2 py-0.5 pointer-coarse:min-h-11 pointer-coarse:px-3 text-[11px] font-bold rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
                                                                     >
                                                                         No
                                                                     </button>
@@ -584,7 +584,7 @@ export default function PayslipArchiveTab({ workerId, workerProfilo, workerElior
                                                                         whileTap={{ scale: 0.9 }}
                                                                         onClick={() => handleDelete(record)}
                                                                         disabled={deletingId === record.id}
-                                                                        className="px-2 py-0.5 text-[11px] font-bold rounded-lg bg-red-500 text-white hover:bg-red-600 transition-colors disabled:opacity-50 flex items-center gap-0.5"
+                                                                        className="px-2 py-0.5 pointer-coarse:min-h-11 pointer-coarse:px-3 text-[11px] font-bold rounded-lg bg-red-500 text-white hover:bg-red-600 transition-colors disabled:opacity-50 flex items-center gap-0.5"
                                                                     >
                                                                         {deletingId === record.id
                                                                             ? <Loader2 className="w-3 h-3 animate-spin" />
@@ -598,7 +598,7 @@ export default function PayslipArchiveTab({ workerId, workerProfilo, workerElior
                                                                     key="delete-btn"
                                                                     whileTap={{ scale: 0.9 }}
                                                                     onClick={() => setConfirmDeleteId(record.id)}
-                                                                    className="p-1.5 rounded-lg text-slate-300 dark:text-slate-600 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                                                                    className="p-1.5 pointer-coarse:p-3 rounded-lg text-slate-300 dark:text-slate-600 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
                                                                     title="Elimina"
                                                                 >
                                                                     <Trash2 className="w-3.5 h-3.5" />
