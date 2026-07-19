@@ -118,6 +118,11 @@ const ArchivePage: React.FC<ArchivePageProps> = ({ workers, onBack, initialWorke
   const [uploadDone, setUploadDone] = useState(false);
   const [uploadFailed, setUploadFailed] = useState(false);
   const [uploadAutoDetected, setUploadAutoDetected] = useState(false);
+  // Drill-down mobile (<640px): una colonna alla volta — Lavoratori → Periodi →
+  // Documento — col breadcrumb per tornare. Da 640px in su le tre colonne restano
+  // affiancate come oggi (tutte le classi sono max-sm/sm:hidden).
+  const [mobilePane, setMobilePane] = useState<'workers' | 'periods' | 'doc'>('workers');
+  const pickerInputRef = useRef<HTMLInputElement | null>(null);
 
   const currentFile = pendingQueue[queueIndex] ?? null;
 
@@ -199,6 +204,7 @@ const ArchivePage: React.FC<ArchivePageProps> = ({ workers, onBack, initialWorke
     setSelectedWorkerId(worker.id);
     setSelectedPayslip(null);
     setPdfUrl(null);
+    setMobilePane('periods');
     setExpandedYears(new Set());
     // Il gruppo del selezionato resta/diventa visibile (conta per il deep-link dalla card)
     setExpandedGroups(prev => new Set([...prev, groupIdOf(worker)]));
@@ -214,6 +220,7 @@ const ArchivePage: React.FC<ArchivePageProps> = ({ workers, onBack, initialWorke
   const handleSelectPayslip = useCallback(async (payslip: PayslipRecord) => {
     setSelectedPayslip(payslip);
     setPdfUrl(null);
+    setMobilePane('doc');
     setLoadingPdf(true);
     const url = await getSignedUrl(payslip.storage_path);
     setPdfUrl(url);
@@ -297,19 +304,28 @@ const ArchivePage: React.FC<ArchivePageProps> = ({ workers, onBack, initialWorke
     setUploadFailed(false);
   }, []);
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    if (isReadOnly) return;
-    dragCounter.current = 0;
-    setIsDraggingOver(false);
-    const files = Array.from(e.dataTransfer.files).filter(f => f.type === 'application/pdf');
-    if (files.length === 0) return;
+  // Avvio coda upload: condiviso tra drag&drop (desktop) e picker file (touch).
+  const startUploadQueue = useCallback((files: File[]) => {
+    if (isReadOnly || files.length === 0) return;
     const defaultWorkerId = selectedWorkerId ?? (workers[0]?.id ?? '');
     setPendingQueue(files);
     setQueueIndex(0);
     initModalForFile(files[0], defaultWorkerId);
     setShowUploadModal(true);
   }, [isReadOnly, selectedWorkerId, workers, initModalForFile]);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    if (isReadOnly) return;
+    dragCounter.current = 0;
+    setIsDraggingOver(false);
+    startUploadQueue(Array.from(e.dataTransfer.files).filter(f => f.type === 'application/pdf'));
+  }, [isReadOnly, startUploadQueue]);
+
+  const handlePickFiles = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    startUploadQueue(Array.from(e.target.files ?? []).filter(f => f.type === 'application/pdf'));
+    e.target.value = '';
+  }, [startUploadQueue]);
 
   const handleDismissModal = useCallback(() => {
     if (isUploading) return;
@@ -468,12 +484,49 @@ const ArchivePage: React.FC<ArchivePageProps> = ({ workers, onBack, initialWorke
         <div aria-hidden="true" className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-indigo-400/50 to-transparent dark:via-indigo-500/40" />
       </div>
 
+      {/* BREADCRUMB MOBILE: drill-down una colonna alla volta (sm:hidden) */}
+      <div className="relative z-10 sm:hidden flex items-center gap-2 border-b border-white/70 bg-white/75 px-3 py-1.5 backdrop-blur-2xl dark:border-slate-800/80 dark:bg-slate-900/75">
+        {mobilePane !== 'workers' && (
+          <button
+            onClick={() => setMobilePane(mobilePane === 'doc' ? 'periods' : 'workers')}
+            className="flex min-h-11 items-center gap-1 rounded-xl px-2 py-1 text-xs font-bold text-indigo-600 transition-colors hover:bg-slate-100 dark:text-indigo-300 dark:hover:bg-slate-800"
+            aria-label={mobilePane === 'doc' ? 'Torna ai periodi' : 'Torna ai lavoratori'}
+          >
+            <ChevronLeft className="h-4 w-4" />
+            {mobilePane === 'doc' ? 'Periodi' : 'Lavoratori'}
+          </button>
+        )}
+        <span className="min-w-0 truncate text-xs font-bold text-slate-600 dark:text-slate-300">
+          {mobilePane === 'workers' && 'Scegli la pratica'}
+          {mobilePane === 'periods' && (selectedWorker ? `${selectedWorker.cognome} ${selectedWorker.nome}` : 'Periodi')}
+          {mobilePane === 'doc' && (selectedPayslip ? `${selectedPayslip.month} ${selectedPayslip.year}` : 'Documento')}
+        </span>
+        {!isReadOnly && (
+          <button
+            onClick={() => pickerInputRef.current?.click()}
+            className="ml-auto flex min-h-11 shrink-0 items-center gap-1.5 rounded-xl bg-indigo-500 px-3 py-1 text-xs font-bold text-white shadow-sm transition-all active:scale-95"
+          >
+            <UploadCloud className="h-4 w-4" /> Carica PDF
+          </button>
+        )}
+      </div>
+      {!isReadOnly && (
+        <input
+          ref={pickerInputRef}
+          type="file"
+          accept="application/pdf"
+          multiple
+          className="hidden"
+          onChange={handlePickFiles}
+        />
+      )}
+
       {/* 3-COLUMN WORKSPACE */}
       <div className="relative z-[1] flex min-h-0 flex-1 p-4 pt-3">
         <div className="isolate flex min-h-0 flex-1 overflow-hidden rounded-[2rem] border border-white/80 bg-white/75 shadow-[0_30px_80px_-42px_rgba(15,23,42,0.55)] [clip-path:inset(0_round_2rem)] dark:border-slate-800/80 dark:bg-slate-900/70">
 
         {/* ── COL 1: WORKERS ── */}
-        <div className="w-72 flex-none flex flex-col border-r border-slate-200/70 bg-white/75 dark:border-slate-800/80 dark:bg-slate-900/70">
+        <div className={`w-72 flex-none flex flex-col border-r border-slate-200/70 bg-white/75 dark:border-slate-800/80 dark:bg-slate-900/70 max-sm:w-full max-sm:border-r-0 ${mobilePane !== 'workers' ? 'max-sm:hidden' : ''}`}>
           <div className="flex h-16 flex-none flex-col justify-center border-b border-slate-100/90 bg-white/45 px-4 dark:border-slate-800/80 dark:bg-slate-900/35">
             <div className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400">
               <FolderOpen className="h-4 w-4" />
@@ -610,7 +663,7 @@ const ArchivePage: React.FC<ArchivePageProps> = ({ workers, onBack, initialWorke
         </div>
 
         {/* ── COL 2: YEAR/MONTH TREE ── */}
-        <div className="w-80 flex-none flex flex-col border-r border-slate-200/70 bg-slate-50/75 dark:border-slate-800/80 dark:bg-slate-900/55">
+        <div className={`w-80 flex-none flex flex-col border-r border-slate-200/70 bg-slate-50/75 dark:border-slate-800/80 dark:bg-slate-900/55 max-sm:w-full max-sm:border-r-0 ${mobilePane !== 'periods' ? 'max-sm:hidden' : ''}`}>
           <div className="flex h-16 flex-none flex-col justify-center border-b border-slate-200/70 bg-white/60 px-5 dark:border-slate-800/80 dark:bg-slate-900/45">
             <div className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400">
               <Calendar className="h-4 w-4" />
@@ -797,7 +850,7 @@ const ArchivePage: React.FC<ArchivePageProps> = ({ workers, onBack, initialWorke
         </div>
 
         {/* ── COL 3: PDF VIEWER ── */}
-        <div className="flex min-w-0 flex-1 flex-col bg-slate-100/45 dark:bg-slate-950/45">
+        <div className={`flex min-w-0 flex-1 flex-col bg-slate-100/45 dark:bg-slate-950/45 ${mobilePane !== 'doc' ? 'max-sm:hidden' : ''}`}>
           <div className="flex h-16 flex-none items-center border-b border-slate-200/70 bg-white/55 px-5 dark:border-slate-800/80 dark:bg-slate-900/40">
             <div>
               <div className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400">
@@ -822,10 +875,20 @@ const ArchivePage: React.FC<ArchivePageProps> = ({ workers, onBack, initialWorke
                   {selectedWorker ? 'Clicca un mese pieno nella griglia, poi scorri con ‹ › o le frecce' : 'Seleziona prima un lavoratore'}
                 </p>
                 {!isReadOnly && (
-                  <div className="mt-4 inline-flex items-center gap-2 rounded-2xl border border-dashed border-indigo-300/80 bg-indigo-50/70 px-4 py-2.5 text-xs font-bold text-indigo-600 dark:border-indigo-500/40 dark:bg-indigo-500/10 dark:text-indigo-300">
-                    <UploadCloud className="h-4 w-4" />
-                    Trascina qui uno o più PDF
-                  </div>
+                  <>
+                    <div className="mt-4 inline-flex items-center gap-2 rounded-2xl border border-dashed border-indigo-300/80 bg-indigo-50/70 px-4 py-2.5 text-xs font-bold text-indigo-600 dark:border-indigo-500/40 dark:bg-indigo-500/10 dark:text-indigo-300 pointer-coarse:hidden">
+                      <UploadCloud className="h-4 w-4" />
+                      Trascina qui uno o più PDF
+                    </div>
+                    {/* Su touch il drag&drop non esiste: picker esplicito */}
+                    <button
+                      onClick={() => pickerInputRef.current?.click()}
+                      className="mt-4 hidden pointer-coarse:inline-flex items-center gap-2 rounded-2xl bg-indigo-500 px-4 py-2.5 min-h-11 text-xs font-bold text-white shadow-sm transition-all active:scale-95"
+                    >
+                      <UploadCloud className="h-4 w-4" />
+                      Carica PDF dal telefono
+                    </button>
+                  </>
                 )}
               </div>
             </div>

@@ -1,3 +1,50 @@
+# Todo — Sessione 19/07 (quater): Fase 5 — Report e pagina Archivio su mobile (ESEGUITA)
+
+## Piano F5 (scope = piano §Fase 5) — ESEGUITO 19/07
+
+- [x] 1. **Archivio drill-down su telefono** ([pages/ArchivePage.tsx](../pages/ArchivePage.tsx)):
+      sotto 640px una colonna alla volta (Lavoratori → Periodi → Documento) con stato
+      `mobilePane`; selezione lavoratore/busta avanza il pannello, breadcrumb `sm:hidden`
+      con back e contesto (nome lavoratore / mese busta); da 640px in su le TRE colonne
+      restano affiancate (tutte le classi max-sm). Selezione PRESERVATA tornando
+      indietro (lo stato non si tocca).
+- [x] 2. **Picker al posto del drag&drop su touch**: estratto `startUploadQueue`
+      (condiviso col drop), input file nascosto + bottone "Carica PDF" nel breadcrumb
+      mobile e "Carica PDF dal telefono" nell'empty-state del documento
+      (`pointer-coarse`); l'hint "Trascina qui" nascosto su coarse. Stessa coda/modale
+      upload di sempre, zero logica nuova.
+- [x] 3. **Report (TableComponent) leggibile senza pan globale**: prospetto in scroller
+      confinato `max-sm:overflow-x-auto` + `max-sm:min-w-[760px]` con colonna Anno
+      sticky su mobile; barra comandi in wrap con bottoni compattati (`max-sm:px-4
+      py-2 text-sm`) e resa NON sticky su mobile (wrappata era 367px: appiccicata
+      mangiava mezzo schermo); pannello info `max-sm:w-[calc(100vw-2.5rem)]`.
+      Tabella % incidenza (3 colonne) entra a 390 senza scroller. **Stampa/PDF
+      intatti: max-sm non si attiva in stampa (viewport carta ≥ 640px).**
+- [x] 4. **Gate**: tsc 0 · **344/344** · build ok.
+- [ ] 5. **Collaudo visivo utente** (insieme a T4).
+
+## Review F5 (19/07)
+
+**Diff: 2 file** (ArchivePage, TableComponent) + todo. Zero dipendenze, zero calcoli.
+
+**Misure (demo+iframe, harness ELIMINATO):**
+- Archivio 390: solo col 1 visibile + breadcrumb + "Carica PDF"; selezione Rossi →
+  col 1 nascosta, col 2 visibile, crumb "Rossi Mario", back presente; back → col 1,
+  gruppo ancora aperto (selezione preservata). Overflow 0 in ogni passo.
+- Archivio 1276: tre colonne affiancate, breadcrumb nascosto, overflow 0 = main.
+- Report 390: overflow documento 0, tabella 773px confinata nello scroller, colonna
+  Anno sticky, barra comandi wrappata e (post-fix) NON sticky.
+- Report 1276: tabella 1256 = container (scroller inattivo), Anno static, header
+  sticky come su main, overflow 0 → desktop invariato.
+
+**Limiti dichiarati:** il pannello Documento (col 3) con PDF vero non è esercitabile
+in demo (archivio fixtures vuoto) → gating verificato per costruzione (stesso
+meccanismo della col 2 misurata) + collaudo su pratica reale; resa `<object>` PDF su
+iOS da collaudare; la stampa va ri-provata al collaudo (argomento: media print non
+attiva max-sm — da confermare a occhio con un Cmd+P).
+
+---
+
 # Todo — Sessione 19/07 (ter): Fase 4 T4 — archivio tab + visore su mobile (ESEGUITA)
 
 > **Collaudo T2a+T3 CONFERMATO dall'utente il 19/07** («verificato ed è tutto ok») →

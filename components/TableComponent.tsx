@@ -261,11 +261,11 @@ const TableComponent: React.FC<TableComponentProps> = ({ worker, monthlyInputs, 
 
       {/* HEADER NAV */}
       {/* ✨ BISTURI 2: Spazio ottimizzato e bilanciato */}
-      <div className="print:hidden w-full pt-16 pb-4 px-6 bg-slate-900 dark:bg-[#0f172a] text-white flex justify-between items-center shadow-2xl sticky top-0 z-50 border-b border-slate-700 dark:border-cyan-900/50 transition-colors">
-        <div className="flex items-center gap-8">
+      <div className="print:hidden w-full pt-16 pb-4 px-6 max-sm:px-3 bg-slate-900 dark:bg-[#0f172a] text-white flex justify-between items-center shadow-2xl sticky top-0 z-50 max-sm:static border-b border-slate-700 dark:border-cyan-900/50 transition-colors max-sm:flex-wrap max-sm:gap-y-3">
+        <div className="flex items-center gap-8 max-sm:gap-4 max-sm:flex-wrap max-sm:gap-y-2">
           <button
             onClick={onBack}
-            className="group relative px-6 py-3 rounded-xl font-bold text-lg text-white shadow-lg hover:-translate-y-0.5 active:scale-95 transition-all duration-300 border border-white/10 overflow-hidden flex items-center gap-3"
+            className="group relative px-6 py-3 max-sm:px-4 max-sm:py-2 rounded-xl font-bold text-lg max-sm:text-sm text-white shadow-lg hover:-translate-y-0.5 active:scale-95 transition-all duration-300 border border-white/10 overflow-hidden flex items-center gap-3"
             style={{ background: 'linear-gradient(90deg, #2563eb 0%, #06b6d4 100%)' }}
           >
             <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500 rotate-12"></div>
@@ -273,12 +273,12 @@ const TableComponent: React.FC<TableComponentProps> = ({ worker, monthlyInputs, 
             <span>Dashboard</span>
           </button>
 
-          <div className="flex items-center gap-4 border-l border-slate-700 pl-8 h-full">
+          <div className="flex items-center gap-4 border-l border-slate-700 pl-8 h-full max-sm:pl-4 max-sm:gap-3">
             <div className="p-2 bg-emerald-500/20 rounded-xl border border-emerald-500/30">
               <FileSpreadsheet className="w-8 h-8 text-emerald-400" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold tracking-wide text-slate-100">Prospetto Ufficiale</h1>
+              <h1 className="text-2xl max-sm:text-lg font-bold tracking-wide text-slate-100">Prospetto Ufficiale</h1>
               <div className="flex items-center gap-2">
                 <p className="text-sm uppercase font-medium text-slate-400 dark:text-slate-200 tracking-wider">Report Annuale</p>
                 <span className={`text-[10px] px-2 py-0.5 rounded border flex items-center gap-1 ${includeExFest ? 'text-amber-400 border-amber-500 bg-amber-500/10' : 'text-slate-400 dark:text-slate-200 border-slate-500'}`}>
@@ -290,10 +290,10 @@ const TableComponent: React.FC<TableComponentProps> = ({ worker, monthlyInputs, 
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-4 max-sm:flex-wrap max-sm:gap-2">
 
           {/* --- GRUPPO TOGGLE --- */}
-          <div className="relative flex items-center gap-2 bg-slate-800 p-1.5 rounded-2xl border border-slate-700">
+          <div className="relative flex items-center gap-2 bg-slate-800 p-1.5 rounded-2xl border border-slate-700 max-sm:flex-wrap">
 
             {/* Tasto Tetto Ferie */}
             <button
@@ -349,7 +349,7 @@ const TableComponent: React.FC<TableComponentProps> = ({ worker, monthlyInputs, 
                   initial={{ opacity: 0, y: 10, scale: 0.95 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                  className="absolute top-full right-0 mt-4 w-96 bg-white text-slate-800 p-5 rounded-2xl shadow-2xl border border-slate-200 z-[100] text-left"
+                  className="absolute top-full right-0 mt-4 w-96 max-sm:w-[calc(100vw-2.5rem)] bg-white text-slate-800 p-5 rounded-2xl shadow-2xl border border-slate-200 z-[100] text-left"
                 >
                   <div className="absolute -top-2 right-12 w-4 h-4 bg-white transform rotate-45 border-t border-l border-slate-200"></div>
                   <h4 className="text-sm font-black uppercase tracking-widest text-indigo-600 mb-3 flex items-center gap-2">
@@ -379,7 +379,7 @@ const TableComponent: React.FC<TableComponentProps> = ({ worker, monthlyInputs, 
           {/* Relazione (.docx) — visibile anche in sola lettura (scarica, non scrive) */}
           <button
             onClick={() => setIsRelazioneOpen(true)}
-            className="group relative px-6 py-3 rounded-xl font-bold text-lg text-white shadow-lg hover:-translate-y-0.5 active:scale-95 transition-all duration-300 border border-white/10 overflow-hidden flex items-center gap-3"
+            className="group relative px-6 py-3 max-sm:px-4 max-sm:py-2 rounded-xl font-bold text-lg max-sm:text-sm text-white shadow-lg hover:-translate-y-0.5 active:scale-95 transition-all duration-300 border border-white/10 overflow-hidden flex items-center gap-3"
             style={{ background: 'linear-gradient(90deg, #f59e0b 0%, #ea580c 100%)' }}
           >
             <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500 rotate-12"></div>
@@ -389,7 +389,7 @@ const TableComponent: React.FC<TableComponentProps> = ({ worker, monthlyInputs, 
 
           <button
             onClick={onEdit}
-            className="group relative px-6 py-3 rounded-xl font-bold text-lg text-white shadow-lg hover:-translate-y-0.5 active:scale-95 transition-all duration-300 border border-white/10 overflow-hidden flex items-center gap-3"
+            className="group relative px-6 py-3 max-sm:px-4 max-sm:py-2 rounded-xl font-bold text-lg max-sm:text-sm text-white shadow-lg hover:-translate-y-0.5 active:scale-95 transition-all duration-300 border border-white/10 overflow-hidden flex items-center gap-3"
             style={{ background: 'linear-gradient(90deg, #059669 0%, #14b8a6 100%)' }}
           >
             <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500 rotate-12"></div>
@@ -405,7 +405,7 @@ const TableComponent: React.FC<TableComponentProps> = ({ worker, monthlyInputs, 
             onClick={handleDownloadAll}
             disabled={isExporting}
             title="Scarica Conteggi + Riepilogo + Relazione in un unico file ZIP"
-            className="group relative px-6 py-3 rounded-xl font-bold text-lg text-white shadow-lg hover:-translate-y-0.5 active:scale-95 transition-all duration-300 border border-white/10 overflow-hidden flex items-center gap-3 disabled:opacity-60 disabled:cursor-wait disabled:hover:translate-y-0"
+            className="group relative px-6 py-3 max-sm:px-4 max-sm:py-2 rounded-xl font-bold text-lg max-sm:text-sm text-white shadow-lg hover:-translate-y-0.5 active:scale-95 transition-all duration-300 border border-white/10 overflow-hidden flex items-center gap-3 disabled:opacity-60 disabled:cursor-wait disabled:hover:translate-y-0"
             style={{ background: 'linear-gradient(90deg, #dc2626 0%, #e11d48 100%)' }}
           >
             <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500 rotate-12"></div>
@@ -418,7 +418,7 @@ const TableComponent: React.FC<TableComponentProps> = ({ worker, monthlyInputs, 
           {/* Stampa */}
           <button
             onClick={handlePrint}
-            className="group relative px-8 py-3 rounded-xl font-bold text-lg text-white shadow-lg hover:-translate-y-0.5 active:scale-95 transition-all duration-300 border border-white/10 overflow-hidden flex items-center gap-3"
+            className="group relative px-8 py-3 max-sm:px-4 max-sm:py-2 rounded-xl font-bold text-lg max-sm:text-sm text-white shadow-lg hover:-translate-y-0.5 active:scale-95 transition-all duration-300 border border-white/10 overflow-hidden flex items-center gap-3"
             style={{ background: 'linear-gradient(90deg, #4f46e5 0%, #7c3aed 100%)' }}
           >
             <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500 rotate-12"></div>
@@ -462,10 +462,13 @@ const TableComponent: React.FC<TableComponentProps> = ({ worker, monthlyInputs, 
                 </div>
               </div>
 
-              <table className="w-full border-collapse text-center">
+              {/* Su telefono la tabella scorre confinata qui dentro (il documento non
+                  panna); in stampa max-sm non si attiva → layout ufficiale intatto */}
+              <div className="max-sm:overflow-x-auto">
+              <table className="w-full border-collapse text-center max-sm:min-w-[760px]">
                 <thead>
                   <tr className="bg-[#7EB6D3] bg-blue-header text-black h-12" style={{ backgroundColor: '#7EB6D3' }}>
-                    <th className="border border-black p-2 font-bold text-base align-middle">Anno</th>
+                    <th className="border border-black p-2 font-bold text-base align-middle max-sm:sticky max-sm:left-0 max-sm:z-10 max-sm:bg-[#7EB6D3]">Anno</th>
                     <th className="border border-black p-2 font-bold text-base align-middle">Totale Voci<br />Retributive<br />Accessorie</th>
                     <th className="border border-black p-2 font-bold text-base align-middle">Divisore Annuo<br /><span className="text-sm font-normal">(media gg lav.)</span></th>
                     <th className="border border-black p-2 font-bold text-base align-middle">Medie competenze<br />sui valori dell'anno<br />godute</th>
@@ -488,7 +491,7 @@ const TableComponent: React.FC<TableComponentProps> = ({ worker, monthlyInputs, 
                 <tbody>
                   {tableData.map((row) => (
                     <tr key={row.anno} className="h-10 text-base">
-                      <td className="border border-black px-2 py-1 text-center bg-gray-100 font-bold">{row.anno}</td>
+                      <td className="border border-black px-2 py-1 text-center bg-gray-100 font-bold max-sm:sticky max-sm:left-0 max-sm:z-10">{row.anno}</td>
                       <td className="border border-black px-2 py-1 text-right">{formatCurrency(row.totaleVoci)}</td>
                       <td className="border border-black px-2 py-1 text-center">{formatNumber(row.divisore)}</td>
                       <td className="border border-black px-2 py-1 text-right text-blue-800 font-medium">{formatCurrency(row.incidenzaGiornata)}</td>
@@ -524,6 +527,7 @@ const TableComponent: React.FC<TableComponentProps> = ({ worker, monthlyInputs, 
                   </tr>
                 </tfoot>
               </table>
+              </div>
             </div>
           )}
         </div>
