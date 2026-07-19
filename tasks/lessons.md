@@ -3,6 +3,26 @@
 > Pattern e errori da evitare nelle prossime sessioni.
 > Aggiornato dopo ogni correzione utente.
 
+## 2026-07-19 - "Schede informative" non significa automaticamente materiale breve
+
+**Contesto:** alla richiesta di materiale informativo/promozionale per ValOra ho consegnato
+quattro schede A4 curate ma sintetiche. L'utente voleva invece un artefatto molto più completo,
+capace di spiegare davvero acquisizione dati, parser deterministico e controlli: quasi un manuale.
+
+**Regole:**
+1. Quando il prodotto ha un metodo tecnico differenziante, il materiale informativo deve spiegare
+   almeno il percorso documento -> estrazione -> controlli -> calcolo -> consegna; la sola vetrina
+   non dimostra affidabilita.
+2. Prima di scegliere il formato, distinguere esplicitamente fra brochure, schede tecniche e manuale
+   operativo. Se la richiesta include "spiegare come funziona", preferire un manuale modulare con
+   schermate e procedure, lasciando le schede come estratto promozionale.
+3. Il parser deterministico non va ridotto a una bullet: e la prova di accuratezza del prodotto.
+   Documentarne input, condizioni d'uso, quadratura col totale stampato, scarti e fallback OCR/AI.
+4. Censire anche i componenti trasversali che orchestrano l'esperienza. In ValOra la Dynamic Island
+   non e decorazione: coordina attivita in background, avanzamento, scanner mobile, esiti e anomalie
+   senza interrompere il lavoro. Deve avere un capitolo autonomo nel manuale e un ruolo esplicito
+   nella narrazione promozionale come innovazione del prodotto.
+
 ## 2026-07-17 — RLS anon: tre regole pagate care (Fase 2 scanner mobile, 6 giri di review)
 
 **Contesto:** consolidamento scanner QR. Il mio probe "sessione viva" via UPDATE+count è
@@ -1122,3 +1142,22 @@ chiave** prima di scrivere. Se più fonti mappano sulla stessa chiave: se **conc
 (dati legali!). Un tool che verifica non deve *dipendere* dall'input perfetto: un errore umano silenzioso che
 sovrascrive un dato giusto è peggio di un errore visibile. Fix: raggruppo per chiave, `truthSignature` per
 riconoscere i doppioni identici, campo `mesiInConflitto` mostrato nel modale.
+# 2026-07-19 — Nei materiali ValOra ogni immagine deve dimostrare una funzione
+
+**Correzione utente:** il primo kit usava illustrazioni generiche e lasciava spazio morto, mentre il
+manuale mostrava schermate non integrate e pagine semi-vuote.
+
+**Regola:** nei materiali promozionali usare l’interfaccia reale come prova del prodotto; ogni visual
+deve dimostrare una funzione, un controllo o un flusso. Gli spazi vuoti devono essere intenzionali e
+bilanciati, non residui dell’impaginazione. Nei manuali, schermate e tabelle vanno trattate come parti
+del sistema editoriale (larghezze standard, bordo/ombra coerenti, griglie leggere), non come oggetti
+appoggiati sulla pagina.
+
+## 2026-07-19 — “Professionale” non basta: verificare anche gli errori invisibili al primo colpo
+
+**Correzione utente:** è stato richiesto esplicitamente un livello grafico altissimo e maniacale.
+
+**Regola:** dopo la prima QA completa eseguire un secondo preflight editoriale a ingrandimento elevato:
+controllare asset alla fonte (non solo il PDF composto), loghi tagliati, crop che eliminano etichette,
+densità delle pagine finali, metadati, font effettivamente usati, PPI delle immagini e funzionamento dei
+link. Un artefatto può essere tecnicamente corretto e avere comunque dettagli che abbassano il percepito.

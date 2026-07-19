@@ -21,7 +21,9 @@
       Tabella % incidenza (3 colonne) entra a 390 senza scroller. **Stampa/PDF
       intatti: max-sm non si attiva in stampa (viewport carta ≥ 640px).**
 - [x] 4. **Gate**: tsc 0 · **344/344** · build ok.
-- [ ] 5. **Collaudo visivo utente** (insieme a T4).
+- [x] 5. **Collaudo visivo utente** → CONFERMATO 19/07 («collaudo fatto») →
+      **PUSH `880270a..ee9ec2c` + DEPLOY Netlify VERIFICATO live** (deploy `6a5ce172`,
+      commit ee9ec2c, ready 14:39 UTC, 38s, secret scan pulito; 1 deploy per 4 commit).
 
 ## Review F5 (19/07)
 
@@ -76,7 +78,7 @@ attiva max-sm — da confermare a occhio con un Cmd+P).
       = zero re-render). Su telefono reale (top-level, rotazione) il canale MQL è
       comunque affidabile; ora lo è anche l'harness.
 - [x] 6. **Gate**: tsc 0 · **344/344** · build ok.
-- [ ] 7. **Collaudo visivo utente** (insieme a F5).
+- [x] 7. **Collaudo visivo utente** → CONFERMATO 19/07, deployata live con la F5.
 
 ## Review T4 (19/07)
 
@@ -1770,3 +1772,31 @@ revert 4 file; rollback DB = ripristino policy 008/010 (sconsigliato: riaprirebb
   quattro PDF singoli e quattro PNG 1323x1871.
 - QA: tutte le 25 pagine del DOCX/PDF ispezionate dopo il render finale; eliminata una pagina vuota
   causata da un callout spezzato. PDF A4, testo estraibile e archivio DOCX verificati; `git diff --check` pulito.
+# Todo — Sessione 19/07 (quinquies): rifinitura grafica manuale + kit ValOra
+
+## Piano revisione 1.2
+
+- [x] 1. Audit visivo dei due PDF modificati dall’utente e mappatura dei vuoti/pagine critiche.
+- [x] 2. Kit: riequilibrare le pagine 1 e 4, aggiungere aziende trattate, sostituire clipart con schermate reali, rendere cliccabili CTA e QR-caption, usare Inter nei titoli e aumentare il respiro del box Trasparenza.
+- [x] 3. Manuale: compattare le pagine semi-vuote, uniformare le schermate, alleggerire le tabelle, rendere funzionale la banda di copertina e aggiungere chip reali alla legenda.
+- [x] 4. Rigenerare DOCX, PDF kit e singole schede; verificare link PDF, testo, formato pagina e integrità DOCX.
+- [x] 5. Renderizzare e ispezionare visivamente tutte le pagine finali; iterare fino a eliminare difetti e documentare l’esito.
+
+## Review
+
+- Kit finale: 4 pagine A4 più 4 schede singole; loghi aziendali, schermate reali,
+  diagramma di tracciabilità e CTA/caption cliccabili verificati nel PDF.
+- Manuale 1.2: 21 pagine A4 (da 25), senza pagine-screenshot orfane; riquadri non
+  spezzati, schermate incorniciate a due larghezze, tabelle zebra e legenda a chip.
+- QA conclusa: tutte le pagine renderizzate e controllate; DOCX integro, testo PDF
+  estraibile, dimensioni A4, annotazioni `mailto:` e `git diff --check` verificati.
+
+## Secondo passaggio premium — richiesta “altissimo livello e maniacale”
+
+- [x] Preflight ad alto ingrandimento di kit e manuale, inclusi asset sorgente e PPI.
+- [x] Rigenerati correttamente i loghi ferroviari: eliminati crop errati su FSE e Mercitalia.
+- [x] Scheda Turni & Riposi: mostrata la schermata reale completa con titolo, legenda e anni.
+- [x] Ultima pagina del manuale chiusa con un colophon editoriale coerente con il brand.
+- [x] Metadati PDF completati e secondo gate su pagine A4, link, font, testo e DOCX.
+
+---

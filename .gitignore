@@ -38,3 +38,10 @@ public/viterbo-seed.json
 
 # Config locale di Claude Code (permessi macchina-specifici, non condivisibili)
 .claude/settings.local.json
+# ValOra materiale commerciale: si committano generatori + asset sorgente,
+# NON gli output generati (PDF/DOCX/PNG social) né i temp
+tmp/
+output/pdf/
+output/promo/
+output/manual/Manuale-operativo-ValOra.docx
+output/manual/assets/_framed/
