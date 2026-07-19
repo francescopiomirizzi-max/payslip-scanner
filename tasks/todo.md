@@ -1,3 +1,58 @@
+# Todo — Sessione 19/07 (bis): Fase 4 T3 — tab Riepilogo/Analisi Voci/TFR su mobile (ESEGUITA)
+
+> **Decisione utente (19/07, AskUserQuestion):** dopo la T2a si prosegue con la **T3**
+> (consultazione, basso rischio) e NON con la T2b: l'editing touch verrà progettato
+> DOPO il collaudo reale della T2a sul telefono. T2a committata `30f1949` su decisione
+> utente («andiamo avanti»), 1 commit avanti a origin (niente push, batching).
+
+## Piano T3 (CSS-mostly, scope = tranche plan 18/07) — ESEGUITO 19/07
+
+- [x] 1. **AnnualCalculationTable**: barra titolo e header "Riepilogo Finale" in
+      `flex-wrap gap-y-2` (in flusso → no-op quando entra); toggle Tetto/Parametri e
+      chip Soglia/Interessi `pointer-coarse:min-h-11`; "Copia totale"
+      `pointer-coarse:p-3`; padding blocco finale `max-sm:p-4`. La tabella 1000px era
+      GIÀ confinata nel suo `overflow-auto`.
+- [x] 2. **IndemnityPivotTable**: colonna sticky voce `max-sm:w-36 max-sm:min-w-[144px]`
+      (era 250px = 64% dello schermo a 390 → ora ~180px liberi per i dati); barra
+      titolo in wrap; toggle TOTALI/MEDIA min-h-11 coarse; icona Info
+      `pointer-coarse:opacity-60` (il pannello descrizione resta hover — limite).
+- [x] 3. **TfrCalculationTable**: top-bar in `flex-wrap gap-y-3 max-sm:px-4`; Punto
+      Zero e Genera Report min-h-11 coarse; tabella `max-sm:min-w-[640px]` (prima
+      `table-fixed w-full` → 6 colonne da ~65px illeggibili; ora scorre confinata).
+- [x] 4. **Gate**: tsc 0 · **344/344** · build ok · classi arbitrarie verificate nel
+      CSS prodotto (`min-w-\[640px\]`, `min-w-\[144px]`, `max-sm\:w-36`).
+- [ ] 5. **Collaudo visivo utente** (insieme a T2a).
+
+## Review T3 (19/07)
+
+**Diff: 3 file, sole classi CSS** (nessun cambio di markup/logica/valori), zero
+dipendenze. Rollback = revert dei 3 file.
+
+**Verifica demo+iframe** (harness temporaneo ELIMINATO, `demo-rfi-1`, deep link
+`/calc` `/pivot` `/tfr` a 390 + 1276):
+- 390: overflow documento 0 su tutti e tre i tab; tabella Annual 1000px e Pivot
+  1100px **confinate** nei loro scroller (client 323); sticky col pivot **144px
+  misurati**; header calc wrappato (131px) e pivot (79px) senza rotture.
+- 1276: overflow 0; header 51px = **riga unica invariata**; tabelle = larghezza
+  container (nessuno scroll aggiunto); le classi nuove sono tutte `max-sm:`/`
+  pointer-coarse:` → desktop invariato per costruzione E misurato.
+- Screenshot: pivot a 390 mostra voce+codice + 2 colonne anno leggibili.
+
+**Limiti dichiarati:**
+- **Tabella TFR non montabile in demo**: i fixture non hanno dati TFR e il
+  componente fa early-return sull'empty-state (riga 214) PRIMA dell'header →
+  verificato staticamente (classi nel CSS buildato) + empty-state senza overflow
+  a 390. Collaudo su una pratica reale con TFR. Segnalazione (non fatta di mia
+  iniziativa): aggiungere `imponibile_tfr_mensile` a un fixture demo renderebbe
+  il tab TFR esercitabile in demo.
+- Tooltip hover (descrizioni voce pivot, HeaderTooltip TFR, tooltip ferie) restano
+  hover-only: su touch il contenuto informativo non è raggiungibile — la T2a li
+  espone già nel dettaglio mese per la griglia; per i tab è un'estensione futura.
+- Input coeff/soglia/interessi della Annual restano piccoli dentro le celle
+  (funzionanti, target del chip 44px): l'editing mobile organico è materia T2b.
+
+---
+
 # Todo — Sessione 19/07: push+deploy mobile + Fase 4 T2a "vista mensile mobile read-only" (PIANO, in attesa di approvazione)
 
 > **Fatto in apertura di sessione (19/07):** collaudo F3+T1 confermato dall'utente

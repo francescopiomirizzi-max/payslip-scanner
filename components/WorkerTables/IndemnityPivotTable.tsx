@@ -207,7 +207,7 @@ const IndemnityPivotTable: React.FC<IndemnityPivotTableProps> = ({
 
   return (
     <div className="bg-white dark:bg-slate-900 shadow-xl dark:shadow-[0_0_20px_rgba(34,211,238,0.15)] rounded-lg overflow-hidden border border-slate-200 dark:border-cyan-400 flex flex-col h-full transition-all duration-300">
-      <div className="p-3 bg-slate-800 text-white font-bold text-sm tracking-wide flex justify-between items-center shrink-0">
+      <div className="p-3 bg-slate-800 text-white font-bold text-sm tracking-wide flex justify-between items-center shrink-0 flex-wrap gap-y-2">
         <div className="flex items-center gap-2">
           <span>RIEPILOGO VOCI VARIABILI</span>
           {getCompanyLogo(profilo) ? (
@@ -224,7 +224,7 @@ const IndemnityPivotTable: React.FC<IndemnityPivotTableProps> = ({
         <div className="flex bg-slate-900/50 p-0.5 rounded-lg border border-slate-600">
           <button
             onClick={() => setViewMode('total')}
-            className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-[10px] font-bold transition-all ${viewMode === 'total'
+            className={`flex items-center gap-1.5 px-3 py-1 pointer-coarse:min-h-11 rounded-md text-[10px] font-bold transition-all ${viewMode === 'total'
               ? 'bg-slate-700 text-white shadow-sm'
               : 'text-slate-400 hover:text-slate-200'
               }`}
@@ -233,7 +233,7 @@ const IndemnityPivotTable: React.FC<IndemnityPivotTableProps> = ({
           </button>
           <button
             onClick={() => setViewMode('average')}
-            className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-[10px] font-bold transition-all ${viewMode === 'average'
+            className={`flex items-center gap-1.5 px-3 py-1 pointer-coarse:min-h-11 rounded-md text-[10px] font-bold transition-all ${viewMode === 'average'
               ? 'bg-indigo-600 text-white shadow-sm'
               : 'text-slate-400 hover:text-slate-200'
               }`}
@@ -269,7 +269,7 @@ const IndemnityPivotTable: React.FC<IndemnityPivotTableProps> = ({
         <table className="w-full text-xs border-collapse table-fixed" style={{ minWidth: `${(visibleYears.length + 2) * 100}px` }}>
           <thead className="sticky top-0 z-20 shadow-sm bg-slate-100 dark:bg-slate-800 transition-colors">
             <tr>
-              <th className={`p-3 text-left font-bold border-r border-slate-300 dark:border-slate-700 w-64 min-w-[250px] sticky left-0 z-30 bg-slate-100 dark:bg-slate-800 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] dark:shadow-[2px_0_5px_-2px_rgba(0,0,0,0.5)] uppercase tracking-wider ${headerColorClass} dark:!text-cyan-400 transition-colors`}>
+              <th className={`p-3 text-left font-bold border-r border-slate-300 dark:border-slate-700 w-64 min-w-[250px] max-sm:w-36 max-sm:min-w-[144px] sticky left-0 z-30 bg-slate-100 dark:bg-slate-800 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] dark:shadow-[2px_0_5px_-2px_rgba(0,0,0,0.5)] uppercase tracking-wider ${headerColorClass} dark:!text-cyan-400 transition-colors`}>
                 VOCE RETRIBUTIVA
               </th>
               {visibleYears.map(year => (
@@ -298,7 +298,7 @@ const IndemnityPivotTable: React.FC<IndemnityPivotTableProps> = ({
                       <span className="text-[10px] text-slate-400 dark:text-slate-500 font-normal font-mono">{row.code}</span>
                     </div>
                     <div className="relative">
-                      <Info size={12} className="text-slate-300 dark:text-slate-600 opacity-0 group-hover/label:opacity-100 transition-opacity" />
+                      <Info size={12} className="text-slate-300 dark:text-slate-600 opacity-0 group-hover/label:opacity-100 pointer-coarse:opacity-60 transition-opacity" />
                       <div className="hidden group-hover/label:block absolute left-4 top-0 w-48 p-2 bg-slate-800 dark:bg-slate-950 dark:border dark:border-slate-700 text-white text-[10px] rounded z-50 pointer-events-none shadow-xl">
                         {row.description}
                       </div>

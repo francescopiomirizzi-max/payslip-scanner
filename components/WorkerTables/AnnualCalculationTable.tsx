@@ -224,8 +224,8 @@ const AnnualCalculationTable: React.FC<AnnualCalculationTableProps> = ({
 
   return (
     <div className="bg-white dark:bg-slate-900 shadow-xl dark:shadow-[0_0_20px_rgba(34,211,238,0.15)] rounded-lg overflow-hidden border border-slate-200 dark:border-cyan-400 flex flex-col h-full transition-all duration-300">
-      <div className="p-3 bg-slate-800 text-white font-bold text-sm tracking-wide flex justify-between items-center shrink-0">
-        <div className="flex items-center gap-4">
+      <div className="p-3 bg-slate-800 text-white font-bold text-sm tracking-wide flex justify-between items-center shrink-0 flex-wrap gap-y-2">
+        <div className="flex items-center gap-4 flex-wrap gap-y-2">
           <div className="flex items-center gap-2">
             <Calculator className="w-4 h-4 text-emerald-400" />
             <span>CALCOLO DIFFERENZE PER ANNO</span>
@@ -241,7 +241,7 @@ const AnnualCalculationTable: React.FC<AnnualCalculationTableProps> = ({
 
           <button
             onClick={() => setIncludeExFest(!includeExFest)}
-            className={`flex items-center gap-1.5 px-2 py-1 rounded text-[10px] border transition-all ${includeExFest
+            className={`flex items-center gap-1.5 px-2 py-1 pointer-coarse:min-h-11 rounded text-[10px] border transition-all ${includeExFest
               ? 'bg-amber-500/20 border-amber-500 text-amber-300 font-bold'
               : 'bg-slate-700 border-slate-600 text-slate-400 hover:text-slate-200'
               }`}
@@ -254,7 +254,7 @@ const AnnualCalculationTable: React.FC<AnnualCalculationTableProps> = ({
 
         <button
           onClick={() => setShowDetails(!showDetails)}
-          className="flex items-center gap-2 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded text-[10px] uppercase font-bold tracking-wider transition-all border border-slate-600 hover:border-slate-500"
+          className="flex items-center gap-2 px-3 py-1.5 pointer-coarse:min-h-11 bg-slate-700 hover:bg-slate-600 rounded text-[10px] uppercase font-bold tracking-wider transition-all border border-slate-600 hover:border-slate-500"
         >
           {showDetails ? <EyeOff size={14} className="text-slate-300" /> : <Eye size={14} className="text-emerald-400" />}
           <span className="text-slate-200">{showDetails ? "Nascondi Dettagli" : "Mostra Parametri"}</span>
@@ -443,13 +443,13 @@ const AnnualCalculationTable: React.FC<AnnualCalculationTableProps> = ({
         </table>
       </div>
 
-      <div className="shrink-0 bg-slate-50 dark:bg-slate-950 p-6 border-t border-slate-200 dark:border-slate-700 transition-colors">
+      <div className="shrink-0 bg-slate-50 dark:bg-slate-950 p-6 max-sm:p-4 border-t border-slate-200 dark:border-slate-700 transition-colors">
         {incidenza && (
-          <div className="mb-5 bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-800/50 rounded-xl p-5 shadow-sm transition-colors">
+          <div className="mb-5 bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-800/50 rounded-xl p-5 max-sm:p-4 shadow-sm transition-colors">
             <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
               <div className="flex items-center gap-3 flex-wrap">
                 <h3 className="text-xs font-black text-amber-800 dark:text-amber-400 uppercase tracking-widest">Incidenza % delle voci variabili</h3>
-                <div className="flex items-center gap-1 bg-white dark:bg-slate-800 px-2 py-1 rounded-lg border border-amber-200 dark:border-slate-600 shadow-sm">
+                <div className="flex items-center gap-1 bg-white dark:bg-slate-800 px-2 py-1 pointer-coarse:min-h-11 rounded-lg border border-amber-200 dark:border-slate-600 shadow-sm">
                   <span className="text-[10px] font-bold text-amber-700 dark:text-amber-300 uppercase">Soglia</span>
                   <input
                     type="text"
@@ -495,9 +495,9 @@ const AnnualCalculationTable: React.FC<AnnualCalculationTableProps> = ({
             <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-2">% variabili = voci variabili ÷ (voci fisse + variabili), media annua ÷12. La <b>media di periodo</b> è il riferimento per la soglia del {SOGLIA_VARIABILI}%.</p>
           </div>
         )}
-        <div className="bg-blue-50/50 dark:bg-slate-900 border border-blue-200 dark:border-slate-700 rounded-xl p-5 shadow-sm transition-colors">
+        <div className="bg-blue-50/50 dark:bg-slate-900 border border-blue-200 dark:border-slate-700 rounded-xl p-5 max-sm:p-4 shadow-sm transition-colors">
           {/* ... HEADER DEL SUMMARY ... */}
-          <div className="flex items-center gap-2 mb-4 justify-between">
+          <div className="flex items-center gap-2 mb-4 justify-between flex-wrap gap-y-2">
             <div className="flex items-center gap-2">
               <h3 className="text-xs font-black text-blue-800 dark:text-blue-400 uppercase tracking-widest">
                 Riepilogo Finale
@@ -508,7 +508,7 @@ const AnnualCalculationTable: React.FC<AnnualCalculationTableProps> = ({
               </div>
             </div>
 
-            <div className="flex items-center gap-2 bg-white dark:bg-slate-800 px-2 py-1 rounded-lg border border-indigo-200 dark:border-slate-600 shadow-sm transition-colors">
+            <div className="flex items-center gap-2 bg-white dark:bg-slate-800 px-2 py-1 pointer-coarse:min-h-11 rounded-lg border border-indigo-200 dark:border-slate-600 shadow-sm transition-colors">
               <Percent size={12} className="text-indigo-500 dark:text-indigo-400" />
               <span className="text-[10px] font-bold text-indigo-700 dark:text-indigo-300 uppercase">Interessi/Rivalutazione:</span>
               <input
@@ -557,7 +557,7 @@ const AnnualCalculationTable: React.FC<AnnualCalculationTableProps> = ({
                 <span className="text-2xl font-black text-emerald-700 dark:text-cyan-400 tabular-nums tracking-tight">{formatCurrency(summary.grandTotal)}</span>
                 <button
                   onClick={handleCopyTotal}
-                  className="p-1.5 rounded-full hover:bg-emerald-50 dark:hover:bg-slate-700 text-emerald-400 dark:text-cyan-500 hover:text-emerald-700 dark:hover:text-cyan-300 transition-colors"
+                  className="p-1.5 pointer-coarse:p-3 rounded-full hover:bg-emerald-50 dark:hover:bg-slate-700 text-emerald-400 dark:text-cyan-500 hover:text-emerald-700 dark:hover:text-cyan-300 transition-colors"
                   title="Copia totale"
                 >
                   {isCopied ? <Check className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
