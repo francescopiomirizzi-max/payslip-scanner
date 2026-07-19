@@ -7,6 +7,8 @@ import { useOCRSniper } from '../hooks/useOCRSniper';
 import { useIslandSync } from '../hooks/useIslandSync';
 import { useStatsData } from '../hooks/useStatsData';
 import MonthlyDataGrid, { VerifyState, VerifyDiscrepancy } from './WorkerTables/MonthlyDataGrid';
+import MonthlyDataMobile from './WorkerTables/MonthlyDataMobile';
+import { useIsMobile } from '../hooks/useIsMobile';
 import AnnualCalculationTable from './WorkerTables/AnnualCalculationTable';
 import IndemnityPivotTable from './WorkerTables/IndemnityPivotTable';
 import TfrCalculationTable from './WorkerTables/TfrCalculationTable';
@@ -40,6 +42,10 @@ interface WorkerDetailPageProps {
 
 const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateData, onUpdateStatus, onUpdateWorkerFields, onPersistWorkerById, onBack }) => {
   const [monthlyInputs, setMonthlyInputs] = useState<AnnoDati[]>(Array.isArray(worker?.anni) ? worker.anni : []);
+
+  // Telefono (<640px): il tab "Inserimento Mensile" monta la vista mobile read-only
+  // al posto della griglia (Fase 4 T2a); da 640px in su griglia invariata.
+  const isPhoneViewport = useIsMobile();
 
   // Feature "prova d'accuratezza": verifica le buste dal DISCO (PDF.js, zero egress) e applica
   // la verità-PDF alle righe esistenti con un click.
@@ -971,27 +977,40 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
     <WorkerDetailLayout>
       {activeTab === 'input' && (
         <div className="h-full flex flex-col overflow-auto custom-scrollbar">
-          <MonthlyDataGrid
-            data={monthlyInputs}
-            onDataChange={handleDataChange}
-            initialYear={currentYear}
-            onYearChange={setCurrentYear}
-            activeMonthIndex={activeMonthIndex}
-            activeYear={activeYear}
-            profilo={worker.profilo}
-            eliorType={worker.eliorType}
-            onCellFocus={handleCellFocus}
-            years={dynamicYears}
-            includePaidLeave={includePaidLeave}
-            archiveEntries={archiveEntries}
-            verifyStates={verifyStates}
-            onVerifyRequest={handleVerifyRequest}
-            onAcceptCorrection={handleAcceptCorrection}
-            onAcceptAllCorrections={handleAcceptAllCorrections}
-            onOpenArchive={() => setActiveTab('archive')}
-            compact={showSplit}
-            onToggleViewer={() => setShowSplit(!showSplit)}
-          />
+          {isPhoneViewport ? (
+            <MonthlyDataMobile
+              data={monthlyInputs}
+              initialYear={currentYear}
+              onYearChange={setCurrentYear}
+              profilo={worker.profilo}
+              eliorType={worker.eliorType}
+              years={dynamicYears}
+              includePaidLeave={includePaidLeave}
+              verifyStates={verifyStates}
+            />
+          ) : (
+            <MonthlyDataGrid
+              data={monthlyInputs}
+              onDataChange={handleDataChange}
+              initialYear={currentYear}
+              onYearChange={setCurrentYear}
+              activeMonthIndex={activeMonthIndex}
+              activeYear={activeYear}
+              profilo={worker.profilo}
+              eliorType={worker.eliorType}
+              onCellFocus={handleCellFocus}
+              years={dynamicYears}
+              includePaidLeave={includePaidLeave}
+              archiveEntries={archiveEntries}
+              verifyStates={verifyStates}
+              onVerifyRequest={handleVerifyRequest}
+              onAcceptCorrection={handleAcceptCorrection}
+              onAcceptAllCorrections={handleAcceptAllCorrections}
+              onOpenArchive={() => setActiveTab('archive')}
+              compact={showSplit}
+              onToggleViewer={() => setShowSplit(!showSplit)}
+            />
+          )}
         </div>
       )}
       {activeTab === 'calc' && (

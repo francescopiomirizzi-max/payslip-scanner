@@ -1,3 +1,88 @@
+# Todo — Sessione 19/07: push+deploy mobile + Fase 4 T2a "vista mensile mobile read-only" (PIANO, in attesa di approvazione)
+
+> **Fatto in apertura di sessione (19/07):** collaudo F3+T1 confermato dall'utente
+> («ho verificato tutto») → **PUSH dei 5 commit** (`b3dfde3→880270a`) su origin/main →
+> **DEPLOY Netlify VERIFICATO live**: deploy `6a5c8625`, commit `880270a`, state ready
+> alle 08:09 UTC, build 40s, 6 functions, secret scan pulito. 1 deploy per 5 commit =
+> batching rispettato. **Ora possibili i collaudi post-deploy su
+> https://railflow-2.netlify.app: standalone/install (Fase 1) + scanner telefono (F2).**
+> Inventario F4 copiato stabile in
+> [tasks/inventario-scheda-lavoratore-fase4.md](inventario-scheda-lavoratore-fase4.md)
+> (era nello scratchpad tmp della sessione 18/07).
+
+> **Scope T2a (dal piano tranche 18/07, T2 spezzata):** consultare la griglia mensile su
+> telefono SENZA toccare MonthlyDataGrid dentro. Solo lettura: l'editing è T2b.
+> Architettura già pronta: la griglia è un componente CONTROLLATO (`data`+`onDataChange`
+> → debounce → `handleUpdateWorkerData`), quindi una vista mobile parallela riceve le
+> stesse props senza toccare il canale di sync (inventario §3).
+
+## Piano T2a (APPROVATO 19/07 — decisioni a/b/c confermate: switch <640 · accordion
+## inline · read-only anche per l'owner) — ESEGUITO 19/07
+
+- [x] 1. **Switch a breakpoint in `WorkerDetailPage`**: nuovo hook `hooks/useIsMobile.ts`
+      (matchMedia `max-width: 639px`, allineato a `sm`); nel tab input monta
+      `MonthlyDataMobile` sotto 640, MonthlyDataGrid invariata sopra. Un solo
+      componente montato per volta. ✓ misurato: 390/430 = 0 griglie, 1276 = griglia
+      presente e mobile assente.
+- [x] 2. **`MonthlyDataMobile.tsx` NUOVO** (~340 righe): pillole anno con dot
+      copertura (stessa `monthsByYearFromAnni` + title della griglia, autoscroll
+      sull'anno attivo), 2 KPI anno (stesse formule di `annualStats`), 12 card mese
+      con GG Lav./Ferie/Ass. Retr., totale mese, semaforo verify, icone alert
+      (divisore rosso / giorni arancio / avviso AI) e nota. Nessun sync scroll.
+- [x] 3. **Accordion inline**: dettaglio con voci non-zero (label+subLabel reali,
+      arretrati marcato "fuori dal totale"), testo alert per esteso, dettagli
+      discrepanze verify (che su desktop vivono nei tooltip hover), nota completa.
+      Formattazione SOLO via parseLocalFloat/formatCurrency/formatDay. Zero input
+      nella vista (misurato: 0 input/textarea/select).
+- [x] 4. **Target touch e a11y**: pillole 44px e card 56px misurate; aria-selected
+      sulle pillole, aria-expanded/aria-controls sull'accordion, aria-label su
+      icone di stato; `scroll-hint-x` + `no-scrollbar` sulla riga anni.
+- [x] 5. **Gate**: tsc 0 · **344/344** · build ok (solo warning chunk preesistente)
+      · `git diff --check` pulito · MonthlyDataGrid **zero righe toccate** (diff =
+      2 file nuovi + mount fork in WorkerDetailPage).
+- [ ] 6. **Collaudo visivo utente** (390 + telefono reale ora che prod è aggiornata).
+
+## Review T2a (19/07)
+
+**Diff: 2 file nuovi** ([hooks/useIsMobile.ts](../hooks/useIsMobile.ts),
+[components/WorkerTables/MonthlyDataMobile.tsx](../components/WorkerTables/MonthlyDataMobile.tsx))
+**+ 1 modificato** (WorkerDetailPage: import + hook + fork del mount nel tab input).
+Zero dipendenze nuove, zero scritture dati (nessun `onDataChange` passato), zero
+migrazioni. Rollback = revert dei 3 file.
+
+**Verifica = protocollo demo+iframe** (harness temporaneo in `public/`, ELIMINATO;
+`npm run dev:demo`, scheda reale `demo-rfi-1` Rossi Mario RFI 2017-2024, deep link
+`#/worker/demo-rfi-1/input`, iframe 390/430/1276 nel Chrome reale):
+
+| Misura | 390 | 430 | 1276 |
+| --- | --- | --- | --- |
+| Overflow documento | 0 ✓ | 0 ✓ | 0 ✓ |
+| Vista montata | mobile (12 card, 0 griglie) | mobile | **griglia, 0 mobile** |
+| **Parità valori vs griglia (stesso fixture)** | **12/12 totali mese + GG/Ferie + 2 KPI + anno: 0 diff, al centesimo** (2024 E contro-prova 2018) | — | fonte del confronto |
+| Somma voci nel dettaglio = totale card | ✓ (497,23 = 497,23, GENNAIO 5 voci) | — | — |
+| Cambio anno da pillola | ✓ (2018, card aggiornate) | — | — |
+| Target touch | pillola 44px, card 56px | — | — |
+| Input nella vista (read-only) | **0** | — | — |
+| Console errors al load | 0 | 0 | 0 |
+| Tetto ferie 28gg cumulato | ✓ (Ferie 16 di Agosto in rosso, cum 30>28 come griglia) | — | — |
+
+**Fix in corsa (trovato guardando, non a tavolino):** la barra anni era `sticky top-0`
+ma lo scroll della scheda avviene a livello DOCUMENTO (il wrapper `overflow-auto` del
+tab non è lo scroller reale → sticky mai ingaggiato; e appiccicarla al viewport la
+farebbe collidere con la DynamicIsland fissa in alto). Semplificata: barra in flusso.
+
+**Limiti dichiarati (non bug):**
+- Read-only per tutti BY DESIGN (decisione c): l'editing touch è la T2b.
+- Vista solo "Variabili": il toggle Voci Fisse (Quadro B, RFI/Trenitalia) resta
+  desktop/tablet — da valutare in T2b/T3 se serve su telefono.
+- Niente colonna "PDF n/12"/link archivio per-mese (griglia li ha nella barra
+  PERIODO): il tab Archivio resta raggiungibile da header/CommandBar; eventuale
+  rifinitura in T4.
+- `pointer-coarse` non provato su touch vero (Chrome desktop): collaudo telefono.
+- Il viewer readonly vede la stessa vista (nessun gate necessario: non scrive nulla).
+
+---
+
 # Todo — Sessione 18/07: PWA mobile — Fase 4 "scheda lavoratore mobile" (PIANO, in attesa di approvazione)
 
 > **Contesto:** Fase 3 implementata e verificata (sotto), NON committata: collaudo visivo
@@ -71,8 +156,9 @@ menu Azioni in viewport (25..235), timeline step in viewport (37..333), command 
 1440 (xl): ticker marquee INVARIATO, chip nascosti, doc ok.
 **Gate:** tsc 0 · **344/344** · build ok.
 
-**Resta:** collaudo visivo utente (390 + desktop + telefono per i target coarse);
-poi T2 (vista mensile mobile, sessione dedicata).
+**Resta:** ~~collaudo visivo utente~~ → **FATTO, confermato dall'utente il 19/07**
+(«ho verificato tutto»). **PUSH 19/07: i 5 commit (b3dfde3→880270a) sono su origin/main
+= deploy Netlify.** Poi T2 (vista mensile mobile, sessione dedicata).
 
 ---
 
@@ -138,7 +224,8 @@ poi T2 (vista mensile mobile, sessione dedicata).
       bloccata da RLS, ora la UI non mente più).
 - [x] 7. **Gate**: tsc 0 · **344/344 test** · build ok (solo warning chunk preesistente);
       classi verificate nel CSS prodotto; misure DOM reali (vedi Review).
-- [ ] 8. **Collaudo visivo utente** (390px + desktop + viewer) → chiusura tranche.
+- [x] 8. **Collaudo visivo utente** (390px + desktop + viewer) → confermato dall'utente
+      il 19/07 («ho verificato tutto») → tranche chiusa.
 
 ## Review Fase 3 giro 1 (17/07)
 
