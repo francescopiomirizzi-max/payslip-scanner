@@ -12,6 +12,7 @@ import { useIsMobile } from '../hooks/useIsMobile';
 import AnnualCalculationTable from './WorkerTables/AnnualCalculationTable';
 import IndemnityPivotTable from './WorkerTables/IndemnityPivotTable';
 import TfrCalculationTable from './WorkerTables/TfrCalculationTable';
+import RicostruiteTab from './WorkerTables/RicostruiteTab';
 import PayslipArchiveTab from './WorkerTables/PayslipArchiveTab';
 import TableComponent from './TableComponent';
 import WorkerDetailLayout from './WorkerDetailLayout';
@@ -77,8 +78,8 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
   // Il tab vive nel 4° segmento dell'hash (#/worker/:id/:tab): F5 e deep link
   // riaprono il tab giusto. Scrittura con replaceState (i tab non sporcano la
   // history); useHashRoute tollera il segmento extra.
-  type DetailTab = 'input' | 'calc' | 'pivot' | 'tfr' | 'archive';
-  const DETAIL_TABS: readonly DetailTab[] = ['input', 'calc', 'pivot', 'tfr', 'archive'];
+  type DetailTab = 'input' | 'calc' | 'pivot' | 'tfr' | 'ricostruite' | 'archive';
+  const DETAIL_TABS: readonly DetailTab[] = ['input', 'calc', 'pivot', 'tfr', 'ricostruite', 'archive'];
   const [activeTab, setActiveTab] = useState<DetailTab>(() => {
     const seg = window.location.hash.split('/')[3];
     return (DETAIL_TABS as readonly string[]).includes(seg) ? (seg as DetailTab) : 'input';
@@ -272,7 +273,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
   // Prospetto TFR: fuori dal piano di consultazione (sarà un modulo a pagamento).
   // Il viewer non deve arrivarci nemmeno via hash/deep-link: rimbalzo su 'calc'.
   useEffect(() => {
-    if (isReadOnly && activeTab === 'tfr') setActiveTab('calc');
+    if (isReadOnly && (activeTab === 'tfr' || activeTab === 'ricostruite')) setActiveTab('calc');
   }, [isReadOnly, activeTab]);
 
   // --- BACKFILL VOCI FISSE (Quadro B) dalle buste già in archivio ---
@@ -919,6 +920,7 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
       onQRData: handleQRData,
       activeTab,
       onSetActiveTab: setActiveTab,
+      showRicostruite: worker.profilo === 'FSE',
       archiveCount,
       isExplainerOpen,
       onCloseExplainer: () => setIsExplainerOpen(false),
@@ -1049,6 +1051,16 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
             onDataChange={handleDataChange}
             onUpdateWorkerFields={onUpdateWorkerFields}
             onGoToInput={() => setActiveTab('input')}
+          />
+        </div>
+      )}
+      {activeTab === 'ricostruite' && !isReadOnly && worker.profilo === 'FSE' && (
+        <div className="h-full overflow-hidden">
+          <RicostruiteTab
+            data={monthlyInputs}
+            startClaimYear={startClaimYear}
+            years={dynamicYears}
+            workerId={worker.id}
           />
         </div>
       )}

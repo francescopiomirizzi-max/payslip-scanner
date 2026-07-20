@@ -49,8 +49,10 @@ export interface WorkerDetailContextValue {
   onOpenQR: () => void;
   onCloseQR: () => void;
   onQRData: (data: any) => void;
-  activeTab: 'input' | 'calc' | 'pivot' | 'tfr' | 'archive';
-  onSetActiveTab: (t: 'input' | 'calc' | 'pivot' | 'tfr' | 'archive') => void;
+  activeTab: 'input' | 'calc' | 'pivot' | 'tfr' | 'ricostruite' | 'archive';
+  onSetActiveTab: (t: 'input' | 'calc' | 'pivot' | 'tfr' | 'ricostruite' | 'archive') => void;
+  /** true solo per FSE: mostra il tab "Ricostruite" (indennità a tariffa del perito). */
+  showRicostruite: boolean;
   archiveCount: number;
   isExplainerOpen: boolean;
   onCloseExplainer: () => void;

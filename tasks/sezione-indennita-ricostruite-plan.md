@@ -61,6 +61,19 @@ documentate». Quindi la sezione (e la Relazione) DEVE:
   ("valore del perito, non più coperto da accordo documentato dopo AAAA") → è trasparenza per l'avvocato,
   non un giudizio. Ogni card mostra: tariffa · accordo/fonte · **fino a quando è documentata**.
 
+## 4-ter. ESEGUITO 20/07 (fase 1) — ok utente su A–D
+
+- **config/ricostruzioniFse.ts**: 6 ricostruzioni dalla Relazione §3 (tariffa, unità, accordo,
+  documentataFinoAl, regime TFR, periodo).
+- **components/WorkerTables/RicostruiteTab.tsx**: nuovo tab. Ind. Aziendale AUTO (3,50 × giorni
+  lavorati 2011–2020, dai dati migrati); le altre = input quantità (× tariffa) + override "valore
+  perito", persistiti in localStorage (`ricostruite_fse_<workerId>`). Ogni card mostra tariffa,
+  accordo, **fin dove è documentata**, regime TFR; totale ricostruito + nota (si aggiunge al
+  numeratore; integrazione nel credito ufficiale + ISTAT = decisione avvocato/fase 2).
+- Cablato in WorkerDetailPage (tab 'ricostruite') + CommandBar (bottone arancio, gated FSE+owner) +
+  WorkerDetailContext (showRicostruite). Gate: tsc 0 · vitest 344/344 · build ok.
+- **Fase 2 (aperta):** wiring nel motore credito (numeratore) + confluenza nella Relazione.
+
 ## 5. Perché è corretto farla
 
 Le ricostruzioni sono **fondate** (accordi aziendali citati nella relazione), non arbitrarie; l'Ind.

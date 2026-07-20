@@ -1,7 +1,7 @@
 import React, { useRef } from 'react';
 import { motion } from 'framer-motion';
 import {
-  LayoutGrid, Calculator, TrendingUp, Wallet,
+  LayoutGrid, Calculator, TrendingUp, Wallet, HardHat,
   Loader2, ScanLine, Bot, QrCode, FolderUp,
 } from 'lucide-react';
 import { useIsReadOnly } from '../../lib/readonly';
@@ -13,6 +13,7 @@ const WorkerDetailCommandBar: React.FC = () => {
   const {
     isBatchProcessing, onBatchUpload, onSetIsGlobalDragging,
     isAnalyzing, scanRef, onFileUpload, onOpenQR, activeTab, onSetActiveTab,
+    showRicostruite,
   } = useWorkerDetail();
   const isReadOnly = useIsReadOnly();
   const commandBarRef = useRef<HTMLDivElement>(null);
@@ -285,6 +286,25 @@ const WorkerDetailCommandBar: React.FC = () => {
               <Wallet className={`w-5 h-5 transition-transform duration-300 relative z-10 ${activeTab === 'tfr' ? 'rotate-0' : 'group-hover:-translate-y-1 group-hover:translate-x-1'}`} />
               <span className="relative z-10">Prospetto TFR</span>
             </button>
+
+            {/* TAB: INDENNITÀ RICOSTRUITE — solo FSE (indennità a tariffa del perito) */}
+            {showRicostruite && (
+            <button
+              onClick={() => onSetActiveTab('ricostruite')}
+              className={`group relative px-6 py-3 rounded-xl font-bold text-sm transition-colors duration-200 flex items-center gap-2 overflow-hidden border-2 shrink-0
+                  ${activeTab === 'ricostruite'
+                  ? 'text-white shadow-lg shadow-orange-500/30 border-white/20'
+                  : 'bg-white/40 dark:bg-slate-800/40 text-slate-600 dark:text-slate-400 dark:text-slate-200 border-transparent hover:bg-white dark:hover:bg-slate-800 hover:text-orange-500 dark:hover:text-orange-400 hover:shadow-md'
+                }`}
+            >
+              {activeTab === 'ricostruite' && (
+                <motion.div layoutId="active-tab-bg" className="absolute inset-0" style={{ backgroundImage: 'linear-gradient(135deg, #f97316 0%, #f59e0b 100%)' }} transition={{ type: 'spring' as const, stiffness: 380, damping: 40 }} />
+              )}
+              <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500 rotate-12" />
+              <HardHat className={`w-5 h-5 transition-transform duration-300 relative z-10 ${activeTab === 'ricostruite' ? 'rotate-0' : 'group-hover:-translate-y-1'}`} />
+              <span className="relative z-10">Ricostruite</span>
+            </button>
+            )}
             </>
             )}
 
