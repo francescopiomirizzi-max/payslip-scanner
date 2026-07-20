@@ -74,6 +74,21 @@ documentate». Quindi la sezione (e la Relazione) DEVE:
   WorkerDetailContext (showRicostruite). Gate: tsc 0 · vitest 344/344 · build ok.
 - **Fase 2 (aperta):** wiring nel motore credito (numeratore) + confluenza nella Relazione.
 
+## 4-quater. ESEGUITO 20/07 (fase 2) — ricostruzioni nel credito + Relazione
+
+- **calculationEngine**: nuovo param `extraNumeratorByYear?` (additivo al numeratore per anno,
+  divisore invariato; retro-compatibile) + 2 test.
+- **utils/ricostruzioniEngine.ts**: helper condiviso (stato localStorage, `valoreVoce`,
+  `computeRicostruzioniByYear` → per-anno delle voci INCLUSE; manuali distribuite ∝ giorni lavorati).
+- **RicostruiteTab**: toggle "includi nel credito" per voce; mostra **credito base vs +ricostruite
+  vs totale** (nominale, via motore). Usa lo stesso stato salvato.
+- **Relazione (docx, root)**: sezione DISTINTA "Indennità ricostruite a tariffa" dopo il totale —
+  elenca solo le voci incluse con fonte/tariffa/limite di documentazione; NON altera il totale delle
+  voci stampate (scelta: tenere separato documentato vs ricostruito).
+- Scope: le card dashboard restano sul credito base by design. Gate: tsc 0 · vitest 346/346 · build ok.
+- **Aperto:** anteprima HTML della Relazione (oggi solo docx); eventuale integrazione nel totale
+  ufficiale se l'avvocato conferma; quantità manuali per-anno (ora distribuite proporzionalmente).
+
 ## 5. Perché è corretto farla
 
 Le ricostruzioni sono **fondate** (accordi aziendali citati nella relazione), non arbitrarie; l'Ind.

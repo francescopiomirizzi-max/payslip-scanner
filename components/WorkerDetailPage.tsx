@@ -1058,8 +1058,13 @@ const WorkerDetailPage: React.FC<WorkerDetailPageProps> = ({ worker, onUpdateDat
         <div className="h-full overflow-hidden">
           <RicostruiteTab
             data={monthlyInputs}
+            profilo={worker.profilo}
+            eliorType={worker.eliorType}
             startClaimYear={startClaimYear}
             years={dynamicYears}
+            includeExFest={includeExFest}
+            includeTickets={includeTickets}
+            includePaidLeave={includePaidLeave}
             workerId={worker.id}
           />
         </div>

@@ -62,6 +62,14 @@ export interface CalculationParams {
    * (Strategia A: solo i giorni di effettiva presenza, comportamento storico).
    */
   includePaidLeave?: boolean;
+  /**
+   * Extra numeratore per ANNO: indennità RICOSTRUITE a tariffa, non stampate sui cedolini
+   * (es. FSE — Ind. Aziendale 3,50 €×giorni lavorati; accordi in Relazione §3). Si SOMMA al
+   * numeratore delle medie di quell'anno; il divisore (giorni lavorati) resta invariato.
+   * Passato SOLO dove le ricostruzioni vanno incluse nel credito (scheda Ricostruite, Relazione),
+   * non nelle viste quotidiane → il credito base (voci stampate) resta separato e visibile.
+   */
+  extraNumeratorByYear?: Record<number, number>;
 }
 
 // ─── Internal helpers ───────────────────────────────────────────────────────
@@ -180,6 +188,7 @@ export function computeHolidayIndemnity(params: CalculationParams): YearResult[]
     startClaimYear,
     years,
     includePaidLeave = false,
+    extraNumeratorByYear,
   } = params;
 
   // ── Input guards ──────────────────────────────────────────────────────────
@@ -218,6 +227,17 @@ export function computeHolidayIndemnity(params: CalculationParams): YearResult[]
     yearlyRaw[y].totVar += fin(sum);
     if (gg > 0) yearlyRaw[y].ggLav += gg;
   });
+
+  // Indennità RICOSTRUITE a tariffa (non stampate sui cedolini): additive al numeratore dell'anno,
+  // divisore (giorni lavorati) invariato. Vuoto/undefined = credito base (comportamento storico).
+  if (extraNumeratorByYear) {
+    for (const [k, v] of Object.entries(extraNumeratorByYear)) {
+      const y = Number(k);
+      if (!isFinite(y) || isNaN(y)) continue;
+      if (!yearlyRaw[y]) yearlyRaw[y] = { totVar: 0, ggLav: 0 };
+      yearlyRaw[y].totVar += fin(parseAmount(v));
+    }
+  }
 
   const yearlyAverages: Record<number, number> = {};
   Object.keys(yearlyRaw).forEach(k => {

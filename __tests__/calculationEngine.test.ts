@@ -203,6 +203,30 @@ describe('computeHolidayIndemnity — standard calculation', () => {
   });
 });
 
+// ─── computeHolidayIndemnity — extraNumeratorByYear (ricostruite) ─────────────
+
+describe('computeHolidayIndemnity — extraNumeratorByYear (ricostruite)', () => {
+  it('somma al numeratore dell\'anno, divisore invariato', () => {
+    const data = [row(2023, 0, 20, 0, 200), row(2024, 0, 20, 10, 200)];
+    const base = computeHolidayIndemnity(params(data, { years: [2023, 2024] }));
+    const con = computeHolidayIndemnity(params(data, { years: [2023, 2024], extraNumeratorByYear: { 2023: 100 } }));
+    const b = base.find(y => y.year === 2024)!;
+    const c = con.find(y => y.year === 2024)!;
+    // media 2023: base 200/20=10 → con (200+100)/20=15; il 2024 applica la media dell'anno precedente.
+    expect(b.avgApplied).toBeCloseTo(10);
+    expect(c.avgApplied).toBeCloseTo(15);
+    expect(c.sumIndennitaSpettante).toBeGreaterThan(b.sumIndennitaSpettante);
+    expect(c.sumGiorniLav).toBe(b.sumGiorniLav);
+  });
+
+  it('undefined/vuoto = credito base', () => {
+    const data = [row(2023, 0, 20, 0, 200), row(2024, 0, 20, 10, 200)];
+    const a = computeHolidayIndemnity(params(data, { years: [2023, 2024] })).find(y => y.year === 2024)!;
+    const b = computeHolidayIndemnity(params(data, { years: [2023, 2024], extraNumeratorByYear: {} })).find(y => y.year === 2024)!;
+    expect(b.sumIndennitaSpettante).toBeCloseTo(a.sumIndennitaSpettante);
+  });
+});
+
 // ─── computeHolidayIndemnity — TETTO (cap on vacation days) ─────────────────
 
 describe('computeHolidayIndemnity — TETTO', () => {

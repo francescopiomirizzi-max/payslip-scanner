@@ -5,6 +5,8 @@ import { X, Printer, Copy, CheckCircle, PenTool, FileText, FileSpreadsheet } fro
 import type { Paragraph, Table, TableRow } from 'docx';
 import { motion } from 'framer-motion';
 import { YEARS, MONTH_NAMES, AnnoDati, getColumnsByProfile, getFixedColumnsByProfile, resolveIncludePaidLeave } from './types';
+import { RICOSTRUZIONI_FSE } from './config/ricostruzioniFse';
+import { loadRicostruzioniState, workedByYear, valoreVoce } from './utils/ricostruzioniEngine';
 import { parseLocalFloat, getProfiloBadgeLabel, formatDay } from './utils/formatters';
 import { EXCLUDED_INDEMNITY_COLS, computeHolidayIndemnity, computePeriodIncidence } from './utils/calculationEngine';
 import { useIsReadOnly } from './lib/readonly';
@@ -401,6 +403,24 @@ export async function buildRelazioneDocxBlob({
     if (includeTickets) summaryRows.push(moneyRow(`+ CREDITO BUONI PASTO NON EROGATI:`, fmt(ticketVal)));
     summaryRows.push(moneyRow(totalLabel, fmt(nettoVal), true));
     children.push(new Table({ alignment: AlignmentType.CENTER, width: { size: 78, type: WidthType.PERCENTAGE }, borders: summaryBorders, rows: summaryRows }));
+
+    // --- Indennità RICOSTRUITE A TARIFFA (FSE): sezione informativa DISTINTA, non altera il totale
+    // sopra (voci stampate). Elenca solo le voci incluse dall'utente, con fonte e limite di documentazione. ---
+    if (worker?.profilo === 'FSE') {
+        const ricState = loadRicostruzioniState(worker?.id);
+        const wby = workedByYear(worker?.anni || []);
+        const inclusi = RICOSTRUZIONI_FSE
+            .filter(r => ricState[r.id]?.includi)
+            .map(r => ({ r, val: valoreVoce(r, wby, ricState[r.id]) }))
+            .filter(x => x.val > 0);
+        if (inclusi.length > 0) {
+            const totRic = inclusi.reduce((s, x) => s + x.val, 0);
+            children.push(new Paragraph({ pageBreakBefore: true, spacing: { before: 240, after: 200 }, children: [new TextRun({ text: 'INDENNITÀ RICOSTRUITE A TARIFFA (accordi aziendali)', bold: true, size: 26 })] }));
+            children.push(para(`Oltre alle voci di incomodo stampate sui cedolini, il conteggio ricostruisce alcune indennità applicando le tariffe degli accordi aziendali richiamati nella documentazione (cfr. tabella degli accordi). Tali voci non risultano stampate sui cedolini: se ne dà evidenza distinta perché la loro inclusione nel credito è rimessa alla valutazione del legale. Per ciascuna si indica la fonte e il periodo entro cui la tariffa è documentata.`));
+            inclusi.forEach(({ r, val }) => children.push(bullet(`${r.nome}: € ${fmt(val)} — € ${fmt(r.tariffa)} per ${r.unita} (${r.accordo}; documentata: ${r.documentataFinoAl}; regime TFR: ${r.regimeTfr}).`)));
+            children.push(para(`Totale delle indennità ricostruite: € ${fmt(totRic)}. Tali importi si aggiungono al numeratore delle medie (indennità non corrisposte durante le ferie), fermo restando il divisore pari ai giorni di servizio effettivo.`));
+        }
+    }
 
     // --- 4. Genera il VERO .docx ---
     const doc = new Document({
