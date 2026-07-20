@@ -56,7 +56,6 @@ export default function RicostruiteTab({
     return { r, total: valoreVoce(r, wby, st), gg, includi: !!st?.includi, usaPerito: parseLocalFloat(st?.valore) > 0 };
   }), [wby, state]);
 
-  const grandTotal = rows.reduce((s, x) => s + x.total, 0);
   const inclusiTotal = rows.filter(x => x.includi).reduce((s, x) => s + x.total, 0);
 
   // Credito NOMINALE base vs con ricostruite incluse (stesso motore; ISTAT+interessi nella Relazione).
@@ -84,8 +83,10 @@ export default function RicostruiteTab({
           Voci che il perito <strong>ricostruisce a tariffa</strong> dagli accordi aziendali (Relazione §3):
           non sono stampate sui cedolini. L'<strong>Indennità Aziendale</strong> è calcolata in automatico dai
           giorni di servizio effettivo; per le altre inserisci la quantità (× tariffa) o il valore dal perito.
-          Spunta <strong>"includi nel credito"</strong> per farle entrare nel numeratore delle medie. Ogni voce
-          indica <strong>fin dove è documentata</strong> da un accordo.
+          Spunta <strong>"includi nel credito"</strong> per farle entrare nella media. Ogni voce indica
+          <strong> fin dove è documentata</strong> da un accordo. Gli importi delle card sono il
+          <strong> valore dell'indennità sul periodo</strong> (non sono somme a parte): nel credito ferie entra
+          solo la loro quota sui giorni di ferie — l'effetto reale è nel riquadro in fondo.
         </p>
       </div>
 
@@ -118,6 +119,7 @@ export default function RicostruiteTab({
 
               {/* Valore + input */}
               <div className="text-right shrink-0">
+                <div className="text-[9px] uppercase tracking-wider text-slate-400 dark:text-slate-500">valore sul periodo</div>
                 <div className="text-lg font-black tabular-nums text-slate-800 dark:text-slate-100">{total > 0 ? formatCurrency(total) : '—'}</div>
                 {r.base === 'daysWorked'
                   ? <div className="text-[11px] text-slate-400">{gg} gg lavorati {r.periodo ? `(${r.periodo.da}–${r.periodo.a})` : ''} × {formatCurrency(r.tariffa)}</div>
@@ -153,35 +155,34 @@ export default function RicostruiteTab({
         ))}
       </div>
 
-      {/* Totali + impatto sul credito */}
+      {/* Impatto sul CREDITO FERIE (il dato che conta) + valore grezzo declassato */}
       <div className="mt-5 p-4 rounded-2xl bg-slate-900 text-white space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 font-bold"><Calculator size={16} className="text-amber-400" /> Totale ricostruito</div>
-          <div className="text-right">
-            <div className="text-2xl font-black tabular-nums">{formatCurrency(grandTotal)}</div>
-            <div className="text-[11px] text-slate-400">di cui incluse nel credito: {formatCurrency(inclusiTotal)}</div>
-          </div>
-        </div>
-        <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-700 text-center">
+        <div className="flex items-center gap-2 font-bold text-slate-200"><Calculator size={16} className="text-amber-400" /> Effetto sul credito ferie</div>
+        <div className="grid grid-cols-3 gap-2 items-end text-center">
           <div>
             <div className="text-[10px] uppercase tracking-wider text-slate-500">Credito base</div>
-            <div className="text-lg font-black tabular-nums text-slate-200">{formatCurrency(base)}</div>
+            <div className="text-lg font-black tabular-nums text-slate-300">{formatCurrency(base)}</div>
           </div>
           <div>
-            <div className="text-[10px] uppercase tracking-wider text-emerald-400">+ Ricostruite</div>
+            <div className="text-[10px] uppercase tracking-wider text-emerald-400">+ Effetto ricostruite</div>
             <div className="text-lg font-black tabular-nums text-emerald-400">{deltaCredito > 0 ? '+' : ''}{formatCurrency(deltaCredito)}</div>
           </div>
-          <div>
-            <div className="text-[10px] uppercase tracking-wider text-white">= Con ricostruite</div>
-            <div className="text-lg font-black tabular-nums text-white">{formatCurrency(con)}</div>
+          <div className="rounded-lg bg-white/10 py-1">
+            <div className="text-[10px] uppercase tracking-wider text-white">= Credito ferie</div>
+            <div className="text-2xl font-black tabular-nums text-white">{formatCurrency(con)}</div>
           </div>
+        </div>
+        {/* Valore grezzo: NON è credito, chiaramente separato */}
+        <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-700 text-slate-400 flex-wrap">
+          <span className="text-[11px]">Valore indennità ricostruite incluse, sul periodo <em className="not-italic text-slate-500">— non è credito: definisce la tariffa che entra nella media</em></span>
+          <span className="text-sm font-bold tabular-nums text-slate-300">{formatCurrency(inclusiTotal)}</span>
         </div>
         <p className="text-[11px] text-slate-400 leading-relaxed border-t border-slate-700 pt-2 flex gap-2">
           <Info size={13} className="shrink-0 mt-0.5 text-slate-500" />
-          Credito <strong>nominale</strong> (l'app aggiunge ISTAT + interessi nella Relazione, che usa le stesse
-          voci incluse). Le ricostruzioni entrano nel numeratore delle medie; il divisore (giorni di servizio
-          effettivo) resta invariato. La conferma delle voci non stampate spetta all'avvocato: qui il calcolo è
-          tracciato con la fonte e il limite di documentazione di ogni tariffa.
+          Le ricostruzioni <strong>non sono somme a parte</strong>: entrano nella media delle indennità e alzano
+          il credito ferie (ogni giorno di ferie vale la tariffa in più), col divisore (giorni di servizio
+          effettivo) invariato. Il "credito ferie" è <strong>nominale</strong> (l'app aggiunge ISTAT + interessi
+          nella Relazione, che usa le stesse voci incluse). La conferma delle voci non stampate spetta all'avvocato.
         </p>
       </div>
     </div>
