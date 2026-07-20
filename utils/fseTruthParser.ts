@@ -35,8 +35,11 @@ export interface FseTruth {
   /** codice voce (e chiavi fse_* del box ELEMENTI) → somma Competenze col segno. */
   codes: Record<string, number>;
   hasDays: boolean;
-  /** quantità G netta delle voci di presenza (definizione del motore). */
+  /** giorni di SERVIZIO EFFETTIVO (divisore): quantità presenza − ferie (v. decisione 20/07).
+   *  La voce presenza è pagata anche in ferie → i suoi giorni includono le ferie, che vanno tolte. */
   daysWorked: number;
+  /** quantità G netta delle voci di presenza (il "23" grezzo, per la scomposizione in UI). */
+  daysPresence: number;
   /** ore F2105 ÷ 6,5. */
   daysVacation: number;
   /** non tracciato per FSE. */
@@ -245,12 +248,15 @@ export async function extractFseTruth(data: Uint8Array): Promise<FseTruth> {
   }
 
   const presQty = r2(PRESENZA.reduce((s, c) => s + (qty[c] || 0), 0));
+  const daysVacation = r2((qty['F2105'] || 0) / 6.5);
   return {
     isText: foundHeader,
     codes: { ...codes, ...fisse },
     hasDays: foundHeader,
-    daysWorked: presQty,
-    daysVacation: r2((qty['F2105'] || 0) / 6.5),
+    // servizio effettivo = presenza − ferie (la presenza è pagata anche in ferie).
+    daysWorked: Math.max(0, r2(presQty - daysVacation)),
+    daysPresence: presQty,
+    daysVacation,
     daysPaidLeave: 0,
     daysUncertain: presQty > 31,
     daysMissingVoce: !PRESENZA.some(c => qty[c] !== undefined),

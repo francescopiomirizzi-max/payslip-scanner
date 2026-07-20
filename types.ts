@@ -27,8 +27,12 @@ export interface AnnoDati {
   month?: string;
 
   // Input per il calcolo
-  daysWorked: string | number;   // Divisore
+  daysWorked: string | number;   // Divisore = giorni di SERVIZIO EFFETTIVO (lavoro reale)
   daysVacation: string | number; // Ferie fruite
+  // FSE (era moderna): quantità grezza della voce presenza (il "23"), scomposta in
+  // daysWorked (lavorati) + daysVacation (ferie). Presente solo dove c'è stata la scomposizione;
+  // serve alla trasparenza in UI (v. tooltip "GG Lav." in MonthlyDataGrid). Decisione 20/07.
+  daysPresence?: string | number;
   ticket: string | number;       // Buono pasto
 
   // Assenze retribuite (es. permessi / distacco sindacale).
@@ -282,13 +286,16 @@ export const INDENNITA_MERCITALIA_FISSE: ColumnDef[] = [
 // Colonne FSE (Ferrovie del Sud Est — Gruppo FS, cedolino ZUCCHETTI a 7 colonne).
 // Vertenza ferie ex art. 7 Dir. 2003/88/CE: si valorizzano le indennità "di incomodo" percepite
 // nei 12 mesi precedenti (media giornaliera × giorni ferie). Importi letti dalla colonna COMPETENZE.
-// DECISIONE 10/07 (supera il "seguiamo il perito" del 09/07: il perito è LINEA GUIDA, i conti
-// sono nostri): il set copre le INDENNITÀ DI PRESTAZIONE stampate sui cedolini — turno,
-// domenicale, trasferte, notturno ordinario, lavoro festivo, turno produttivo, disponibilità e
-// presenza/giornaliera (pagata a giornata lavorata → persa in ferie). ESCLUSI di proposito:
+// Il set copre le INDENNITÀ DI PRESTAZIONE stampate sui cedolini — turno, domenicale, trasferte,
+// notturno ordinario, lavoro festivo, turno produttivo, disponibilità. ESCLUSI di proposito:
 // straordinari/festivi-straordinari (lavoro aggiuntivo, CGUE Hein), voci FISSE mensili che non
-// si perdono in ferie (AA712 funzione sala; 663 dell'era storica: pagata ~26gg fissi anche con
-// 17gg di ferie — Set 2013), rimborsi spese, ANF, 041 festività (nota per l'avvocato).
+// si perdono in ferie (AA712 funzione sala; 663 dell'era storica), rimborsi spese, ANF, 041 festività.
+// DECISIONE 20/07: la voce PRESENZA/GIORNALIERA (I86178/I86005/IX0023) NON è più colonna del
+// numeratore. Sui cedolini reali è pagata ANCHE durante le ferie (es. Ago 2022: 23gg pagati con
+// 16gg di ferie + 3 L104) → non si perde in ferie, quindi non è un'indennità da reintegrare (stessa
+// logica della 663 storica). Resta la fonte del DIVISORE: i giorni "servizio effettivo" = quantità
+// presenza − ferie (vedi daysPresence/daysWorked). È la relazione dell'avvocato (§4 "giorni di
+// servizio effettivo") + il metodo RFI; il perito la usa solo come conta-giorni.
 // TRE ere di codici: I8/T8 (nov2020-oggi), IX (lug2017-ott2020), SPA-GUIDA a 3 cifre
 // (set2010-giu2017, scansioni — censimento+verifica 8/8 in tasks/censimento-codici-fse-2011-2016.md).
 // Le ricostruzioni a tariffa del perito (3,50×GG, Percorrenze/Guide/Nastri…) NON sono colonne.
@@ -299,8 +306,7 @@ export const INDENNITA_FSE: ColumnDef[] = [
   { id: 'I85248', label: 'Ind. Domenicale',   subLabel: '(I85248)', width: 'min-w-[120px]', type: 'currency' },
   { id: 'I86025', label: 'Ind. Aggiuntiva',   subLabel: '(I86025)', width: 'min-w-[120px]', type: 'currency' },
   { id: 'I86174', label: 'Prod. a Vuoto',     subLabel: '(I86174)', width: 'min-w-[120px]', type: 'currency' },
-  { id: 'I86178', label: 'Comp. Presenza',    subLabel: '(I86178)', width: 'min-w-[120px]', type: 'currency' },
-  { id: 'I86005', label: 'Ind. Giornaliera',  subLabel: '(I86005)', width: 'min-w-[120px]', type: 'currency' },
+  // I86178 Comp. Presenza / I86005 Ind. Giornaliera: NON colonne (presenza = fonte del divisore, non numeratore — v. commento sopra)
   { id: 'I85210', label: 'Ord. Notturno',     subLabel: '(I85210)', width: 'min-w-[120px]', type: 'currency' },
   { id: 'I86161', label: 'Comp. Turno Prod.', subLabel: '(I86161)', width: 'min-w-[130px]', type: 'currency' },
   { id: 'I86110', label: 'Ind. Disponibilità',subLabel: '(I86110)', width: 'min-w-[130px]', type: 'currency' },
@@ -313,7 +319,7 @@ export const INDENNITA_FSE: ColumnDef[] = [
   // Era IX (lug 2017 → ott 2020)
   { id: 'IX0002', label: 'Art. 5A',           subLabel: '(IX0002)', width: 'min-w-[110px]', type: 'currency' },
   { id: 'IX0001', label: 'Art. 5/B',          subLabel: '(IX0001)', width: 'min-w-[110px]', type: 'currency' },
-  { id: 'IX0023', label: 'Ind. Giornaliera',  subLabel: '(IX0023)', width: 'min-w-[120px]', type: 'currency' },
+  // IX0023 Ind. Giornaliera: NON colonna (presenza = fonte del divisore, non numeratore)
   { id: 'IX0046', label: 'Ord. Notturno',     subLabel: '(IX0046)', width: 'min-w-[120px]', type: 'currency' },
   { id: 'IX0051', label: 'Trasf. A1 24%',     subLabel: '(IX0051)', width: 'min-w-[120px]', type: 'currency' },
   { id: 'IX0052', label: 'Trasf. A2 9%',      subLabel: '(IX0052)', width: 'min-w-[120px]', type: 'currency' },

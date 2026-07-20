@@ -150,9 +150,9 @@ const INDENNITA_DETAILS: Record<string, IndennitaDetail> = {
     location: "Corpo centrale, vicino alla voce 0687."
   },
   "daysWorked": {
-    title: "Giornate Lavorative (Divisore)",
-    explanation: "Numero giorni lavorati effettivi. Usato come divisore per le medie.",
-    location: "Testata del cedolino (Box Presenze) o somma giorni lavorati nel corpo."
+    title: "Giornate di Servizio Effettivo (Divisore)",
+    explanation: "Giorni di lavoro reale, usati come divisore delle medie. Ferie, permessi (L104) e malattia sono ESCLUSI. Su FSE la voce presenza estratta viene scomposta: lavorati = presenza − ferie (v. tooltip sulla cella).",
+    location: "Testata (Box Presenze) o, su FSE, quantità della voce presenza meno le ferie."
   },
   "daysVacation": {
     title: "Giorni Ferie (Moltiplicatore)",
@@ -1439,6 +1439,33 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
                   const vacDays = parseLocalFloat(row.daysVacation);
                   const workedDays = parseLocalFloat(row.daysWorked);
                   const paidLeaveDays = parseLocalFloat(row.daysPaidLeave);
+                  // FSE (era moderna): la voce presenza (es. 23) è scomposta in lavorati (= divisore,
+                  // "servizio effettivo") + ferie. daysPresence esiste solo dove c'è stata la
+                  // scomposizione (migrazione 20/07 + parser FSE) → tooltip esplicativo sul "GG Lav.".
+                  const presenceDays = (row as any).daysPresence != null && (row as any).daysPresence !== ''
+                    ? parseLocalFloat((row as any).daysPresence) : null;
+                  // Tariffa €/giorno della voce presenza (importo grezzo ancora nella riga ÷ giorni),
+                  // se ricavabile: arricchisce il tooltip di scomposizione.
+                  const presenceAmount = presenceDays != null
+                    ? (parseLocalFloat((row as any).I86178) || 0) + (parseLocalFloat((row as any).I86005) || 0) + (parseLocalFloat((row as any).IX0023) || 0)
+                    : 0;
+                  const presenceRate = presenceDays && presenceDays > 0 && presenceAmount > 0
+                    ? presenceAmount / presenceDays : null;
+                  // Contenuto del tooltip di scomposizione (reso via PortalTooltip → su document.body,
+                  // così NON viene coperto dalla colonna Totale a sinistra né clippato dalla tabella).
+                  const presenceTooltipContent = presenceDays == null ? null : (
+                    <div className="w-72 p-3 bg-slate-900/95 text-white text-[11px] rounded-lg shadow-2xl border border-slate-700 backdrop-blur-sm">
+                      <div className="flex items-center gap-1.5 font-bold text-blue-300 mb-2 border-b border-slate-700 pb-1.5 uppercase tracking-wider text-[10px]">
+                        <Info size={12} /> Servizio effettivo · Divisore
+                      </div>
+                      <div className="space-y-1.5">
+                        <div className="flex justify-between items-center text-slate-300"><span>Voce presenza{presenceRate ? ` · ${formatCurrency(presenceRate)}/g` : ''}:</span><span className="font-bold text-white text-xs">{formatDay(presenceDays)} gg</span></div>
+                        <div className="flex justify-between items-center bg-blue-500/20 px-2 py-1 rounded border border-blue-500/30"><span className="text-blue-200 font-bold">di cui Lavorati (divisore):</span><span className="font-black text-blue-300 text-xs">{formatDay(workedDays)} gg</span></div>
+                        <div className="flex justify-between items-center text-slate-300"><span>di cui Ferie:</span><span className="font-mono text-xs">{formatDay(vacDays)} gg</span></div>
+                        <p className="text-[9px] text-slate-400 mt-2 italic leading-relaxed border-t border-slate-700 pt-1">La voce presenza è pagata <strong>anche in ferie</strong>: non si perde, quindi il divisore usa solo i giorni di lavoro reale (presenza − ferie). Permessi (L104) e malattia sono già fuori dalla presenza.</p>
+                      </div>
+                    </div>
+                  );
 
                   const prevTotal = ferieCumulateCounter;
                   ferieCumulateCounter += vacDays;
@@ -1712,6 +1739,7 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
                               <div className="w-full h-full flex items-center justify-end px-2 tabular-nums text-xs">{rowTotal !== 0 ? formatCurrency(rowTotal) : '-'}</div>
                             ) : (
                               <div className="relative w-full h-10 group/cell">
+                                {(() => { const inputEl = (
                                 <input
                                   id={`input-${rowIndex}-${col.id}`}
                                   type="text"
@@ -1740,6 +1768,9 @@ const MonthlyDataGrid: React.FC<MonthlyDataGridProps> = ({
                                   onKeyDown={(e) => handleKeyDown(e, rowIndex, col.id)}
                                   onPaste={(e) => handlePaste(e, rowIndex, col.id)}
                                 />
+                                ); return (col.id === 'daysWorked' && presenceTooltipContent)
+                                  ? (<PortalTooltip delay={350} disabled={isCellActive} wrapperClassName="w-full h-full" content={presenceTooltipContent}>{inputEl}</PortalTooltip>)
+                                  : inputEl; })()}
 
                                 {/* QUADRATINO MAGICO PER IL DRAG-TO-FILL */}
                                 {isCellActive && !dragSelection.isDragging && !cellSelection.isSelecting && col.type !== 'formula' && (

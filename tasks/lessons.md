@@ -3,6 +3,34 @@
 > Pattern e errori da evitare nelle prossime sessioni.
 > Aggiornato dopo ogni correzione utente.
 
+## 2026-07-20 — Il "GG Lav." di FSE NON erano i giorni lavorati: la quantità della voce presenza include le ferie
+
+**Contesto:** controllo pratica Clarino (FSE). Avevo trattato il divisore delle medie come "i giorni
+della voce presenza" (definizione ereditata dal perito e scritta nel motore/parser). L'utente ha
+chiesto: «quando contiamo i giorni lavorati non sono tutti effettivamente lavorati?». Sulla busta vera
+(Ago 2022): voce `I86178 Compenso di presenza` = **23 giorni**, ma `GG LAV.` in banda = **7**, ferie
+`F2105` = 16, permessi L104 = 3 → 7+16+3 = 26 (GG INPS). La voce presenza è pagata **anche in ferie**,
+quindi la sua quantità (23) = lavorati (7) + ferie (16). Dividere per 23 diluisce la media.
+
+**La prova nei documenti (non fidarsi della propria riconciliazione):** la mia riconciliazione del
+09/07 aveva concluso «il perito usa i giorni della voce presenza» — vero nei mesi SENZA ferie, dove
+presenza ≈ lavorati. Ri-misurando sul Riepilogo del perito nei mesi CON ferie: era storica → usa i
+lavorati (Set 2013 = 9); era moderna → usa la presenza-con-ferie (Ago 2022 = 23) → **il perito è
+incoerente con se stesso**, e la sua stessa relazione (§4) dice "giorni di **servizio effettivo**".
+
+**Regole:**
+1. Per una voce "giornaliera/presenza" pagata a giornata, **la sua quantità può includere le ferie**
+   (ed escludere permessi/malattia): NON è il divisore "servizio effettivo". Verificare SEMPRE contro
+   la banda `GG LAV.` e le voci di ferie/permessi della busta, non assumere "quantità = giorni lavorati".
+2. Il divisore giusto = **lavorati = quantità presenza − ferie** (invariante verificata su 100/100 mesi
+   Clarino, sempre ≥ 0). Cfr. lezione 11/07: una conclusione scritta in un report è un'ipotesi da
+   ri-misurare sui mesi-limite (qui i mesi con ferie pesanti), non i mesi comodi.
+3. **Non seguire il perito alla cieca**: è linea guida, ma se devia dal principio scritto (o dalla
+   logica della vertenza), si fa la cosa giusta e si documenta lo scarto come input per l'avvocato.
+4. La voce presenza, essendo pagata anche in ferie, **non si perde in ferie** → fuori dal numeratore
+   (come la 663 storica); resta solo come fonte del divisore. Numeratore = solo indennità legate alla
+   presenza (maturate lavorando), coerente col divisore = giorni lavorati.
+
 ## 2026-07-19 - "Schede informative" non significa automaticamente materiale breve
 
 **Contesto:** alla richiesta di materiale informativo/promozionale per ValOra ho consegnato

@@ -225,13 +225,16 @@ indennità ordinarie: sono confluiti in "arretrati". Non segnalarli come discrep
   Per quest'era valgono le regole del blocco ERA STORICA più sotto.
 Un cedolino contiene UNA sola era: i codici delle ALTRE ere a 0.0 nel JSON sono CORRETTI, non segnalarli come mancanti.
 
-**daysWorked — ere ZUCCHETTI: GIORNI DELLA VOCE PRESENZA, NON la banda (CRITICO):**
-daysWorked = giorni (colonna ORE/GIORNI, marcatore G) della voce di presenza dell'era:
-I86178 "Compenso di presenza" (recente) / I86005 "Indennita' giornaliera" (~2020-21) / IX0023
-"Indenn. giornaliera" (era IX). Es.: "I86178 G 21,000" → daysWorked corretto = 21.
+**daysPresence + daysWorked — ere ZUCCHETTI (CRITICO, leggi con attenzione):**
+La QUANTITÀ (colonna ORE/GIORNI, marcatore G) della voce di presenza dell'era — I86178 "Compenso di
+presenza" (recente) / I86005 "Indennita' giornaliera" (~2020-21) / IX0023 "Indenn. giornaliera"
+(era IX) — è "daysPresence" (il valore GREZZO). Es.: "I86178 G 21,000" → daysPresence = 21.
+Il "daysWorked" (servizio effettivo = DIVISORE) NON è quel numero: è **daysPresence − daysVacation**,
+perché la voce presenza è pagata ANCHE nei giorni di ferie e ne va tolta la parte feriale.
+Es.: presenza 21, ferie 5 → daysWorked = 16 (NON 21). NON segnalare una discrepanza su daysWorked
+solo perché è più basso della quantità stampata della voce presenza: è corretto per costruzione.
 È VIETATO proporre come "suggested" i valori "GG LAV.", "GG. RETR." o "GG. INPS" della banda di
-testata: NON sono i giorni di servizio effettivo. Se la voce di presenza è assente, daysWorked = 0
-è CORRETTO (mese di sola assenza).
+testata. Se la voce di presenza è assente, daysPresence = 0 e daysWorked = 0 (mese di sola assenza).
 
 **daysVacation — ere ZUCCHETTI: ORE F2105 ÷ 6,5:**
 La voce F2105 (Ferie godute) è in ORE (marcatore H): daysVacation = ore ÷ 6,5 (es. H 45,500 → 7.0).

@@ -317,6 +317,32 @@ export function reconcileRailwayAttendance(finalJson: any): void {
   }
 }
 
+/**
+ * Post-processing FSE: scompone la voce presenza (il "23") in servizio effettivo + ferie.
+ * DECISIONE 20/07: la voce presenza (I86178/I86005/IX0023) è pagata ANCHE durante le ferie, quindi
+ * la sua quantità include i giorni di ferie. Il DIVISORE delle medie deve essere il servizio
+ * EFFETTIVO (giorni davvero lavorati): daysWorked = presenza − ferie; il grezzo resta in
+ * daysPresence per la scomposizione in UI. Verificato su 100 mesi Clarino (invariante sempre ≥ 0).
+ * Solo era moderna Zucchetti (voce presenza pagata): nell'era storica SPA-GUIDA il §5-ter del prompt
+ * ricava già daysWorked dalla banda "Presenze" (= servizio effettivo) → NON si tocca.
+ */
+export function reconcileFsePresence(finalJson: any): void {
+  const num = (v: any): number => {
+    if (v === null || v === undefined || v === "") return 0;
+    const n = typeof v === "number" ? v : parseFloat(String(v).replace(",", "."));
+    return isNaN(n) ? 0 : n;
+  };
+  const PRESENZA = ['I86178', 'I86005', 'IX0023'];
+  // Era moderna solo se una voce presenza è stata effettivamente pagata (importo ≠ 0): nell'era
+  // storica quei codici non esistono (c'è la 663, esclusa dal numeratore) → si lascia la banda.
+  const isModern = PRESENZA.some(c => Math.abs(num(finalJson.codes?.[c])) > 0.001);
+  if (!isModern) return;
+  const presence = num(finalJson.daysWorked);   // quantità voce presenza estratta dall'IA (§2)
+  const ferie = num(finalJson.daysVacation);
+  finalJson.daysPresence = presence;
+  finalJson.daysWorked = Math.max(0, Math.round((presence - ferie) * 100) / 100);
+}
+
 // ==========================================
 // 1. PROMPT RFI (PLATINUM EDITION - VERSIONE FINALE CON FIX RIPOSI)
 // ==========================================
@@ -1561,6 +1587,12 @@ Esempio di output perfetto:
     // corregge lo slittamento di colonna (Riposi scambiati per giorni lavorati).
     if (companyKey === "RFI" || companyKey === "TRENITALIA") {
       reconcileRailwayAttendance(finalJson);
+    }
+
+    // FSE: la voce presenza è pagata anche in ferie → il divisore è il servizio effettivo
+    // (presenza − ferie). Scompone daysWorked e conserva il grezzo in daysPresence (v. 20/07).
+    if (companyKey === "FSE") {
+      reconcileFsePresence(finalJson);
     }
 
     console.log(`✅ EXTR ${companyKey}: ${finalJson.month}/${finalJson.year} - Warning: ${finalJson.aiWarning}`);
